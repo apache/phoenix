@@ -73,7 +73,6 @@ import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
@@ -84,7 +83,6 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.security.User;
-import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -976,20 +974,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private NamespaceDescriptor ensureNamespaceCreated(String schemaName) throws SQLException {
         SQLException sqlE = null;
         try (HBaseAdmin admin = getAdmin()) {
-            final String quorum = ZKConfig.getZKQuorumServersString(config);
-            final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
-            logger.debug("Found quorum: " + quorum + ":" + znode);
-            boolean nameSpaceExists = true;
             NamespaceDescriptor namespaceDescriptor = null;
             try {
-                namespaceDescriptor = admin.getNamespaceDescriptor(schemaName);
-            } catch (org.apache.hadoop.hbase.NamespaceNotFoundException e) {
-                nameSpaceExists = false;
-            }
-            if (!nameSpaceExists) {
                 namespaceDescriptor = NamespaceDescriptor.create(schemaName).build();
                 admin.createNamespace(namespaceDescriptor);
-            }
+            } catch (org.apache.hadoop.hbase.NamespaceExistException e) {}
             return namespaceDescriptor;
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
@@ -2579,7 +2568,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return null;
                 }
 
-                private void ensureSystemTablesUpgraded(ReadOnlyProps props) throws SQLException, IOException {
+                private void ensureSystemTablesUpgraded(ReadOnlyProps props)
+                        throws SQLException, IOException, IllegalArgumentException, InterruptedException {
                     if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, props)) { return; }
                     HTableInterface metatable = null;
                     try (HBaseAdmin admin = getAdmin()) {
@@ -2590,11 +2580,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         metatable = getTable(SchemaUtil
                                 .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName());
                         if (tables.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
-                            upgradeTable(admin, metatable, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props);
+                            UpgradeUtil.upgradeTable(admin, metatable, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                                    props, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
                             tables.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
                         }
                         for (HTableDescriptor table : tables) {
-                            upgradeTable(admin, metatable, table.getName(), props);
+                            UpgradeUtil.upgradeTable(admin, metatable, table.getTableName().getNameAsString(), props,
+                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
                         }
                     } finally {
                         if (metatable != null) {
@@ -2607,21 +2599,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             throw Throwables.propagate(e);
         }
-    }
-
-    private static void upgradeTable(HBaseAdmin admin, HTableInterface metatable, byte[] tableName, ReadOnlyProps props)
-            throws SnapshotCreationException, IllegalArgumentException, IOException {
-        admin.snapshot(tableName, tableName);
-        admin.cloneSnapshot(tableName, SchemaUtil.getPhysicalTableName(tableName, true));
-        admin.disableTable(tableName);
-        admin.deleteTable(tableName);
-        Put put = new Put(
-                SchemaUtil.getTableKey(null, SchemaUtil.getSchemaNameFromFullName(tableName),
-                        SchemaUtil.getTableNameFromFullName(tableName)),
-                MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
-        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES,
-                PBoolean.INSTANCE.toBytes(Boolean.TRUE));
-        metatable.put(put);
     }
 
     /**

@@ -839,8 +839,6 @@ public abstract class BaseTest {
                 }
                 try (Connection conn = DriverManager.getConnection(url, props);) {
                     conn.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + schema);
-                } catch (TableAlreadyExistsException e) {
-                    throw e;
                 }
             }
         }

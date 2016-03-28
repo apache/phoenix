@@ -82,7 +82,7 @@ message GetFunctionsRequest {
 message GetSchemaRequest {
   required string schemaName = 1;
   required int64 clientTimestamp = 2;
-  optional int32 clientVersion = 3;
+  required int32 clientVersion = 3;
 }
 
 // each byte array represents a MutationProto instance
@@ -101,8 +101,8 @@ message CreateFunctionRequest {
 
 message CreateSchemaRequest {
   repeated bytes tableMetadataMutations = 1;
-  optional string schemaName = 2;
-  optional int32 clientVersion = 3;
+  required string schemaName = 2;
+  required int32 clientVersion = 3;
 }
 
 message DropTableRequest {
@@ -115,7 +115,7 @@ message DropTableRequest {
 message DropSchemaRequest {
   repeated bytes schemaMetadataMutations = 1;
   required string schemaName = 2;
-  optional int32 clientVersion = 3;
+  required int32 clientVersion = 3;
 }
 
 message AddColumnRequest {

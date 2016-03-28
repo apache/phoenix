@@ -189,6 +189,6 @@ public class JDBCUtil {
 
     public static String getSchema(String url, Properties info, String defaultValue) {
         String schema = findProperty(url, info, PhoenixRuntime.SCHEMA_ATTRIB);
-        return (schema == null) ? defaultValue : schema;
+        return (schema == null || schema.equals("")) ? defaultValue : schema;
     }
 }

@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_REPLICATION_SCOPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -72,7 +73,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         String tableName = schemaName + ".M_INTERFACE_JOB";
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        
         String ddl = "CREATE TABLE " + tableName + "(                data.addtime VARCHAR ,\n" + 
                 "                data.dir VARCHAR ,\n" + 
                 "                data.end_time VARCHAR ,\n" + 
@@ -98,30 +99,38 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 "                data.type VARCHAR ,\n" + 
                 "                id INTEGER not null primary key desc\n" + 
                 "                ) ";
-        conn.createStatement().execute(ddl);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute(ddl);
+        }
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
-        assertNotEquals(null, admin.getTableDescriptor(Bytes.toBytes(tableName)));
+        assertNotNull(admin.getTableDescriptor(Bytes.toBytes(tableName)));
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
             fail();
         } catch (TableAlreadyExistsException e) {
             // expected
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("DROP TABLE " + tableName);
-        conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute("DROP TABLE " + tableName);
+            conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+        }
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute(ddl);
-        assertNotEquals(null, admin.getTableDescriptor(SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName()));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute(ddl);
+            assertNotEquals(null,
+                    admin.getTableDescriptor(SchemaUtil.getPhysicalTableName(tableName.getBytes(), true).getName()));
+        } finally {
+            admin.close();
+        }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         props.setProperty(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
-        conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("DROP TABLE " + tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute("DROP TABLE " + tableName);
+        }
     }
 
     @Test

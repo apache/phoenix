@@ -52,6 +52,7 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode(), e.getErrorCode());
         }
+        conn.close();
     }
 
     @Test
@@ -81,5 +82,6 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("select schema_name from test");
         assertTrue(rs.next());
         assertEquals(schema, rs.getString(1));
+        conn.close();
     }
 }

@@ -67,12 +67,14 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -1278,5 +1280,41 @@ public class UpgradeUtil {
             }
         }
         return false;
+    }
+
+    public static void upgradeTable(HBaseAdmin admin, HTableInterface metatable, String srcTableName,
+            String destTableName, ReadOnlyProps props, Long ts, String phoenixTableName, PTableType pTableType)
+                    throws SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException,
+                    SQLException {
+        srcTableName = SchemaUtil.normalizeIdentifier(srcTableName);
+        if (!SchemaUtil.isNamespaceMappingEnabled(
+                SchemaUtil.isSystemTable(srcTableName.getBytes()) ? PTableType.SYSTEM : null,
+                props)) { throw new IllegalArgumentException(SchemaUtil.isSystemTable(srcTableName.getBytes())
+                        ? "For system table " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
+                                + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
+                        : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
+        
+        if (PTableType.TABLE.equals(pTableType) || PTableType.INDEX.equals(pTableType)) {
+            admin.snapshot(srcTableName, srcTableName);
+            admin.cloneSnapshot(srcTableName.getBytes(), destTableName.getBytes());
+            admin.disableTable(srcTableName);
+            admin.deleteTable(srcTableName);
+        }
+        if (phoenixTableName == null) {
+            phoenixTableName = srcTableName;
+        }
+        Put put = new Put(SchemaUtil.getTableKey(null, SchemaUtil.getSchemaNameFromFullName(phoenixTableName),
+                SchemaUtil.getTableNameFromFullName(phoenixTableName)), ts);
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES,
+                PBoolean.INSTANCE.toBytes(Boolean.TRUE));
+        metatable.put(put);
+    }
+
+    public static void upgradeTable(HBaseAdmin admin, HTableInterface metatable, String tableName, ReadOnlyProps props,
+            Long ts) throws SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException,
+                    SQLException {
+        String destTablename = SchemaUtil
+                .normalizeIdentifier(SchemaUtil.getPhysicalTableName(tableName, props).getNameAsString());
+        upgradeTable(admin, metatable, tableName, destTablename, props, ts, null, PTableType.TABLE);
     }
 }

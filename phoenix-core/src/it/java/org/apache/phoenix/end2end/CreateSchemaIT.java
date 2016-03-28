@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -25,10 +25,10 @@ import java.sql.DriverManager;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class CreateSchemaIT extends BaseClientManagedTimeIT {
@@ -38,30 +38,25 @@ public class CreateSchemaIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         String ddl = "CREATE SCHEMA TEST_SCHEMA";
-        conn.createStatement().execute(ddl);
-        assertNotEquals(null, admin.getNamespaceDescriptor("TEST_SCHEMA"));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
+            conn.createStatement().execute(ddl);
+            assertNotNull(admin.getNamespaceDescriptor("TEST_SCHEMA"));
+        }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
-
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SchemaAlreadyExistsException e) {
             // expected
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts - 20));
-        conn = DriverManager.getConnection(getUrl(), props);
-        try {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
             fail();
         } catch (NewerSchemaAlreadyExistsException e) {
             // expected
         }
-        admin.close();
-        conn.close();
     }
-
 }

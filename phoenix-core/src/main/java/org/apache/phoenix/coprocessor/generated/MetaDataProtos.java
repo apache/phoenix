@@ -3930,13 +3930,13 @@ public final class MetaDataProtos {
      */
     long getClientTimestamp();
 
-    // optional int32 clientVersion = 3;
+    // required int32 clientVersion = 3;
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     boolean hasClientVersion();
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     int getClientVersion();
   }
@@ -4105,17 +4105,17 @@ public final class MetaDataProtos {
       return clientTimestamp_;
     }
 
-    // optional int32 clientVersion = 3;
+    // required int32 clientVersion = 3;
     public static final int CLIENTVERSION_FIELD_NUMBER = 3;
     private int clientVersion_;
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     public boolean hasClientVersion() {
       return ((bitField0_ & 0x00000004) == 0x00000004);
     }
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     public int getClientVersion() {
       return clientVersion_;
@@ -4136,6 +4136,10 @@ public final class MetaDataProtos {
         return false;
       }
       if (!hasClientTimestamp()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasClientVersion()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -4434,6 +4438,10 @@ public final class MetaDataProtos {
           
           return false;
         }
+        if (!hasClientVersion()) {
+          
+          return false;
+        }
         return true;
       }
 
@@ -4563,22 +4571,22 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // optional int32 clientVersion = 3;
+      // required int32 clientVersion = 3;
       private int clientVersion_ ;
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public boolean hasClientVersion() {
         return ((bitField0_ & 0x00000004) == 0x00000004);
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public int getClientVersion() {
         return clientVersion_;
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public Builder setClientVersion(int value) {
         bitField0_ |= 0x00000004;
@@ -4587,7 +4595,7 @@ public final class MetaDataProtos {
         return this;
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public Builder clearClientVersion() {
         bitField0_ = (bitField0_ & ~0x00000004);
@@ -6008,28 +6016,28 @@ public final class MetaDataProtos {
      */
     com.google.protobuf.ByteString getTableMetadataMutations(int index);
 
-    // optional string schemaName = 2;
+    // required string schemaName = 2;
     /**
-     * <code>optional string schemaName = 2;</code>
+     * <code>required string schemaName = 2;</code>
      */
     boolean hasSchemaName();
     /**
-     * <code>optional string schemaName = 2;</code>
+     * <code>required string schemaName = 2;</code>
      */
     java.lang.String getSchemaName();
     /**
-     * <code>optional string schemaName = 2;</code>
+     * <code>required string schemaName = 2;</code>
      */
     com.google.protobuf.ByteString
         getSchemaNameBytes();
 
-    // optional int32 clientVersion = 3;
+    // required int32 clientVersion = 3;
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     boolean hasClientVersion();
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     int getClientVersion();
   }
@@ -6168,17 +6176,17 @@ public final class MetaDataProtos {
       return tableMetadataMutations_.get(index);
     }
 
-    // optional string schemaName = 2;
+    // required string schemaName = 2;
     public static final int SCHEMANAME_FIELD_NUMBER = 2;
     private java.lang.Object schemaName_;
     /**
-     * <code>optional string schemaName = 2;</code>
+     * <code>required string schemaName = 2;</code>
      */
     public boolean hasSchemaName() {
       return ((bitField0_ & 0x00000001) == 0x00000001);
     }
     /**
-     * <code>optional string schemaName = 2;</code>
+     * <code>required string schemaName = 2;</code>
      */
     public java.lang.String getSchemaName() {
       java.lang.Object ref = schemaName_;
@@ -6195,7 +6203,7 @@ public final class MetaDataProtos {
       }
     }
     /**
-     * <code>optional string schemaName = 2;</code>
+     * <code>required string schemaName = 2;</code>
      */
     public com.google.protobuf.ByteString
         getSchemaNameBytes() {
@@ -6211,17 +6219,17 @@ public final class MetaDataProtos {
       }
     }
 
-    // optional int32 clientVersion = 3;
+    // required int32 clientVersion = 3;
     public static final int CLIENTVERSION_FIELD_NUMBER = 3;
     private int clientVersion_;
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     public boolean hasClientVersion() {
       return ((bitField0_ & 0x00000002) == 0x00000002);
     }
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     public int getClientVersion() {
       return clientVersion_;
@@ -6237,6 +6245,14 @@ public final class MetaDataProtos {
       byte isInitialized = memoizedIsInitialized;
       if (isInitialized != -1) return isInitialized == 1;
 
+      if (!hasSchemaName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasClientVersion()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
       memoizedIsInitialized = 1;
       return true;
     }
@@ -6534,6 +6550,14 @@ public final class MetaDataProtos {
       }
 
       public final boolean isInitialized() {
+        if (!hasSchemaName()) {
+          
+          return false;
+        }
+        if (!hasClientVersion()) {
+          
+          return false;
+        }
         return true;
       }
 
@@ -6628,16 +6652,16 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // optional string schemaName = 2;
+      // required string schemaName = 2;
       private java.lang.Object schemaName_ = "";
       /**
-       * <code>optional string schemaName = 2;</code>
+       * <code>required string schemaName = 2;</code>
        */
       public boolean hasSchemaName() {
         return ((bitField0_ & 0x00000002) == 0x00000002);
       }
       /**
-       * <code>optional string schemaName = 2;</code>
+       * <code>required string schemaName = 2;</code>
        */
       public java.lang.String getSchemaName() {
         java.lang.Object ref = schemaName_;
@@ -6651,7 +6675,7 @@ public final class MetaDataProtos {
         }
       }
       /**
-       * <code>optional string schemaName = 2;</code>
+       * <code>required string schemaName = 2;</code>
        */
       public com.google.protobuf.ByteString
           getSchemaNameBytes() {
@@ -6667,7 +6691,7 @@ public final class MetaDataProtos {
         }
       }
       /**
-       * <code>optional string schemaName = 2;</code>
+       * <code>required string schemaName = 2;</code>
        */
       public Builder setSchemaName(
           java.lang.String value) {
@@ -6680,7 +6704,7 @@ public final class MetaDataProtos {
         return this;
       }
       /**
-       * <code>optional string schemaName = 2;</code>
+       * <code>required string schemaName = 2;</code>
        */
       public Builder clearSchemaName() {
         bitField0_ = (bitField0_ & ~0x00000002);
@@ -6689,7 +6713,7 @@ public final class MetaDataProtos {
         return this;
       }
       /**
-       * <code>optional string schemaName = 2;</code>
+       * <code>required string schemaName = 2;</code>
        */
       public Builder setSchemaNameBytes(
           com.google.protobuf.ByteString value) {
@@ -6702,22 +6726,22 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // optional int32 clientVersion = 3;
+      // required int32 clientVersion = 3;
       private int clientVersion_ ;
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public boolean hasClientVersion() {
         return ((bitField0_ & 0x00000004) == 0x00000004);
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public int getClientVersion() {
         return clientVersion_;
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public Builder setClientVersion(int value) {
         bitField0_ |= 0x00000004;
@@ -6726,7 +6750,7 @@ public final class MetaDataProtos {
         return this;
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public Builder clearClientVersion() {
         bitField0_ = (bitField0_ & ~0x00000004);
@@ -7631,13 +7655,13 @@ public final class MetaDataProtos {
     com.google.protobuf.ByteString
         getSchemaNameBytes();
 
-    // optional int32 clientVersion = 3;
+    // required int32 clientVersion = 3;
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     boolean hasClientVersion();
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     int getClientVersion();
   }
@@ -7819,17 +7843,17 @@ public final class MetaDataProtos {
       }
     }
 
-    // optional int32 clientVersion = 3;
+    // required int32 clientVersion = 3;
     public static final int CLIENTVERSION_FIELD_NUMBER = 3;
     private int clientVersion_;
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     public boolean hasClientVersion() {
       return ((bitField0_ & 0x00000002) == 0x00000002);
     }
     /**
-     * <code>optional int32 clientVersion = 3;</code>
+     * <code>required int32 clientVersion = 3;</code>
      */
     public int getClientVersion() {
       return clientVersion_;
@@ -7846,6 +7870,10 @@ public final class MetaDataProtos {
       if (isInitialized != -1) return isInitialized == 1;
 
       if (!hasSchemaName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasClientVersion()) {
         memoizedIsInitialized = 0;
         return false;
       }
@@ -8150,6 +8178,10 @@ public final class MetaDataProtos {
           
           return false;
         }
+        if (!hasClientVersion()) {
+          
+          return false;
+        }
         return true;
       }
 
@@ -8318,22 +8350,22 @@ public final class MetaDataProtos {
         return this;
       }
 
-      // optional int32 clientVersion = 3;
+      // required int32 clientVersion = 3;
       private int clientVersion_ ;
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public boolean hasClientVersion() {
         return ((bitField0_ & 0x00000004) == 0x00000004);
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public int getClientVersion() {
         return clientVersion_;
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public Builder setClientVersion(int value) {
         bitField0_ |= 0x00000004;
@@ -8342,7 +8374,7 @@ public final class MetaDataProtos {
         return this;
       }
       /**
-       * <code>optional int32 clientVersion = 3;</code>
+       * <code>required int32 clientVersion = 3;</code>
        */
       public Builder clearClientVersion() {
         bitField0_ = (bitField0_ & ~0x00000004);
@@ -15076,19 +15108,19 @@ public final class MetaDataProtos {
       "lientTimestamp\030\004 \002(\003\022\025\n\rclientVersion\030\005 " +
       "\001(\005\"V\n\020GetSchemaRequest\022\022\n\nschemaName\030\001 " +
       "\002(\t\022\027\n\017clientTimestamp\030\002 \002(\003\022\025\n\rclientVe" +
-      "rsion\030\003 \001(\005\"K\n\022CreateTableRequest\022\036\n\026tab" +
+      "rsion\030\003 \002(\005\"K\n\022CreateTableRequest\022\036\n\026tab" +
       "leMetadataMutations\030\001 \003(\014\022\025\n\rclientVersi" +
       "on\030\002 \001(\005\"r\n\025CreateFunctionRequest\022\036\n\026tab",
       "leMetadataMutations\030\001 \003(\014\022\021\n\ttemporary\030\002" +
       " \002(\010\022\017\n\007replace\030\003 \001(\010\022\025\n\rclientVersion\030\004" +
       " \001(\005\"`\n\023CreateSchemaRequest\022\036\n\026tableMeta" +
-      "dataMutations\030\001 \003(\014\022\022\n\nschemaName\030\002 \001(\t\022" +
-      "\025\n\rclientVersion\030\003 \001(\005\"m\n\020DropTableReque" +
+      "dataMutations\030\001 \003(\014\022\022\n\nschemaName\030\002 \002(\t\022" +
+      "\025\n\rclientVersion\030\003 \002(\005\"m\n\020DropTableReque" +
       "st\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\021\n\tta" +
       "bleType\030\002 \002(\t\022\017\n\007cascade\030\003 \001(\010\022\025\n\rclient" +
       "Version\030\004 \001(\005\"_\n\021DropSchemaRequest\022\037\n\027sc" +
       "hemaMetadataMutations\030\001 \003(\014\022\022\n\nschemaNam" +
-      "e\030\002 \002(\t\022\025\n\rclientVersion\030\003 \001(\005\"I\n\020AddCol",
+      "e\030\002 \002(\t\022\025\n\rclientVersion\030\003 \002(\005\"I\n\020AddCol",
       "umnRequest\022\036\n\026tableMetadataMutations\030\001 \003" +
       "(\014\022\025\n\rclientVersion\030\002 \001(\005\"J\n\021DropColumnR" +
       "equest\022\036\n\026tableMetadataMutations\030\001 \003(\014\022\025" +

@@ -40,9 +40,16 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-
+/*
+ * since 4.8
+ */
 public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
-
+    /**
+     * Tests that when: There is a table created with older version of phoenix and a table created with newer version
+     * having {@code QueryServices#IS_NAMESPACE_MAPPING_ENABLED} true, then there is only a flag
+     * {@code PhoenixDatabaseMetaData#IS_NAMESPACE_MAPPED} differentiates that whether schema of the table is mapped to
+     * namespace or not
+     */
     @Test
     @SuppressWarnings("deprecation")
     public void testBackWardCompatibility() throws Exception {
@@ -69,11 +76,10 @@ public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
         put = new Put(PVarchar.INSTANCE.toBytes(hbaseFullTableName));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
                 QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-
+        phoenixSchematable.close();
         HTable namespaceMappedtable = new HTable(admin.getConfiguration(), hbaseFullTableName);
         namespaceMappedtable.put(put);
         namespaceMappedtable.close();
-
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create schema " + schemaName);
@@ -93,9 +99,9 @@ public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
                 PBoolean.INSTANCE.toBytes(true));
         metatable.put(p);
         metatable.close();
+
         PhoenixConnection phxConn = (conn.unwrap(PhoenixConnection.class));
         phxConn.getQueryServices().clearCache();
-        conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(hbaseFullTableName, rs.getString(1));

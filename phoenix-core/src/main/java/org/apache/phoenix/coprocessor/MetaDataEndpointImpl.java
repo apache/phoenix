@@ -1223,7 +1223,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         arrayList.add(key);
         List<PSchema> schemas = buildSchemas(arrayList, region, asOfTimeStamp, cacheKey);
         if (schemas != null) return schemas.get(0);
-        // if not found then check if newer table already exists and add delete marker for timestamp
+        // if not found then check if newer schema already exists and add delete marker for timestamp
         // found
         if (schema == null
                 && (schema = buildDeletedSchema(key, cacheKey, region, clientTimeStamp)) != null) { return schema; }
@@ -3124,7 +3124,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try {
             acquireLock(region, lockKey, locks);
             // Get as of latest timestamp so we can detect if we have a
-            // newer function that already
+            // newer schema that already
             // exists without making an additional query
             ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(lockKey);
             PSchema schema = loadSchema(env, lockKey, cacheKey, clientTimeStamp, clientTimeStamp);

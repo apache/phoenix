@@ -18,6 +18,14 @@
 package org.apache.phoenix.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
 
 import java.io.File;
@@ -50,9 +58,13 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
@@ -62,6 +74,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
@@ -77,12 +90,14 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
@@ -173,7 +188,20 @@ public class PhoenixRuntime {
             REQUEST_METRIC_ATTRIB,
             NO_UPGRADE_ATTRIB
             };
-
+    
+    private static final String UPDATE_LINK =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+            TENANT_ID + "," +
+            TABLE_SCHEM + "," +
+            TABLE_NAME + "," +
+            COLUMN_FAMILY + "," +
+            LINK_TYPE + "," +
+            PARENT_TENANT_ID + " " + PVarchar.INSTANCE.getSqlTypeName() + // Dynamic column for now to prevent schema change
+            ") VALUES (?, ?, ?, ?, ?, ?)";
+    private static final String DELETE_LINK = "DELETE FROM " + SYSTEM_CATALOG_SCHEMA + "." + SYSTEM_CATALOG_TABLE
+            + " WHERE " + TENANT_ID + "='?' " + TABLE_SCHEM + "='?' AND " + TABLE_NAME + "='?' AND " + COLUMN_FAMILY
+            + "='?'";
+            
     /**
      * Use this as the zookeeper quorum name to have a connection-less connection. This enables
      * Phoenix-compatible HFiles to be created in a map/reduce job by creating tables,
@@ -210,28 +238,121 @@ public class PhoenixRuntime {
         PhoenixConnection conn = null;
         try {
             Properties props = new Properties();
-            conn = DriverManager.getConnection(jdbcUrl, props)
-                    .unwrap(PhoenixConnection.class);
+            conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
+            ReadOnlyProps readOnlyProps = conn.getQueryServices().getProps();
+            if (execCmd.isMapNamespace()) {
+                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
+                        "May not specify the CURRENT_SCN property when upgrading"); }
+                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) { throw new SQLException(
+                        "May not specify the TENANT_ID_ATTRIB property when upgrading"); }
+                try (HBaseAdmin admin = conn.getQueryServices().getAdmin();
+                        HTableInterface metatable = conn.getQueryServices().getTable(SchemaUtil
+                                .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, readOnlyProps)
+                                .getName());) {
+                    String tableName = SchemaUtil.normalizeIdentifier(execCmd.getSrcTable());
+                    String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
 
-            if (execCmd.isUpgrade()) {
-                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) {
-                    throw new SQLException("May not specify the CURRENT_SCN property when upgrading");
+                    // Upgrade is not required if schemaName is not present.
+                    if (schemaName.equals("")) { throw new IllegalArgumentException("Table doesn't have schema name"); }
+
+                    // Confirm table is not already upgraded
+                    PTable table = getTable(conn, tableName);
+                    if (table.isNamespaceMapped()) { throw new IllegalArgumentException("Table is already upgraded"); }
+                    conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+                    String newPhysicalTablename = SchemaUtil.normalizeIdentifier(
+                            SchemaUtil.getPhysicalTableName(tableName, readOnlyProps).getNameAsString());
+
+                    // Upgrade the data or main table
+                    UpgradeUtil.upgradeTable(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
+                            HConstants.LATEST_TIMESTAMP, tableName, table.getType());
+
+                    // clear the cache and get new table
+                    conn.getQueryServices().clearCache();
+                    MetaDataMutationResult result = new MetaDataClient(conn).updateCache(schemaName,
+                            SchemaUtil.getTableNameFromFullName(tableName));
+                    if (result
+                            .getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { throw new TableNotFoundException(
+                                    tableName); }
+                    table = result.getTable();
+                    // check whether table is properly upgraded before upgrading indexes
+                    if (table.isNamespaceMapped()) {
+                        for (PTable index : table.getIndexes()) {
+                            String srcTableName = index.getPhysicalName().getString();
+                            String destTableName = null;
+                            String phoenixTableName = index.getName().getString();
+                            boolean updateLink = false;
+                            PreparedStatement linkStatement = conn.prepareStatement(UPDATE_LINK);
+                            PreparedStatement deleteLinkStatement = conn.prepareStatement(DELETE_LINK);
+                            linkStatement.setString(1,
+                                    index.getTenantId() == null ? null : index.getTenantId().getString());
+                            deleteLinkStatement.setString(1,
+                                    index.getTenantId() == null ? null : index.getTenantId().getString());
+                            linkStatement.setString(2,
+                                    index.getSchemaName() == null ? null : index.getSchemaName().getString());
+                            deleteLinkStatement.setString(2,
+                                    index.getSchemaName() == null ? null : index.getSchemaName().getString());
+                            linkStatement.setString(3, index.getTableName().getString());
+                            deleteLinkStatement.setString(3, index.getTableName().getString());
+                            
+                            
+                            
+                            if (srcTableName.startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
+                                // TODO: need to handle local index properly, descriptor needs to be updated parent
+                                // table property and
+
+                                destTableName = Bytes.toString(
+                                        MetaDataUtil.getLocalIndexPhysicalName(newPhysicalTablename.getBytes()));
+                                
+                                linkStatement.setString(4, destTableName);
+                                deleteLinkStatement.setString(4, index.getPhysicalName().getString());
+                                linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
+                                linkStatement.setLong(6, index.getSequenceNumber());
+                                updateLink = true;
+                            } else if (srcTableName.startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+                                destTableName = Bytes.toString(
+                                        MetaDataUtil.getViewIndexPhysicalName(newPhysicalTablename.getBytes()));
+                                linkStatement.setString(4, destTableName);
+                                updateLink = true;
+                            } else {
+                                destTableName = SchemaUtil
+                                        .getPhysicalTableName(index.getPhysicalName().getString(), readOnlyProps)
+                                        .getNameAsString();
+                            }
+                            if (updateLink) {
+                                deleteLinkStatement.execute();
+                                linkStatement.execute();
+                                conn.commit();
+                            }
+                            
+                            UpgradeUtil.upgradeTable(admin, metatable, srcTableName, destTableName, readOnlyProps,
+                                    HConstants.LATEST_TIMESTAMP, phoenixTableName, index.getType());
+
+                        }
+                    } else {
+                        throw new RuntimeException(
+                                "Error: problem occured during upgrade. Table is not upgraded successfully");
+                    }
+                    conn.getQueryServices().clearCache();
                 }
-                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) {
-                    throw new SQLException("May not specify the TENANT_ID_ATTRIB property when upgrading");
-                }
+            } else if (execCmd.isUpgrade()) {
+                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
+                        "May not specify the CURRENT_SCN property when upgrading"); }
+                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) { throw new SQLException(
+                        "May not specify the TENANT_ID_ATTRIB property when upgrading"); }
                 if (execCmd.getInputFiles().isEmpty()) {
                     List<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescRowKey(conn);
                     if (tablesNeedingUpgrade.isEmpty()) {
                         String msg = "No tables are required to be upgraded due to incorrect row key order (PHOENIX-2067 and PHOENIX-2120)";
                         System.out.println(msg);
                     } else {
-                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrectly ordered (PHOENIX-2067 and PHOENIX-2120):\n" + Joiner.on(' ').join(tablesNeedingUpgrade);
+                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrectly ordered (PHOENIX-2067 and PHOENIX-2120):\n"
+                                + Joiner.on(' ').join(tablesNeedingUpgrade);
                         System.out.println("WARNING: " + msg);
                     }
                     List<String> unsupportedTables = UpgradeUtil.getPhysicalTablesWithDescVarbinaryRowKey(conn);
                     if (!unsupportedTables.isEmpty()) {
-                        String msg = "The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n" + Joiner.on(' ').join(unsupportedTables);
+                        String msg = "The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n"
+                                + Joiner.on(' ').join(unsupportedTables);
                         System.out.println("WARNING: " + msg);
                     }
                 } else {
@@ -240,21 +361,18 @@ public class PhoenixRuntime {
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
                     if (inputFile.endsWith(SQL_FILE_EXT)) {
-                        PhoenixRuntime.executeStatements(conn,
-                                new FileReader(inputFile), Collections.emptyList());
+                        PhoenixRuntime.executeStatements(conn, new FileReader(inputFile), Collections.emptyList());
                     } else if (inputFile.endsWith(CSV_FILE_EXT)) {
-    
+
                         String tableName = execCmd.getTableName();
                         if (tableName == null) {
                             tableName = SchemaUtil.normalizeIdentifier(
                                     inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
                                             inputFile.length() - CSV_FILE_EXT.length()));
                         }
-                        CSVCommonsLoader csvLoader =
-                                new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
-                                        execCmd.isStrict(), execCmd.getFieldDelimiter(),
-                                        execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
-                                        execCmd.getArrayElementSeparator());
+                        CSVCommonsLoader csvLoader = new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
+                                execCmd.isStrict(), execCmd.getFieldDelimiter(), execCmd.getQuoteCharacter(),
+                                execCmd.getEscapeCharacter(), execCmd.getArrayElementSeparator());
                         csvLoader.upsert(inputFile);
                     }
                 }
@@ -510,6 +628,8 @@ public class PhoenixRuntime {
         private List<String> inputFiles;
         private boolean isUpgrade;
         private boolean isBypassUpgrade;
+        private boolean mapNamespace;
+        private String srcTable;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -548,6 +668,9 @@ public class PhoenixRuntime {
                     "This would only be the case if you have not relied on auto padding for BINARY and CHAR data, " +
                     "but instead have always provided data up to the full max length of the column. See PHOENIX-2067 " +
                     "and PHOENIX-2120 for more information. ");
+            Option mapNamespaceOption = new Option("m", "map-namespace", true,
+                    "Used to map table to a namespace matching with schema, require "+ QueryServices.IS_NAMESPACE_MAPPING_ENABLED +
+                    " to be enabled");
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -558,6 +681,7 @@ public class PhoenixRuntime {
             options.addOption(arrayValueSeparatorOption);
             options.addOption(upgradeOption);
             options.addOption(bypassUpgradeOption);
+            options.addOption(mapNamespaceOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -568,7 +692,10 @@ public class PhoenixRuntime {
             }
 
             ExecutionCommand execCmd = new ExecutionCommand();
-
+            if(cmdLine.hasOption(mapNamespaceOption.getOpt())){
+                execCmd.mapNamespace = true;
+                execCmd.srcTable = validateTableName(cmdLine.getOptionValue(mapNamespaceOption.getOpt()));
+            }
             if (cmdLine.hasOption(tableOption.getOpt())) {
                 execCmd.tableName = cmdLine.getOptionValue(tableOption.getOpt());
             }
@@ -624,13 +751,23 @@ public class PhoenixRuntime {
                 }
             }
 
-            if (inputFiles.isEmpty() && !execCmd.isUpgrade) {
+            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace()) {
                 usageError("At least one input file must be supplied", options);
             }
 
             execCmd.inputFiles = inputFiles;
 
             return execCmd;
+        }
+
+        private static String validateTableName(String tableName) {
+            if (tableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+                throw new IllegalArgumentException(
+                        "tablename:" + tableName + " cannot have '" + QueryConstants.NAMESPACE_SEPARATOR + "' ");
+            } else {
+                return tableName;
+            }
+
         }
 
         private static char getCharacter(String s) {
@@ -703,6 +840,14 @@ public class PhoenixRuntime {
 
         public boolean isBypassUpgrade() {
             return isBypassUpgrade;
+        }
+
+        public boolean isMapNamespace() {
+            return mapNamespace;
+        }
+
+        public String getSrcTable() {
+            return srcTable;
         }
     }
     

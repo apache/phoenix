@@ -3378,8 +3378,7 @@ public class MetaDataClient {
             MutationCode code = result.getMutationCode();
             switch (code) {
             case SCHEMA_ALREADY_EXISTS:
-                if (result.getTable() != null) { // Can happen for transactional table that already exists as HBase
-                                                 // table
+                if (result.getSchema() != null) {
                     addSchemaToCache(result);
                 }
                 if (!isIfNotExists) { throw new SchemaAlreadyExistsException(schema.getSchemaName()); }
