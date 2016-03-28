@@ -28,6 +28,7 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
@@ -239,5 +240,19 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
         DateFormat result = new SimpleDateFormat(pattern);
         result.setTimeZone(TimeZone.getTimeZone("GMT"));
         return result;
+    }
+    
+    @Test
+    public void testToCharWithCloneMethod() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+    	String ddl = "create table t (k varchar primary key, v integer[])";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO T VALUES('x',ARRAY[1234])");
+        conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("select to_char(v[1],'000') from t");
+        assertTrue(rs.next());
+        assertEquals("Unexpected value for date ", String.valueOf(1234), rs.getString(1));
+        assertFalse(rs.next());
     }
 }
