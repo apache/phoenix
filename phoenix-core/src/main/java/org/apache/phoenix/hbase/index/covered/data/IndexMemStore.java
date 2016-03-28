@@ -31,7 +31,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.IndexKeyValueSkipListSet;
 import org.apache.hadoop.hbase.regionserver.MemStore;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.hbase.index.covered.KeyValueStore;
 import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
@@ -251,9 +250,7 @@ public class IndexMemStore implements KeyValueStore {
        * Unfortunately the Java API does not offer a method to get it. So we remember the last keys
        * we iterated to and restore the reseeked set to at least that point.
        */
-
-      KeyValue kv = KeyValueUtil.ensureKeyValue(key);
-      kvsetIt = kvsetAtCreation.tailSet(getHighest(kv, kvsetItRow)).iterator();
+      kvsetIt = kvsetAtCreation.tailSet(getHighest(KeyValueUtil.ensureKeyValue(key), kvsetItRow)).iterator();
       return seekInSubLists();
     }
 
