@@ -1071,7 +1071,7 @@ public class CalciteIT extends BaseCalciteIT {
                 "                    PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "                  PhoenixServerProject(item_id=[$2])\n" +
                 "                    PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
-        start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(0, r5).close();
+        //start(correlProps).sql(q5).explainIs(p5Correlate).resultIs(0, r5).close();
         //TODO long-running query, disable for now.
         //start(decorrelProps).sql(q5).explainIs(p5Decorrelated).resultIs(false, r5).close();
         

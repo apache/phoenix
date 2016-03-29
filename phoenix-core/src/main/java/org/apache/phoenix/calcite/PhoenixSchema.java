@@ -282,7 +282,7 @@ public class PhoenixSchema implements Schema {
         try {
             // FIXME: Do this the same way as resolving a table after PHOENIX-2489.
             String tenantId = pc.getTenantId() == null ? null : pc.getTenantId().getString();
-            String q = "select 1 from " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED
+            String q = "select 1 from " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
                     + " where " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
                     + (schemaName == null ? " is null" : " = '" + schemaName + "'")
                     + " and " + PhoenixDatabaseMetaData.SEQUENCE_NAME

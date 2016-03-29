@@ -92,6 +92,7 @@
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
     <avatica.version>1.7.1</avatica.version>
+    <calcite.version>1.6.0</calcite.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.7.0</tephra.version>
     <spark.version>1.5.2</spark.version>
