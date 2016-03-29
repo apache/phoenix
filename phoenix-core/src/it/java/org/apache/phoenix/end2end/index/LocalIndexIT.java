@@ -727,7 +727,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            for (int i = 1; i < 5; i++) {
+            for (int i = 1; i < 2; i++) {
                 admin.split(Bytes.toBytes(TestUtil.DEFAULT_DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
                 List<HRegionInfo> regionsOfUserTable =
                         MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
@@ -971,24 +971,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(5, regionsOfIndexTable.size());
             boolean success = latch1.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
             assertTrue("Timed out waiting for MockedLocalIndexSplitter.preSplitAfterPONR to complete", success);
-            // Verify the metadata for index is correct.
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), TestUtil.DEFAULT_INDEX_TABLE_NAME,
-                    new String[] { PTableType.INDEX.toString() });
-            assertTrue(rs.next());
-            assertEquals(TestUtil.DEFAULT_INDEX_TABLE_NAME, rs.getString(3));
-            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), TestUtil.DEFAULT_INDEX_TABLE_NAME+"_2",
-                new String[] { PTableType.INDEX.toString() });
-            assertTrue(rs.next());
-            assertEquals(TestUtil.DEFAULT_INDEX_TABLE_NAME+"_2", rs.getString(3));
-            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-
-            String query = "SELECT t_id,k1,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2";
-            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT PARALLEL " + 1 + "-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME+"2",
-                QueryUtil.getExplainPlan(rs));
             latch2.countDown();
        } finally {
             conn1.close();

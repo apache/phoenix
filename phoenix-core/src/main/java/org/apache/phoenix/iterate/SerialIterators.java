@@ -52,9 +52,9 @@ public class SerialIterators extends BaseResultIterators {
 	private static final String NAME = "SERIAL";
     private final ParallelIteratorFactory iteratorFactory;
     
-    public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
+    public SerialIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan)
             throws SQLException {
-        super(plan, perScanLimit, scanGrouper);
+        super(plan, perScanLimit, scanGrouper, scan);
         Preconditions.checkArgument(perScanLimit != null || plan.getStatement().getHint().hasHint(HintNode.Hint.SERIAL)); // must be a limit specified or a SERIAL hint
         this.iteratorFactory = iteratorFactory;
     }
@@ -83,9 +83,9 @@ public class SerialIterators extends BaseResultIterators {
                 public PeekingResultIterator call() throws Exception {
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
-                	    TableResultIterator scanner = new TableResultIterator(mutationState, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold);
+                	    TableResultIterator scanner = new TableResultIterator(mutationState, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, SerialIterators.this.plan);
                 	    conn.addIterator(scanner);
-                	    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan, tableName));
+                	    concatIterators.add(iteratorFactory.newIterator(context, scanner, scan, tableName, SerialIterators.this.plan));
                 	}
                 	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);
                     allIterators.add(concatIterator);

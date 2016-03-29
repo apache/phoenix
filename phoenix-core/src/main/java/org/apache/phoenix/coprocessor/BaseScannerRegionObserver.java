@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -42,6 +43,7 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
+import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -99,6 +101,9 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String TX_SCN = "_TxScn";
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String IGNORE_NEWER_MUTATIONS = "_IGNORE_NEWER_MUTATIONS";
+    public static final String SCAN_START_ROW_SUFFIX = "_ScanStartRowSuffix";
+    public static final String SCAN_STOP_ROW_SUFFIX = "_ScanStopRowSuffix";
+
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
@@ -146,6 +151,19 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
+        if(isLocalIndex) {
+            byte[] prefix = lowerInclusiveRegionKey.length == 0 ? new byte[upperExclusiveRegionKey.length]: lowerInclusiveRegionKey;
+            int prefixLength = lowerInclusiveRegionKey.length == 0? upperExclusiveRegionKey.length: lowerInclusiveRegionKey.length;
+            if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
+                byte[] startKey = ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength);
+                if(Bytes.compareTo(scan.getStartRow(), startKey)<=0) {
+                    scan.setStartRow(startKey);
+                }
+            }
+            if(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)!=null) {
+                scan.setStopRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
+            }
+        }
     }
 
     abstract protected boolean isRegionObserverFor(Scan scan);
@@ -165,7 +183,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
         }
         if (isRegionObserverFor(scan)) {
-            if (! skipRegionBoundaryCheck(scan)) {
+            if (! skipRegionBoundaryCheck(scan) || ScanUtil.isLocalIndex(scan)) {
                 throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
             }
             // Muck with the start/stop row of the scan and set as reversed at the
@@ -226,6 +244,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 }
             }
         } catch (Throwable t) {
+            if(ScanUtil.isLocalIndex(scan) && t instanceof NotServingRegionException) {
+                Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+                throw new DoNotRetryIOException(cause.getMessage(), cause);
+            }
             ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
             return null; // impossible
         }
@@ -278,6 +300,31 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
         return new RegionScanner() {
+
+            private boolean hasReferences = checkForReferenceFiles();
+            private HRegionInfo regionInfo = c.getEnvironment().getRegionInfo();
+            private byte[] actualStartKey = getActualStartKey();
+
+            private boolean checkForReferenceFiles(){
+                for(byte[] family: scan.getFamilies()) {
+                    if(c.getEnvironment().getRegion().getStore(family).hasReferences()) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            public byte[] getActualStartKey() {
+                if(ScanUtil.isLocalIndex(scan) && scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
+                    byte[] startKey = ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, regionInfo.getStartKey().length == 0 ? new byte[regionInfo.getEndKey().length]: regionInfo.getStartKey(), regionInfo.getStartKey().length == 0? regionInfo.getEndKey().length: regionInfo.getStartKey().length);
+                    if(Bytes.compareTo(scan.getStartRow(), startKey)>=0) {
+                        return scan.getStartRow();
+                    } else {
+                        return startKey;
+                    }
+                }
+                return null;
+            }
 
             @Override
             public boolean next(List<Cell> results) throws IOException {
@@ -337,6 +384,22 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         arrayElementCell = result.get(arrayElementCellPosition);
                     }
                     if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
+                        if(hasReferences && actualStartKey!=null) {
+                            Cell firstCell = result.get(0);
+                            while(Bytes.compareTo(firstCell.getRowArray(), firstCell.getRowOffset(), firstCell.getRowLength(), actualStartKey, 0, actualStartKey.length)<0) {
+                                result.clear();
+                                next = s.nextRaw(result);
+                                if (result.isEmpty()) {
+                                    return next;
+                                }
+                                if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+                                    replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                                }
+                                firstCell = result.get(0);
+                            }
+                        }
+                        System.out.println("&&&&-< "+scan);
+                        System.out.println("&&&&-<< "+result);
                         IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
                             tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
@@ -369,6 +432,22 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     arrayElementCell = result.get(arrayElementCellPosition);
                 }
                 if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
+                    if(hasReferences && actualStartKey!=null) {
+                        Cell firstCell = result.get(0);
+                        while(Bytes.compareTo(firstCell.getRowArray(), firstCell.getRowOffset(), firstCell.getRowLength(), actualStartKey, 0, actualStartKey.length)<0) {
+                            result.clear();
+                            next = s.nextRaw(result, scannerContext);
+                            if (result.isEmpty()) {
+                                return next;
+                            }
+                            if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+                                replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                            }
+                            firstCell = result.get(0);
+                        }
+                    }
+//                    System.out.println("&&&&-< "+scan);
+//                    System.out.println("&&&&-<< "+result);
                     IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
                         tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                 }

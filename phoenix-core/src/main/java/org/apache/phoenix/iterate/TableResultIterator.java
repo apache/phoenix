@@ -22,22 +22,31 @@ import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NO
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.THRESHOLD_NOT_REACHED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.UNINITIALIZED;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.NON_AGGREGATE_QUERY;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
 import javax.annotation.concurrent.GuardedBy;
+import javax.ws.rs.QueryParam;
 
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -57,6 +66,10 @@ public class TableResultIterator implements ResultIterator {
     private final CombinableMetric scanMetrics;
     private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
     private final long renewLeaseThreshold;
+    private final QueryPlan plan;
+    private Tuple lastTuple = null;
+    private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    private boolean handleSplitRegionBoundaryFailureDuringInitialization;
 
     @GuardedBy("this")
     private ResultIterator scanIterator;
@@ -73,6 +86,7 @@ public class TableResultIterator implements ResultIterator {
         this.renewLeaseThreshold = 0;
         this.htable = null;
         this.scan = null;
+        this.plan = null;
     }
 
     public static enum RenewLeaseStatus {
@@ -80,13 +94,19 @@ public class TableResultIterator implements ResultIterator {
     };
 
 
-    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
+    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan) throws SQLException {
+        this(mutationState, scan, scanMetrics, renewLeaseThreshold, plan, false);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan, boolean handleSplitRegionBoundaryFailureDuringInitialization) throws SQLException {
         this.scan = scan;
         this.scanMetrics = scanMetrics;
-        PTable table = tableRef.getTable();
+        PTable table = plan.getTableRef().getTable();
         htable = mutationState.getHTable(table);
         this.scanIterator = UNINITIALIZED_SCANNER;
         this.renewLeaseThreshold = renewLeaseThreshold;
+        this.plan = plan;
+        this.handleSplitRegionBoundaryFailureDuringInitialization = handleSplitRegionBoundaryFailureDuringInitialization;
     }
 
     @Override
@@ -107,8 +127,37 @@ public class TableResultIterator implements ResultIterator {
     @Override
     public synchronized Tuple next() throws SQLException {
         initScanner();
-        Tuple t = scanIterator.next();
-        return t;
+        try {
+            lastTuple = scanIterator.next();
+            if (lastTuple != null) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                lastTuple.getKey(ptr);
+            }
+        } catch (SQLException e) {
+            try {
+                throw ServerUtil.parseServerException(e);
+            } catch(StaleRegionBoundaryCacheException e1) {
+                if(scan.getAttribute(NON_AGGREGATE_QUERY)!=null) {
+                    Scan newScan = ScanUtil.newScan(scan);
+                    if(lastTuple != null) {
+                        lastTuple.getKey(ptr);
+                        byte[] startRowSuffix = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        if(ScanUtil.isLocalIndex(newScan)) {
+                            newScan.setAttribute(SCAN_START_ROW_SUFFIX, ByteUtil.nextKey(startRowSuffix));
+                        } else {
+                            newScan.setStartRow(ByteUtil.nextKey(startRowSuffix));
+                        }
+                    }
+                    plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
+                    this.scanIterator =
+                            plan.iterator(DefaultParallelScanGrouper.getInstance(), newScan);
+                    lastTuple = scanIterator.next();
+                } else {
+                    throw e;
+                }
+            }
+        }
+        return lastTuple;
     }
 
     public synchronized void initScanner() throws SQLException {
@@ -121,8 +170,21 @@ public class TableResultIterator implements ResultIterator {
                 this.scanIterator =
                         new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
             } catch (IOException e) {
-                Closeables.closeQuietly(htable);
-                throw ServerUtil.parseServerException(e);
+                if(handleSplitRegionBoundaryFailureDuringInitialization) {
+                    try {
+                        throw ServerUtil.parseServerException(e);
+                    } catch(StaleRegionBoundaryCacheException s) {
+                        if(scan.getAttribute(NON_AGGREGATE_QUERY)!=null) {
+                            plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
+                            this.scanIterator =
+                                    plan.iterator(DefaultParallelScanGrouper.getInstance(), scan);
+                        }
+                        
+                    }
+                } else {
+                    Closeables.closeQuietly(htable);
+                    throw ServerUtil.parseServerException(e);
+                }
             }
         }
     }

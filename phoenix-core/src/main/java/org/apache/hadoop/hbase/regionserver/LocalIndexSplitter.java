@@ -143,36 +143,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
     public void preSplitAfterPONR(ObserverContext<RegionCoprocessorEnvironment> ctx)
             throws IOException {
         if (st == null || daughterRegions == null) return;
-        RegionCoprocessorEnvironment environment = ctx.getEnvironment();
-        PhoenixConnection conn = null;
-        try {
-            conn = QueryUtil.getConnection(ctx.getEnvironment().getConfiguration()).unwrap(
-                PhoenixConnection.class);
-            MetaDataClient client = new MetaDataClient(conn);
-            String userTableName = ctx.getEnvironment().getRegion().getTableDesc().getNameAsString();
-            PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
-            List<PTable> indexes = dataTable.getIndexes();
-            for (PTable index : indexes) {
-                if (index.getIndexType() == IndexType.LOCAL) {
-                    AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                        org.apache.phoenix.parse.TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                        dataTable.getTableName().getString(), false, PIndexState.INACTIVE);
-                    client.alterIndex(indexStatement);
-                }
-            }
-            conn.commit();
-        } catch (ClassNotFoundException ex) {
-        } catch (SQLException ex) {
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException ex) {
-                }
-            }
-        }
-
-        HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
+        HRegionServer rs = (HRegionServer) ctx.getEnvironment().getRegionServerServices();
         st.stepsAfterPONR(rs, rs, daughterRegions);
     }
     

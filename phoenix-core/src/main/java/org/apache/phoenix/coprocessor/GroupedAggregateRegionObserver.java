@@ -39,8 +39,10 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -64,6 +66,7 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.Closeables;
@@ -402,8 +405,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
             }
 
             Region region = c.getEnvironment().getRegion();
-            region.startRegionOperation();
             try {
+                region.startRegionOperation();
                 synchronized (scanner) {
                     do {
                         List<Cell> results = new ArrayList<Cell>();
@@ -423,7 +426,14 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         }
                     } while (hasMore && groupByCache.size() < limit);
                 }
-            } finally {
+            }  catch(NotServingRegionException e){
+                if(ScanUtil.isLocalIndex(scan)) {
+                    Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+                    throw new DoNotRetryIOException(cause.getMessage(), cause);
+                } else {
+                    throw e;
+                }
+                    } finally {
                 region.closeRegionOperation();
             }
 
@@ -472,8 +482,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 // start of a new row. Otherwise, we have to wait until an agg
                 int countOffset = rowAggregators.length == 0 ? 1 : 0;
                 Region region = c.getEnvironment().getRegion();
-                region.startRegionOperation();
                 try {
+                    region.startRegionOperation();
                     synchronized (scanner) {
                         do {
                             List<Cell> kvs = new ArrayList<Cell>();
@@ -503,6 +513,13 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             // Do rowCount + 1 b/c we don't have to wait for a complete
                             // row in the case of a DISTINCT with a LIMIT
                         } while (hasMore && !aggBoundary && !atLimit);
+                    }
+                } catch(NotServingRegionException e){
+                    if(ScanUtil.isLocalIndex(scan)) {
+                        Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+                        throw new DoNotRetryIOException(cause.getMessage(), cause);
+                    } else {
+                        throw e;
                     }
                 } finally {
                     region.closeRegionOperation();

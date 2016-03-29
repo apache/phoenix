@@ -49,6 +49,8 @@ public interface QueryPlan extends StatementPlan {
     
     public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException;
     
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException;
+
     public long getEstimatedSize();
     
     // TODO: change once joins are supported

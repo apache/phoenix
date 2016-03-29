@@ -302,7 +302,11 @@ public class MetaDataUtil {
     public static String getLocalIndexTableName(String tableName) {
         return LOCAL_INDEX_TABLE_PREFIX + tableName;
     }
-    
+
+    public static boolean isLocalIndexTableName(String tableName) {
+        return tableName.startsWith(LOCAL_INDEX_TABLE_PREFIX);
+    }
+
     public static String getLocalIndexSchemaName(String schemaName) {
         return schemaName;
     }  

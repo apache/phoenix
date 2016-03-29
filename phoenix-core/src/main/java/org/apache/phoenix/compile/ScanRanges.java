@@ -19,6 +19,8 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -204,7 +206,7 @@ public class ScanRanges {
         scan.setStopRow(scanRange.getUpperRange());
     }
     
-    private static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
+    public static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
         if (key.length > 0) {
             byte[] newKey = new byte[key.length + prefixKeyOffset];
             int totalKeyOffset = keyOffset + prefixKeyOffset;
@@ -213,7 +215,7 @@ public class ScanRanges {
             }
             System.arraycopy(key, keyOffset, newKey, totalKeyOffset, key.length - keyOffset);
             return newKey;
-        }
+        } 
         return key;
     }
     
@@ -238,7 +240,7 @@ public class ScanRanges {
         return temp;
     }
     
-    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary) {
+    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary,  byte[] regionStartKey, byte[] regionEndKey) {
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
         if (stopKey.length > 0 && Bytes.compareTo(startKey, stopKey) >= 0) { 
@@ -385,9 +387,25 @@ public class ScanRanges {
         if (scanStopKey.length > 0 && Bytes.compareTo(scanStartKey, scanStopKey) >= 0) { 
             return null; 
         }
-        newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
-        newScan.setStartRow(scanStartKey);
-        newScan.setStopRow(scanStopKey);
+        if(ScanUtil.isLocalIndex(scan)) {
+            newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
+            newScan.setStartRow(regionStartKey);
+            newScan.setStopRow(regionEndKey);
+            if (keyOffset > 0 ) {
+                newScan.setAttribute(SCAN_START_ROW_SUFFIX, stripPrefix(scanStartKey, keyOffset));
+            } else {
+                newScan.setAttribute(SCAN_START_ROW_SUFFIX, scanStartKey);
+            }
+            if (keyOffset > 0) {
+                newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, stripPrefix(scanStopKey, keyOffset));
+            } else {
+                newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, scanStopKey);
+            }
+        } else {
+            newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
+            newScan.setStartRow(scanStartKey);
+            newScan.setStopRow(scanStopKey);
+        }
         if(keyOffset > 0) {
             newScan.setAttribute(STARTKEY_OFFSET, Bytes.toBytes(keyOffset));
         }
@@ -418,7 +436,7 @@ public class ScanRanges {
         }
         
         //return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
-        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset, crossesRegionBoundary) == HAS_INTERSECTION;
+        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset, crossesRegionBoundary, lowerInclusiveKey, upperExclusiveKey) == HAS_INTERSECTION;
     }
     
     public SkipScanFilter getSkipScanFilter() {

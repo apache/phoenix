@@ -24,6 +24,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
@@ -181,9 +182,8 @@ public class ScanPlan extends BaseQueryPlan {
     }
 
     @Override
-    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
-    	Scan scan = context.getScan();
         scan.setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
         ResultIterator scanner;
         TableRef tableRef = this.getTableRef();
@@ -197,9 +197,9 @@ public class ScanPlan extends BaseQueryPlan {
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         BaseResultIterators iterators;
         if (isSerial) {
-        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
+        	iterators = new SerialIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper, scan);
         } else {
-        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper);
+        	iterators = new ParallelIterators(this, perScanLimit, parallelIteratorFactory, scanGrouper, scan);
         }
         splits = iterators.getSplits();
         scans = iterators.getScans();
@@ -209,7 +209,11 @@ public class ScanPlan extends BaseQueryPlan {
         if (isOrdered) {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
-            if ((isSalted || table.getIndexType() == IndexType.LOCAL) && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)) {
+            if ((isSalted || table.getIndexType() == IndexType.LOCAL)
+                    && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)
+                    || (table.getIndexType() == IndexType.LOCAL && (Bytes.compareTo(
+                        scan.getStartRow(), this.context.getScan().getStartRow()) != 0 || Bytes
+                            .compareTo(scan.getStopRow(), this.context.getScan().getStopRow()) != 0))) {
                 /*
                  * For salted tables or local index, a merge sort is needed if: 
                  * 1) The config phoenix.query.force.rowkeyorder is set to true 

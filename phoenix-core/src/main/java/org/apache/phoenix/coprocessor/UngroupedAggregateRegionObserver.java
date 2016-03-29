@@ -41,9 +41,11 @@ import java.util.concurrent.Callable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -86,6 +88,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
@@ -288,8 +291,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
-        region.startRegionOperation();
         try {
+            region.startRegionOperation();
             synchronized (innerScanner) {
                 do {
                     List<Cell> results = new ArrayList<Cell>();
@@ -524,6 +527,13 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         hasAny = true;
                     }
                 } while (hasMore);
+            }
+        } catch(NotServingRegionException e){
+            if(ScanUtil.isLocalIndex(scan)) {
+                Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+                throw new DoNotRetryIOException(cause.getMessage(), cause);
+            } else {
+                throw e;
             }
         } finally {
             try {

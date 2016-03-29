@@ -20,6 +20,7 @@ package org.apache.phoenix.execute;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
@@ -53,7 +54,12 @@ public class UnnestArrayPlan extends DelegateQueryPlan {
 
     @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return new UnnestArrayResultIterator(delegate.iterator(scanGrouper));
+        return new UnnestArrayResultIterator(delegate.iterator(scanGrouper, delegate.getContext().getScan()));
+    }
+
+    @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        return new UnnestArrayResultIterator(delegate.iterator(scanGrouper, scan));
     }
 
     @Override
