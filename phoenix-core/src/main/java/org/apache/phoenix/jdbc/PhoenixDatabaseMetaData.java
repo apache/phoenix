@@ -1043,7 +1043,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null" +
-                " and " + COLUMN_FAMILY + " is null");
+                " and " + COLUMN_FAMILY + " is null" +
+                " and " + TABLE_NAME + " != " + MetaDataClient.EMPTY_TABLE);
         addTenantIdFilter(buf, catalog);
         if (schemaPattern != null) {
             buf.append(" and " + TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'" ));

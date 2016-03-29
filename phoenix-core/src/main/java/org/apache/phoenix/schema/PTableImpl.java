@@ -953,11 +953,6 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public PName getPhoenixPhysicalName() {
-        return physicalNames.isEmpty() ? getName() : physicalNames.get(0);
-    }
-
-    @Override
     public List<PName> getPhysicalNames() {
         return physicalNames;
     }

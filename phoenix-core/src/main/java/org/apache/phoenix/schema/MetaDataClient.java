@@ -664,7 +664,7 @@ public class MetaDataClient {
         if (view.getType() != PTableType.VIEW || view.getViewType() == ViewType.MAPPED) {
             return false;
         }
-        String physicalName = view.getPhoenixPhysicalName().toString();
+        String physicalName = view.getPhysicalNames().get(0).toString();
         String schemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
         String tableName = SchemaUtil.getTableNameFromFullName(physicalName);
         MetaDataMutationResult parentResult = updateCache(null, schemaName, tableName, false, resolvedTimestamp);
@@ -1803,7 +1803,7 @@ public class MetaDataClient {
             }
 
             if (tableType == PTableType.VIEW) {
-                physicalNames = Collections.singletonList(parent.getPhoenixPhysicalName());
+                physicalNames = Collections.singletonList(parent.getName());
                 if (viewType == ViewType.MAPPED) {
                     columns = newArrayListWithExpectedSize(colDefs.size());
                     pkColumns = newLinkedHashSetWithExpectedSize(colDefs.size());
@@ -3310,11 +3310,11 @@ public class MetaDataClient {
         boolean isSharedIndex = table.getViewIndexId() != null;
         if (isSharedIndex) {
             // we are assuming the stats table is not transactional
-            return connection.getQueryServices().getTableStats(table.getPhoenixPhysicalName().getBytes(),
+            return connection.getQueryServices().getTableStats(table.getPhysicalName().getBytes(),
                     getCurrentScn());
         }
         boolean isView = table.getType() == PTableType.VIEW;
-        String physicalName = table.getPhoenixPhysicalName().toString();
+        String physicalName = table.getPhysicalName().toString();
         if (isView && table.getViewType() != ViewType.MAPPED) {
             try {
                 return connection.getTable(new PTableKey(null, physicalName)).getTableStats();
@@ -3362,6 +3362,7 @@ public class MetaDataClient {
         connection.rollback();
         try {
             boolean isIfNotExists = create.isIfNotExists();
+            validateSchema(create.getSchemaName());
             PSchema schema = new PSchema(create.getSchemaName());
             connection.setAutoCommit(false);
             List<Mutation> schemaMutations;
@@ -3393,6 +3394,12 @@ public class MetaDataClient {
             connection.setAutoCommit(wasAutoCommit);
         }
         return new MutationState(0, connection);
+    }
+
+    private void validateSchema(String schemaName) throws SQLException {
+        if (SchemaUtil.NOT_ALLOWED_SCHEMA_LIST.contains(
+                schemaName.toUpperCase())) { throw new SQLExceptionInfo.Builder(SQLExceptionCode.SCHEMA_NOT_ALLOWED)
+                        .setSchemaName(schemaName).build().buildException(); }
     }
 
     public MutationState dropSchema(DropSchemaStatement executableDropSchemaStatement) throws SQLException {
@@ -3432,9 +3439,14 @@ public class MetaDataClient {
     }
 
     public MutationState useSchema(UseSchemaStatement useSchemaStatement) throws SQLException {
-        PSchema schema = FromCompiler.getResolverForSchema(useSchemaStatement, connection)
-                .resolveSchema(useSchemaStatement.getSchemaName());
-        connection.setSchema(schema.getSchemaName());
+        if (useSchemaStatement.getSchemaName().equals(StringUtil.EMPTY_STRING)
+                || useSchemaStatement.getSchemaName().toUpperCase().equals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE)) {
+            connection.setSchema(null);
+        } else {
+            PSchema schema = FromCompiler.getResolverForSchema(useSchemaStatement, connection)
+                    .resolveSchema(useSchemaStatement.getSchemaName());
+            connection.setSchema(schema.getSchemaName());
+        }
         return new MutationState(0, connection);
     }
 }

@@ -29,6 +29,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
 public class UseSchemaIT extends BaseHBaseManagedTimeIT {
@@ -52,6 +53,14 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode(), e.getErrorCode());
         }
+        conn.createStatement().execute("use default");
+        ddl = "create table IF NOT EXISTS test(schema_name varchar primary key)";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().executeUpdate("upsert into test values('"+SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE+"')");
+        conn.commit();
+        rs = conn.createStatement().executeQuery("select schema_name from test");
+        assertTrue(rs.next());
+        assertEquals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE, rs.getString(1));
         conn.close();
     }
 

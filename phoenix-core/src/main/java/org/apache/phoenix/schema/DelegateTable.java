@@ -276,9 +276,4 @@ public class DelegateTable implements PTable {
     public boolean isNamespaceMapped() {
         return delegate.isNamespaceMapped();
     }
-
-    @Override
-    public PName getPhoenixPhysicalName() {
-        return delegate.getPhoenixPhysicalName();
-    }
 }

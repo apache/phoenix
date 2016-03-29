@@ -388,7 +388,8 @@ public enum SQLExceptionCode {
         public SQLException newException(SQLExceptionInfo info) {
             return new SchemaNotFoundException(info.getSchemaName());
         }
-    }), CANNOT_MUTATE_SCHEMA(723, "43M06", "Cannot mutate schema as schema has existing tables");
+    }), CANNOT_MUTATE_SCHEMA(723, "43M06", "Cannot mutate schema as schema has existing tables"), SCHEMA_NOT_ALLOWED(
+            724, "43M07", "Schema name not allowed!!");
 
     private final int errorCode;
     private final String sqlState;

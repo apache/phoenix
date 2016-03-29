@@ -347,11 +347,4 @@ public interface PTable extends PMetaDataEntity {
     long getUpdateCacheFrequency();
 
     boolean isNamespaceMapped();
-
-    /**
-     * For a view, return the name of table in Phoenix that physically stores data.
-     * 
-     * @return the name of the Phoenix table storing the data.
-     */
-    PName getPhoenixPhysicalName();
 }
