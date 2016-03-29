@@ -23,11 +23,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.hbase.index.exception.IndexWriteException;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.QuickFailingTaskRunner;
@@ -39,6 +38,8 @@ import org.apache.phoenix.hbase.index.table.CachingHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -97,14 +98,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite)
-            throws IndexWriteException {
-        write(toWrite, false);
-    }
-
-    @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
-            final boolean allowLocalUpdates) throws SingleIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite) throws SingleIndexWriteFailureException {
         /*
          * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the writes in
          * parallel to each index table, so each table gets its own task and is submitted to the pool. Where it gets
@@ -151,25 +145,19 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
                     }
                     try {
+                        // TODO: Once HBASE-11766 is fixed, reexamine whether this is necessary.
+                        // Also, checking the prefix of the table name to determine if this is a local
+                        // index is pretty hacky. If we're going to keep this, we should revisit that
+                        // as well.
                         try {
-							// Since we are storing the local index data in the data table if the table name of the index updates
-							// same as data table then we can directly write to the the region.
-                            if (env != null
-                                    && tableReference.getTableName().equals(
-                                        env.getRegion().getTableDesc().getNameAsString())) {
-                                throwFailureIfDone();
-                                
-                                if(allowLocalUpdates) {
-									// For local index updates we can skip writing to wal because we have already written them
-									// local index edits along with data table wal edits.
-                                    for (Mutation m : mutations) {
-                                        m.setDurability(Durability.SKIP_WAL);
-                                    }
-                                    env.getRegion().batchMutate(
-                                        mutations.toArray(new Mutation[mutations.size()]),
+                            if (tableReference.getTableName().startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
+                                Region indexRegion = IndexUtil.getIndexRegion(env);
+                                if (indexRegion != null) {
+                                    throwFailureIfDone();
+                                    indexRegion.batchMutate(mutations.toArray(new Mutation[mutations.size()]),
                                         HConstants.NO_NONCE, HConstants.NO_NONCE);
+                                    return null;
                                 }
-                                return null;
                             }
                         } catch (IOException ignord) {
                             // when it's failed we fall back to the standard & slow way
@@ -212,7 +200,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
         }
 
     }
-    
+
     private void propagateFailure(Throwable throwable) throws SingleIndexWriteFailureException {
         try {
             throw throwable;

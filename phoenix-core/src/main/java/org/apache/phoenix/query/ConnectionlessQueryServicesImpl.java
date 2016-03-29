@@ -566,19 +566,4 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
             throws SQLException {
         return new MetaDataMutationResult(MutationCode.FUNCTION_ALREADY_EXISTS, 0, null);
     }
-
-    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
-    	List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
-    	if (regions != null) {
-    		for(HRegionLocation region: regions) {
-    			if (Bytes.compareTo(region.getRegionInfo().getStartKey(), row) <= 0
-    					&& Bytes.compareTo(region.getRegionInfo().getEndKey(), row) > 0) {
-	                    return region;
-    			}
-    		}
-    	}
-    	return new HRegionLocation(
-    			new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
-    			SERVER_NAME, -1);
-    }
 }

@@ -26,7 +26,6 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
@@ -365,22 +364,13 @@ public class MetaDataUtil {
     }
 
     public static boolean hasLocalIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
         try {
-            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalTableName);
-            if(desc == null ) return false;
-            return hasLocalIndexColumnFamily(desc);
+            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
+            return desc != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(IS_LOCAL_INDEX_TABLE_PROP_BYTES)));
         } catch (TableNotFoundException e) {
             return false;
         }
-    }
-
-    public static boolean hasLocalIndexColumnFamily(HTableDescriptor desc) {
-        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
-            if (cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {

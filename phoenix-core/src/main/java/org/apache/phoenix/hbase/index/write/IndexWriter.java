@@ -126,20 +126,12 @@ public class IndexWriter implements Stoppable {
    * which ensures that the server crashes when an index write fails, ensuring that we get WAL
    * replay of the index edits.
    * @param indexUpdates Updates to write
-   * @param allowLocalUpdates
-   *            whether to allow writing the updates of the same table in the
-   *            coprocessor hooks or not. HBase doesn't support allow writing
-   *            updates to the same table in (pre|post)BatchMutate coprocessor
-   *            hooks but we can write them in post(Put|Delete) hook. So the
-   *            value of this argument should be decided based on coprocessor
-   *            hook.
  * @throws IOException 
    */
-    public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
-            boolean allowLocalUpdates) throws IOException {
+  public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates) throws IOException  {
     // convert the strings to htableinterfaces to which we can talk and group by TABLE
     Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-    writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates);
+    writeAndKillYourselfOnFailure(toWrite);
   }
 
   /**
@@ -147,10 +139,9 @@ public class IndexWriter implements Stoppable {
    * @param toWrite
  * @throws IOException 
    */
-    public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
-            boolean allowLocalUpdates) throws IOException {
+  public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite) throws IOException {
     try {
-      write(toWrite, allowLocalUpdates);
+      write(toWrite);
       if (LOG.isTraceEnabled()) {
         LOG.trace("Done writing all index updates!\n\t" + toWrite);
       }
@@ -171,19 +162,11 @@ public class IndexWriter implements Stoppable {
    * We attempt to quickly determine if any write has failed and not write to the remaining indexes
    * to ensure a timely recovery of the failed index writes.
    * @param toWrite Updates to write
-   * @param allowLocalUpdates
-   *            whether to allow writing the updates of the same table in the
-   *            coprocessor hooks or not. HBase doesn't support allow writing
-   *            updates to the same table in (pre|post)BatchMutate coprocessor
-   *            hooks but we can write them in post(Put|Delete) hook. So the
-   *            value of this argument should be decided based on coprocessor
-   *            hook.
    * @throws IndexWriteException if we cannot successfully write to the index. Whether or not we
    *           stop early depends on the {@link IndexCommitter}.
    */
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates)
-            throws IndexWriteException {
-    write(resolveTableReferences(toWrite), allowLocalUpdates);
+  public void write(Collection<Pair<Mutation, byte[]>> toWrite) throws IndexWriteException {
+    write(resolveTableReferences(toWrite));
   }
 
   /**
@@ -196,18 +179,6 @@ public class IndexWriter implements Stoppable {
     this.writer.write(toWrite);
   }
 
-
-  	/**
-	 * see {@link #write(Collection, boolean)}
-	 * 
-	 * @param toWrite
-	 * @param allowLocalUpdates
-	 * @throws IndexWriteException
-	 */
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates)
-      throws IndexWriteException {
-    this.writer.write(toWrite, allowLocalUpdates);
-  }
 
   /**
    * Convert the passed index updates to {@link HTableInterfaceReference}s.

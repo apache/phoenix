@@ -67,6 +67,7 @@ import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
+import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -783,14 +784,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         null, priority, null);
             }
 
-            Set<byte[]> familiesKeys = descriptor.getFamiliesKeys();
-            for(byte[] family: familiesKeys) {
-                if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                    if (!descriptor.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
-                        descriptor.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
-                            null, priority, null);
-                        break;
-                    }
+            if (descriptor.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null
+                    && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(descriptor
+                            .getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                if (!descriptor.hasCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName())) {
+                    descriptor.addCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName(),
+                        null, priority, null);
+                }
+            } else {
+                if (!descriptor.hasCoprocessor(LocalIndexSplitter.class.getName())
+                        && !SchemaUtil.isMetaTable(tableName)
+                        && !SchemaUtil.isSequenceTable(tableName)) {
+                    descriptor.addCoprocessor(LocalIndexSplitter.class.getName(), null, priority, null);
                 }
             }
 
@@ -936,6 +941,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableDescriptor newDesc = generateTableDescriptor(tableName, existingDesc, tableType , props, families, splits);
 
             if (!tableExist) {
+                if (newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES) != null && Boolean.TRUE.equals(
+                    PBoolean.INSTANCE.toObject(newDesc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                    newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
+                }
                 // Remove the splitPolicy attribute to prevent HBASE-12570
                 if (isMetaTable) {
                     newDesc.remove(HTableDescriptor.SPLIT_POLICY);
@@ -972,13 +981,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else {
                 if (isMetaTable) {
                     checkClientServerCompatibility();
-                }
-
-                for(Pair<byte[],Map<String,Object>> family: families) {
-                	if(Bytes.toString(family.getFirst()).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                		newDesc.setValue(HTableDescriptor.SPLIT_POLICY, IndexRegionSplitPolicy.class.getName());
-                		break;
-                	}
                 }
 
                 if (!modifyExistingMetaData) {
@@ -1209,6 +1211,53 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private void ensureLocalIndexTableCreated(byte[] physicalTableName, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits, long timestamp) throws SQLException {
+        PTable table;
+        String parentTableName = Bytes.toString(physicalTableName, MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX_BYTES.length,
+            physicalTableName.length - MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX_BYTES.length);
+        try {
+            synchronized (latestMetaDataLock) {
+                throwConnectionClosedIfNullMetaData();
+                table = latestMetaData.getTableRef(new PTableKey(PName.EMPTY_NAME, parentTableName)).getTable();
+                latestMetaDataLock.notifyAll();
+            }
+            if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be the case
+                throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
+            }
+        } catch (TableNotFoundException e) {
+            byte[] schemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(parentTableName));
+            byte[] tableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(parentTableName));
+            MetaDataMutationResult result = this.getTable(null, schemaName, tableName, HConstants.LATEST_TIMESTAMP, timestamp);
+            table = result.getTable();
+            if (table == null) {
+                throw e;
+            }
+        }
+        ensureLocalIndexTableCreated(physicalTableName, tableProps, families, splits);
+    }
+
+    private void ensureLocalIndexTableCreated(byte[] physicalTableName, Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits) throws SQLException, TableAlreadyExistsException {
+        
+        // If we're not allowing local indexes or the hbase version is too low,
+        // don't create the local index table
+        if (   !this.getProps().getBoolean(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, QueryServicesOptions.DEFAULT_ALLOW_LOCAL_INDEX) 
+            || !this.supportsFeature(Feature.LOCAL_INDEX)) {
+                    return;
+        }
+        
+        tableProps.put(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
+        HTableDescriptor desc = ensureTableCreated(physicalTableName, PTableType.TABLE, tableProps, families, splits, true);
+        if (desc != null) {
+            if (!Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                String fullTableName = Bytes.toString(physicalTableName);
+                throw new TableAlreadyExistsException(
+                        "Unable to create shared physical table for local indexes.",
+                        SchemaUtil.getSchemaNameFromFullName(fullTableName),
+                        SchemaUtil.getTableNameFromFullName(fullTableName));
+            }
+        }
+    }
+
     private boolean ensureViewIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         HTableDescriptor desc = null;
@@ -1245,28 +1294,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private boolean ensureLocalIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
+        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
         HTableDescriptor desc = null;
         HBaseAdmin admin = null;
         boolean wasDeleted = false;
         try {
-            admin = this.getAdmin();
+            admin = new HBaseAdmin(config);
             try {
-                desc = admin.getTableDescriptor(physicalTableName);
-                this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalTableName));
-                final ReadOnlyProps props = this.getProps();
-                final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
-                if (dropMetadata) {
-                	List<String> columnFamiles = new ArrayList<String>();
-                	for(HColumnDescriptor cf : desc.getColumnFamilies()) {
-                		if(cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                			columnFamiles.add(cf.getNameAsString());
-                		}    
-                	} 
-                	for(String cf: columnFamiles) {
-                		admin.deleteColumn(physicalTableName, cf);
-                	}    
-                	clearTableRegionCache(physicalTableName);
-                	wasDeleted = true;
+                desc = admin.getTableDescriptor(physicalIndexName);
+                if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_BYTES)))) {
+                    this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalIndexName));
+                    final ReadOnlyProps props = this.getProps();
+                    final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
+                    if (dropMetadata) {
+                        admin.disableTable(physicalIndexName);
+                        admin.deleteTable(physicalIndexName);
+                        clearTableRegionCache(physicalIndexName);
+                        wasDeleted = true;
+                    }
                 }
             } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
                 // Ignore, as we may never have created a view index table
@@ -1294,14 +1339,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
         byte[] tableName = physicalTableName != null ? physicalTableName : SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
-        boolean localIndexTable = false;
-        for(Pair<byte[], Map<String, Object>> family: families) {
-        	if(Bytes.toString(family.getFirst()).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-        		localIndexTable = true; 
-        		break;
-        	}
-        }
-        if ((tableType == PTableType.VIEW && physicalTableName != null) || (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))) {
+        boolean localIndexTable = Boolean.TRUE.equals(tableProps.remove(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME));
+
+        if ((tableType == PTableType.VIEW && physicalTableName != null) || (tableType != PTableType.VIEW && physicalTableName == null)) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
             ensureTableCreated(tableName, tableType, tableProps, families, splits, true);
@@ -1311,7 +1351,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Physical index table created up front for multi tenant
             // TODO: if viewIndexId is Short.MIN_VALUE, then we don't need to attempt to create it
             if (physicalTableName != null) {
-                if (!localIndexTable && !MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
+                if (localIndexTable) {
+                    ensureLocalIndexTableCreated(tableName, tableProps, families, splits, MetaDataUtil.getClientTimeStamp(m));
+                } else if (!MetaDataUtil.isMultiTenant(m, kvBuilder, ptr)) {
                     ensureViewIndexTableCreated(tenantIdBytes.length == 0 ? null : PNameFactory.newName(tenantIdBytes), physicalTableName, MetaDataUtil.getClientTimeStamp(m));
                 }
             }
@@ -1430,13 +1472,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 dropTables(result.getTableNamesToDelete());
             }
             invalidateTables(result.getTableNamesToDelete());
-            long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
             if (tableType == PTableType.TABLE) {
                 byte[] physicalName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+                long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
                 ensureViewIndexTableDropped(physicalName, timestamp);
                 ensureLocalIndexTableDropped(physicalName, timestamp);
                 tableStatsCache.invalidate(new ImmutableBytesPtr(physicalName));
-            } 
+            }
             break;
         default:
             break;
@@ -3094,30 +3136,5 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
         }, PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES);
         return result;
-    }
-
-    @Override
-    public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException {
-    	/*
-    	 * Use HConnection.getRegionLocation as it uses the cache in HConnection, to get the region
-    	 * to which specified row belongs to.
-    	 */
-    	int retryCount = 0, maxRetryCount = 1;
-    	boolean reload =false;
-    	while (true) {
-    		try {
-    			return connection.getRegionLocation(TableName.valueOf(tableName), row, reload);
-    		} catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-    			String fullName = Bytes.toString(tableName);
-    			throw new TableNotFoundException(SchemaUtil.getSchemaNameFromFullName(fullName), SchemaUtil.getTableNameFromFullName(fullName));
-    		} catch (IOException e) {
-    			if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
-    				reload = true;
-    				continue;
-    			}
-    			throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
-    			.setRootCause(e).build().buildException();
-    		}
-    	}
     }
 }

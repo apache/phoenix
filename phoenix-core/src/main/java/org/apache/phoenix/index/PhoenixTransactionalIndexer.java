@@ -164,7 +164,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
             // no index updates, so we are done
             if (!indexUpdates.isEmpty()) {
-                this.writer.write(indexUpdates, true);
+                this.writer.write(indexUpdates);
             }
         } catch (Throwable t) {
             String msg = "Failed to update index with entries:" + indexUpdates;

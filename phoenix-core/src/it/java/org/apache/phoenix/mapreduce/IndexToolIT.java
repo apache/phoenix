@@ -281,7 +281,7 @@ public class IndexToolIT {
         
         String expectedExplainPlan = "";
         if(isLocal) {
-            final String localIndexName = SchemaUtil.getTableName(schemaName, dataTable);
+            final String localIndexName = MetaDataUtil.getLocalIndexTableName(SchemaUtil.getTableName(schemaName, dataTable));
             expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER %s [-32768]"
                 + "\n    SERVER FILTER BY FIRST KEY ONLY", localIndexName);
         } else {

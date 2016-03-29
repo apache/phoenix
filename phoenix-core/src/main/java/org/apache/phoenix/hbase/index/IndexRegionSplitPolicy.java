@@ -18,7 +18,6 @@
 package org.apache.phoenix.hbase.index;
 
 import org.apache.hadoop.hbase.regionserver.RegionSplitPolicy;
-import org.apache.phoenix.query.QueryConstants;
 
 /**
  * Split policy for index regions to avoid split from external requests.
@@ -27,14 +26,11 @@ public class IndexRegionSplitPolicy extends RegionSplitPolicy {
 
     @Override
     protected boolean shouldSplit() {
-        return true;
-    }
-    
-    @Override
-    protected boolean skipStoreFileRangeCheck(String familyName) {
-        if (familyName.startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-            return true;
-        }
         return false;
     }
+
+    protected boolean skipStoreFileRangeCheck() {
+        return true;
+    }
+
 }

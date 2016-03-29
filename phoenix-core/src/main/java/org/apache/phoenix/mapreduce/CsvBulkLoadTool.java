@@ -22,11 +22,8 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
@@ -320,14 +317,9 @@ public class CsvBulkLoadTool extends Configured implements Tool {
 	 * @throws Exception
 	 */
 	private void completebulkload(Configuration conf,Path outputPath , List<TargetTableRef> tablesToBeLoaded) throws Exception {
-	    TargetTableRef targetTableRef = tablesToBeLoaded.get(0);
-	    Set<String> set = new HashSet<String>();
-	       for(TargetTableRef table : tablesToBeLoaded) {
-	           set.add(table.getPhysicalName());
-	        }
-
-	    for(String tableName : set) {
+	    for(TargetTableRef table : tablesToBeLoaded) {
 	        LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
+            String tableName = table.getPhysicalName();
             Path tableOutputPath = new Path(outputPath,tableName);
             HTable htable = new HTable(conf,tableName);
             LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
@@ -464,8 +456,16 @@ public class CsvBulkLoadTool extends Configured implements Tool {
         PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
         for(PTable indexTable : table.getIndexes()){
-            indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName, indexTable
-                    .getTableName().getString()), indexTable.getPhysicalName().getString()));
+            if (indexTable.getIndexType() == IndexType.LOCAL) {
+                throw new UnsupportedOperationException("Local indexes not supported by CSV Bulk Loader");
+                /*indexTables.add(
+                        new TargetTableRef(getQualifiedTableName(schemaName,
+                                indexTable.getTableName().getString()),
+                                MetaDataUtil.getLocalIndexTableName(qualifiedTableName))); */
+            } else {
+                indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName,
+                        indexTable.getTableName().getString())));
+            }
         }
         return indexTables;
     }
