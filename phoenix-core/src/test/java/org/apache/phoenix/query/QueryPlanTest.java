@@ -26,6 +26,7 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -229,8 +230,52 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    public void testLimitOnTenantSpecific() throws Exception {
-        
+    public void testDescTimestampAtBoundary() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE FOO(\n" + 
+                    "                a VARCHAR NOT NULL,\n" + 
+                    "                b TIMESTAMP NOT NULL,\n" + 
+                    "                c VARCHAR,\n" + 
+                    "                CONSTRAINT pk PRIMARY KEY (a, b DESC, c)\n" + 
+                    "              ) IMMUTABLE_ROWS=true\n" + 
+                    "                ,SALT_BUCKETS=20");
+            String query = "select * from foo where a = 'a' and b >= timestamp '2016-01-28 00:00:00' and b < timestamp '2016-01-29 00:00:00'";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            String queryPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals(
+                    "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [0,'a',~'2016-01-28 23:59:59.999'] - [0,'a',~'2016-01-28 00:00:00.000']\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "CLIENT MERGE SORT", queryPlan);
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testUseOfRoundRobinIteratorSurfaced() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(new Properties());
+        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = "testUseOfRoundRobinIteratorSurfaced".toUpperCase();
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tableName + "(\n" +
+                    "                a VARCHAR NOT NULL,\n" +
+                    "                b TIMESTAMP NOT NULL,\n" +
+                    "                c VARCHAR,\n" +
+                    "                CONSTRAINT pk PRIMARY KEY (a, b DESC, c)\n" +
+                    "              ) IMMUTABLE_ROWS=true\n" +
+                    "                ,SALT_BUCKETS=20");
+            String query = "select * from " + tableName + " where a = 'a' and b >= timestamp '2016-01-28 00:00:00' and b < timestamp '2016-01-29 00:00:00'";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            String queryPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals(
+                    "CLIENT PARALLEL 20-WAY ROUND ROBIN RANGE SCAN OVER " + tableName + " [0,'a',~'2016-01-28 23:59:59.999'] - [0,'a',~'2016-01-28 00:00:00.000']\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
+        } finally {
+            conn.close();
+        }
     }
 
 }

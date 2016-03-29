@@ -44,9 +44,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -80,7 +78,6 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.PColumn;
@@ -92,6 +89,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
+import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
@@ -153,7 +151,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       }
       Mutation[] mutationArray = new Mutation[mutations.size()];
       // TODO: should we use the one that is all or none?
-      logger.warn("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
+      logger.debug("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
@@ -187,9 +185,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             byte[] gp_per_region_bytes =
                     scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION);
             // Let this throw, as this scan is being done for the sole purpose of collecting stats
-            StatisticsCollector statsCollector =
-                    new StatisticsCollector(env, region.getRegionInfo().getTable()
-                            .getNameAsString(), ts, gp_width_bytes, gp_per_region_bytes);
+            StatisticsCollector statsCollector = StatisticsCollectorFactory.createStatisticsCollector(
+                    env, region.getRegionInfo().getTable().getNameAsString(), ts,
+                    gp_width_bytes, gp_per_region_bytes);
             return collectStats(s, statsCollector, region, scan, env.getConfiguration());
         }
         int offsetToBe = 0;
@@ -210,7 +208,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] descRowKeyTableBytes = scan.getAttribute(UPGRADE_DESC_ROW_KEY);
         boolean isDescRowKeyOrderUpgrade = descRowKeyTableBytes != null;
         if (isDescRowKeyOrderUpgrade) {
-            logger.warn("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
+            logger.debug("Upgrading row key for " + region.getRegionInfo().getTable().getNameAsString());
             projectedTable = deserializeTable(descRowKeyTableBytes);
             try {
                 writeToTable = PTableImpl.makePTable(projectedTable, true);
@@ -610,23 +608,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                boolean useCurrentTime = c.getEnvironment().getConfiguration().getBoolean(
-                        QueryServices.STATS_USE_CURRENT_TIME_ATTRIB,
-                        QueryServicesOptions.DEFAULT_STATS_USE_CURRENT_TIME);
-                Connection conn = c.getEnvironment().getRegionServerServices().getConnection();
                 Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
-                if (store.hasReferences()) {
-                    mergeRegions = MetaTableAccessor.getRegionsFromMergeQualifier(conn,
-                            c.getEnvironment().getRegion().getRegionInfo().getRegionName());
-                }
-                // Provides a means of clients controlling their timestamps to not use current time
-                // when background tasks are updating stats. Instead we track the max timestamp of
-                // the cells and use that.
-                long clientTimeStamp = useCurrentTime ? TimeKeeper.SYSTEM.getCurrentTime()
-                        : StatisticsCollector.NO_TIMESTAMP;
-                StatisticsCollector stats = new StatisticsCollector(c.getEnvironment(), table.getNameAsString(),
-                        clientTimeStamp, store.getFamily().getName());
-                internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner, mergeRegions);
+                long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
+                        c.getEnvironment(), table.getNameAsString(), clientTimeStamp,
+                        store.getFamily().getName());
+                internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
             } catch (IOException e) {
                 // If we can't reach the stats table, don't interrupt the normal
                 // compaction operation, just log a warning.

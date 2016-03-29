@@ -46,6 +46,7 @@ import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TupleUtil;
 
 public class HashJoinRegionScanner implements RegionScanner {
@@ -53,6 +54,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     private final RegionScanner scanner;
     private final TupleProjector projector;
     private final HashJoinInfo joinInfo;
+    private final RegionCoprocessorEnvironment env;
     private Queue<Tuple> resultQueue;
     private boolean hasMore;
     private long count;
@@ -64,6 +66,7 @@ public class HashJoinRegionScanner implements RegionScanner {
 
     @SuppressWarnings("unchecked")
     public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesWritable tenantId, RegionCoprocessorEnvironment env) throws IOException {
+        this.env = env;
         this.scanner = scanner;
         this.projector = projector;
         this.joinInfo = joinInfo;
@@ -250,25 +253,35 @@ public class HashJoinRegionScanner implements RegionScanner {
 
     @Override
     public boolean nextRaw(List<Cell> result) throws IOException {
-        while (shouldAdvance()) {
-            hasMore = scanner.nextRaw(result);
-            processResults(result, false);
-            result.clear();
+        try {
+            while (shouldAdvance()) {
+                hasMore = scanner.nextRaw(result);
+                processResults(result, false);
+                result.clear();
+            }
+            
+            return nextInQueue(result);
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
+            return false; // impossible
         }
-
-        return nextInQueue(result);
     }
 
     @Override
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
             throws IOException {
-        while (shouldAdvance()) {
-            hasMore = scanner.nextRaw(result, scannerContext);
-            processResults(result, false); // TODO fix honoring the limit
-            result.clear();
+        try {
+            while (shouldAdvance()) {
+                hasMore = scanner.nextRaw(result, scannerContext);
+                processResults(result, false); // TODO detect if limit used here
+                result.clear();
+            }
+            
+            return nextInQueue(result);
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
+            return false; // impossible
         }
-
-        return nextInQueue(result);
     }
 
     @Override
@@ -283,24 +296,34 @@ public class HashJoinRegionScanner implements RegionScanner {
 
     @Override
     public boolean next(List<Cell> result) throws IOException {
-        while (shouldAdvance()) {
-            hasMore = scanner.next(result);
-            processResults(result, false);
-            result.clear();
+        try {
+            while (shouldAdvance()) {
+                hasMore = scanner.next(result);
+                processResults(result, false);
+                result.clear();
+            }
+            
+            return nextInQueue(result);
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
+            return false; // impossible
         }
-
-        return nextInQueue(result);
     }
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        while (shouldAdvance()) {
-            hasMore = scanner.next(result, scannerContext);
-            processResults(result, false); // TODO honoring the limit
-            result.clear();
+        try {
+            while (shouldAdvance()) {
+                hasMore = scanner.next(result, scannerContext);
+                processResults(result, false); // TODO detect if limit used here
+                result.clear();
+            }
+            
+            return nextInQueue(result);
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(env.getRegion().getRegionInfo().getRegionNameAsString(), t);
+            return false; // impossible
         }
-
-      return nextInQueue(result);
     }
 
     @Override

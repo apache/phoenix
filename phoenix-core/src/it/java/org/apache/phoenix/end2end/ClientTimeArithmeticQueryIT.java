@@ -19,9 +19,9 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
-import static org.apache.phoenix.util.TestUtil.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -51,7 +51,6 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -614,10 +613,10 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
         statement.setDate(3, date);
         statement.execute();
         statement.setString(2, ROW4);
-        statement.setDate(3, new Date(date.getTime() + TestUtil.MILLIS_IN_DAY - 1));
+        statement.setDate(3, new Date(date.getTime() + MILLIS_IN_DAY - 1));
         statement.execute();
         statement.setString(2, ROW6);
-        statement.setDate(3, new Date(date.getTime() + TestUtil.MILLIS_IN_DAY - 1));
+        statement.setDate(3, new Date(date.getTime() + MILLIS_IN_DAY - 1));
         statement.execute();
         statement.setString(2, ROW9);
         statement.setDate(3, date);
@@ -738,7 +737,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts + 1 FROM time_table");
       assertTrue(rs.next());
-      assertEquals(time.getTime() + TestUtil.MILLIS_IN_DAY,rs.getTimestamp(1).getTime());
+      assertEquals(time.getTime() + MILLIS_IN_DAY,rs.getTimestamp(1).getTime());
     }
 
     @Test
@@ -772,7 +771,7 @@ public class ClientTimeArithmeticQueryIT extends BaseQueryIT {
       conn = DriverManager.getConnection(getUrl(), props);
       rs = conn.createStatement().executeQuery("SELECT ts - 1 FROM time_table");
       assertTrue(rs.next());
-      assertEquals(time.getTime() - TestUtil.MILLIS_IN_DAY,rs.getTimestamp(1).getTime());
+      assertEquals(time.getTime() - MILLIS_IN_DAY,rs.getTimestamp(1).getTime());
     }
  
     @Test

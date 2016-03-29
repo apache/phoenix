@@ -40,7 +40,7 @@ import com.google.common.collect.Lists;
  * Tests for the LPAD built-in function.
  */
 
-public class LpadFunctionIT extends BaseHBaseManagedTimeIT {
+public class StringIT extends BaseHBaseManagedTimeIT {
     
     /**
      * Helper to test LPAD function
@@ -239,4 +239,16 @@ public class LpadFunctionIT extends BaseHBaseManagedTimeIT {
             Lists.newArrayList("12", "ɚɦ", "12", "ɚɦ"), Lists.<String> newArrayList(null, null, null, null));
     }
 
+    @Test
+    public void testStrConcat() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("create table T (PK1 integer, F1 varchar, F2 varchar, F3 varchar, F4 varchar, constraint PK primary key (PK1))");
+        conn.createStatement().execute("upsert into T(PK1, F1,F3) values(0, 'tortilla', 'chip')");
+        conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("select * from T where (F1||F2||F3||F4)='tortillachip'");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+        assertFalse(rs.next());
+    }
 }

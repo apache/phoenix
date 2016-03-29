@@ -89,6 +89,8 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
+import co.cask.tephra.util.TxUtils;
+
 /**
  *
  * Collection of non JDBC compliant utility methods
@@ -982,6 +984,25 @@ public class PhoenixRuntime {
         if (!SchemaUtil.isMetaTable(table) && !SchemaUtil.isSequenceTable(table) && !table.isMultiTenant()) {
             return null;
         }
+        return getFirstPKColumnExpression(table);
+    }
+    
+    /**
+     * Get expression that may be used to evaluate to the value of the first
+     * column of a given row in a Phoenix table.
+     * @param conn open Phoenix connection
+     * @param fullTableName full table name
+     * @return An expression that may be evaluated for a row in the provided table. 
+     * @throws SQLException if the table name is not found, a TableNotFoundException
+     * is thrown. If a local index is supplied a SQLFeatureNotSupportedException
+     * is thrown.
+     */
+    public static Expression getFirstPKColumnExpression(Connection conn, String fullTableName) throws SQLException {
+        PTable table = getTable(conn, fullTableName);
+        return getFirstPKColumnExpression(table);
+    }
+
+    private static Expression getFirstPKColumnExpression(PTable table) throws SQLException {
         if (table.getIndexType() == IndexType.LOCAL) {
             /*
              * With some hackery, we could deduce the tenant ID from a multi-tenant local index,
@@ -1156,4 +1177,14 @@ public class PhoenixRuntime {
         pConn.clearMetrics();
     }
     
+    /**
+     * Use this utility function to ensure that a timestamp is in milliseconds across transactional and
+     * non transactional tables. This expects that the Cell timestamp is based either on wall clock
+     * time or transaction manager nanos wall clock time.
+     * @param tsOfCell Cell time stamp to be converted.
+     * @return wall clock time in milliseconds (i.e. Epoch time) of a given Cell time stamp.
+     */
+    public static long getWallClockTimeFromCellTimeStamp(long tsOfCell) {
+        return TxUtils.isPreExistingVersion(tsOfCell) ? tsOfCell : TransactionUtil.convertToMilliseconds(tsOfCell);
+    }
  }

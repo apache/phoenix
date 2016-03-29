@@ -108,7 +108,8 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
         final String indxTable = String.format("%s_%s", dataTable, "INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, "true");
+        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         try {
@@ -143,7 +144,7 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             
             //assert we are pulling from data table.
-            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s", fullTableName), actualExplainPlan);
+            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s", fullTableName), actualExplainPlan);
             
             rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -204,10 +205,10 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         String expectedExplainPlan = "";
         if(isLocal) {
             final String localIndexName = MetaDataUtil.getLocalIndexTableName(SchemaUtil.getTableName(schemaName, dataTable));
-            expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY RANGE SCAN OVER %s [-32768]"
+            expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN RANGE SCAN OVER %s [-32768]"
                 + "\n    SERVER FILTER BY FIRST KEY ONLY", localIndexName);
         } else {
-            expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s"
+            expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s"
                     + "\n    SERVER FILTER BY FIRST KEY ONLY",SchemaUtil.getTableName(schemaName, indxTable));
         }
         assertEquals(expectedExplainPlan,actualExplainPlan);

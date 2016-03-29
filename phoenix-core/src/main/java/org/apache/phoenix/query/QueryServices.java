@@ -154,6 +154,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB = "phoenix.stats.guidepost.width";
     public static final String STATS_GUIDEPOST_PER_REGION_ATTRIB = "phoenix.stats.guidepost.per.region";
     public static final String STATS_USE_CURRENT_TIME_ATTRIB = "phoenix.stats.useCurrentTime";
+    public static final String STATS_ENABLED_ATTRIB = "phoenix.stats.enabled";
     public static final String RUN_UPDATE_STATS_ASYNC = "phoenix.update.stats.command.async";
     public static final String STATS_SERVER_POOL_SIZE = "phoenix.stats.pool.size";
     public static final String COMMIT_STATS_ASYNC = "phoenix.stats.commit.async";
@@ -161,6 +162,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
     public static final String COPROCESSOR_PRIORITY_ATTRIB = "phoenix.coprocessor.priority";
     public static final String EXPLAIN_CHUNK_COUNT_ATTRIB = "phoenix.explain.displayChunkCount";
+    public static final String EXPLAIN_ROW_COUNT_ATTRIB = "phoenix.explain.displayRowCount";
     public static final String ALLOW_ONLINE_TABLE_SCHEMA_UPDATE = "hbase.online.schema.update.enable";
     public static final String NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK = "phoenix.schema.change.retries";
     public static final String DELAY_FOR_SCHEMA_UPDATE_CHECK = "phoenix.schema.change.delay";

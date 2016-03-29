@@ -61,6 +61,7 @@ public class MutableIndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         final String dataTable = "DATA_TABLE5";
         final String indxTable = String.format("%s_%s",dataTable,"INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         try {
@@ -90,7 +91,7 @@ public class MutableIndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             
             //assert we are pulling from data table.
-            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER %s",dataTable),actualExplainPlan);
+            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s",dataTable),actualExplainPlan);
             
             rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());

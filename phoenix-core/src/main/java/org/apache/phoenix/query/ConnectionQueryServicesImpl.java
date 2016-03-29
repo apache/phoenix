@@ -193,6 +193,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -204,6 +205,7 @@ import co.cask.tephra.TransactionSystemClient;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.distributed.PooledClientProvider;
 import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.zookeeper.TephraZKClientService;
 
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
@@ -350,14 +352,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (zkQuorumServersString==null) {
             zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
         }
+
+        int timeOut = props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
+        // Create instance of the tephra zookeeper client 
+        ZKClientService tephraZKClientService = new TephraZKClientService(zkQuorumServersString, timeOut, null, ArrayListMultimap.<String, byte[]>create());
+        
         ZKClientService zkClientService = ZKClientServices.delegate(
                   ZKClients.reWatchOnExpire(
-                    ZKClients.retryOnFailure(
-                      ZKClientService.Builder.of(zkQuorumServersString)
-                        .setSessionTimeout(props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
-                        .build(),
-                      RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
-                    )
+                         ZKClients.retryOnFailure(tephraZKClientService, RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
                   )
                 );
         zkClientService.startAndWait();
@@ -2365,21 +2367,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0, columnsToAdd);
                                 }
                                 if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0) {
+                                    // Drop old stats table so that new stats table is created
+                                    metaConnection = dropStatsTable(metaConnection, 
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 4);
                                     // Add these columns one at a time, each with different timestamps so that if folks have
                                     // run the upgrade code already for a snapshot, we'll still enter this block (and do the
                                     // parts we haven't yet done).
-                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, 
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 3,
                                             PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
-                                    // Drop old stats table so that new stats table is created
-                                    metaConnection = dropStatsTable(metaConnection,
+                                    metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, 
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 2,
+                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " " + PLong.INSTANCE.getSqlTypeName());
+                                    metaConnection = setImmutableTableIndexesImmutable(metaConnection, 
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 1);
-                                    metaConnection = addColumnsIfNotExists(metaConnection,
-                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0,
-                                            PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " "
-                                                    + PLong.INSTANCE.getSqlTypeName());
-                                    setImmutableTableIndexesImmutable(metaConnection);
-                                    // that already have cached data.
+                                    metaConnection = updateSystemCatalogTimestamp(metaConnection, 
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
+                                    ConnectionQueryServicesImpl.this.removeTable(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
+                                    logger.info("Update of SYSTEM.CATALOG complete");
 									clearCache();
                                 }
                                 
@@ -2412,14 +2417,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
                                     if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
                                         metaConnection.removeTable(null,
-                                                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME,
-                                                PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
                                         clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
-                                                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME_BYTES,
-                                                PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA_BYTES,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE_BYTES,
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                                        clearTableRegionCache(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+                                        clearTableRegionCache(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                                     }
                                     nSequenceSaltBuckets = nSaltBuckets;
                                 } else { 
@@ -2431,13 +2436,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-                            } catch(TableAlreadyExistsException ignore) {
-                                metaConnection = addColumnsIfNotExists(
+                            } catch(TableAlreadyExistsException e) {
+                                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+                                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
+                                    metaConnection = addColumnsIfNotExists(
                                         metaConnection,
                                         PhoenixDatabaseMetaData.SYSTEM_STATS_NAME,
                                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
                                         PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
                                                 + PLong.INSTANCE.getSqlTypeName());
+                                }
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
@@ -2488,7 +2496,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @param metaConnection connection over which to run the upgrade
      * @throws SQLException
      */
-    private static void setImmutableTableIndexesImmutable(PhoenixConnection metaConnection) throws SQLException {
+    private PhoenixConnection setImmutableTableIndexesImmutable(PhoenixConnection oldMetaConnection, long timestamp) throws SQLException {
+        SQLException sqlE = null;
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+        PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
         boolean autoCommit = metaConnection.getAutoCommit();
         try {
             metaConnection.setAutoCommit(true);
@@ -2505,9 +2517,64 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     "WHERE A.COLUMN_FAMILY IS NULL AND\n" + 
                     " B.COLUMN_FAMILY IS NOT NULL AND\n" + 
                     " A.IMMUTABLE_ROWS = TRUE");
+        } catch (SQLException e) {
+            logger.warn("exception during upgrading stats table:" + e);
+            sqlE = e;
         } finally {
-            metaConnection.setAutoCommit(autoCommit);
+            try {
+                metaConnection.setAutoCommit(autoCommit);
+                oldMetaConnection.close();
+            } catch (SQLException e) {
+                if (sqlE != null) {
+                    sqlE.setNextException(e);
+                } else {
+                    sqlE = e;
+                }
+            }
+            if (sqlE != null) {
+                throw sqlE;
+            }
         }
+        return metaConnection;
+    }
+
+    /**
+     * Forces update of SYSTEM.CATALOG by setting column to existing value
+     * @param oldMetaConnection
+     * @param timestamp
+     * @return
+     * @throws SQLException
+     */
+    private PhoenixConnection updateSystemCatalogTimestamp(PhoenixConnection oldMetaConnection, long timestamp) throws SQLException {
+        SQLException sqlE = null;
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+        PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
+        boolean autoCommit = metaConnection.getAutoCommit();
+        try {
+            metaConnection.setAutoCommit(true);
+            metaConnection.createStatement().execute(
+                    "UPSERT INTO SYSTEM.CATALOG(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, DISABLE_WAL)\n" + 
+                    "VALUES (NULL, '" + QueryConstants.SYSTEM_SCHEMA_NAME + "','" + PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE + "', NULL, NULL, FALSE)"); 
+        } catch (SQLException e) {
+            logger.warn("exception during upgrading stats table:" + e);
+            sqlE = e;
+        } finally {
+            try {
+                metaConnection.setAutoCommit(autoCommit);
+                oldMetaConnection.close();
+            } catch (SQLException e) {
+                if (sqlE != null) {
+                    sqlE.setNextException(e);
+                } else {
+                    sqlE = e;
+                }
+            }
+            if (sqlE != null) {
+                throw sqlE;
+            }
+        }
+        return metaConnection;
     }
 
     private PhoenixConnection dropStatsTable(PhoenixConnection oldMetaConnection, long timestamp)
@@ -2709,7 +2776,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Now that we have the lock we need, create the sequence
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
             HTableInterface htable =
-                    this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+                    this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             htable.setAutoFlush(true);
             try {
                 Result result = htable.append(append);
@@ -2736,7 +2803,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
             Append append = sequence.dropSequence(timestamp);
-            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             try {
                 Result result = htable.append(append);
                 return sequence.dropSequence(result);
@@ -2832,7 +2899,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toIncrementList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -2955,7 +3022,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toReturnList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -3008,7 +3075,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (mutations.isEmpty()) {
             return;
         }
-        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
         SQLException sqlE = null;
         try {
             hTable.batch(mutations);

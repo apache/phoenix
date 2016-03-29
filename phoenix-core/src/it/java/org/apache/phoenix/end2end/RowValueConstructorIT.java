@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID1;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID3;
 import static org.apache.phoenix.util.TestUtil.ENTITYHISTID7;
@@ -54,7 +55,6 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -847,7 +847,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
-            Timestamp timestampWithNanos = DateUtil.getTimestamp(dateUpserted.getTime() + 2 * TestUtil.MILLIS_IN_DAY, 300);
+            Timestamp timestampWithNanos = DateUtil.getTimestamp(dateUpserted.getTime() + 2 * MILLIS_IN_DAY, 300);
             timestampWithNanos.setNanos(0);
             statement.setTimestamp(2, timestampWithNanos);
             statement.setTimestamp(3, timestampWithNanos);

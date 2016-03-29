@@ -35,7 +35,7 @@ class MetadataRpcController extends DelegatingPayloadCarryingRpcController {
 	private static final List<String> SYSTEM_TABLE_NAMES = new ImmutableList.Builder<String>()
 			.add(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)
 			.add(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
-			.add(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME)
+			.add(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME)
 			.add(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME).build();
 
 	public MetadataRpcController(PayloadCarryingRpcController delegate,
