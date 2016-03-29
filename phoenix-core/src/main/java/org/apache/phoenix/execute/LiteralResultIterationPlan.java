@@ -85,7 +85,8 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
 
             @Override
             public Tuple next() throws SQLException {
-                while (!this.closed && (offset != null && count++ < offset) && tupleIterator.hasNext()) {
+                while (!this.closed && (offset != null && count < offset) && tupleIterator.hasNext()) {
+                    count++;
                     tupleIterator.next();
                 }
                 if (!this.closed 

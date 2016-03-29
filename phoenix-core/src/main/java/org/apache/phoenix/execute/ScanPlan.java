@@ -62,6 +62,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.LogUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -197,9 +198,9 @@ public class ScanPlan extends BaseQueryPlan {
         boolean isSerial = isSerial(context, statement, tableRef, orderBy, limit, offset, allowPageFilter);
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         if (perScanLimit != null) {
-            perScanLimit += (offset == null ? 0 : offset);
+            perScanLimit = QueryUtil.getOffsetLimit(perScanLimit, offset);
         }
-		boolean hasOffset = offset != null;
+        boolean hasOffset = offset != null;
         BaseResultIterators iterators;
         if (hasOffset && !isOrdered) {
             iterators = new TableSerialIterators(this, perScanLimit, offset, parallelIteratorFactory,

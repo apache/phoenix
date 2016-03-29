@@ -108,6 +108,6 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 	public String toString() {
 		return "MergeSortTopNResultIterator [limit=" + limit + ", count="
 				+ count + ", orderByColumns=" + orderByColumns + ", ptr1="
-				+ ptr1 + ", ptr2=" + ptr2 + "]";
+				+ ptr1 + ", ptr2=" + ptr2 + ",offset=" + offset + "]";
 	}
 }

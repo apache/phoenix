@@ -134,7 +134,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // (where)
-            String query = "SELECT t.eid, t.x + 9 FROM (SELECT entity_id eid, b_string b, a_byte + 1 x FROM aTable WHERE a_byte + 1 < 9 ) AS t";
+            String query = "SELECT t.eid, t.x + 9 FROM (SELECT entity_id eid, b_string b, a_byte + 1 x FROM aTable WHERE a_byte + 1 < 9) AS t";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -241,7 +241,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             rs = statement.executeQuery();
             assertFalse(rs.next());
 
-            // (offset) where
+            // (where offset)
             query = "SELECT t.eid, t.x + 9 FROM (SELECT entity_id eid, b_string b, a_byte + 1 x FROM aTable WHERE a_byte + 1 < 9 OFFSET 2) AS t";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
@@ -260,6 +260,18 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(ROW7, rs.getString(1));
             assertEquals(17, rs.getInt(2));
+
+            // (offset) where
+            query = "SELECT t.eid, t.x + 9 FROM (SELECT entity_id eid, b_string b, a_byte + 1 x FROM aTable OFFSET 4) AS t WHERE t.b = '"
+                    + C_VALUE + "'";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(ROW5, rs.getString(1));
+            assertEquals(15, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals(ROW8, rs.getString(1));
+            assertEquals(18, rs.getInt(2));
 
         } finally {
             conn.close();
