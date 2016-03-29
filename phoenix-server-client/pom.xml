@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.7.0-HBase-1.1</version>
+    <version>4.8.0-HBase-1.1-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-server-client</artifactId>
   <name>Phoenix Query Server Client</name>
@@ -54,8 +54,8 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica</artifactId>
     </dependency>
     <dependency>
       <!-- a dependency for the thin-client uberjar -->

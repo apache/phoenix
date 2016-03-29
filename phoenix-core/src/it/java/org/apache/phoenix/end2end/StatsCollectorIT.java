@@ -39,6 +39,7 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
@@ -366,11 +367,13 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
             props.setProperty(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, minStatsUpdateFreq.toString());
         }
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER) " + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
-        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?)");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER, w INTEGER) "
+                + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
+        stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
         for (int i = 0; i < nRows; i++) {
             stmt.setString(1, Character.toString((char) ('a' + i)));
             stmt.setInt(2, i);
+            stmt.setInt(3, i);
             stmt.executeUpdate();
         }
         conn.commit();
@@ -392,7 +395,7 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
         List<KeyRange>keyRanges = getAllSplits(conn, tableName);
         assertEquals(nRows+1, keyRanges.size());
         
-        int nDeletedRows = conn.createStatement().executeUpdate("DELETE FROM " + tableName + " WHERE V < 5");
+        int nDeletedRows = conn.createStatement().executeUpdate("DELETE FROM " + tableName + " WHERE V < " + nRows / 2);
         conn.commit();
         assertEquals(5, nDeletedRows);
         
@@ -411,6 +414,10 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
             keyRanges = getAllSplits(conn, tableName);
         }
         assertEquals(nRows/2+1, keyRanges.size());
+        ResultSet rs = conn.createStatement().executeQuery("SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM "
+                + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE PHYSICAL_NAME='" + tableName + "'");
+        rs.next();
+        assertEquals(nRows - nDeletedRows, rs.getLong(1));
         
     }
 }

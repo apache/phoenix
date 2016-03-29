@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.7.0-HBase-1.1</version>
+  <version>4.8.0-HBase-1.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -39,25 +39,6 @@
       <id>apache release</id>
       <url>https://repository.apache.org/content/repositories/releases/</url>
     </repository>
-    <repository>
-      <id>conjars.org</id>
-      <url>http://conjars.org/repo</url>
-    </repository>
-    <repository>
-      <id>apache snapshot</id>
-      <url>https://repository.apache.org/content/repositories/snapshots/</url>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>sonatype-nexus-snapshots</id>
-      <name>Sonatype Nexus Snapshots</name>
-      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
   </repositories>
 
   <parent>
@@ -80,7 +61,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.1.2</hbase.version>
+    <hbase.version>1.1.3</hbase.version>
     <hadoop-two.version>2.5.1</hadoop-two.version>
 
     <!-- Dependency versions -->
@@ -88,7 +69,7 @@
     <hadoop.version>2.5.1</hadoop.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
-    <antlr.version>3.5</antlr.version>
+    <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
     <slf4j.version>1.6.4</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
@@ -97,7 +78,7 @@
     <commons-lang.version>2.5</commons-lang.version>
     <commons-logging.version>1.2</commons-logging.version>
     <commons-csv.version>1.0</commons-csv.version>
-    <sqlline.version>1.1.8</sqlline.version>
+    <sqlline.version>1.1.9</sqlline.version>
     <guava.version>13.0.1</guava.version>
     <flume.version>1.4.0</flume.version>
     <findbugs.version>1.3.2</findbugs.version>
@@ -106,11 +87,11 @@
     <netty.version>4.0.23.Final</netty.version>
     <commons-codec.version>1.7</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
-    <collections.version>3.2.1</collections.version>
+    <collections.version>3.2.2</collections.version>
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
     <joni.version>2.1.2</joni.version>
-    <calcite.version>1.6.0</calcite.version>
+    <avatica.version>1.7.1</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.7.0</tephra.version>
     <spark.version>1.5.2</spark.version>
@@ -629,14 +610,14 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
-        <version>${calcite.version}</version>
+        <groupId>org.apache.calcite.avatica</groupId>
+        <artifactId>avatica</artifactId>
+        <version>${avatica.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica-server</artifactId>
-        <version>${calcite.version}</version>
+        <groupId>org.apache.calcite.avatica</groupId>
+        <artifactId>avatica-server</artifactId>
+        <version>${avatica.version}</version>
       </dependency>
 
       <!-- Transaction dependencies -->

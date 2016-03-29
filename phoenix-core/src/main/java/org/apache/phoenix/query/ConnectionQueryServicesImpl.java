@@ -2417,14 +2417,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
                                     if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
                                         metaConnection.removeTable(null,
-                                                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME,
-                                                PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
                                         clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
-                                                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA_NAME_BYTES,
-                                                PhoenixDatabaseMetaData.SEQUENCE_TABLE_NAME_BYTES,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA_BYTES,
+                                                PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE_BYTES,
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
-                                        clearTableRegionCache(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+                                        clearTableRegionCache(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
                                     }
                                     nSequenceSaltBuckets = nSaltBuckets;
                                 } else { 
@@ -2436,13 +2436,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 metaConnection.createStatement().executeUpdate(
                                         QueryConstants.CREATE_STATS_TABLE_METADATA);
                             } catch (NewerTableAlreadyExistsException ignore) {
-                            } catch(TableAlreadyExistsException ignore) {
-                                metaConnection = addColumnsIfNotExists(
+                            } catch(TableAlreadyExistsException e) {
+                                long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+                                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
+                                    metaConnection = addColumnsIfNotExists(
                                         metaConnection,
                                         PhoenixDatabaseMetaData.SYSTEM_STATS_NAME,
                                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
                                         PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
                                                 + PLong.INSTANCE.getSqlTypeName());
+                                }
                             }
                             try {
                                 metaConnection.createStatement().executeUpdate(
@@ -2773,7 +2776,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // Now that we have the lock we need, create the sequence
             Append append = sequence.createSequence(startWith, incrementBy, cacheSize, timestamp, minValue, maxValue, cycle);
             HTableInterface htable =
-                    this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+                    this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             htable.setAutoFlush(true);
             try {
                 Result result = htable.append(append);
@@ -2800,7 +2803,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             sequence.getLock().lock();
             // Now that we have the lock we need, create the sequence
             Append append = sequence.dropSequence(timestamp);
-            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            HTableInterface htable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             try {
                 Result result = htable.append(append);
                 return sequence.dropSequence(result);
@@ -2896,7 +2899,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toIncrementList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -3019,7 +3022,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (toReturnList.isEmpty()) {
                 return;
             }
-            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+            HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
             Object[] resultObjects = null;
             SQLException sqlE = null;
             try {
@@ -3072,7 +3075,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (mutations.isEmpty()) {
             return;
         }
-        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_BYTES);
+        HTableInterface hTable = this.getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
         SQLException sqlE = null;
         try {
             hTable.batch(mutations);

@@ -21,7 +21,11 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.TreeSet;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
@@ -38,7 +42,11 @@ import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +55,7 @@ import org.slf4j.LoggerFactory;
  * Performs similar functionality to {@link KeyValueSortReducer}
  */
 public class FormatToKeyValueReducer
-    extends Reducer<TableRowkeyPair,ImmutableBytesWritable,TableRowkeyPair,KeyValue> {
+        extends Reducer<TableRowkeyPair, ImmutableBytesWritable, TableRowkeyPair, KeyValue> {
 
     protected static final Logger LOG = LoggerFactory.getLogger(FormatToKeyValueReducer.class);
 
@@ -72,8 +80,8 @@ public class FormatToKeyValueReducer
         try {
             PhoenixConnection conn = (PhoenixConnection) QueryUtil.getConnection(clientInfos, conf);
             builder = conn.getKeyValueBuilder();
-            final String tableNamesConf = conf.get(FormatToKeyValueMapper.TABLE_NAMES_CONFKEY);
-            final String logicalNamesConf = conf.get(FormatToKeyValueMapper.LOGICAL_NAMES_CONFKEY);
+            final String tableNamesConf = conf.get(FormatToBytesWritableMapper.TABLE_NAMES_CONFKEY);
+            final String logicalNamesConf = conf.get(FormatToBytesWritableMapper.LOGICAL_NAMES_CONFKEY);
             tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
             logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
 
@@ -91,9 +99,9 @@ public class FormatToKeyValueReducer
             emptyFamilyName.add(SchemaUtil.getEmptyColumnFamilyPtr(table));
             List<PColumn> cls = table.getColumns();
             List<Pair<byte[], byte[]>> list = new ArrayList(cls.size());
-            for(int i = 0; i < cls.size(); i++) {
+            for (int i = 0; i < cls.size(); i++) {
                 PColumn c = cls.get(i);
-                if(c.getFamilyName() == null) {
+                if (c.getFamilyName() == null) {
                     list.add(null); // Skip PK column
                     continue;
                 }
@@ -108,15 +116,14 @@ public class FormatToKeyValueReducer
 
     @Override
     protected void reduce(TableRowkeyPair key, Iterable<ImmutableBytesWritable> values,
-        Reducer<TableRowkeyPair, ImmutableBytesWritable, TableRowkeyPair, KeyValue>.Context context)
-        throws IOException, InterruptedException {
+                          Reducer<TableRowkeyPair, ImmutableBytesWritable, TableRowkeyPair, KeyValue>.Context context)
+            throws IOException, InterruptedException {
         TreeSet<KeyValue> map = new TreeSet<KeyValue>(KeyValue.COMPARATOR);
-        int tableIndex = Integer.parseInt(key.getTableName());
-        key.setTableName(tableNames.get(tableIndex));
+        int tableIndex = tableNames.indexOf(key.getTableName());
         List<Pair<byte[], byte[]>> columns = columnIndexes.get(tableIndex);
         for (ImmutableBytesWritable aggregatedArray : values) {
             DataInputStream input = new DataInputStream(new ByteArrayInputStream(aggregatedArray.get()));
-            while (input.available()!= 0) {
+            while (input.available() != 0) {
                 int index = WritableUtils.readVInt(input);
                 Pair<byte[], byte[]> pair = columns.get(index);
                 byte type = input.readByte();

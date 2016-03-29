@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -370,6 +371,7 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
                     "STATS.ACTIVE_VISITOR INTEGER " +
                     "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE)) IMMUTABLE_ROWS=true");
             stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX web_stats_idx ON web_stats (DATE, FEATURE)");
+            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX web_stats_idx2 ON web_stats (DATE, FEATURE, USAGE.DB)");
             stm.close();
 
             Date date = new Date(0);
@@ -406,6 +408,16 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(0, rs.getLong(1));
 
+            stm.execute("DROP INDEX web_stats_idx ON web_stats");
+            stm.execute("DROP INDEX web_stats_idx2 ON web_stats");
+
+            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX web_stats_idx ON web_stats (USAGE.DB)");
+            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX web_stats_idx2 ON web_stats (USAGE.DB, DATE)");
+            try{
+                psInsert = con.prepareStatement("DELETE FROM web_stats WHERE  USAGE.DB=2");
+            } catch(Exception e) {
+                fail("There should not be any exception while deleting row");
+            }
         } finally {
             try {
                 con.close();

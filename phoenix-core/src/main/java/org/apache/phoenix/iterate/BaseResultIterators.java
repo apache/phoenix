@@ -82,6 +82,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
@@ -95,7 +96,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.io.Closeables;
 
 
 /**
@@ -1006,6 +1006,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
         }
         buf.append(getName()).append(" ").append(size()).append("-WAY ");
+        try {
+            if (plan.useRoundRobinIterator()) {
+                buf.append("ROUND ROBIN ");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         explain(buf.toString(),planSteps);
     }
     

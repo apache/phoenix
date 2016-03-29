@@ -944,7 +944,7 @@ public abstract class BaseTest {
                 + PhoenixDatabaseMetaData.TENANT_ID + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," 
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME 
-                + " FROM " + PhoenixDatabaseMetaData.SEQUENCE_FULLNAME_ESCAPED);
+                + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
         String lastTenantId = null;
         Connection conn = globalConn;
         while (rs.next()) {

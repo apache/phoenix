@@ -33,7 +33,7 @@ import com.google.common.collect.Lists;
 
 import static org.junit.Assert.assertEquals;
 
-public class FormatToKeyValueMapperTest {
+public class FormatToBytesWritableMapperTest {
 
     @Test
     public void testBuildColumnInfoList() {
@@ -43,8 +43,8 @@ public class FormatToKeyValueMapperTest {
                 new ColumnInfo("stringArrayCol", PIntegerArray.INSTANCE.getSqlType()));
 
         Configuration conf = new Configuration();
-        FormatToKeyValueMapper.configureColumnInfoList(conf, columnInfoList);
-        List<ColumnInfo> fromConfig = FormatToKeyValueMapper.buildColumnInfoList(conf);
+        FormatToBytesWritableMapper.configureColumnInfoList(conf, columnInfoList);
+        List<ColumnInfo> fromConfig = FormatToBytesWritableMapper.buildColumnInfoList(conf);
 
         assertEquals(columnInfoList, fromConfig);
     }
@@ -59,8 +59,8 @@ public class FormatToKeyValueMapperTest {
                 new ColumnInfo("stringArrayCol", PIntegerArray.INSTANCE.getSqlType()));
 
         Configuration conf = new Configuration();
-        FormatToKeyValueMapper.configureColumnInfoList(conf, columnInfoListWithNull);
-        List<ColumnInfo> fromConfig = FormatToKeyValueMapper.buildColumnInfoList(conf);
+        FormatToBytesWritableMapper.configureColumnInfoList(conf, columnInfoListWithNull);
+        List<ColumnInfo> fromConfig = FormatToBytesWritableMapper.buildColumnInfoList(conf);
 
         assertEquals(columnInfoListWithNull, fromConfig);
     }
@@ -81,7 +81,7 @@ public class FormatToKeyValueMapperTest {
         Configuration conf = new Configuration();
         ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
 
-        assertEquals(FormatToKeyValueMapper.DefaultImportPreUpsertKeyValueProcessor.class,
+        assertEquals(FormatToBytesWritableMapper.DefaultImportPreUpsertKeyValueProcessor.class,
                 processor.getClass());
     }
 

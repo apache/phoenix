@@ -4,7 +4,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.7.0-HBase-1.1</version>
+    <version>4.8.0-HBase-1.1-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
   <name>Phoenix Query Server</name>
@@ -66,14 +66,14 @@
       <artifactId>phoenix-server-client</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
-      <version>${calcite.version}</version>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica</artifactId>
+      <version>${avatica.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica-server</artifactId>
-      <version>${calcite.version}</version>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica-server</artifactId>
+      <version>${avatica.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>

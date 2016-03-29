@@ -104,6 +104,15 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] SYSTEM_STATS_TABLE_BYTES = Bytes.toBytes(SYSTEM_STATS_TABLE);
     public static final String SYSTEM_CATALOG_ALIAS = "\"SYSTEM.TABLE\"";
 
+    public static final byte[] SYSTEM_SEQUENCE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+    public static final String SYSTEM_SEQUENCE_SCHEMA = SYSTEM_CATALOG_SCHEMA;
+    public static final byte[] SYSTEM_SEQUENCE_SCHEMA_BYTES = Bytes.toBytes(SYSTEM_SEQUENCE_SCHEMA);
+    public static final String SYSTEM_SEQUENCE_TABLE = "SEQUENCE";
+    public static final byte[] SYSTEM_SEQUENCE_TABLE_BYTES = Bytes.toBytes(SYSTEM_SEQUENCE_TABLE);
+    public static final String SYSTEM_SEQUENCE = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_SEQUENCE_TABLE + "\"";
+    public static final String SYSTEM_SEQUENCE_NAME = SchemaUtil.getTableName(SYSTEM_SEQUENCE_SCHEMA, SYSTEM_SEQUENCE_TABLE);
+    public static final byte[] SYSTEM_SEQUENCE_NAME_BYTES = Bytes.toBytes(SYSTEM_SEQUENCE_NAME);
+    
     public static final String TABLE_NAME = "TABLE_NAME";
     public static final byte[] TABLE_NAME_BYTES = Bytes.toBytes(TABLE_NAME);
     public static final String TABLE_TYPE = "TABLE_TYPE";
@@ -223,14 +232,6 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String NUM_ARGS = "NUM_ARGS";
     public static final byte[] NUM_ARGS_BYTES = Bytes.toBytes(NUM_ARGS);
     
-    public static final byte[] SEQUENCE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
-    public static final String SEQUENCE_SCHEMA_NAME = SYSTEM_CATALOG_SCHEMA;
-    public static final byte[] SEQUENCE_SCHEMA_NAME_BYTES = Bytes.toBytes(SEQUENCE_SCHEMA_NAME);
-    public static final String SEQUENCE_TABLE_NAME = TYPE_SEQUENCE;
-    public static final byte[] SEQUENCE_TABLE_NAME_BYTES = Bytes.toBytes(SEQUENCE_TABLE_NAME);
-    public static final String SEQUENCE_FULLNAME_ESCAPED = SYSTEM_CATALOG_SCHEMA + ".\"" + TYPE_SEQUENCE + "\"";
-    public static final String SEQUENCE_FULLNAME = SchemaUtil.getTableName(SEQUENCE_SCHEMA_NAME, SEQUENCE_TABLE_NAME);
-    public static final byte[] SEQUENCE_FULLNAME_BYTES = Bytes.toBytes(SEQUENCE_FULLNAME);
     public static final String SEQUENCE_SCHEMA = "SEQUENCE_SCHEMA";
     public static final String SEQUENCE_NAME = "SEQUENCE_NAME";
     public static final String CURRENT_VALUE = "CURRENT_VALUE";
@@ -294,7 +295,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     private final ResultSet emptyResultSet;
     public static final int MAX_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "8");
     public static final int MIN_LOCAL_SI_VERSION_DISALLOW = VersionUtil.encodeVersion("0", "98", "6");
-    public static final int MIN_RENEW_LEASE_VERSION = VersionUtil.encodeVersion("1", "1", "4");
+    public static final int MIN_RENEW_LEASE_VERSION = VersionUtil.encodeVersion("1", "1", "3");
     
     // Version below which we should turn off essential column family.
     public static final int ESSENTIAL_FAMILY_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "7");

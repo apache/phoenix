@@ -40,6 +40,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PDataType;
@@ -171,7 +172,7 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         Expression e2 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
         assertNotNull(e2);
 
-        Expression e3 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SEQUENCE_FULLNAME);
+        Expression e3 = PhoenixRuntime.getTenantIdExpression(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
         assertNotNull(e3);
         
         conn.createStatement().execute("CREATE TABLE FOO (k VARCHAR PRIMARY KEY)");
@@ -288,4 +289,14 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         return "\"" + string + "\"";
     }
 
+    @Test
+    public void testGetWallClockTimeFromCellTimeStamp() {
+        long ts = System.currentTimeMillis();
+        assertEquals(ts, PhoenixRuntime.getWallClockTimeFromCellTimeStamp(ts));
+        long nanoTs = TransactionUtil.convertToNanoseconds(ts);
+        assertEquals(ts, PhoenixRuntime.getWallClockTimeFromCellTimeStamp(nanoTs));
+        long skewedTs = ts + QueryConstants.MILLIS_IN_DAY; // skew of a day
+        // Even with a day of skew, we won't consider the ts a nanos timestamp
+        assertEquals(skewedTs, PhoenixRuntime.getWallClockTimeFromCellTimeStamp(skewedTs));
+    }    
 }
