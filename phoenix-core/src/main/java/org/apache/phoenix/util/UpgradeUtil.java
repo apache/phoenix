@@ -1362,7 +1362,7 @@ public class UpgradeUtil {
             if (table.isNamespaceMapped()) { throw new IllegalArgumentException("Table is already upgraded"); }
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
             String newPhysicalTablename = SchemaUtil
-                    .normalizeIdentifier(SchemaUtil.getPhysicalTableName(tableName, readOnlyProps).getNameAsString());
+                    .normalizeIdentifier(SchemaUtil.getPhysicalTableName(table.getPhysicalName().getString(), readOnlyProps).getNameAsString());
 
             // Upgrade the data or main table
             UpgradeUtil.mapTableToNamespace(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
@@ -1377,17 +1377,23 @@ public class UpgradeUtil {
             table = result.getTable();
             // check whether table is properly upgraded before upgrading indexes
             if (table.isNamespaceMapped()) {
-                // TODO: Identify all views and Update too
-                conn.commit();
                 for (PTable index : table.getIndexes()) {
                     String srcTableName = index.getPhysicalName().getString();
+                    if(srcTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)){
+                        //this condition occurs in case of multiple views on table
+                        //skip already migrated tables 
+                        continue;
+                    }
                     String destTableName = null;
                     String phoenixTableName = index.getName().getString();
                     boolean updateLink = false;
                     if (srcTableName.startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
-                        // TODO: need to update parent table name local index descriptor
                         destTableName = Bytes
                                 .toString(MetaDataUtil.getLocalIndexPhysicalName(newPhysicalTablename.getBytes()));
+                        //update parent_table property in local index table descriptor
+                        conn.createStatement()
+                                .execute(String.format("ALTER TABLE %s set " + MetaDataUtil.PARENT_TABLE_KEY + "='%s'",
+                                        phoenixTableName, table.getPhysicalName()));
                         updateLink = true;
                     } else if (srcTableName.startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
                         destTableName = Bytes
@@ -1404,11 +1410,11 @@ public class UpgradeUtil {
                     UpgradeUtil.mapTableToNamespace(admin, metatable, srcTableName, destTableName, readOnlyProps,
                             PhoenixRuntime.getCurrentScn(readOnlyProps), phoenixTableName, index.getType());
                 }
+                conn.getQueryServices().clearCache();
 
             } else {
                 throw new RuntimeException("Error: problem occured during upgrade. Table is not upgraded successfully");
             }
-            conn.getQueryServices().clearCache();
         }
     }
 

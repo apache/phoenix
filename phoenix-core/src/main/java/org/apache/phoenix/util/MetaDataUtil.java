@@ -17,12 +17,22 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -452,6 +462,10 @@ public class MetaDataUtil {
     public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
     public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
 
+    private static final String GET_VIEWS_QUERY = "SELECT " + TABLE_SCHEM + "," + TABLE_NAME + " FROM "
+            + SYSTEM_CATALOG_SCHEMA + "." + SYSTEM_CATALOG_TABLE + " WHERE " + COLUMN_FAMILY + " = ? AND " + LINK_TYPE
+            + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue();
+
     public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp){
         return newTableRowsScan(key, null, startTimeStamp, stopTimeStamp);
     }
@@ -490,5 +504,16 @@ public class MetaDataUtil {
     public static boolean isViewIndex(String physicalName) {
         if (physicalName.contains(VIEW_INDEX_TABLE_PREFIX)) { return true; }
         return false;
+    }
+
+    public static Set<String> getViewNames(PhoenixConnection conn, String table) throws SQLException {
+        Set<String> viewNames = new HashSet<String>();
+        PreparedStatement preparedStatment = conn.prepareStatement(GET_VIEWS_QUERY);
+        preparedStatment.setString(1, SchemaUtil.normalizeIdentifier(table));
+        ResultSet rs = preparedStatment.executeQuery();
+        while (rs.next()) {
+            viewNames.add(SchemaUtil.getTableName(rs.getString(1), rs.getString(2)));
+        }
+        return viewNames;
     }
 }

@@ -215,6 +215,10 @@ public class PhoenixRuntime {
             if (execCmd.isMapNamespace()) {
                 String srcTable = execCmd.getSrcTable();
                 UpgradeUtil.upgradeTable(conn, srcTable);
+                Set<String> viewNames = MetaDataUtil.getViewNames(conn, srcTable);
+                for (String viewName : viewNames) {
+                    UpgradeUtil.upgradeTable(conn, viewName);
+                }
             } else if (execCmd.isUpgrade()) {
                 if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
                         "May not specify the CURRENT_SCN property when upgrading"); }
