@@ -241,8 +241,8 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             rs = statement.executeQuery();
             assertFalse(rs.next());
 
-            // (where offset)
-            query = "SELECT t.eid, t.x + 9 FROM (SELECT entity_id eid, b_string b, a_byte + 1 x FROM aTable WHERE a_byte + 1 < 9 OFFSET 2) AS t";
+            // (where) offset
+            query = "SELECT t.eid, t.x + 9 FROM (SELECT entity_id eid, b_string b, a_byte + 1 x FROM aTable WHERE a_byte + 1 < 9 ) AS t OFFSET 2";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue(rs.next());

@@ -77,6 +77,7 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
             private final Iterator<Tuple> tupleIterator = tuples.iterator();
             private boolean closed = false;
             private int count = 0;
+            private int offsetCount = 0;
 
             @Override
             public void close() throws SQLException {
@@ -85,8 +86,8 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
 
             @Override
             public Tuple next() throws SQLException {
-                while (!this.closed && (offset != null && count < offset) && tupleIterator.hasNext()) {
-                    count++;
+                while (!this.closed && (offset != null && offsetCount < offset) && tupleIterator.hasNext()) {
+                    offsetCount++;
                     tupleIterator.next();
                 }
                 if (!this.closed 
