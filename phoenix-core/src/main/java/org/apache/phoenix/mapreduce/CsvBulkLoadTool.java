@@ -23,6 +23,7 @@ import java.util.List;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.ToolRunner;
@@ -54,7 +55,7 @@ public class CsvBulkLoadTool extends AbstractBulkLoadTool {
 
         char delimiterChar = ',';
         if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
-            String delimString = cmdLine.getOptionValue(DELIMITER_OPT.getOpt());
+            String delimString = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue(DELIMITER_OPT.getOpt()));
             if (delimString.length() != 1) {
                 throw new IllegalArgumentException("Illegal delimiter character: " + delimString);
             }

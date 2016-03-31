@@ -49,6 +49,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -636,10 +637,11 @@ public class PhoenixRuntime {
         }
 
         private static char getCharacter(String s) {
-            if (s.length() > 1) {
-                throw new IllegalArgumentException("Invalid single character: '" + s + "'");
+            String unescaped = StringEscapeUtils.unescapeJava(s);
+            if (unescaped.length() > 1) {
+                throw new IllegalArgumentException("Invalid single character: '" + unescaped + "'");
             }
-            return s.charAt(0);
+            return unescaped.charAt(0);
         }
 
         private static void usageError(String errorMsg, Options options) {
