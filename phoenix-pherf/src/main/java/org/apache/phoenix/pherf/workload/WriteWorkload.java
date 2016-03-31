@@ -331,7 +331,7 @@ public class WriteWorkload implements Workload {
                 }
                 break;
             case CHAR:
-            	System.out.print("Data value "+ dataValue.getValue());
+            	//System.out.print("Data value "+ dataValue.getValue());
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.CHAR);
                 } else {
