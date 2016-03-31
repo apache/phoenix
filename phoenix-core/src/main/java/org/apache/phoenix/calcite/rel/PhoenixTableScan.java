@@ -206,7 +206,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             }
         }
         return planner.getCostFactory()
-                .makeCost(byteCount, byteCount + 1, 0)
+                .makeCost(byteCount + 1, byteCount + 1, 0)
+                .multiplyBy(0.5) /* data scan only */
                 .multiplyBy(SERVER_FACTOR)
                 .multiplyBy(PHOENIX_FACTOR);
     }

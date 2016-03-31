@@ -25,6 +25,7 @@ import org.apache.calcite.avatica.UnregisteredDriver;
 import org.apache.calcite.jdbc.CalciteConnectionImpl;
 import org.apache.calcite.jdbc.CalciteFactory;
 import org.apache.calcite.jdbc.Driver;
+import org.apache.phoenix.calcite.PhoenixSchema;
 
 public class PhoenixCalciteFactory extends CalciteFactory {
     
@@ -94,6 +95,17 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                 JavaTypeFactory typeFactory) {
             super(driver, factory, url, info,
                     CalciteSchema.createRootSchema(true, false), typeFactory);
+        }
+        
+        public void close() throws SQLException {
+            for (String subSchemaName : getRootSchema().getSubSchemaNames()) {               
+                try {
+                    PhoenixSchema phoenixSchema = getRootSchema()
+                            .getSubSchema(subSchemaName).unwrap(PhoenixSchema.class);
+                    phoenixSchema.pc.close();
+                } catch (ClassCastException e) {
+                }
+            }
         }
     }
 

@@ -19,62 +19,15 @@ package org.apache.phoenix.calcite;
 
 import static org.junit.Assert.fail;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Properties;
 
-import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 
-@RunWith(Parameterized.class)
-public class CalciteIndexIT extends BaseCalciteIT {
+public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
     
-    private final boolean localIndex;
-    
-    public CalciteIndexIT(boolean localIndex) {
-        this.localIndex = localIndex;
-    }
-    
-    @Parameters(name="localIndex = {0}")
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 { false }, { true }
-           });
-    }
-    
-    @Before
-    public void initTable() throws Exception {
-        final String url = getUrl();
-        final String index = localIndex ? "LOCAL INDEX" : "INDEX";
-        initATableValues(getOrganizationId(), null, url);
-        initSaltedTables(index);
-        initMultiTenantTables(index);
-        Connection connection = DriverManager.getConnection(url);
-        connection.createStatement().execute("CREATE " + index + " IF NOT EXISTS IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)");
-        connection.createStatement().execute("CREATE " + index + " IF NOT EXISTS IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)");
-        connection.createStatement().execute("CREATE " + index + " IF NOT EXISTS IDX_FULL ON aTable (b_string) INCLUDE (a_string, a_integer, a_date, a_time, a_timestamp, x_decimal, x_long, x_integer, y_integer, a_byte, a_short, a_float, a_double, a_unsigned_float, a_unsigned_double)");
-        connection.createStatement().execute("UPDATE STATISTICS ATABLE");
-        connection.createStatement().execute("UPDATE STATISTICS " + NOSALT_TABLE_NAME);
-        connection.createStatement().execute("UPDATE STATISTICS " + SALTED_TABLE_NAME);
-        connection.createStatement().execute("UPDATE STATISTICS " + MULTI_TENANT_TABLE);
-        connection.close();
-        
-        Properties props = new Properties();
-        props.setProperty("TenantId", "10");
-        connection = DriverManager.getConnection(url, props);
-        connection.createStatement().execute("UPDATE STATISTICS " + MULTI_TENANT_VIEW1);
-        connection.close();
-        
-        props.setProperty("TenantId", "20");
-        connection = DriverManager.getConnection(url, props);
-        connection.createStatement().execute("UPDATE STATISTICS " + MULTI_TENANT_VIEW2);
-        connection.close();
+    public CalciteGlobalIndexIT() {
+        super(false);
     }
     
     @Test public void testIndex() throws Exception {

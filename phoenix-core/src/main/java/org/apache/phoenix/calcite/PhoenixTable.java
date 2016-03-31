@@ -2,6 +2,7 @@ package org.apache.phoenix.calcite;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Iterator;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptTable;
@@ -40,6 +41,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -67,7 +69,12 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       
       List<PColumn> columns = Lists.newArrayList(pTable.getColumns());
       if (pTable.getViewIndexId() != null) {
-          columns.remove((pTable.getBucketNum() == null ? 0 : 1) + (pTable.isMultiTenant() ? 1 : 0));
+          for (Iterator<PColumn> iter = columns.iterator(); iter.hasNext();) {
+              if (iter.next().getName().getString().equals(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME)) {
+                  iter.remove();
+                  break;
+              }
+          }
       }
       if (pTable.isMultiTenant()) {
           columns.remove(pTable.getBucketNum() == null ? 0 : 1);

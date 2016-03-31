@@ -17,7 +17,6 @@ import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
-import org.apache.calcite.util.Util;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -105,9 +104,10 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             return planner.getCostFactory().makeInfiniteCost();
         
         double rowCount = mq.getRowCount(this);
-        double bytesPerRow = mq.getAverageRowSize(this);
-        if (isOrderedGroupBy) {
-            rowCount = (rowCount * rowCount) / Util.nLogN(rowCount);
+        double spoolSize = 0;
+        if (!isOrderedGroupBy) {
+            double bytesPerRow = mq.getAverageRowSize(this);
+            spoolSize = rowCount * bytesPerRow * 6 /* map size */;
         }
         // Aggregates with more aggregate functions cost a bit more
         float multiplier = 1f + (float) aggCalls.size() * 0.125f;
@@ -118,7 +118,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             multiplier += 0.0125f;
           }
         }
-        return planner.getCostFactory().makeCost(rowCount * multiplier * bytesPerRow, 0, 0);
+        return planner.getCostFactory().makeCost(rowCount * multiplier + spoolSize, 0, 0);
     }
 
     @Override

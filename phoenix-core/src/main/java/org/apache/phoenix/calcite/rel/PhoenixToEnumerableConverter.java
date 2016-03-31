@@ -58,7 +58,10 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     }
 
     @Override public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
-        return super.computeSelfCost(planner, mq).multiplyBy(.1);
+        return super.computeSelfCost(planner, mq)
+                .multiplyBy(.1)
+                .multiplyBy(PhoenixRel.PHOENIX_FACTOR)
+                .multiplyBy(PhoenixRel.SERVER_FACTOR);
     }
 
     @Override

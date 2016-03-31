@@ -46,6 +46,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 
@@ -58,6 +59,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         Map<String,String> props = getDefaultProps();
         props.put(QueryServices.RUN_UPDATE_STATS_ASYNC, Boolean.FALSE.toString());
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(1000));
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(200));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -67,6 +69,20 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     
     public static Start start(Properties props) {
         return new Start(props);
+    }
+    
+    public static Start startPhoenixStandalone(Properties props) {
+        return new Start(props) {
+            Connection createConnection() throws Exception {
+                return DriverManager.getConnection(
+                        getUrl(), 
+                        props);
+            }
+            
+            String getExplainPlanString() {
+                return "explain";
+            }
+        };
     }
 
     public static class Start {
@@ -82,6 +98,10 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
                     "jdbc:phoenixcalcite:" 
                             + getUrl().substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1), 
                     props);
+        }
+        
+        String getExplainPlanString() {
+            return "explain plan for";
         }
 
         public Sql sql(String sql) {
@@ -120,12 +140,6 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             this.sql = sql;
         }
 
-        public static List<Object[]> getResult(ResultSet resultSet) throws SQLException {
-            final List<Object[]> list = Lists.newArrayList();
-            populateResult(resultSet, list);
-            return list;
-        }
-
         private static void populateResult(ResultSet resultSet, List<Object[]> list) throws SQLException {
             final int columnCount = resultSet.getMetaData().getColumnCount();
             while (resultSet.next()) {
@@ -138,11 +152,11 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         }
 
         public Sql explainIs(String expected) throws SQLException {
-            final List<Object[]> list = getResult("explain plan for " + sql);
-            if (list.size() != 1) {
-                fail("explain should return 1 row, got " + list.size());
-            }
-            String explain = (String) (list.get(0)[0]);
+            final Statement statement = start.getConnection().createStatement();
+            final ResultSet resultSet = statement.executeQuery(start.getExplainPlanString() + " " + sql);
+            String explain = QueryUtil.getExplainPlan(resultSet);
+            resultSet.close();
+            statement.close();
             assertEquals(explain, expected);
             return this;
         }
@@ -155,10 +169,11 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             return execute;
         }
 
-        public List<Object[]> getResult(String sql) throws SQLException {
+        public List<Object[]> getResult() throws SQLException {
             final Statement statement = start.getConnection().createStatement();
             final ResultSet resultSet = statement.executeQuery(sql);
-            List<Object[]> list = getResult(resultSet);
+            final List<Object[]> list = Lists.newArrayList();
+            populateResult(resultSet, list);
             resultSet.close();
             statement.close();
             return list;
@@ -195,6 +210,20 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             return this;
         }
         
+        public Sql sameResultAsPhoenixStandalone() throws SQLException {
+            Start phoenixStart = startPhoenixStandalone(this.start.props);
+            List<Object[]> result = phoenixStart.sql(this.sql).getResult();
+            phoenixStart.close();
+            return resultIs(result.toArray(new Object[result.size()][]));
+        }
+        
+        public Sql sameResultAsPhoenixStandalone(int orderedCount) throws SQLException {
+            Start phoenixStart = startPhoenixStandalone(this.start.props);
+            List<Object[]> result = phoenixStart.sql(this.sql).getResult();
+            phoenixStart.close();
+            return resultIs(orderedCount, result.toArray(new Object[result.size()][]));
+        }
+        
         private void checkResultOrdered(ResultSet resultSet, Object[][] expected) throws SQLException {
             int expectedCount = expected.length;
             int count = 0;
@@ -225,6 +254,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
                 expectedResults.add(row);
             }
             while (resultSet.next()) {
+                if (actualResults.size() >= expected.length) {
+                    fail("Got more rows than expected after getting results: " + actualResults);
+                }
                 // check the ordered part
                 Object[] row = expected[actualResults.size()];
                 for (int i = 0; i < orderedCount; i++) {
@@ -403,7 +435,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             conn.commit();
             
             if (index != null) {
-                conn.createStatement().execute("CREATE " + index + " " + NOSALT_TABLE_SALTED_INDEX_NAME + " ON " + NOSALT_TABLE_NAME + " (col0) SALT_BUCKETS=4");
+                conn.createStatement().execute(
+                        "CREATE " + index + " " + NOSALT_TABLE_SALTED_INDEX_NAME + " ON " + NOSALT_TABLE_NAME + " (col0)"
+                        + (index.toUpperCase().startsWith("LOCAL") ? "" : " SALT_BUCKETS=4"));
                 conn.commit();
             }
             
@@ -423,7 +457,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             
             if (index != null) {
                 conn.createStatement().execute("CREATE " + index + " " + SALTED_TABLE_NOSALT_INDEX_NAME + " ON " + SALTED_TABLE_NAME + " (col0)");
-                conn.createStatement().execute("CREATE " + index + " " + SALTED_TABLE_SALTED_INDEX_NAME + " ON " + SALTED_TABLE_NAME + " (col1) INCLUDE (col0) SALT_BUCKETS=4");
+                conn.createStatement().execute(
+                        "CREATE " + index + " " + SALTED_TABLE_SALTED_INDEX_NAME + " ON " + SALTED_TABLE_NAME + " (col1) INCLUDE (col0)"
+                        + (index.toUpperCase().startsWith("LOCAL") ? "" : " SALT_BUCKETS=4"));
                 conn.commit();
             }
         } catch (TableAlreadyExistsException e) {
