@@ -172,21 +172,43 @@ public class CorrelatePlanTest {
                 {2, "2", "2", 20},
                 {5, "5", "5", 100},
         };
-        testCorrelatePlan(LEFT_RELATION, rightRelation, 1, 0, JoinType.Inner, expected);        
+        testCorrelatePlan(LEFT_RELATION, rightRelation, 1, 0, JoinType.Inner, expected);
     }
     
-    private void testCorrelatePlan(Object[][] leftRelation, Object[][] rightRelation, int leftCorrelColumn, int rightCorrelColumn, JoinType type, Object[][] expectedResult) throws SQLException {        
+    @Test
+    public void testCorrelatePlanWithSingleValueOnlyAndOffset() throws SQLException {
+        Integer offset = 1;
+        Object[][] rightRelation = new Object[][] {
+                {"6", 60},
+                {"2", 20},
+                {"5", 100},
+                {"1", 10},
+        };
+        Object[][] expected = new Object[][] {
+                {2, "2", "2", 20},
+                {5, "5", "5", 100},
+        };
+        testCorrelatePlan(LEFT_RELATION, rightRelation, 1, 0, JoinType.Inner, expected, offset);
+    }
+
+    private void testCorrelatePlan(Object[][] leftRelation, Object[][] rightRelation, int leftCorrelColumn, int rightCorrelColumn, JoinType type, Object[][] expectedResult) throws SQLException {
+        testCorrelatePlan(leftRelation, rightRelation, leftCorrelColumn, rightCorrelColumn, type, expectedResult, null);
+    }
+
+    private void testCorrelatePlan(Object[][] leftRelation, Object[][] rightRelation, int leftCorrelColumn,
+            int rightCorrelColumn, JoinType type, Object[][] expectedResult, Integer offset) throws SQLException {
         TableRef leftTable = createProjectedTableFromLiterals(leftRelation[0]);
         TableRef rightTable = createProjectedTableFromLiterals(rightRelation[0]);
         String varName = "$cor0";
         RuntimeContext runtimeContext = new RuntimeContextImpl();
         runtimeContext.defineCorrelateVariable(varName, leftTable);
-        QueryPlan leftPlan = newLiteralResultIterationPlan(leftRelation);
-        QueryPlan rightPlan = newLiteralResultIterationPlan(rightRelation);
+        QueryPlan leftPlan = newLiteralResultIterationPlan(leftRelation, offset);
+        QueryPlan rightPlan = newLiteralResultIterationPlan(rightRelation, offset);
         Expression columnExpr = new ColumnRef(rightTable, rightCorrelColumn).newColumnExpression();
         Expression fieldAccess = new CorrelateVariableFieldAccessExpression(runtimeContext, varName, new ColumnRef(leftTable, leftCorrelColumn).newColumnExpression());
         Expression filter = ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(columnExpr, fieldAccess), CONTEXT.getTempPtr(), false);
-        rightPlan = new ClientScanPlan(CONTEXT, SelectStatement.SELECT_ONE, rightTable, RowProjector.EMPTY_PROJECTOR, null, filter, OrderBy.EMPTY_ORDER_BY, rightPlan);
+        rightPlan = new ClientScanPlan(CONTEXT, SelectStatement.SELECT_ONE, rightTable, RowProjector.EMPTY_PROJECTOR,
+                null, null, filter, OrderBy.EMPTY_ORDER_BY, rightPlan);
         PTable joinedTable = JoinCompiler.joinProjectedTables(leftTable.getTable(), rightTable.getTable(), type);
         CorrelatePlan correlatePlan = new CorrelatePlan(leftPlan, rightPlan, varName, type, false, runtimeContext, joinedTable, leftTable.getTable(), rightTable.getTable(), leftTable.getTable().getColumns().size());
         ResultIterator iter = correlatePlan.iterator();
@@ -202,8 +224,8 @@ public class CorrelatePlanTest {
             }
         }
     }
-    
-    private QueryPlan newLiteralResultIterationPlan(Object[][] rows) {
+
+    private QueryPlan newLiteralResultIterationPlan(Object[][] rows, Integer offset) {
         List<Tuple> tuples = Lists.newArrayList();
         Tuple baseTuple = new SingleKeyValueTuple(KeyValue.LOWESTKEY);
         for (Object[] row : rows) {
@@ -215,7 +237,8 @@ public class CorrelatePlanTest {
             tuples.add(projector.projectResults(baseTuple));
         }
         
-        return new LiteralResultIterationPlan(tuples, CONTEXT, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null);
+        return new LiteralResultIterationPlan(tuples, CONTEXT, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF,
+                RowProjector.EMPTY_PROJECTOR, null, offset, OrderBy.EMPTY_ORDER_BY, null);
     }
 
 

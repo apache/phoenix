@@ -167,7 +167,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         JoinConditionExtractor conditionExtractor = new JoinConditionExtractor(subquery, resolver, connection, rhsTableAlias);
         ParseNode where = subquery.getWhere() == null ? null : subquery.getWhere().accept(conditionExtractor);
         if (where == subquery.getWhere()) { // non-correlated EXISTS subquery, add LIMIT 1
-            subquery = NODE_FACTORY.select(subquery, NODE_FACTORY.limit(NODE_FACTORY.literal(1)));
+            subquery = NODE_FACTORY.select(subquery, NODE_FACTORY.limit(NODE_FACTORY.literal(1)), null);
             subqueryNode = NODE_FACTORY.subquery(subquery, false);
             node = NODE_FACTORY.exists(subqueryNode, node.isNegate());
             return super.visitLeave(node, Collections.<ParseNode> singletonList(subqueryNode));
@@ -206,7 +206,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         JoinConditionExtractor conditionExtractor = new JoinConditionExtractor(subquery, resolver, connection, rhsTableAlias);
         ParseNode where = subquery.getWhere() == null ? null : subquery.getWhere().accept(conditionExtractor);
         if (where == subquery.getWhere()) { // non-correlated comparison subquery, add LIMIT 2, expectSingleRow = true
-            subquery = NODE_FACTORY.select(subquery, NODE_FACTORY.limit(NODE_FACTORY.literal(2)));
+            subquery = NODE_FACTORY.select(subquery, NODE_FACTORY.limit(NODE_FACTORY.literal(2)), null);
             subqueryNode = NODE_FACTORY.subquery(subquery, true);
             l = Lists.newArrayList(l.get(0), subqueryNode);
             node = NODE_FACTORY.comparison(node.getFilterOp(), l.get(0), l.get(1));
@@ -341,7 +341,10 @@ public class SubqueryRewriter extends ParseNodeRewriter {
                 groupbyNodes.set(i - 1, aliasedNode.getNode());
             }
             SelectStatement derivedTableStmt = NODE_FACTORY.select(subquery, subquery.isDistinct(), derivedTableSelect, where, derivedTableGroupBy, true);
-            subquery = NODE_FACTORY.select(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt), subquery.getHint(), false, selectNodes, null, groupbyNodes, null, Collections.<OrderByNode> emptyList(), null, subquery.getBindCount(), true, false, Collections.<SelectStatement>emptyList(), subquery.getUdfParseNodes());
+            subquery = NODE_FACTORY.select(NODE_FACTORY.derivedTable(derivedTableAlias, derivedTableStmt),
+                    subquery.getHint(), false, selectNodes, null, groupbyNodes, null,
+                    Collections.<OrderByNode> emptyList(), null, null, subquery.getBindCount(), true, false,
+                    Collections.<SelectStatement> emptyList(), subquery.getUdfParseNodes());
         }
         
         ParseNode onNode = conditionExtractor.getJoinCondition();
@@ -364,7 +367,10 @@ public class SubqueryRewriter extends ParseNodeRewriter {
             return select;
         
         // Wrap as a derived table.
-        return NODE_FACTORY.select(NODE_FACTORY.derivedTable(ParseNodeFactory.createTempAlias(), select), HintNode.EMPTY_HINT_NODE, false, select.getSelect(), null, null, null, null, null, select.getBindCount(), false, false, Collections.<SelectStatement> emptyList(), select.getUdfParseNodes());
+        return NODE_FACTORY.select(NODE_FACTORY.derivedTable(ParseNodeFactory.createTempAlias(), select),
+                HintNode.EMPTY_HINT_NODE, false, select.getSelect(), null, null, null, null, null, null,
+                select.getBindCount(), false, false, Collections.<SelectStatement> emptyList(),
+                select.getUdfParseNodes());
     }
     
     private List<AliasedNode> fixAliasedNodes(List<AliasedNode> nodes, boolean addSelectOne) {

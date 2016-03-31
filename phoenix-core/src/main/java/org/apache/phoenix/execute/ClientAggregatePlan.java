@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.execute;
 
-import static org.apache.phoenix.query.QueryConstants.*;
+import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -46,6 +46,7 @@ import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.GroupedAggregatingResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.LookAheadResultIterator;
+import org.apache.phoenix.iterate.OffsetResultIterator;
 import org.apache.phoenix.iterate.OrderedAggregatingResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
@@ -70,8 +71,8 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     private final Aggregators clientAggregators;
     
     public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
-            Integer limit, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
-        super(context, statement, table, projector, limit, where, orderBy, delegate);
+            Integer limit, Integer offset, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
+        super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
         this.groupBy = groupBy;
         this.having = having;
         this.serverAggregators =
@@ -100,7 +101,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
                 for (Expression keyExpression : keyExpressions) {
                     keyExpressionOrderBy.add(new OrderByExpression(keyExpression, false, true));
                 }
-                iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, projector.getEstimatedRowByteSize());
+                iterator = new OrderedResultIterator(iterator, keyExpressionOrderBy, thresholdBytes, null, null, projector.getEstimatedRowByteSize());
             }
             aggResultIterator = new ClientGroupedAggregatingResultIterator(LookAheadResultIterator.wrap(iterator), serverAggregators, groupBy.getKeyExpressions());
             aggResultIterator = new GroupedAggregatingResultIterator(LookAheadResultIterator.wrap(aggResultIterator), clientAggregators);
@@ -116,13 +117,16 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
 
         ResultIterator resultScanner = aggResultIterator;
         if (orderBy.getOrderByExpressions().isEmpty()) {
+            if (offset != null) {
+                resultScanner = new OffsetResultIterator(resultScanner, offset);
+            }
             if (limit != null) {
-                resultScanner = new LimitingResultIterator(aggResultIterator, limit);
+                resultScanner = new LimitingResultIterator(resultScanner, limit);
             }
         } else {
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            resultScanner = new OrderedAggregatingResultIterator(aggResultIterator, orderBy.getOrderByExpressions(), thresholdBytes, limit);
+            resultScanner = new OrderedAggregatingResultIterator(aggResultIterator, orderBy.getOrderByExpressions(), thresholdBytes, limit, offset);
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
@@ -150,6 +154,9 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         }
         if (statement.isDistinct() && statement.isAggregate()) {
             planSteps.add("CLIENT DISTINCT ON " + projector.toString());
+        }
+        if (offset != null) {
+            planSteps.add("CLIENT OFFSET " + offset);
         }
         if (orderBy.getOrderByExpressions().isEmpty()) {
             if (limit != null) {

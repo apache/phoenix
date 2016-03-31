@@ -99,6 +99,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final RowProjector projection;
     protected final ParameterMetaData paramMetaData;
     protected final Integer limit;
+    protected final Integer offset;
     protected final OrderBy orderBy;
     protected final GroupBy groupBy;
     protected final ParallelIteratorFactory parallelIteratorFactory;    
@@ -114,7 +115,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
     protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projection, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy,
+            RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
             Expression dynamicFilter) {
         this.context = context;
@@ -124,6 +125,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.projection = projection;
         this.paramMetaData = paramMetaData;
         this.limit = limit;
+        this.offset = offset;
         this.orderBy = orderBy;
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
@@ -174,6 +176,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
     @Override
     public Integer getLimit() {
         return limit;
+    }
+    
+    @Override
+    public Integer getOffset() {
+        return offset;
     }
 
     @Override

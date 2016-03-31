@@ -407,6 +407,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             }
 
             @Override
+            public Integer getOffset() {
+                return null;
+            }
+
+            @Override
             public OrderBy getOrderBy() {
                 return OrderBy.EMPTY_ORDER_BY;
             }

@@ -72,6 +72,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.Lists;
@@ -168,7 +169,11 @@ public class QueryCompiler {
             SelectStatement subSelect = unionAllSelects.get(i);
             // Push down order-by and limit into sub-selects.
             if (!select.getOrderBy().isEmpty() || select.getLimit() != null) {
-                subSelect = NODE_FACTORY.select(subSelect, select.getOrderBy(), select.getLimit());
+                if (select.getOffset() == null) {
+                    subSelect = NODE_FACTORY.select(subSelect, select.getOrderBy(), select.getLimit(), null);
+                } else {
+                    subSelect = NODE_FACTORY.select(subSelect, select.getOrderBy(), null, null);
+                }
             }
             QueryPlan subPlan = compileSubquery(subSelect, true);
             TupleProjector projector = new TupleProjector(subPlan.getProjector());
@@ -182,8 +187,8 @@ public class QueryCompiler {
         StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
 
         QueryPlan plan = compileSingleFlatQuery(context, select, statement.getParameters(), false, false, null, null, false);
-        plan =  new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(), plan.getOrderBy(), GroupBy.EMPTY_GROUP_BY, 
-                plans, context.getBindManager().getParameterMetaData()); 
+        plan = new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(), plan.getOffset(),
+                plan.getOrderBy(), GroupBy.EMPTY_GROUP_BY, plans, context.getBindManager().getParameterMetaData());
         return plan;
     }
 
@@ -324,10 +329,13 @@ public class QueryCompiler {
             QueryPlan plan = compileSingleFlatQuery(context, query, binds, asSubquery, !asSubquery && joinTable.isAllLeftJoin(), null, !table.isSubselect() && projectPKColumns ? tupleProjector : null, true);
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, table);
             Integer limit = null;
+            Integer offset = null;
             if (!query.isAggregate() && !query.isDistinct() && query.getOrderBy().isEmpty()) {
                 limit = plan.getLimit();
+                offset = plan.getOffset();
             }
-            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable, joinIds, joinExpressions, joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression, limit);
+            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable, joinIds, joinExpressions, joinTypes,
+                    starJoinVector, tables, fieldPositions, postJoinFilterExpression, QueryUtil.getOffsetLimit(limit, offset));
             return HashJoinPlan.create(joinTable.getStatement(), plan, joinInfo, hashPlans);
         }
 
@@ -378,10 +386,14 @@ public class QueryCompiler {
             QueryPlan rhsPlan = compileSingleFlatQuery(context, rhs, binds, asSubquery, !asSubquery && type == JoinType.Right, null, !rhsTable.isSubselect() && projectPKColumns ? tupleProjector : null, true);
             Expression postJoinFilterExpression = joinTable.compilePostFilterExpression(context, rhsTable);
             Integer limit = null;
+            Integer offset = null;
             if (!rhs.isAggregate() && !rhs.isDistinct() && rhs.getOrderBy().isEmpty()) {
                 limit = rhsPlan.getLimit();
+                offset = rhsPlan.getOffset();
             }
-            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable, joinIds, new List[] {joinExpressions}, new JoinType[] {type == JoinType.Right ? JoinType.Left : type}, new boolean[] {true}, new PTable[] {lhsTable}, new int[] {fieldPosition}, postJoinFilterExpression, limit);
+            HashJoinInfo joinInfo = new HashJoinInfo(projectedTable, joinIds, new List[] { joinExpressions },
+                    new JoinType[] { type == JoinType.Right ? JoinType.Left : type }, new boolean[] { true },
+                    new PTable[] { lhsTable }, new int[] { fieldPosition }, postJoinFilterExpression,  QueryUtil.getOffsetLimit(limit, offset));
             Pair<Expression, Expression> keyRangeExpressions = new Pair<Expression, Expression>(null, null);
             getKeyExpressionCombinations(keyRangeExpressions, context, joinTable.getStatement(), rhsTableRef, type, joinExpressions, hashExpressions);
             return HashJoinPlan.create(joinTable.getStatement(), rhsPlan, joinInfo, new HashSubPlan[] {new HashSubPlan(0, lhsPlan, hashExpressions, false, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond())});
@@ -432,7 +444,11 @@ public class QueryCompiler {
         context.setResolver(resolver);
         TableNode from = NODE_FACTORY.namedTable(tableRef.getTableAlias(), NODE_FACTORY.table(tableRef.getTable().getSchemaName().getString(), tableRef.getTable().getTableName().getString()));
         ParseNode where = joinTable.getPostFiltersCombined();
-        SelectStatement select = asSubquery ? NODE_FACTORY.select(from, joinTable.getStatement().getHint(), false, Collections.<AliasedNode> emptyList(), where, null, null, orderBy, null, 0, false, joinTable.getStatement().hasSequence(), Collections.<SelectStatement>emptyList(), joinTable.getStatement().getUdfParseNodes())
+        SelectStatement select = asSubquery
+                ? NODE_FACTORY.select(from, joinTable.getStatement().getHint(), false,
+                        Collections.<AliasedNode> emptyList(), where, null, null, orderBy, null, null, 0, false,
+                        joinTable.getStatement().hasSequence(), Collections.<SelectStatement> emptyList(),
+                        joinTable.getStatement().getUdfParseNodes())
                 : NODE_FACTORY.select(joinTable.getStatement(), from, where);
         
         return compileSingleFlatQuery(context, select, binds, asSubquery, false, innerPlan, null, isInRowKeyOrder);
@@ -529,7 +545,7 @@ public class QueryCompiler {
             viewWhere = new SQLParser(table.getViewStatement()).parseQuery().getWhere();
         }
         Integer limit = LimitCompiler.compile(context, select);
-
+        Integer offset = OffsetCompiler.compile(context, select);
         GroupBy groupBy = GroupByCompiler.compile(context, select, innerPlanTupleProjector, isInRowKeyOrder);
         // Optimize the HAVING clause by finding any group by expressions that can be moved
         // to the WHERE clause
@@ -544,7 +560,8 @@ public class QueryCompiler {
         Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries);
         context.setResolver(resolver); // recover resolver
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns, where);
-        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, projector, groupBy == GroupBy.EMPTY_GROUP_BY ? innerPlanTupleProjector : null, isInRowKeyOrder); 
+        OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, offset, projector,
+                groupBy == GroupBy.EMPTY_GROUP_BY ? innerPlanTupleProjector : null, isInRowKeyOrder);
         // Final step is to build the query plan
         if (!asSubquery) {
             int maxRows = statement.getMaxRows();
@@ -564,11 +581,14 @@ public class QueryCompiler {
         QueryPlan plan = innerPlan;
         if (plan == null) {
             ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
-            plan = select.getFrom() == null ?
-                      new LiteralResultIterationPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory)
-                    : (select.isAggregate() || select.isDistinct() ?
-                              new AggregatePlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, groupBy, having)
-                            : new ScanPlan(context, select, tableRef, projector, limit, orderBy, parallelIteratorFactory, allowPageFilter));
+            plan = select.getFrom() == null
+                    ? new LiteralResultIterationPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                            parallelIteratorFactory)
+                    : (select.isAggregate() || select.isDistinct()
+                            ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
+                                    parallelIteratorFactory, groupBy, having)
+                            : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                                    parallelIteratorFactory, allowPageFilter));
         }
         if (!subqueries.isEmpty()) {
             int count = subqueries.size();
@@ -585,14 +605,13 @@ public class QueryCompiler {
             if (LiteralExpression.isTrue(where)) {
                 where = null; // we do not pass "true" as filter
             }
-            plan =  select.isAggregate() || select.isDistinct() ?
-                      new ClientAggregatePlan(context, select, tableRef, projector, limit, where, orderBy, groupBy, having, plan)
-                    : new ClientScanPlan(context, select, tableRef, projector, limit, where, orderBy, plan);
+            plan = select.isAggregate() || select.isDistinct()
+                    ? new ClientAggregatePlan(context, select, tableRef, projector, limit, offset, where, orderBy,
+                            groupBy, having, plan)
+                    : new ClientScanPlan(context, select, tableRef, projector, limit, offset, where, orderBy, plan);
 
         }
 
         return plan;
     }
 }
-
-

@@ -74,7 +74,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 "                data.file VARCHAR ,\n" + 
                 "                data.fk_log VARCHAR ,\n" + 
                 "                data.host VARCHAR ,\n" + 
-                "                data.row VARCHAR ,\n" + 
+                "                data.r VARCHAR ,\n" + 
                 "                data.size VARCHAR ,\n" + 
                 "                data.start_time VARCHAR ,\n" + 
                 "                data.stat_date DATE ,\n" + 
