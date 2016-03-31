@@ -255,7 +255,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             if (filter != null && !context.getScanRanges().equals(this.scanRanges)) {
                 dynamicFilter = filterExpr;
             }
-            projectColumnFamilies(context.getScan(), phoenixTable.getTable(), columnRefList);
+            projectColumnFamilies(context.getScan(), phoenixTable.mappedColumns, columnRefList);
             if (implementor.getCurrentContext().forceProject) {
                 TupleProjector tupleProjector = implementor.createTupleProjector();
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
@@ -275,10 +275,10 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
         }
     }
     
-    private void projectColumnFamilies(Scan scan, PTable table, ImmutableIntList columnRefList) {
+    private void projectColumnFamilies(Scan scan, List<PColumn> mappedColumns, ImmutableIntList columnRefList) {
         scan.getFamilyMap().clear();
         for (Integer index : columnRefList) {
-            PColumn column = table.getColumns().get(index);
+            PColumn column = mappedColumns.get(index);
             PName familyName = column.getFamilyName();
             if (familyName != null) {
                 scan.addFamily(familyName.getBytes());

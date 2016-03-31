@@ -195,11 +195,11 @@ public class CalciteLocalIndexIT extends BaseCalciteIndexIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[$2], COL1=[CAST($0):INTEGER], COL2=[$3])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[>(CAST($0):INTEGER, 1000)])\n")
-//                .resultIs(0, new Object[][] {
-//                        {"0999", 1000, 1001, 1002},
-//                        {"1000", 1001, 1002, 1003},
-//                        {"1001", 1002, 1003, 1004},
-//                        {"1002", 1003, 1004, 1005}})
+                .resultIs(0, new Object[][] {
+                        {"0999", 1000, 1001, 1002},
+                        {"1000", 1001, 1002, 1003},
+                        {"1001", 1002, 1003, 1004},
+                        {"1002", 1003, 1004, 1005}})
                 .close();
         
         try {
@@ -222,10 +222,11 @@ public class CalciteLocalIndexIT extends BaseCalciteIndexIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(ID=[$1], COL0=[$2], COL1=[CAST($0):INTEGER], COL2=[$3])\n" +
                            "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[<=(CAST($0):INTEGER, 6)])\n")
-//                .resultIs(0, new Object[][] {
-//                        {"0002", 3, 4, 5},
-//                        {"0003", 4, 5, 6},
-//                        {"0004", 5, 6, 7}})
+                .sameResultAsPhoenixStandalone(0)
+                /*.resultIs(0, new Object[][] {
+                        {"0002", 3, 4, 5},
+                        {"0003", 4, 5, 6},
+                        {"0004", 5, 6, 7}})*/
                 .close();
         
         start(props).sql("select id, col0 from " + MULTI_TENANT_VIEW1 + " where col0 >= 1000")
