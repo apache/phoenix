@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -143,6 +144,7 @@ public class LiteralResultIteratorPlanTest {
                 assertEquals(row[i], o);
             }
         }
+        assertNull(iter.next());
     }
 
     private QueryPlan newLiteralResultIterationPlan(Integer offset, Integer limit) {
