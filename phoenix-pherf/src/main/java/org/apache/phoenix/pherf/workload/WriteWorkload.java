@@ -270,7 +270,7 @@ public class WriteWorkload implements Workload {
                         	//System.out.print("Executing batch");
                         	stmt.executeBatch();
                             connection.commit();
-                            stmt.clearBatch();
+                            //stmt.clearBatch();
                             duration = System.currentTimeMillis() - last;
                             logger.info("Writer (" + Thread.currentThread().getName()
                                     + ") committed Batch. Total " + getBatchSize()
