@@ -530,7 +530,7 @@ public class QueryCompiler {
         }
         Integer limit = LimitCompiler.compile(context, select);
 
-        GroupBy groupBy = GroupByCompiler.compile(context, select, innerPlanTupleProjector, isInRowKeyOrder);
+        GroupBy groupBy = GroupByCompiler.compile(context, select, isInRowKeyOrder);
         // Optimize the HAVING clause by finding any group by expressions that can be moved
         // to the WHERE clause
         select = HavingCompiler.rewrite(context, select, groupBy);
@@ -542,6 +542,9 @@ public class QueryCompiler {
         }
         Set<SubqueryParseNode> subqueries = Sets.<SubqueryParseNode> newHashSet();
         Expression where = WhereCompiler.compile(context, select, viewWhere, subqueries);
+        // Recompile GROUP BY now that we've figured out our ScanRanges so we know
+        // definitively whether or not we'll traverse in row key order.
+        groupBy = groupBy.compile(context, innerPlanTupleProjector);
         context.setResolver(resolver); // recover resolver
         RowProjector projector = ProjectionCompiler.compile(context, select, groupBy, asSubquery ? Collections.<PDatum>emptyList() : targetColumns, where);
         OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, projector, groupBy == GroupBy.EMPTY_GROUP_BY ? innerPlanTupleProjector : null, isInRowKeyOrder); 
