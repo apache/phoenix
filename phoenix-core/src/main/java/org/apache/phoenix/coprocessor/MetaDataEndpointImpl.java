@@ -3014,7 +3014,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         }
     }
 
-    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, Region region) {
+    private static MetaDataMutationResult checkKeyInRegion(byte[] key, Region region, MutationCode code) {
         byte[] startKey = region.getRegionInfo().getStartKey();
         byte[] endKey = region.getRegionInfo().getEndKey();
         if (Bytes.compareTo(startKey, key) <= 0
@@ -3022,30 +3022,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     endKey) < 0)) {
             return null; // normal case;
         }
-        return new MetaDataMutationResult(MutationCode.TABLE_NOT_IN_REGION,
-                EnvironmentEdgeManager.currentTimeMillis(), null);
+        return new MetaDataMutationResult(code, EnvironmentEdgeManager.currentTimeMillis(), null);
     }
 
-    private static MetaDataMutationResult checkSchemaKeyInRegion(byte[] key, Region region) {
-        byte[] startKey = region.getRegionInfo().getStartKey();
-        byte[] endKey = region.getRegionInfo().getEndKey();
-        if (Bytes.compareTo(startKey, key) <= 0 && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0
-                || Bytes.compareTo(key, endKey) < 0)) { return null; // normal case;
-        }
-        return new MetaDataMutationResult(MutationCode.SCHEMA_NOT_IN_REGION, EnvironmentEdgeManager.currentTimeMillis(),
-                null);
+    private static MetaDataMutationResult checkTableKeyInRegion(byte[] key, Region region) {
+        return checkKeyInRegion(key, region, MutationCode.TABLE_NOT_IN_REGION);
+
     }
 
     private static MetaDataMutationResult checkFunctionKeyInRegion(byte[] key, Region region) {
-        byte[] startKey = region.getRegionInfo().getStartKey();
-        byte[] endKey = region.getRegionInfo().getEndKey();
-        if (Bytes.compareTo(startKey, key) <= 0
-                && (Bytes.compareTo(HConstants.LAST_ROW, endKey) == 0 || Bytes.compareTo(key,
-                    endKey) < 0)) {
-            return null; // normal case;
-        }
-        return new MetaDataMutationResult(MutationCode.FUNCTION_NOT_IN_REGION,
-                EnvironmentEdgeManager.currentTimeMillis(), null);
+        return checkKeyInRegion(key, region, MutationCode.FUNCTION_NOT_IN_REGION);
+    }
+
+    private static MetaDataMutationResult checkSchemaKeyInRegion(byte[] key, Region region) {
+        return checkKeyInRegion(key, region, MutationCode.SCHEMA_NOT_IN_REGION);
+
     }
 
     /**
@@ -3389,9 +3380,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(schemaMutations);
             try {
                 acquireLock(region, lockKey, locks);
-                // Get as of latest timestamp so we can detect if we have a
-                // newer function that already
-                // exists without making an additional query
+                // Get as of latest timestamp so we can detect if we have a newer schema that already exists without
+                // making an additional query
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(lockKey);
                 PSchema schema = loadSchema(env, lockKey, cacheKey, clientTimeStamp, clientTimeStamp);
                 if (schema != null) {
@@ -3412,9 +3402,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 region.mutateRowsWithLocks(schemaMutations, Collections.<byte[]> emptySet(), HConstants.NO_NONCE,
                         HConstants.NO_NONCE);
 
-                // Invalidate the cache - the next getTable call will add it
-                // TODO: consider loading the table that was just created here,
-                // patching up the parent table, and updating the cache
+                // Invalidate the cache - the next getSchema call will add it
                 Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env)
                         .getMetaDataCache();
                 if (cacheKey != null) {
@@ -3432,7 +3420,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 region.releaseRowLocks(locks);
             }
         } catch (Throwable t) {
-            logger.error("createFunction failed", t);
+            logger.error("Creating the schema" + schemaName + "failed", t);
             ProtobufUtil.setControllerException(controller, ServerUtil.createIOException(schemaName, t));
         }
     }
@@ -3508,7 +3496,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     scanner.next(results);
                 } while (!results.isEmpty());
             }
-            if (areTablesExists) { return new MetaDataMutationResult(MutationCode.UNALLOWED_SCHEMA_MUTATION, schema,
+            if (areTablesExists) { return new MetaDataMutationResult(MutationCode.TABLES_EXIST_ON_SCHEMA, schema,
                     EnvironmentEdgeManager.currentTimeMillis()); }
 
             return new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, schema,

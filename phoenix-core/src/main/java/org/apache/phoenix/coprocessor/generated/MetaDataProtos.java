@@ -86,9 +86,13 @@ public final class MetaDataProtos {
      */
     SCHEMA_NOT_IN_REGION(17, 17),
     /**
-     * <code>UNALLOWED_SCHEMA_MUTATION = 18;</code>
+     * <code>TABLES_EXIST_ON_SCHEMA = 18;</code>
      */
-    UNALLOWED_SCHEMA_MUTATION(18, 18),
+    TABLES_EXIST_ON_SCHEMA(18, 18),
+    /**
+     * <code>UNALLOWED_SCHEMA_MUTATION = 19;</code>
+     */
+    UNALLOWED_SCHEMA_MUTATION(19, 19),
     ;
 
     /**
@@ -164,9 +168,13 @@ public final class MetaDataProtos {
      */
     public static final int SCHEMA_NOT_IN_REGION_VALUE = 17;
     /**
-     * <code>UNALLOWED_SCHEMA_MUTATION = 18;</code>
+     * <code>TABLES_EXIST_ON_SCHEMA = 18;</code>
      */
-    public static final int UNALLOWED_SCHEMA_MUTATION_VALUE = 18;
+    public static final int TABLES_EXIST_ON_SCHEMA_VALUE = 18;
+    /**
+     * <code>UNALLOWED_SCHEMA_MUTATION = 19;</code>
+     */
+    public static final int UNALLOWED_SCHEMA_MUTATION_VALUE = 19;
 
 
     public final int getNumber() { return value; }
@@ -191,7 +199,8 @@ public final class MetaDataProtos {
         case 15: return NEWER_SCHEMA_FOUND;
         case 16: return SCHEMA_NOT_FOUND;
         case 17: return SCHEMA_NOT_IN_REGION;
-        case 18: return UNALLOWED_SCHEMA_MUTATION;
+        case 18: return TABLES_EXIST_ON_SCHEMA;
+        case 19: return UNALLOWED_SCHEMA_MUTATION;
         default: return null;
       }
     }
@@ -15137,7 +15146,7 @@ public final class MetaDataProtos {
       "t\022\020\n\010tenantId\030\001 \002(\014\022\022\n\nschemaName\030\002 \002(\014\022" +
       "\021\n\ttableName\030\003 \002(\014\022\027\n\017clientTimestamp\030\004 " +
       "\002(\003\022\025\n\rclientVersion\030\005 \001(\005\"\035\n\033ClearTable" +
-      "FromCacheResponse*\367\003\n\014MutationCode\022\030\n\024TA" +
+      "FromCacheResponse*\223\004\n\014MutationCode\022\030\n\024TA" +
       "BLE_ALREADY_EXISTS\020\000\022\023\n\017TABLE_NOT_FOUND\020" +
       "\001\022\024\n\020COLUMN_NOT_FOUND\020\002\022\031\n\025COLUMN_ALREAD" +
       "Y_EXISTS\020\003\022\035\n\031CONCURRENT_TABLE_MUTATION\020",
@@ -15149,31 +15158,32 @@ public final class MetaDataProtos {
       "UND\020\014\022\032\n\026FUNCTION_NOT_IN_REGION\020\r\022\031\n\025SCH" +
       "EMA_ALREADY_EXISTS\020\016\022\026\n\022NEWER_SCHEMA_FOU" +
       "ND\020\017\022\024\n\020SCHEMA_NOT_FOUND\020\020\022\030\n\024SCHEMA_NOT" +
-      "_IN_REGION\020\021\022\035\n\031UNALLOWED_SCHEMA_MUTATIO" +
-      "N\020\0222\345\006\n\017MetaDataService\022/\n\010getTable\022\020.Ge",
-      "tTableRequest\032\021.MetaDataResponse\0227\n\014getF" +
-      "unctions\022\024.GetFunctionsRequest\032\021.MetaDat" +
-      "aResponse\0221\n\tgetSchema\022\021.GetSchemaReques" +
-      "t\032\021.MetaDataResponse\0225\n\013createTable\022\023.Cr" +
-      "eateTableRequest\032\021.MetaDataResponse\022;\n\016c" +
-      "reateFunction\022\026.CreateFunctionRequest\032\021." +
-      "MetaDataResponse\0227\n\014createSchema\022\024.Creat" +
-      "eSchemaRequest\032\021.MetaDataResponse\0221\n\tdro" +
-      "pTable\022\021.DropTableRequest\032\021.MetaDataResp" +
-      "onse\0223\n\ndropSchema\022\022.DropSchemaRequest\032\021",
-      ".MetaDataResponse\0227\n\014dropFunction\022\024.Drop" +
-      "FunctionRequest\032\021.MetaDataResponse\0221\n\tad" +
-      "dColumn\022\021.AddColumnRequest\032\021.MetaDataRes" +
-      "ponse\0223\n\ndropColumn\022\022.DropColumnRequest\032" +
-      "\021.MetaDataResponse\022?\n\020updateIndexState\022\030" +
-      ".UpdateIndexStateRequest\032\021.MetaDataRespo" +
-      "nse\0225\n\nclearCache\022\022.ClearCacheRequest\032\023." +
-      "ClearCacheResponse\0225\n\ngetVersion\022\022.GetVe" +
-      "rsionRequest\032\023.GetVersionResponse\022P\n\023cle" +
-      "arTableFromCache\022\033.ClearTableFromCacheRe",
-      "quest\032\034.ClearTableFromCacheResponseBB\n(o" +
-      "rg.apache.phoenix.coprocessor.generatedB" +
-      "\016MetaDataProtosH\001\210\001\001\240\001\001"
+      "_IN_REGION\020\021\022\032\n\026TABLES_EXIST_ON_SCHEMA\020\022" +
+      "\022\035\n\031UNALLOWED_SCHEMA_MUTATION\020\0232\345\006\n\017Meta",
+      "DataService\022/\n\010getTable\022\020.GetTableReques" +
+      "t\032\021.MetaDataResponse\0227\n\014getFunctions\022\024.G" +
+      "etFunctionsRequest\032\021.MetaDataResponse\0221\n" +
+      "\tgetSchema\022\021.GetSchemaRequest\032\021.MetaData" +
+      "Response\0225\n\013createTable\022\023.CreateTableReq" +
+      "uest\032\021.MetaDataResponse\022;\n\016createFunctio" +
+      "n\022\026.CreateFunctionRequest\032\021.MetaDataResp" +
+      "onse\0227\n\014createSchema\022\024.CreateSchemaReque" +
+      "st\032\021.MetaDataResponse\0221\n\tdropTable\022\021.Dro" +
+      "pTableRequest\032\021.MetaDataResponse\0223\n\ndrop",
+      "Schema\022\022.DropSchemaRequest\032\021.MetaDataRes" +
+      "ponse\0227\n\014dropFunction\022\024.DropFunctionRequ" +
+      "est\032\021.MetaDataResponse\0221\n\taddColumn\022\021.Ad" +
+      "dColumnRequest\032\021.MetaDataResponse\0223\n\ndro" +
+      "pColumn\022\022.DropColumnRequest\032\021.MetaDataRe" +
+      "sponse\022?\n\020updateIndexState\022\030.UpdateIndex" +
+      "StateRequest\032\021.MetaDataResponse\0225\n\nclear" +
+      "Cache\022\022.ClearCacheRequest\032\023.ClearCacheRe" +
+      "sponse\0225\n\ngetVersion\022\022.GetVersionRequest" +
+      "\032\023.GetVersionResponse\022P\n\023clearTableFromC",
+      "ache\022\033.ClearTableFromCacheRequest\032\034.Clea" +
+      "rTableFromCacheResponseBB\n(org.apache.ph" +
+      "oenix.coprocessor.generatedB\016MetaDataPro" +
+      "tosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {

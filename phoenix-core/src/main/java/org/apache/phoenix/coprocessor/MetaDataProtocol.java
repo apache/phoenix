@@ -101,6 +101,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         NEWER_SCHEMA_FOUND,
         SCHEMA_NOT_FOUND,
         SCHEMA_NOT_IN_REGION,
+        TABLES_EXIST_ON_SCHEMA,
         UNALLOWED_SCHEMA_MUTATION,
         NO_OP
     };

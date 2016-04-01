@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
@@ -81,6 +82,7 @@ public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
         namespaceMappedtable.put(put);
         namespaceMappedtable.close();
         Properties props = new Properties();
+        props.setProperty(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create schema " + schemaName);
         String ddl = "create table " + phoenixFullTableName + "(tableName varchar primary key)";
@@ -105,6 +107,9 @@ public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(hbaseFullTableName, rs.getString(1));
+        admin.disableTable(phoenixFullTableName);
+        admin.deleteTable(phoenixFullTableName);
+        conn.createStatement().execute("DROP TABLE " + phoenixFullTableName);
         admin.close();
         conn.close();
     }

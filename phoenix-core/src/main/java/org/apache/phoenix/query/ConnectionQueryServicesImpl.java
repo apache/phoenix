@@ -1002,14 +1002,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         SQLException sqlE = null;
         HTableDescriptor existingDesc = null;
         boolean isMetaTable = SchemaUtil.isMetaTable(tableName);
+        byte[] physicalTable = SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, tableType).getBytes(); 
         boolean tableExist = true;
         try (HBaseAdmin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
             try {
-                existingDesc = admin.getTableDescriptor(
-                        SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, tableType).getBytes());
+                existingDesc = admin.getTableDescriptor(physicalTable);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 tableExist = false;
                 if (tableType == PTableType.VIEW) {
@@ -1054,11 +1054,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
                     if (allowOnlineTableSchemaUpdate()) {
                         // No need to wait/poll for this update
-                        admin.modifyTable(SchemaUtil.getPhysicalName(tableName, this.getProps()), newDesc);
+                        admin.modifyTable(physicalTable, newDesc);
                     } else {
-                        admin.disableTable(SchemaUtil.getPhysicalName(tableName, this.getProps()));
-                        admin.modifyTable(SchemaUtil.getPhysicalName(tableName, this.getProps()), newDesc);
-                        admin.enableTable(SchemaUtil.getPhysicalName(tableName, this.getProps()));
+                        admin.disableTable(physicalTable);
+                        admin.modifyTable(physicalTable, newDesc);
+                        admin.enableTable(physicalTable);
                     }
                 }
                 return null;
@@ -1089,7 +1089,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return null; // Indicate that no metadata was changed
                 }
 
-                modifyTable(SchemaUtil.getPhysicalName(tableName, this.getProps()).getName(), newDesc, true);
+                modifyTable(physicalTable, newDesc, true);
                 return newDesc;
             }
 

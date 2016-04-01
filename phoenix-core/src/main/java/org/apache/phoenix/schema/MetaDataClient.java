@@ -3408,7 +3408,6 @@ public class MetaDataClient {
         try {
             String schemaName = executableDropSchemaStatement.getSchemaName();
             boolean ifExists = executableDropSchemaStatement.ifExists();
-
             byte[] key = SchemaUtil.getSchemaKey(schemaName);
 
             Long scn = connection.getSCN();
@@ -3425,7 +3424,7 @@ public class MetaDataClient {
                 break;
             case NEWER_SCHEMA_FOUND:
                 throw new NewerSchemaAlreadyExistsException(schemaName);
-            case UNALLOWED_SCHEMA_MUTATION:
+            case TABLES_EXIST_ON_SCHEMA:
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_MUTATE_SCHEMA).setSchemaName(schemaName)
                         .build().buildException();
             default:
@@ -3439,6 +3438,7 @@ public class MetaDataClient {
     }
 
     public MutationState useSchema(UseSchemaStatement useSchemaStatement) throws SQLException {
+        // As we allow default namespace mapped to empty schema, so this is to reset schema in connection
         if (useSchemaStatement.getSchemaName().equals(StringUtil.EMPTY_STRING)
                 || useSchemaStatement.getSchemaName().toUpperCase().equals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE)) {
             connection.setSchema(null);
