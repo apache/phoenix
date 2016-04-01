@@ -566,8 +566,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
                         Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                                 false);
-                        estimatedRows += gps.getRowCounts().get(guideIndex);
-                        estimatedSize += gps.getByteCounts().get(guideIndex);
+                        if (newScan != null) {
+                            estimatedRows += gps.getRowCounts().get(guideIndex);
+                            estimatedSize += gps.getByteCounts().get(guideIndex);
+                        }
                         scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                         currentKeyBytes = currentGuidePost.copyBytes();
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
@@ -590,6 +592,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (hasGuidePosts) {
                 this.estimatedRows = estimatedRows;
                 this.estimatedSize = estimatedSize;
+            } else if (scanRanges.isPointLookup()) {
+                this.estimatedRows = 1L;
+                this.estimatedSize = SchemaUtil.estimateRowSize(table);
             } else {
                 this.estimatedRows = null;
                 this.estimatedSize = null;
@@ -876,7 +881,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     QueryServices.EXPLAIN_ROW_COUNT_ATTRIB,
                     QueryServicesOptions.DEFAULT_EXPLAIN_ROW_COUNT);
             buf.append(this.splits.size()).append("-CHUNK ");
-            if (displayRowCount && hasGuidePosts) {
+            if (displayRowCount && estimatedRows != null) {
                 buf.append(estimatedRows).append(" ROWS ");
                 buf.append(estimatedSize).append(" BYTES ");
             }
