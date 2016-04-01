@@ -33,6 +33,7 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
@@ -261,4 +262,49 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
         conn.close();
     }
+    
+    @Test
+    public void testGroupByOrderPreserving() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE T (ORGANIZATION_ID char(15) not null, \n" + 
+                "JOURNEY_ID char(15) not null, \n" + 
+                "DATASOURCE SMALLINT not null, \n" + 
+                "MATCH_STATUS TINYINT not null, \n" + 
+                "EXTERNAL_DATASOURCE_KEY varchar(30), \n" + 
+                "ENTITY_ID char(15) not null, \n" + 
+                "CONSTRAINT PK PRIMARY KEY (\n" + 
+                "    ORGANIZATION_ID, \n" + 
+                "    JOURNEY_ID, \n" + 
+                "    DATASOURCE, \n" + 
+                "    MATCH_STATUS,\n" + 
+                "    EXTERNAL_DATASOURCE_KEY,\n" + 
+                "    ENTITY_ID))");
+        conn.createStatement().execute("UPSERT INTO T VALUES('000001111122222', '333334444455555', 0, 0, 'abc', '666667777788888')");
+        conn.createStatement().execute("UPSERT INTO T VALUES('000001111122222', '333334444455555', 0, 0, 'abcd', '666667777788889')");
+        conn.createStatement().execute("UPSERT INTO T VALUES('000001111122222', '333334444455555', 0, 0, 'abc', '666667777788899')");
+        conn.commit();
+        String query =
+                "SELECT COUNT(1), EXTERNAL_DATASOURCE_KEY As DUP_COUNT\n" + 
+                "    FROM T \n" + 
+                "   WHERE JOURNEY_ID='333334444455555' AND \n" + 
+                "                 DATASOURCE=0 AND MATCH_STATUS <= 1 and \n" + 
+                "                 ORGANIZATION_ID='000001111122222' \n" + 
+                "    GROUP BY MATCH_STATUS, EXTERNAL_DATASOURCE_KEY \n" + 
+                "    HAVING COUNT(1) > 1";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(2,rs.getInt(1));
+        assertEquals("abc", rs.getString(2));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]\n" + 
+                "CLIENT MERGE SORT\n" + 
+                "CLIENT FILTER BY COUNT(1) > 1",QueryUtil.getExplainPlan(rs));
+    }
+    
 }

@@ -57,14 +57,33 @@ public class GroupByCompiler {
     public static class GroupBy {
         private final List<Expression> expressions;
         private final List<Expression> keyExpressions;
-        private final String scanAttribName;
-        public static final GroupByCompiler.GroupBy EMPTY_GROUP_BY = new GroupBy(new GroupByBuilder());
+        private final boolean isOrderPreserving;
+        public static final GroupByCompiler.GroupBy EMPTY_GROUP_BY = new GroupBy(new GroupByBuilder()) {
+            @Override
+            public void explain(List<String> planSteps, Integer limit) {
+            }
+            @Override
+            public String getScanAttribName() {
+                return null;
+            }
+        };
+        public static final GroupByCompiler.GroupBy UNGROUPED_GROUP_BY = new GroupBy(new GroupByBuilder().setIsOrderPreserving(true)) {
+            @Override
+            public void explain(List<String> planSteps, Integer limit) {
+                planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
+            }
+            @Override
+            public String getScanAttribName() {
+                return BaseScannerRegionObserver.UNGROUPED_AGG;
+            }
+        };
         
         private GroupBy(GroupByBuilder builder) {
             this.expressions = ImmutableList.copyOf(builder.expressions);
-            this.keyExpressions = ImmutableList.copyOf(builder.keyExpressions);
-            this.scanAttribName = builder.scanAttribName;
-            assert(expressions.size() == keyExpressions.size());
+            this.keyExpressions = builder.expressions == builder.keyExpressions ? 
+                    this.expressions : builder.keyExpressions == null ? null :
+                        ImmutableList.copyOf(builder.keyExpressions);
+            this.isOrderPreserving = builder.isOrderPreserving;
         }
         
         public List<Expression> getExpressions() {
@@ -76,129 +95,47 @@ public class GroupByCompiler {
         }
         
         public String getScanAttribName() {
-            return scanAttribName;
+            return isOrderPreserving ? 
+                        BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS : 
+                            BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
         }
         
         public boolean isEmpty() {
             return expressions.isEmpty();
         }
         
-        public static class GroupByBuilder {
-            private String scanAttribName;
-            private List<Expression> expressions = Collections.emptyList();
-            private List<Expression> keyExpressions = Collections.emptyList();
-
-            public GroupByBuilder() {
-            }
-            
-            public GroupByBuilder setScanAttribName(String scanAttribName) {
-                this.scanAttribName = scanAttribName;
-                return this;
-            }
-            
-            public GroupByBuilder setExpressions(List<Expression> expressions) {
-                this.expressions = expressions;
-                return this;
-            }
-            
-            public GroupByBuilder setKeyExpressions(List<Expression> keyExpressions) {
-                this.keyExpressions = keyExpressions;
-                return this;
-            }
-            
-            public GroupBy build() {
-                return new GroupBy(this);
-            }
-        }
-
         public boolean isOrderPreserving() {
-            return !BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName);
+            return isOrderPreserving;
         }
         
-        public void explain(List<String> planSteps, Integer limit) {
-            if (scanAttribName != null) {
-                if (BaseScannerRegionObserver.UNGROUPED_AGG.equals(scanAttribName)) {
-                    planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
-                } else if (BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS.equals(scanAttribName)) {
-                    planSteps.add("    SERVER AGGREGATE INTO DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
-                } else {
-                    planSteps.add("    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
+        public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
+            boolean isOrderPreserving = this.isOrderPreserving;
+            if (isOrderPreserving) {
+                OrderPreservingTracker tracker = new OrderPreservingTracker(context, GroupBy.EMPTY_GROUP_BY, Ordering.UNORDERED, expressions.size(), tupleProjector);
+                for (int i = 0; i < expressions.size(); i++) {
+                    Expression expression = expressions.get(i);
+                    tracker.track(expression);
                 }
+                
+                // This is true if the GROUP BY is composed of only PK columns. We further check here that
+                // there are no "gaps" in the PK columns positions used (i.e. we start with the first PK
+                // column and use each subsequent one in PK order).
+                isOrderPreserving = tracker.isOrderPreserving();
             }
-        }
-    }
-
-    /**
-     * Get list of columns in the GROUP BY clause.
-     * @param context query context kept between compilation of different query clauses
-     * @param statement SQL statement being compiled
-     * @return the {@link GroupBy} instance encapsulating the group by clause
-     * @throws ColumnNotFoundException if column name could not be resolved
-     * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
-     */
-    public static GroupBy compile(StatementContext context, SelectStatement statement, TupleProjector tupleProjector, boolean isInRowKeyOrder) throws SQLException {
-        List<ParseNode> groupByNodes = statement.getGroupBy();
-        /**
-         * Distinct can use an aggregate plan if there's no group by.
-         * Otherwise, we need to insert a step after the Merge that dedups.
-         * Order by only allowed on columns in the select distinct
-         */
-        if (groupByNodes.isEmpty()) {
-            if (statement.isAggregate()) {
-                return new GroupBy.GroupByBuilder().setScanAttribName(BaseScannerRegionObserver.UNGROUPED_AGG).build();
-            }
-            if (!statement.isDistinct()) {
-                return GroupBy.EMPTY_GROUP_BY;
+            if (isOrderPreserving) {
+                return this;
             }
             
-            groupByNodes = Lists.newArrayListWithExpectedSize(statement.getSelect().size());
-            for (AliasedNode aliasedNode : statement.getSelect()) {
-                groupByNodes.add(aliasedNode.getNode());
-            }
-        }
-
-       // Accumulate expressions in GROUP BY
-        ExpressionCompiler compiler =
-                new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY);
-        List<Pair<Integer,Expression>> groupBys = Lists.newArrayListWithExpectedSize(groupByNodes.size());
-        OrderPreservingTracker tracker = new OrderPreservingTracker(context, GroupBy.EMPTY_GROUP_BY, Ordering.UNORDERED, groupByNodes.size(), tupleProjector);
-        for (int i = 0; i < groupByNodes.size(); i++) {
-            ParseNode node = groupByNodes.get(i);
-            Expression expression = node.accept(compiler);
-            if (!expression.isStateless()) {
-                if (compiler.isAggregate()) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_GROUP_BY)
-                        .setMessage(expression.toString()).build().buildException();
-                }
-                tracker.track(expression);
+            List<Expression> expressions = Lists.newArrayListWithExpectedSize(this.expressions.size());
+            List<Expression> keyExpressions = expressions;
+            List<Pair<Integer,Expression>> groupBys = Lists.newArrayListWithExpectedSize(this.expressions.size());
+            for (int i = 0; i < this.expressions.size(); i++) {
+                Expression expression = this.expressions.get(i);
                 groupBys.add(new Pair<Integer,Expression>(i,expression));
             }
-            compiler.reset();
-        }
-        
-        if (groupBys.isEmpty()) {
-            return GroupBy.EMPTY_GROUP_BY;
-        }
-        
-        boolean isRowKeyOrderedGrouping = isInRowKeyOrder && tracker.isOrderPreserving();
-        List<Expression> expressions = Lists.newArrayListWithExpectedSize(groupBys.size());
-        List<Expression> keyExpressions = expressions;
-        String groupExprAttribName;
-        // This is true if the GROUP BY is composed of only PK columns. We further check here that
-        // there are no "gaps" in the PK columns positions used (i.e. we start with the first PK
-        // column and use each subsequent one in PK order).
-        if (isRowKeyOrderedGrouping) {
-            groupExprAttribName = BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS;
-            for (Pair<Integer,Expression> groupBy : groupBys) {
-                expressions.add(groupBy.getSecond());
-            }
-        } else {
             /*
-             * Otherwise, our coprocessor needs to collect all distinct groups within a region, sort them, and
-             * hold on to them until the scan completes.
-             */
-            groupExprAttribName = BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
-            /*
+             * If we're not ordered along the PK axis, our coprocessor needs to collect all distinct groups within
+             * a region, sort them, and hold on to them until the scan completes.
              * Put fixed length nullables at the end, so that we can represent null by the absence of the trailing
              * value in the group by key. If there is more than one, we'll need to convert the ones not at the end
              * into a Decimal so that we can use an empty byte array as our representation for null (which correctly
@@ -276,9 +213,99 @@ public class GroupByCompiler {
                 // than one fixed and nullable types are used in a group by clause
                 keyExpressions.set(i, CoerceExpression.create(expression, keyType));
             }
+
+            GroupBy groupBy = new GroupBy.GroupByBuilder().setIsOrderPreserving(isOrderPreserving).setExpressions(expressions).setKeyExpressions(keyExpressions).build();
+            return groupBy;
+        }
+        
+        public static class GroupByBuilder {
+            private boolean isOrderPreserving;
+            private List<Expression> expressions = Collections.emptyList();
+            private List<Expression> keyExpressions = Collections.emptyList();
+
+            public GroupByBuilder() {
+            }
+            
+            public GroupByBuilder setExpressions(List<Expression> expressions) {
+                this.expressions = expressions;
+                return this;
+            }
+            
+            public GroupByBuilder setKeyExpressions(List<Expression> keyExpressions) {
+                this.keyExpressions = keyExpressions;
+                return this;
+            }
+            
+            public GroupByBuilder setIsOrderPreserving(boolean isOrderPreserving) {
+                this.isOrderPreserving = isOrderPreserving;
+                return this;
+            }
+            
+            public GroupBy build() {
+                return new GroupBy(this);
+            }
         }
 
-        GroupBy groupBy = new GroupBy.GroupByBuilder().setScanAttribName(groupExprAttribName).setExpressions(expressions).setKeyExpressions(keyExpressions).build();
+        public void explain(List<String> planSteps, Integer limit) {
+            if (isOrderPreserving) {
+                planSteps.add("    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
+            } else {
+                planSteps.add("    SERVER AGGREGATE INTO DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
+            }
+        }
+    }
+
+    /**
+     * Get list of columns in the GROUP BY clause.
+     * @param context query context kept between compilation of different query clauses
+     * @param statement SQL statement being compiled
+     * @return the {@link GroupBy} instance encapsulating the group by clause
+     * @throws ColumnNotFoundException if column name could not be resolved
+     * @throws AmbiguousColumnException if an unaliased column name is ambiguous across multiple tables
+     */
+    public static GroupBy compile(StatementContext context, SelectStatement statement, boolean isOrderPreserving) throws SQLException {
+        List<ParseNode> groupByNodes = statement.getGroupBy();
+        /**
+         * Distinct can use an aggregate plan if there's no group by.
+         * Otherwise, we need to insert a step after the Merge that dedups.
+         * Order by only allowed on columns in the select distinct
+         */
+        if (groupByNodes.isEmpty()) {
+            if (statement.isAggregate()) {
+                return GroupBy.UNGROUPED_GROUP_BY;
+            }
+            if (!statement.isDistinct()) {
+                return GroupBy.EMPTY_GROUP_BY;
+            }
+            
+            groupByNodes = Lists.newArrayListWithExpectedSize(statement.getSelect().size());
+            for (AliasedNode aliasedNode : statement.getSelect()) {
+                groupByNodes.add(aliasedNode.getNode());
+            }
+        }
+
+       // Accumulate expressions in GROUP BY
+        ExpressionCompiler compiler =
+                new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY);
+        List<Expression> expressions = Lists.newArrayListWithExpectedSize(groupByNodes.size());
+        for (int i = 0; i < groupByNodes.size(); i++) {
+            ParseNode node = groupByNodes.get(i);
+            Expression expression = node.accept(compiler);
+            if (!expression.isStateless()) {
+                if (compiler.isAggregate()) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATE_IN_GROUP_BY)
+                        .setMessage(expression.toString()).build().buildException();
+                }
+                expressions.add(expression);
+            }
+            compiler.reset();
+        }
+        
+        if (expressions.isEmpty()) {
+            return GroupBy.EMPTY_GROUP_BY;
+        }
+        
+        GroupBy groupBy = new GroupBy.GroupByBuilder().setIsOrderPreserving(isOrderPreserving).setExpressions(expressions).setKeyExpressions(expressions).build();
         return groupBy;
     }
     
