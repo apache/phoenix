@@ -303,8 +303,44 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]\n" + 
-                "CLIENT MERGE SORT\n" + 
                 "CLIENT FILTER BY COUNT(1) > 1",QueryUtil.getExplainPlan(rs));
+    }
+    
+    @Test
+    public void testGroupByOrderPreservingDescSort() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE GROUP_BY_DESC (k1 char(1) not null, k2 char(1) not null, constraint pk primary key (k1,k2)) split on ('ac','jc','nc')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 'a')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 'b')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 'c')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 'd')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 'a')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 'b')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 'c')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 'd')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 'a')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 'b')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 'c')");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 'd')");
+        conn.commit();
+        String query = "SELECT k1,count(*) FROM GROUP_BY_DESC GROUP BY k1 ORDER BY k1 DESC";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("n", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("j", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertFalse(rs.next());
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY REVERSE FULL SCAN OVER GROUP_BY_DESC\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]", QueryUtil.getExplainPlan(rs));
     }
     
 }
