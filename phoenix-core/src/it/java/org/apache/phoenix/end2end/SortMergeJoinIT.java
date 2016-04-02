@@ -113,6 +113,8 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "            SERVER SORTED BY [\"I.item_id\"]\n" +
+                "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "            SERVER FILTER BY QUANTITY < 5000\n" +
@@ -132,7 +134,9 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.ItemTable\n" +
                 "AND\n" +
                 "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.ItemTable\n" +
-                "        SERVER FILTER BY FIRST KEY ONLY"
+                "        SERVER FILTER BY FIRST KEY ONLY\n" +
+                "        SERVER SORTED BY [\"I2.item_id\"]\n" + 
+                "    CLIENT MERGE SORT"
                 }});
         testCases.add(new String[][] {
                 {

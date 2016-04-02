@@ -472,7 +472,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
                         + MetaDataUtil.getLocalIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME)+" [-32768,*] - [-32768,'z']\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
-                        + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\n" + "CLIENT MERGE SORT",
+                        + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
             rs = conn1.createStatement().executeQuery(query);
