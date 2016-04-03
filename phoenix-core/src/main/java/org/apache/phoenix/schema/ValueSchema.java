@@ -318,11 +318,6 @@ public abstract class ValueSchema implements Writable {
             fields.add(new Field(datum, isNullable, 1, sortOrder));
             return this;
         }
-
-        public ValueSchemaBuilder addField(Field field) {
-            fields.add(field);
-            return this;
-        }
     }
     
     public int getEstimatedByteSize() {
