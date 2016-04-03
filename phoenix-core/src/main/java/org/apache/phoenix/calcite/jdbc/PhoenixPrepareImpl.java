@@ -38,6 +38,7 @@ import org.apache.phoenix.calcite.rules.PhoenixMergeSortUnionRule;
 import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
+import org.apache.phoenix.calcite.rules.PhoenixTableScanColumnRefRule;
 
 import com.google.common.base.Function;
 
@@ -93,6 +94,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             planner.addRule(rule);
         }
         planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
+        planner.addRule(PhoenixTableScanColumnRefRule.INSTANCE);
         planner.addRule(PhoenixCompactClientSortRule.INSTANCE);
         planner.addRule(PhoenixJoinSingleValueAggregateMergeRule.INSTANCE);
         planner.addRule(PhoenixMergeSortUnionRule.INSTANCE);

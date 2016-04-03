@@ -47,7 +47,8 @@ public class PhoenixReverseTableScanRule extends RelOptRule {
         for (RelCollation candidate : scan.getTable().getCollationList()) {
             if (CalciteUtils.reverseCollation(candidate).satisfies(collation)) {
                 RelNode newRel = PhoenixTableScan.create(
-                        scan.getCluster(), scan.getTable(), scan.filter, ScanOrder.REVERSE);
+                        scan.getCluster(), scan.getTable(), scan.filter,
+                        ScanOrder.REVERSE, scan.extendedColumnRef);
                 if (sort.offset != null || sort.fetch != null) {
                     newRel = sort.copy(
                             sort.getTraitSet().replace(RelCollations.EMPTY),

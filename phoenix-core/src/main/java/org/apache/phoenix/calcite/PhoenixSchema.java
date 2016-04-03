@@ -226,7 +226,7 @@ public class PhoenixSchema implements Schema {
         try {
             for (Table table : tables.values()) {
                 if (table instanceof PhoenixTable) {
-                    PTable pTable = ((PhoenixTable) table).pTable;
+                    PTable pTable = ((PhoenixTable) table).tableMapping.getPTable();
                     for (PTable index : pTable.getIndexes()) {
                         addMaterialization(index, path, calciteSchema);
                     }
@@ -247,9 +247,11 @@ public class PhoenixSchema implements Schema {
     private void addMaterialization(PTable index, List<String> path,
             CalciteSchema calciteSchema) throws SQLException {
         index = fixTableMultiTenancy(index);
+        PhoenixTable table = new PhoenixTable(pc, index);
+        tables.put(index.getTableName().getString(), table);
         StringBuffer sb = new StringBuffer();
         sb.append("SELECT");
-        for (PColumn column : PhoenixTable.getMappedColumns(index)) {
+        for (PColumn column : table.getColumns()) {
             String indexColumnName = column.getName().getString();
             String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
             sb.append(",").append(SchemaUtil.getEscapedFullColumnName(dataColumnName));

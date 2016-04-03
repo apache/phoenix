@@ -17,6 +17,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -28,7 +29,6 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
@@ -111,12 +111,12 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
 
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, true, getColumnRefList(0)));
         QueryPlan leftPlan = implementInput(implementor, 0, null);
-        PTable leftTable = implementor.getTableRef().getTable();
+        PTable leftTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
 
         implementor.pushContext(new ImplementorContext(false, true, getColumnRefList(1)));
         QueryPlan rightPlan = implementInput(implementor, 1, rightExprs);
-        PTable rightTable = implementor.getTableRef().getTable();
+        PTable rightTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
         
         JoinType type = CalciteUtils.convertJoinType(getJoinType());
@@ -126,7 +126,7 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        implementor.setTableRef(new TableRef(joinedTable));
+        implementor.setTableMapping(new TableMapping(joinedTable));
         
         // Compile left conditions against the joined table due to implementation of HashJoinRegionScanner.
         for (Iterator<Integer> iter = joinInfo.leftKeys.iterator(); iter.hasNext();) {

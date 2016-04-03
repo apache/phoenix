@@ -16,6 +16,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.QueryPlan;
@@ -99,7 +100,8 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
 
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns && getJoinType() != JoinRelType.FULL, true, getColumnRefList(0)));
         QueryPlan leftPlan = implementInput(implementor, 0, leftExprs);
-        TableRef joinedTable = implementor.getTableRef();
+        TableMapping tableMapping = implementor.getTableMapping();
+        TableRef joinedTable = tableMapping.getTableRef();
         implementor.popContext();
 
         implementor.pushContext(new ImplementorContext(false, true, getColumnRefList(1)));
@@ -107,7 +109,7 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
         implementor.popContext();
         
         JoinType type = JoinType.Semi;
-        implementor.setTableRef(joinedTable);
+        implementor.setTableMapping(tableMapping);
         PhoenixStatement stmt = leftPlan.getContext().getStatement();
         ColumnResolver resolver = leftPlan.getContext().getResolver();
         StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));

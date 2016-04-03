@@ -10,12 +10,12 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Uncollect;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.UnnestArrayPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 
 public class PhoenixUncollect extends Uncollect implements PhoenixRel {
@@ -56,8 +56,8 @@ public class PhoenixUncollect extends Uncollect implements PhoenixRel {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        PTable projectedTable = implementor.createProjectedTable();
-        implementor.setTableRef(new TableRef(projectedTable));
+        PTable projectedTable = implementor.getTableMapping().createProjectedTable(implementor.getCurrentContext().retainPKColumns);
+        implementor.setTableMapping(new TableMapping(projectedTable));
         return new UnnestArrayPlan(plan, arrayExpression, false);
     }
 

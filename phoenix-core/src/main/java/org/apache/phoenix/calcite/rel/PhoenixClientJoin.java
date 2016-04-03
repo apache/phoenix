@@ -19,6 +19,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -115,12 +116,12 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
 
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns && getJoinType() != JoinRelType.FULL, true, getColumnRefList(0)));
         QueryPlan leftPlan = implementInput(implementor, 0, leftExprs);
-        PTable leftTable = implementor.getTableRef().getTable();
+        PTable leftTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
 
         implementor.pushContext(new ImplementorContext(false, true, getColumnRefList(1)));
         QueryPlan rightPlan = implementInput(implementor, 1, rightExprs);
-        PTable rightTable = implementor.getTableRef().getTable();
+        PTable rightTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
         
         JoinType type = CalciteUtils.convertJoinType(getJoinType());
@@ -130,8 +131,9 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        TableRef tableRef = new TableRef(joinedTable);
-        implementor.setTableRef(tableRef);
+        TableMapping tableMapping = new TableMapping(joinedTable);
+        implementor.setTableMapping(tableMapping);
+        TableRef tableRef = tableMapping.getTableRef();
         ColumnResolver resolver;
         try {
             resolver = FromCompiler.getResolver(tableRef);

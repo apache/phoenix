@@ -6,9 +6,9 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.PhoenixSequence;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMetadataProvider;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.execute.RuntimeContext;
@@ -16,8 +16,6 @@ import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.SequenceValueParseNode;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 
 /**
@@ -75,15 +73,12 @@ public interface PhoenixRel extends RelNode {
     Expression newFieldAccessExpression(String variableId, int index, PDataType type);
     SequenceValueExpression newSequenceExpression(PhoenixSequence seq, SequenceValueParseNode.Op op);
     RuntimeContext getRuntimeContext();
-    void setTableRef(TableRef tableRef);
-    TableRef getTableRef();
+    void setTableMapping(TableMapping tableMapping);
+    TableMapping getTableMapping();
     void setSequenceManager(SequenceManager sequenceManager);
     void pushContext(ImplementorContext context);
     ImplementorContext popContext();
     ImplementorContext getCurrentContext();
-    PTable createProjectedTable();
-    TupleProjector createTupleProjector();
-    RowProjector createRowProjector();
     TupleProjector project(List<Expression> exprs);
   }
 }

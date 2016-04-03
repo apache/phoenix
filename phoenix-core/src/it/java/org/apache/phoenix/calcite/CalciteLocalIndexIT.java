@@ -239,6 +239,24 @@ public class CalciteLocalIndexIT extends BaseCalciteIndexIT {
                         {"1000", 1001},
                         {"1001", 1002}})*/
                 .close();
+        
+        start(props).sql("select * from " + MULTI_TENANT_VIEW1 + " where col0 = 1000")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER], COL1=[$2], COL2=[$3])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, S1, IDX_MULTITENANT_TEST_VIEW1]], filter=[=(CAST($0):INTEGER, 1000)], extendedColumns=[{2, 3}])\n")
+                .sameResultAsPhoenixStandalone(0)
+                /*.resultIs(0, new Object[][] {
+                        {"0999", 1000, 1001, 1002}})*/
+                .close();
+        
+        start(props).sql("select id, col0, col2 from " + MULTI_TENANT_VIEW1 + " where col0 = 1000")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerProject(ID=[$1], COL0=[CAST($0):INTEGER], COL2=[$3])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, S1, IDX_MULTITENANT_TEST_VIEW1]], filter=[=(CAST($0):INTEGER, 1000)], extendedColumns=[{3}])\n")
+                .sameResultAsPhoenixStandalone(0)
+                /*.resultIs(0, new Object[][] {
+                        {"0999", 1000, 1002}})*/
+                .close();
 
         props.setProperty("TenantId", "20");
         start(props).sql("select * from " + MULTI_TENANT_VIEW2 + " where id = '0765'")

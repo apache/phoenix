@@ -17,13 +17,14 @@ import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.CorrelateVariableImpl;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.CorrelatePlan;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.base.Supplier;
 
@@ -73,14 +74,14 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
     public QueryPlan implement(Implementor implementor) {
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, true, ImmutableIntList.identity(getLeft().getRowType().getFieldCount())));
         QueryPlan leftPlan = implementor.visitInput(0, (PhoenixRel) getLeft());
-        PTable leftTable = implementor.getTableRef().getTable();
+        PTable leftTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
 
-        implementor.getRuntimeContext().defineCorrelateVariable(getCorrelVariable(), implementor.getTableRef());
+        implementor.getRuntimeContext().defineCorrelateVariable(getCorrelVariable(), new CorrelateVariableImpl(implementor.getTableMapping()));
 
         implementor.pushContext(new ImplementorContext(false, true, ImmutableIntList.identity(getRight().getRowType().getFieldCount())));
         QueryPlan rightPlan = implementor.visitInput(1, (PhoenixRel) getRight());
-        PTable rightTable = implementor.getTableRef().getTable();
+        PTable rightTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
                 
         JoinType type = CalciteUtils.convertSemiJoinType(getJoinType());
@@ -90,8 +91,8 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        TableRef tableRef = new TableRef(joinedTable);
-        implementor.setTableRef(tableRef);
+        TableMapping tableMapping = new TableMapping(joinedTable);
+        implementor.setTableMapping(tableMapping);
 
         return new CorrelatePlan(leftPlan, rightPlan, getCorrelVariable(), 
                 type, false, implementor.getRuntimeContext(), joinedTable, 

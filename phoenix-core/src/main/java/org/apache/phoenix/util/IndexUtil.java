@@ -94,6 +94,7 @@ import co.cask.tephra.TxConstants;
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
     public static final byte[] INDEX_COLUMN_NAME_SEP_BYTES = Bytes.toBytes(INDEX_COLUMN_NAME_SEP);
+    public static final String INDEX_PROJECTOR = "indexProjector";
     
     private IndexUtil() {
     }
@@ -453,6 +454,11 @@ public class IndexUtil {
     
     public static TupleProjector getTupleProjector(Scan scan, ColumnReference[] dataColumns) {
         if (dataColumns != null && dataColumns.length != 0) {
+            TupleProjector projector = TupleProjector.deserializeProjectorFromScan(scan, INDEX_PROJECTOR);
+            if (projector != null) {
+                return projector;
+            }
+            
             KeyValueSchema keyValueSchema = deserializeLocalIndexJoinSchemaFromScan(scan); 
             KeyValueColumnExpression[] keyValueColumns = new KeyValueColumnExpression[dataColumns.length];
             for (int i = 0; i < dataColumns.length; i++) {

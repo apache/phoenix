@@ -5,18 +5,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Stack;
 
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixSequence;
-import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.rel.PhoenixRel.ImplementorContext;
-import org.apache.phoenix.compile.ColumnProjector;
-import org.apache.phoenix.compile.ExpressionProjector;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
-import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
@@ -26,7 +20,6 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -35,19 +28,14 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.SchemaUtil;
-
 import com.google.common.collect.Lists;
 
 public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     private final RuntimeContext runtimeContext;
-	private TableRef tableRef;
-	private List<PColumn> mappedColumns;
 	private Stack<ImplementorContext> contextStack;
 	private SequenceManager sequenceManager;
+	private TableMapping tableMapping;
 	
 	public PhoenixRelImplementorImpl(RuntimeContext runtimeContext) {
 	    this.runtimeContext = runtimeContext;
@@ -61,14 +49,13 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 
 	@Override
 	public ColumnExpression newColumnExpression(int index) {
-		ColumnRef colRef = new ColumnRef(this.tableRef, this.mappedColumns.get(index).getPosition());
-		return colRef.newColumnExpression();
+		return tableMapping.newColumnExpression(index);
 	}
     
     @SuppressWarnings("rawtypes")
     @Override
     public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {
-        Expression fieldAccessExpr = runtimeContext.newCorrelateVariableReference(variableId, index);
+        Expression fieldAccessExpr = runtimeContext.getCorrelateVariable(variableId).newExpression(index);
         return new CorrelateVariableFieldAccessExpression(runtimeContext, variableId, fieldAccessExpr);
     }
     
@@ -89,14 +76,13 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     }
 
     @Override
-	public void setTableRef(TableRef tableRef) {
-		this.tableRef = tableRef;
-		this.mappedColumns = PhoenixTable.getMappedColumns(tableRef.getTable());
+	public void setTableMapping(TableMapping tableMapping) {
+		this.tableMapping = tableMapping;
 	}
     
     @Override
-    public TableRef getTableRef() {
-        return this.tableRef;
+    public TableMapping getTableMapping() {
+        return this.tableMapping;
     }
     
     @Override
@@ -120,49 +106,6 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
     }
     
     @Override
-    public PTable createProjectedTable() {
-        List<ColumnRef> sourceColumnRefs = Lists.<ColumnRef> newArrayList();
-        List<PColumn> columns = getCurrentContext().retainPKColumns ?
-                  getTableRef().getTable().getColumns() : mappedColumns;
-        for (PColumn column : columns) {
-            sourceColumnRefs.add(new ColumnRef(getTableRef(), column.getPosition()));
-        }
-        
-        try {
-            return TupleProjectionCompiler.createProjectedTable(getTableRef(), sourceColumnRefs, getCurrentContext().retainPKColumns);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
-    
-    @Override
-    public TupleProjector createTupleProjector() {
-        KeyValueSchemaBuilder builder = new KeyValueSchemaBuilder(0);
-        List<Expression> exprs = Lists.<Expression> newArrayList();
-        for (PColumn column : mappedColumns) {
-            if (!SchemaUtil.isPKColumn(column) || !getCurrentContext().retainPKColumns) {
-                Expression expr = new ColumnRef(tableRef, column.getPosition()).newColumnExpression();
-                exprs.add(expr);
-                builder.addField(expr);                
-            }
-        }
-        
-        return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));
-    }
-    
-    @Override
-    public RowProjector createRowProjector() {
-        List<ColumnProjector> columnProjectors = Lists.<ColumnProjector>newArrayList();
-        for (int i = 0; i < mappedColumns.size(); i++) {
-            PColumn column = mappedColumns.get(i);
-            Expression expr = newColumnExpression(i); // Do not use column.position() here.
-            columnProjectors.add(new ExpressionProjector(column.getName().getString(), getTableRef().getTable().getName().getString(), expr, false));
-        }
-        // TODO get estimate row size
-        return new RowProjector(columnProjectors, 0, false);        
-    }
-    
-    @Override
     public TupleProjector project(List<Expression> exprs) {
         KeyValueSchema.KeyValueSchemaBuilder builder = new KeyValueSchema.KeyValueSchemaBuilder(0);
         List<PColumn> columns = Lists.<PColumn>newArrayList();
@@ -180,7 +123,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
                     null, null, columns, null, null, Collections.<PTable>emptyList(),
                     false, Collections.<PName>emptyList(), null, null, false, false, false, null,
                     null, null, true, false, 0, 0);
-            this.setTableRef(new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false));
+            this.setTableMapping(new TableMapping(pTable));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

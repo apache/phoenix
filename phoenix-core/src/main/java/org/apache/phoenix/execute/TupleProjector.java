@@ -111,6 +111,10 @@ public class TupleProjector {
     }
     
     public static void serializeProjectorIntoScan(Scan scan, TupleProjector projector) {
+        serializeProjectorIntoScan(scan, projector, SCAN_PROJECTOR);
+    }
+    
+    public static void serializeProjectorIntoScan(Scan scan, TupleProjector projector, String attr) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
             DataOutputStream output = new DataOutputStream(stream);
@@ -121,7 +125,7 @@ public class TupleProjector {
             	WritableUtils.writeVInt(output, ExpressionType.valueOf(projector.expressions[i]).ordinal());
             	projector.expressions[i].write(output);
             }
-            scan.setAttribute(SCAN_PROJECTOR, stream.toByteArray());
+            scan.setAttribute(attr, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -135,7 +139,11 @@ public class TupleProjector {
     }
     
     public static TupleProjector deserializeProjectorFromScan(Scan scan) {
-        byte[] proj = scan.getAttribute(SCAN_PROJECTOR);
+        return deserializeProjectorFromScan(scan, SCAN_PROJECTOR);
+    }
+    
+    public static TupleProjector deserializeProjectorFromScan(Scan scan, String attr) {
+        byte[] proj = scan.getAttribute(attr);
         if (proj == null) {
             return null;
         }

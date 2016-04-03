@@ -104,7 +104,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
             }
             @Override
             public RowProjector getProjector() {
-                return phoenixImplementor.createRowProjector();
+                return phoenixImplementor.getTableMapping().createRowProjector();
             }
             @Override
             public ResultIterator iterator(ParallelScanGrouper scanGrouper)

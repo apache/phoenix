@@ -15,10 +15,10 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.collect.Lists;
 
@@ -55,8 +55,8 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixR
             exprs.add(CalciteUtils.toExpression(project, implementor));
         }
         TupleProjector tupleProjector = implementor.project(exprs);
-        PTable projectedTable = implementor.createProjectedTable();
-        implementor.setTableRef(new TableRef(projectedTable));
+        PTable projectedTable = implementor.getTableMapping().createProjectedTable(implementor.getCurrentContext().retainPKColumns);
+        implementor.setTableMapping(new TableMapping(projectedTable));
 
         return tupleProjector;
     }

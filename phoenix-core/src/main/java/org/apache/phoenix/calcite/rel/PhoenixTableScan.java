@@ -18,10 +18,11 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -45,7 +46,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
@@ -64,17 +64,18 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public final RexNode filter;
     public final ScanOrder scanOrder;
     public final ScanRanges scanRanges;
+    public final ImmutableBitSet extendedColumnRef;
     
     protected final Long estimatedBytes;
     protected final float rowCountFactor;
     
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table) {
         return create(cluster, table, null,
-                getDefaultScanOrder(table.unwrap(PhoenixTable.class)));
+                getDefaultScanOrder(table.unwrap(PhoenixTable.class)), null);
     }
 
     public static PhoenixTableScan create(RelOptCluster cluster, final RelOptTable table, 
-            RexNode filter, final ScanOrder scanOrder) {
+            RexNode filter, final ScanOrder scanOrder, ImmutableBitSet extendedColumnRef) {
         final RelTraitSet traits =
                 cluster.traitSetOf(PhoenixConvention.SERVER)
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
@@ -87,25 +88,34 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                         return scanOrder == ScanOrder.FORWARD ? collations : reverse(collations);
                     }
                 });
-        return new PhoenixTableScan(cluster, traits, table, filter, scanOrder);
+        return new PhoenixTableScan(cluster, traits, table, filter, scanOrder, extendedColumnRef);
     }
 
-    private PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits, RelOptTable table, RexNode filter, ScanOrder scanOrder) {
+    private PhoenixTableScan(RelOptCluster cluster, RelTraitSet traits,
+            RelOptTable table, RexNode filter, ScanOrder scanOrder,
+            ImmutableBitSet extendedColumnRef) {
         super(cluster, traits, table);
         this.filter = filter;
         this.scanOrder = scanOrder;
         final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
         this.rowCountFactor = phoenixTable.pc.getQueryServices()
-                .getProps().getFloat(PhoenixRel.ROW_COUNT_FACTOR, 1f);        
+                .getProps().getFloat(PhoenixRel.ROW_COUNT_FACTOR, 1f);
         try {
             // TODO simplify this code
-            PTable pTable = phoenixTable.getTable();
-            TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
+            TableMapping tableMapping = phoenixTable.tableMapping;
+            PTable pTable = tableMapping.getPTable();
             SelectStatement select = SelectStatement.SELECT_ONE;
             PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
-            ColumnResolver resolver = FromCompiler.getResolver(tableRef);
+            ColumnResolver resolver = FromCompiler.getResolver(tableMapping.getTableRef());
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
-            if (filter != null) {
+            if (extendedColumnRef == null) {
+                extendedColumnRef = tableMapping.getDefaultExtendedColumnRef();
+            }
+            if (filter == null) {
+                this.extendedColumnRef = extendedColumnRef;
+            } else {
+                this.extendedColumnRef = extendedColumnRef.union(
+                        tableMapping.getExtendedColumnRef(ImmutableList.of(filter)));
                 // We use a implementor with a special implementation for field access
                 // here, which translates RexFieldAccess into a LiteralExpression
                 // with a sample value. This will achieve 3 goals at a time:
@@ -124,12 +134,13 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                         }
                     }                    
                 };
-                tmpImplementor.setTableRef(tableRef);
+                tmpImplementor.setTableMapping(tableMapping);
                 Expression filterExpr = CalciteUtils.toExpression(filter, tmpImplementor);
                 filterExpr = WhereOptimizer.pushKeyExpressionsToScan(context, select, filterExpr);
                 WhereCompiler.setScanFilter(context, select, filterExpr, true, false);
             }        
             this.scanRanges = context.getScanRanges();
+            // TODO Get estimated byte count based on column reference list.
             this.estimatedBytes = BaseResultIterators.getEstimatedCount(context, pTable).getSecond();
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -170,7 +181,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     public RelWriter explainTerms(RelWriter pw) {
         return super.explainTerms(pw)
             .itemIf("filter", filter, filter != null)
-            .itemIf("scanOrder", scanOrder, scanOrder != ScanOrder.NONE);
+            .itemIf("scanOrder", scanOrder, scanOrder != ScanOrder.NONE)
+            .itemIf("extendedColumns", extendedColumnRef, !extendedColumnRef.isEmpty());
     }
 
     @Override
@@ -188,6 +200,10 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 byteCount = phoenixTable.byteCount;
             }
         }
+        Pair<Integer, Integer> columnRefCount =
+                phoenixTable.tableMapping.getExtendedColumnReferenceCount(extendedColumnRef);
+        double extendedColumnMultiplier = 1 + columnRefCount.getFirst() * 10 + columnRefCount.getSecond() * 0.1;
+        byteCount *= extendedColumnMultiplier;
         byteCount *= rowCountFactor;
         if (scanOrder != ScanOrder.NONE) {
             // We don't want to make a big difference here. The idea is to avoid
@@ -230,12 +246,11 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     @Override
     public QueryPlan implement(Implementor implementor) {
         final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
-        PTable pTable = phoenixTable.getTable();
-        TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
-        implementor.setTableRef(tableRef);
+        TableMapping tableMapping = phoenixTable.tableMapping;
+        implementor.setTableMapping(tableMapping);
         try {
             PhoenixStatement stmt = new PhoenixStatement(phoenixTable.pc);
-            ColumnResolver resolver = FromCompiler.getResolver(tableRef);
+            ColumnResolver resolver = FromCompiler.getResolver(tableMapping.getTableRef());
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
             SelectStatement select = SelectStatement.SELECT_ONE;
             ImmutableIntList columnRefList = implementor.getCurrentContext().columnRefList;
@@ -255,12 +270,14 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
             if (filter != null && !context.getScanRanges().equals(this.scanRanges)) {
                 dynamicFilter = filterExpr;
             }
-            projectColumnFamilies(context.getScan(), phoenixTable.mappedColumns, columnRefList);
+            tableMapping.setupScanForExtendedTable(context.getScan(), extendedColumnRef, context.getConnection());
+            projectColumnFamilies(context.getScan(), tableMapping.getMappedColumns(), columnRefList);
             if (implementor.getCurrentContext().forceProject) {
-                TupleProjector tupleProjector = implementor.createTupleProjector();
+                boolean retainPKColumns = implementor.getCurrentContext().retainPKColumns;
+                TupleProjector tupleProjector = tableMapping.createTupleProjector(retainPKColumns);
                 TupleProjector.serializeProjectorIntoScan(context.getScan(), tupleProjector);
-                PTable projectedTable = implementor.createProjectedTable();
-                implementor.setTableRef(new TableRef(projectedTable));
+                PTable projectedTable = tableMapping.createProjectedTable(retainPKColumns);
+                implementor.setTableMapping(new TableMapping(projectedTable));
             }
             Integer limit = null;
             OrderBy orderBy = scanOrder == ScanOrder.NONE ?
@@ -269,7 +286,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                               OrderBy.FWD_ROW_KEY_ORDER_BY
                             : OrderBy.REV_ROW_KEY_ORDER_BY);
             ParallelIteratorFactory iteratorFactory = null;
-            return new ScanPlan(context, select, tableRef, RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true, dynamicFilter);
+            return new ScanPlan(context, select, tableMapping.getTableRef(), RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true, dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

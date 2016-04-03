@@ -59,7 +59,7 @@ public class PhoenixClientSort extends PhoenixAbstractSort {
             
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         
-        TableRef tableRef = implementor.getTableRef();
+        TableRef tableRef = implementor.getTableMapping().getTableRef();
         PhoenixStatement stmt = plan.getContext().getStatement();
         StatementContext context;
         try {

@@ -44,6 +44,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.RuntimeContext.CorrelateVariable;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.Expression;
@@ -180,7 +181,7 @@ public class CorrelatePlanTest {
         TableRef rightTable = createProjectedTableFromLiterals(rightRelation[0]);
         String varName = "$cor0";
         RuntimeContext runtimeContext = new RuntimeContextImpl();
-        runtimeContext.defineCorrelateVariable(varName, leftTable);
+        runtimeContext.defineCorrelateVariable(varName, new CorrelateVariableImpl(leftTable));
         QueryPlan leftPlan = newLiteralResultIterationPlan(leftRelation);
         QueryPlan rightPlan = newLiteralResultIterationPlan(rightRelation);
         Expression columnExpr = new ColumnRef(rightTable, rightCorrelColumn).newColumnExpression();
@@ -243,6 +244,30 @@ public class CorrelatePlanTest {
             return new TableRef(TupleProjectionCompiler.createProjectedTable(sourceTable, sourceColumnRefs, false));
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        }        
+    }
+    
+    private static class CorrelateVariableImpl implements CorrelateVariable {
+        private final TableRef tableRef;
+        private Tuple value;
+        
+        CorrelateVariableImpl(TableRef tableRef) {
+            this.tableRef = tableRef;
+        }
+
+        @Override
+        public Expression newExpression(int index) {
+            return new ColumnRef(tableRef, index).newColumnExpression();
+        }
+
+        @Override
+        public Tuple getValue() {
+            return value;
+        }
+
+        @Override
+        public void setValue(Tuple value) {
+            this.value = value;            
         }        
     }
 }

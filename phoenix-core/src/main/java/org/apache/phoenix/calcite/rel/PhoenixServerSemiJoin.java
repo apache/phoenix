@@ -15,6 +15,7 @@ import org.apache.calcite.rel.core.SemiJoin;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableIntList;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
@@ -24,7 +25,6 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
@@ -98,7 +98,7 @@ public class PhoenixServerSemiJoin extends PhoenixAbstractSemiJoin {
 
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, true, getColumnRefList(0)));
         QueryPlan leftPlan = implementInput(implementor, 0, leftExprs);
-        TableRef joinedTable = implementor.getTableRef();
+        TableMapping tableMapping = implementor.getTableMapping();
         implementor.popContext();
 
         implementor.pushContext(new ImplementorContext(false, true, getColumnRefList(1)));
@@ -106,10 +106,10 @@ public class PhoenixServerSemiJoin extends PhoenixAbstractSemiJoin {
         implementor.popContext();
         
         JoinType type = JoinType.Semi;
-        implementor.setTableRef(joinedTable);
+        implementor.setTableMapping(tableMapping);
         @SuppressWarnings("unchecked")
         HashJoinInfo hashJoinInfo = new HashJoinInfo(
-                joinedTable.getTable(), 
+                tableMapping.getPTable(), 
                 new ImmutableBytesPtr[] {new ImmutableBytesPtr()}, 
                 (List<Expression>[]) (new List[] {leftExprs}), 
                 new JoinType[] {type}, new boolean[] {true}, 

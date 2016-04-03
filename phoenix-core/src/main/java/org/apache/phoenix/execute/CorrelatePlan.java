@@ -150,7 +150,7 @@ public class CorrelatePlan extends DelegateQueryPlan {
                         close();
                         return null;
                     }
-                    runtimeContext.setCorrelateVariableValue(variableId, current);
+                    runtimeContext.getCorrelateVariable(variableId).setValue(current);
                     rhsIter = rhs.iterator();
                     rhsCurrent = rhsIter.next();
                     if ((rhsCurrent == null && (joinType == JoinType.Inner || joinType == JoinType.Semi))

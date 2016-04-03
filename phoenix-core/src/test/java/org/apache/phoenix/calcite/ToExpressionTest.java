@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,7 +40,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.TableRef;
+
 import org.junit.Test;
 
 
@@ -81,7 +82,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 
 	    public ExpressionChecker checkExpressionEquality() {        
 	        Implementor implementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
-	        implementor.setTableRef(new TableRef(table));
+	        implementor.setTableMapping(new TableMapping(table));
 	        Expression e = CalciteUtils.toExpression(this.calciteExpr, implementor);
 	        assertEquals(this.phoenixExpr,e);
 	        return this;
@@ -165,7 +166,11 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
                 return null;
             
             PTable table = rootTables.get(name);
-            return new PhoenixTable(pc, table);
+            try {
+                return new PhoenixTable(pc, table);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override

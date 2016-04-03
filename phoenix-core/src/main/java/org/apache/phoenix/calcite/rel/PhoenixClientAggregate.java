@@ -63,7 +63,7 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
         QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
         implementor.popContext();
         
-        TableRef tableRef = implementor.getTableRef();
+        TableRef tableRef = implementor.getTableMapping().getTableRef();
         PhoenixStatement stmt = plan.getContext().getStatement();
         StatementContext context;
         try {

@@ -2,7 +2,6 @@ package org.apache.phoenix.calcite;
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptTable;
@@ -33,15 +32,18 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ColumnDef;
+import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -52,47 +54,32 @@ import com.google.common.collect.Lists;
  * Phoenix.
  */
 public class PhoenixTable extends AbstractTable implements TranslatableTable {
-  public final PTable pTable;
-  public final List<PColumn> mappedColumns;
+  public final TableMapping tableMapping;
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
   public final long byteCount;
   public final long rowCount;
   public final PhoenixConnection pc;
-  
-  public static List<PColumn> getMappedColumns(PTable pTable) {
-      if (pTable.getBucketNum() == null
-              && !pTable.isMultiTenant()
-              && pTable.getViewIndexId() == null) {
-          return pTable.getColumns();
-      }
-      
-      List<PColumn> columns = Lists.newArrayList(pTable.getColumns());
-      if (pTable.getViewIndexId() != null) {
-          for (Iterator<PColumn> iter = columns.iterator(); iter.hasNext();) {
-              if (iter.next().getName().getString().equals(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME)) {
-                  iter.remove();
-                  break;
-              }
-          }
-      }
-      if (pTable.isMultiTenant()) {
-          columns.remove(pTable.getBucketNum() == null ? 0 : 1);
-      }
-      if (pTable.getBucketNum() != null) {
-          columns.remove(0);
-      }
-      return columns;
-  }
 
-  public PhoenixTable(PhoenixConnection pc, PTable pTable) {
+  public PhoenixTable(PhoenixConnection pc, PTable pTable) throws SQLException {
       this.pc = Preconditions.checkNotNull(pc);
-      this.pTable = Preconditions.checkNotNull(pTable);
-      this.mappedColumns = getMappedColumns(pTable);
+      PTable extendedTable = null;
+      if (pTable.getIndexType() == IndexType.LOCAL) {
+          ColumnResolver x = FromCompiler.getResolver(
+                  NamedTableNode.create(null,
+                          TableName.create(pTable.getParentSchemaName().getString(),
+                                  pTable.getParentTableName().getString()),
+                          ImmutableList.<ColumnDef>of()), pc);
+          final List<TableRef> tables = x.getTables();
+          assert tables.size() == 1;
+          extendedTable = tables.get(0).getTable();          
+      }
+      this.tableMapping = extendedTable == null ? new TableMapping(pTable) : new TableMapping(pTable, extendedTable);
       List<Integer> pkPositions = Lists.<Integer> newArrayList();
       List<RelFieldCollation> fieldCollations = Lists.<RelFieldCollation> newArrayList();
-      for (int i = 0; i < mappedColumns.size(); i++) {
-          PColumn column = mappedColumns.get(i);
+      final List<PColumn> columns = tableMapping.getMappedColumns();
+      for (int i = 0; i < columns.size(); i++) {
+          PColumn column = columns.get(i);
           if (SchemaUtil.isPKColumn(column)) {
               SortOrder sortOrder = column.getSortOrder();
               pkPositions.add(i);
@@ -133,16 +120,17 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       }
     }
     
-    public PTable getTable() {
-    	return pTable;
+    public List<PColumn> getColumns() {
+        return tableMapping.getMappedColumns();
     }
 
     @SuppressWarnings("rawtypes")
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
-        for (int i = 0; i < mappedColumns.size(); i++) {
-            PColumn pColumn = mappedColumns.get(i);
+        final List<PColumn> columns = tableMapping.getMappedColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            PColumn pColumn = columns.get(i);
             final PDataType baseType = 
                     pColumn.getDataType().isArrayType() ?
                             PDataType.fromTypeId(pColumn.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE) 

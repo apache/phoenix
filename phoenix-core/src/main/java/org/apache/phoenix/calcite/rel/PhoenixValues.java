@@ -28,6 +28,7 @@ import org.apache.calcite.rex.RexLiteral;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -119,12 +120,13 @@ public class PhoenixValues extends Values implements PhoenixRel {
             TupleProjector projector = implementor.project(exprs);
             literalResult.add(projector.projectResults(baseTuple));
         }
-        PTable projectedTable = implementor.createProjectedTable();
-        implementor.setTableRef(new TableRef(projectedTable));
+        PTable projectedTable = implementor.getTableMapping().createProjectedTable(implementor.getCurrentContext().retainPKColumns);
+        TableMapping tableMapping = new TableMapping(projectedTable);
+        implementor.setTableMapping(tableMapping);
         
         try {
             PhoenixStatement stmt = new PhoenixStatement(phoenixConnection);
-            ColumnResolver resolver = FromCompiler.getResolver(implementor.getTableRef());
+            ColumnResolver resolver = FromCompiler.getResolver(tableMapping.getTableRef());
             StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
             return new LiteralResultIterationPlan(literalResult, context, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF, RowProjector.EMPTY_PROJECTOR, null, OrderBy.EMPTY_ORDER_BY, null);
         } catch (SQLException e) {

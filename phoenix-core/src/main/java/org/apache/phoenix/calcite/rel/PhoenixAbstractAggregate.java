@@ -18,6 +18,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
@@ -32,7 +33,6 @@ import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
-import org.apache.phoenix.schema.TableRef;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -193,8 +193,8 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         }
         
         TupleProjector tupleProjector = implementor.project(exprs);
-        PTable projectedTable = implementor.createProjectedTable();
-        implementor.setTableRef(new TableRef(projectedTable));
+        PTable projectedTable = implementor.getTableMapping().createProjectedTable(implementor.getCurrentContext().retainPKColumns);
+        implementor.setTableMapping(new TableMapping(projectedTable));
         return new TupleProjectionPlan(plan, tupleProjector, null);
     }
     

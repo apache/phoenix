@@ -41,7 +41,7 @@ public class CorrelateVariableFieldAccessExpression extends BaseTerminalExpressi
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Tuple variable = runtimeContext.getCorrelateVariableValue(variableId);
+        Tuple variable = runtimeContext.getCorrelateVariable(variableId).getValue();
         if (variable == null)
             throw new RuntimeException("Variable '" + variableId + "' not set.");
         

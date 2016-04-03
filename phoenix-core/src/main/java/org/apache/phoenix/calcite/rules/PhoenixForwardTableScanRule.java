@@ -43,7 +43,8 @@ public class PhoenixForwardTableScanRule extends RelOptRule {
         for (RelCollation candidate : scan.getTable().getCollationList()) {
             if (candidate.satisfies(collation)) {
                 RelNode newRel = PhoenixTableScan.create(
-                        scan.getCluster(), scan.getTable(), scan.filter, ScanOrder.FORWARD);
+                        scan.getCluster(), scan.getTable(), scan.filter,
+                        ScanOrder.FORWARD, scan.extendedColumnRef);
                 if (sort.offset != null || sort.fetch != null) {
                     newRel = sort.copy(
                             sort.getTraitSet().replace(RelCollations.EMPTY),
