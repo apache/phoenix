@@ -32,13 +32,17 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 /**
  * Codec to encode/decode {@link KeyValue}s and {@link IndexedKeyValue}s within a {@link WALEdit}
  */
-public class KeyValueCodec {
+public final class KeyValueCodec {
 
   /**
    * KeyValue length marker specifying that its actually an {@link IndexedKeyValue} rather than a
    * regular {@link KeyValue}.
    */
   public static final int INDEX_TYPE_LENGTH_MARKER = -1;
+
+  private KeyValueCodec() {
+    throw new AssertionError("Must not instantiate this class");
+  }
 
   /**
    * Read a {@link List} of {@link KeyValue} from the input stream - may contain regular

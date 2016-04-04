@@ -30,7 +30,11 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 import com.google.common.collect.Lists;
 
-public class PrefixByteCodec {
+public final class PrefixByteCodec {
+	
+	private PrefixByteCodec() {
+		throw new AssertionError("Must not instantiate this class");
+	}
     
     public static List<byte[]> decodeBytes(ImmutableBytesWritable encodedBytes, int maxLength) throws IOException {
         ByteArrayInputStream stream = new ByteArrayInputStream(encodedBytes.get(), encodedBytes.getOffset(), encodedBytes.getLength());

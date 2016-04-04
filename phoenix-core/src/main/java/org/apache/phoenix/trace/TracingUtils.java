@@ -24,7 +24,7 @@ import org.apache.htrace.Span;
 /**
  * Utilities for tracing
  */
-public class TracingUtils {
+public final class TracingUtils {
     public static final String METRIC_SOURCE_KEY = "phoenix.";
 
     /** Set context to enable filtering */
@@ -32,6 +32,10 @@ public class TracingUtils {
 
     /** Marker metric to ensure that we register the tracing mbeans */
     public static final String METRICS_MARKER_CONTEXT = "marker";
+
+    private TracingUtils() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     public static void addAnnotation(Span span, String message, int value) {
         span.addKVAnnotation(message.getBytes(), Bytes.toBytes(Integer.toString(value)));

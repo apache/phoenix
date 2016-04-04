@@ -34,12 +34,16 @@ import org.apache.phoenix.util.InstanceResolver;
  * 
  * @since 0.2
  */
-public class HBaseFactoryProvider {
+public final class HBaseFactoryProvider {
 
     private static final HTableFactory DEFAULT_HTABLE_FACTORY = new HTableFactory.HTableFactoryImpl();
     private static final HConnectionFactory DEFAULT_HCONNECTION_FACTORY =
         new HConnectionFactory.HConnectionFactoryImpl();
     private static final ConfigurationFactory DEFAULT_CONFIGURATION_FACTORY = new ConfigurationFactory.ConfigurationFactoryImpl();
+
+    private HBaseFactoryProvider() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     public static HTableFactory getHTableFactory() {
         return InstanceResolver.getSingleton(HTableFactory.class, DEFAULT_HTABLE_FACTORY);

@@ -32,7 +32,7 @@ import com.google.common.collect.Lists;
 /**
  * Utility methods related to transparent salting of row keys.
  */
-public class SaltingUtil {
+public final class SaltingUtil {
     public static final int NUM_SALTING_BYTES = 1;
     public static final Integer MAX_BUCKET_NUM = 256; // Unsigned byte.
     public static final String SALTING_COLUMN_NAME = "_SALT";
@@ -42,6 +42,10 @@ public class SaltingUtil {
     public static final RowKeySchema VAR_BINARY_SALTED_SCHEMA = new RowKeySchemaBuilder(2)
         .addField(SALTING_COLUMN, false, SortOrder.getDefault())
         .addField(SchemaUtil.VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
+
+    private SaltingUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     public static List<KeyRange> generateAllSaltingRanges(int bucketNum) {
         List<KeyRange> allRanges = Lists.newArrayListWithExpectedSize(bucketNum);

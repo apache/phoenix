@@ -30,7 +30,11 @@ import com.google.common.collect.Lists;
   * Utility functions to get/put json.
   *
   */
-public class TargetTableRefFunctions {
+public final class TargetTableRefFunctions {
+
+	private TargetTableRefFunctions() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
      public static Function<TargetTableRef,String> TO_JSON =  new Function<TargetTableRef,String>() {
 

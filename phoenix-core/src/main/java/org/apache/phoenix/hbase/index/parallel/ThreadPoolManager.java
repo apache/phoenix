@@ -36,9 +36,13 @@ import org.apache.hadoop.hbase.util.Threads;
 /**
  * Manage access to thread pools
  */
-public class ThreadPoolManager {
+public final class ThreadPoolManager {
 
   private static final Log LOG = LogFactory.getLog(ThreadPoolManager.class);
+
+  private ThreadPoolManager() {
+	throw new AssertionError("Must not instantiate this class");
+  }
 
   /**
    * Get an executor for the given name, based on the passed {@link Configuration}. If a thread pool

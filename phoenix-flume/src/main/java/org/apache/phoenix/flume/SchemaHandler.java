@@ -26,9 +26,13 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 
-public class SchemaHandler {
+public final class SchemaHandler {
     
     private static final Logger logger = LoggerFactory.getLogger(SchemaHandler.class);
+    
+    private SchemaHandler() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     public static boolean createTable(Connection connection, String createTableDdl) {
         Preconditions.checkNotNull(connection);

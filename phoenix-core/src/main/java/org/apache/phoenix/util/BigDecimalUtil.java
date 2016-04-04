@@ -24,7 +24,11 @@ import org.apache.hadoop.hbase.util.Pair;
  * 
  * @since 1.2.1
  */
-public class BigDecimalUtil {
+public final class BigDecimalUtil {
+	
+	private BigDecimalUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     /**
      * Calculates the precision and scale for BigDecimal arithmetic operation results. It uses the algorithm mentioned

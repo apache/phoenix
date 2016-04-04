@@ -24,7 +24,12 @@ import static org.apache.hadoop.hbase.HConstants.HBASE_MASTER_LOGCLEANER_PLUGINS
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 
-public class ConfigUtil {
+public final class ConfigUtil {
+	
+	private ConfigUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
+	
   /**
    * This function set missed replication configuration settings. It should only be used in testing
    * env.

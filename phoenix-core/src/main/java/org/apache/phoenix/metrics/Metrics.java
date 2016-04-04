@@ -22,13 +22,17 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 
-public class Metrics {
+public final class Metrics {
 
     private static final Log LOG = LogFactory.getLog(Metrics.class);
 
   private static volatile MetricsSystem manager = DefaultMetricsSystem.instance();
 
     private static boolean initialized;
+
+    private Metrics() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     /** This must match the prefix that we are using in the hadoop-metrics2 config on the client */
     public static final String METRICS_SYSTEM_NAME = "phoenix";

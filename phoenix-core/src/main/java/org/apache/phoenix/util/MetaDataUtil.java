@@ -67,7 +67,7 @@ import org.slf4j.LoggerFactory;
 import com.google.protobuf.ServiceException;
 
 
-public class MetaDataUtil {
+public final class MetaDataUtil {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataUtil.class);
   
     public static final String VIEW_INDEX_TABLE_PREFIX = "_IDX_";
@@ -80,6 +80,10 @@ public class MetaDataUtil {
     public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
     public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
     public static final byte[] PARENT_TABLE_KEY_BYTES = Bytes.toBytes("PARENT_TABLE");
+    
+    private MetaDataUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
     
     public static boolean areClientAndServerCompatible(long serverHBaseAndPhoenixVersion) {
         // As of 3.0, we allow a client and server to differ for the minor version.

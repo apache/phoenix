@@ -76,4 +76,9 @@ public final class FlumeConstants {
      * The default delimiter for columns and headers
      */
     public static final String DEFAULT_COLUMNS_DELIMITER = ",";
+    
+    private FlumeConstants() {
+		throw new AssertionError("Must not instantiate this class");
+	}
+    
 }

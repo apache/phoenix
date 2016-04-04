@@ -27,7 +27,7 @@ import org.apache.phoenix.schema.types.PDataType;
  * 
  * @since 0.1
  */
-public class NumberUtil {
+public final class NumberUtil {
     
     public static final String DEFAULT_NUMBER_FORMAT = "#,##0.###";
 
@@ -36,6 +36,11 @@ public class NumberUtil {
      * round using our default context to ensure precision doesn't exceed max allowed.
      * @return new {@link BigDecimal} instance
      */
+    
+    private NumberUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
+    
     public static BigDecimal normalize(BigDecimal bigDecimal) {
         return bigDecimal.round(PDataType.DEFAULT_MATH_CONTEXT).stripTrailingZeros();
     }

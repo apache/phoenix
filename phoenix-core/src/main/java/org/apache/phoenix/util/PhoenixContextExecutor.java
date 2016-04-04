@@ -34,10 +34,14 @@ import com.google.common.base.Throwables;
  * class is intended to get around that, to ensure that the same classloader used to load Phoenix
  * classes is set as the context classloader for specific calls.
  */
-public class PhoenixContextExecutor {
+public final class PhoenixContextExecutor {
 
     // We cache the class loader because calls to Class.getClassLoader are relatively expensive
     private static final ClassLoader CACHED_CLASSLOADER = PhoenixContextExecutor.class.getClassLoader();
+    
+    private PhoenixContextExecutor() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     private static class CurrentContextWrapper implements CallWrapper {
         private ClassLoader saveCcl;

@@ -32,8 +32,11 @@ import org.apache.phoenix.util.QueryUtil;
 /**
  * Utility class to return a {@link Connection} .
  */
-public class ConnectionUtil {
+public final class ConnectionUtil {
 
+	private ConnectionUtil() {
+		throw new AssertionError("Must not instantiate this class");
+	}
 
     /**
      * Retrieve the configured input Connection.
