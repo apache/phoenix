@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.ipc.DelegatingPayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PayloadCarryingRpcController;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.ImmutableList;
 
@@ -36,7 +37,16 @@ class MetadataRpcController extends DelegatingPayloadCarryingRpcController {
 			.add(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)
 			.add(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
 			.add(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME)
-			.add(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME).build();
+			.add(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME)
+            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, true)
+                    .getNameAsString())
+            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, true)
+                    .getNameAsString())
+            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, true)
+                    .getNameAsString())
+            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES, true)
+                    .getNameAsString())
+            .build();
 
 	public MetadataRpcController(PayloadCarryingRpcController delegate,
 			Configuration conf) {

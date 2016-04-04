@@ -90,4 +90,5 @@ message PTable {
   optional bool transactional = 27;
   optional int64 updateCacheFrequency = 28;
   optional int64 indexDisableTimestamp = 29;
+  optional bool isNamespaceMapped = 30;
 }

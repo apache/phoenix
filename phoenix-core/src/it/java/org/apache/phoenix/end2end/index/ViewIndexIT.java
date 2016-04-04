@@ -23,7 +23,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Map;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -33,16 +36,26 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
 
-
+@RunWith(Parameterized.class)
 public class ViewIndexIT extends BaseHBaseManagedTimeIT {
 
     private String VIEW_NAME = "MY_VIEW";
+    private String schemaName="TEST";
+    private boolean isNamespaceMapped;
+    private String tableName = schemaName + ".T";
+    private String indexName = "I";
+    private String viewIndexPhysicalTableName;
+    private TableName physicalTableName;
 
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
@@ -54,8 +67,14 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
+    @Parameters(name = "isNamespaceMapped = {0}")
+    public static Collection<Boolean> data() {
+        return Arrays.asList(true, false);
+    }
+
     private void createBaseTable(String tableName, Integer saltBuckets, String splits) throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
+        conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS "+ schemaName);
         String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
                 "k1 INTEGER NOT NULL,\n" +
                 "k2 INTEGER NOT NULL,\n" +
@@ -67,19 +86,32 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         conn.close();
     }
 
+    public Connection getConnection() throws SQLException{
+        Properties props = new Properties();
+        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+        return DriverManager.getConnection(getUrl(),props);
+    }
+    
+    public ViewIndexIT(boolean isNamespaceMapped) {
+        this.isNamespaceMapped = isNamespaceMapped;
+        this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        this.viewIndexPhysicalTableName = MetaDataUtil.getLocalIndexTableName(physicalTableName.getNameAsString());
+    }
+
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
-        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, null);
-        Connection conn1 = DriverManager.getConnection(getUrl());
-        Connection conn2 = DriverManager.getConnection(getUrl());
-        conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME + " AS SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME);
-        conn1.createStatement().execute("CREATE INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + VIEW_NAME + " (v1)");
-        conn2.createStatement().executeQuery("SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
+        createBaseTable(tableName, null, null);
+        Connection conn1 = getConnection();
+        Connection conn2 = getConnection();
+        conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME + " AS SELECT * FROM " + tableName);
+        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + VIEW_NAME + " (v1)");
+        conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         conn1.createStatement().execute("DROP VIEW " + VIEW_NAME);
-        conn1.createStatement().execute("DROP TABLE "+ TestUtil.DEFAULT_DATA_TABLE_NAME);
+        conn1.createStatement().execute("DROP TABLE "+ tableName);
         admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(MetaDataUtil.getViewIndexTableName(TestUtil.DEFAULT_DATA_TABLE_NAME))));
+        assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(viewIndexPhysicalTableName)));
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME

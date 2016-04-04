@@ -55,6 +55,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
@@ -67,6 +68,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -177,8 +179,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime) throws SQLException {
-        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
+            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
+                    throws SQLException {
+        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
+                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
+                resolvedTime);
     }
 
     @Override
@@ -241,7 +247,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     @Override
-    public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
+    public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
+            Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
+            boolean isNamespaceMapped) throws SQLException {
         if (splits != null) {
             byte[] tableName = getTableName(tableMetaData, physicalName);
             tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
@@ -591,5 +599,34 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
        return new HRegionLocation(
                        new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
                        SERVER_NAME, -1);
+    }
+
+    @Override
+    public MetaDataMutationResult createSchema(List<Mutation> schemaMutations, String schemaName) {
+        return new MetaDataMutationResult(MutationCode.SCHEMA_NOT_FOUND, 0l, null);
+    }
+
+    @Override
+    public PMetaData addSchema(PSchema schema) throws SQLException {
+        return metaData = this.metaData.addSchema(schema);
+    }
+
+    @Override
+    public MetaDataMutationResult getSchema(String schemaName, long clientTimestamp) throws SQLException {
+        try {
+            PSchema schema = metaData.getSchema(new PTableKey(null, schemaName));
+            new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, schema, 0);
+        } catch (SchemaNotFoundException e) {}
+        return new MetaDataMutationResult(MutationCode.SCHEMA_NOT_FOUND, 0, null);
+    }
+
+    @Override
+    public PMetaData removeSchema(PSchema schema, long schemaTimeStamp) {
+        return metaData = metaData.removeSchema(schema, schemaTimeStamp);
+    }
+
+    @Override
+    public MetaDataMutationResult dropSchema(List<Mutation> schemaMetaData, String schemaName) {
+        return new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, 0, null);
     }
 }

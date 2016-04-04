@@ -28,6 +28,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
@@ -74,8 +75,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_5_0 = MIN_TABLE_TIMESTAMP + 8;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0 = MIN_TABLE_TIMESTAMP + 9;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 = MIN_TABLE_TIMESTAMP + 15;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 = MIN_TABLE_TIMESTAMP + 16;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0;
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.
     // ENTITY_ALREADY_EXISTS, ENTITY_NOT_FOUND, NEWER_ENTITY_FOUND, ENTITY_NOT_IN_REGION, CONCURRENT_MODIFICATION
@@ -95,6 +97,12 @@ public abstract class MetaDataProtocol extends MetaDataService {
         FUNCTION_NOT_FOUND,
         NEWER_FUNCTION_FOUND,
         FUNCTION_NOT_IN_REGION,
+        SCHEMA_ALREADY_EXISTS, 
+        NEWER_SCHEMA_FOUND,
+        SCHEMA_NOT_FOUND,
+        SCHEMA_NOT_IN_REGION,
+        TABLES_EXIST_ON_SCHEMA,
+        UNALLOWED_SCHEMA_MUTATION,
         NO_OP
     };
 
@@ -106,6 +114,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private byte[] columnName;
         private byte[] familyName;
         private boolean wasUpdated;
+        private PSchema schema;
+
         private List<PFunction> functions = new ArrayList<PFunction>(1);
 
         public MetaDataMutationResult() {
@@ -129,6 +139,12 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.functions = functions;
             this.wasUpdated = wasUpdated;
          }
+
+        public MetaDataMutationResult(MutationCode returnCode, PSchema schema, long currentTime) {
+            this.returnCode = returnCode;
+            this.mutationTime = currentTime;
+            this.schema = schema;
+        }
 
         // For testing, so that connectionless can set wasUpdated so ColumnResolver doesn't complain
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, boolean wasUpdated) {
@@ -210,6 +226,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
           if(proto.hasFamilyName()){
             result.familyName = proto.getFamilyName().toByteArray();
           }
+          if (proto.hasSchema()) {
+            result.schema = PSchema.createFromProto(proto.getSchema());
+          }
           return result;
         }
 
@@ -234,8 +253,15 @@ public abstract class MetaDataProtocol extends MetaDataService {
             if(result.getFamilyName() != null){
               builder.setFamilyName(ByteStringer.wrap(result.getFamilyName()));
             }
+            if (result.getSchema() != null) {
+              builder.setSchema(PSchema.toProto(result.schema));
+            }
           }
           return builder.build();
+        }
+
+        public PSchema getSchema() {
+            return schema;
         }
     }
 }

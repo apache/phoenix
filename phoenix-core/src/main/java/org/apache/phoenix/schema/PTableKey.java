@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.phoenix.query.QueryConstants;
+
 import com.google.common.base.Preconditions;
 
 public class PTableKey {
@@ -26,7 +28,8 @@ public class PTableKey {
     public PTableKey(PName tenantId, String name) {
         Preconditions.checkNotNull(name);
         this.tenantId = tenantId;
-        this.name = name;
+        this.name = !name.contains(QueryConstants.NAMESPACE_SEPARATOR) ? name
+                : name.replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
     }
 
     public PName getTenantId() {

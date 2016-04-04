@@ -36,6 +36,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.SchemaUtil;
 
 public class UnionCompiler {
     private static final PName UNION_FAMILY_NAME = PNameFactory.newName("unionFamilyName");
@@ -79,10 +80,12 @@ public class UnionCompiler {
             projectedColumns.add(projectedColumn);
         }
         Long scn = statement.getConnection().getSCN();
-        PTable tempTable = PTableImpl.makePTable(statement.getConnection().getTenantId(), UNION_SCHEMA_NAME, UNION_TABLE_NAME, 
-                PTableType.SUBQUERY, null, HConstants.LATEST_TIMESTAMP, scn == null ? HConstants.LATEST_TIMESTAMP : scn, null, null,
-                        projectedColumns, null, null, null,
-                        true, null, null, null, true, true, true, null, null, null, false, false, 0, 0L);
+        PTable tempTable = PTableImpl.makePTable(statement.getConnection().getTenantId(), UNION_SCHEMA_NAME,
+                UNION_TABLE_NAME, PTableType.SUBQUERY, null, HConstants.LATEST_TIMESTAMP,
+                scn == null ? HConstants.LATEST_TIMESTAMP : scn, null, null, projectedColumns, null, null, null, true,
+                null, null, null, true, true, true, null, null, null, false, false, 0, 0L,
+                SchemaUtil.isNamespaceMappingEnabled(PTableType.SUBQUERY,
+                        statement.getConnection().getQueryServices().getProps()));
         TableRef tableRef = new TableRef(null, tempTable, 0, false);
         return tableRef;
     }
