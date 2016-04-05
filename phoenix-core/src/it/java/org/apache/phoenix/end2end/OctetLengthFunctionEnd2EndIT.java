@@ -33,9 +33,10 @@ import org.junit.Test;
 /**
  * End to end tests for {@link OctetLengthFunction}
  */
-public class OctetLengthFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
+public class OctetLengthFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final String KEY = "key";
+    private static final String TABLE_NAME = generateRandomString();
 
     @Before
     public void initTable() throws Exception {
@@ -44,7 +45,8 @@ public class OctetLengthFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE ta (k VARCHAR NOT NULL PRIMARY KEY, b BINARY(4), vb VARBINARY)";
+            ddl = "CREATE TABLE " + TABLE_NAME
+                + " (k VARCHAR NOT NULL PRIMARY KEY, b BINARY(4), vb VARBINARY)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -55,7 +57,8 @@ public class OctetLengthFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     @Test
     public void test() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO ta VALUES (?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement(
+            "UPSERT INTO " + TABLE_NAME + " VALUES (?, ?, ?)");
         stmt.setString(1, KEY);
         stmt.setBytes(2, new byte[] { 1, 2, 3, 4 });
         stmt.setBytes(3, new byte[] { 1, 2, 3, 4 });
@@ -63,8 +66,8 @@ public class OctetLengthFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         conn.commit();
         ResultSet rs =
                 conn.createStatement()
-                        .executeQuery(
-                            "SELECT OCTET_LENGTH(vb), OCTET_LENGTH(b) FROM ta WHERE OCTET_LENGTH(vb)=4 and OCTET_LENGTH(b)=4");
+                        .executeQuery("SELECT OCTET_LENGTH(vb), OCTET_LENGTH(b) FROM " + TABLE_NAME
+                            + " WHERE OCTET_LENGTH(vb)=4 and OCTET_LENGTH(b)=4");
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         assertEquals(4, rs.getInt(2));
