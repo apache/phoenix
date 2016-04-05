@@ -25,8 +25,12 @@ import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ParameterMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Map;
 import java.util.Properties;
 
@@ -38,7 +42,8 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class QueryWithOffset extends BaseOwnClusterHBaseManagedTimeIT {
+public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
+    
     private static String tableName = "T";
     private static String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
             "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
@@ -131,12 +136,12 @@ public class QueryWithOffset extends BaseOwnClusterHBaseManagedTimeIT {
         }
 
         rs = conn.createStatement().executeQuery(
-                "SELECT t_id,count(*) from " + tableName + " group by t_id order by t_id offset " + offset + " row");
+                "SELECT k3, count(*) from " + tableName + " group by k3 order by k3 desc offset " + offset + " row");
 
         i = 0;
         while (i++ < strings.length - offset) {
             assertTrue(rs.next());
-            assertEquals(strings[offset + i - 1], rs.getString(1));
+            assertEquals(strings.length - offset - i + 2, rs.getInt(1));
         }
 
         rs = conn.createStatement().executeQuery("SELECT t_id from " + tableName + " union all SELECT t_id from "
@@ -166,6 +171,24 @@ public class QueryWithOffset extends BaseOwnClusterHBaseManagedTimeIT {
         String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
                 + "\"=" + Long.toString(100);
         conn.createStatement().execute(query);
+    }
+
+    @Test
+    public void testMetaDataWithOffset() throws SQLException {
+        Connection conn;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        conn = DriverManager.getConnection(getUrl(), props);
+        createTestTable(getUrl(), ddl);
+        initTableValues(conn);
+        updateStatistics(conn);
+        PreparedStatement stmt = conn.prepareStatement("SELECT * from " + tableName + " offset ?");
+        ParameterMetaData pmd = stmt.getParameterMetaData();
+        assertEquals(1, pmd.getParameterCount());
+        assertEquals(Types.INTEGER, pmd.getParameterType(1));
+        stmt.setInt(1, 10);
+        ResultSet rs = stmt.executeQuery();
+        ResultSetMetaData md = rs.getMetaData();
+        assertEquals(5, md.getColumnCount());
     }
 
 }

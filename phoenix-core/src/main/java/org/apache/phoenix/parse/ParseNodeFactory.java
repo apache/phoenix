@@ -766,10 +766,11 @@ public class ParseNodeFactory {
 
     }
 
-    public SelectStatement select(SelectStatement statement, LimitNode limit, OffsetNode offset) {
+    public SelectStatement select(SelectStatement statement, LimitNode limit) {
         return select(statement.getFrom(), statement.getHint(), statement.isDistinct(), statement.getSelect(),
-            statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), limit, offset,
-            statement.getBindCount(), statement.isAggregate(), statement.hasSequence(), statement.getSelects(), statement.getUdfParseNodes());
+                statement.getWhere(), statement.getGroupBy(), statement.getHaving(), statement.getOrderBy(), limit,
+                statement.getOffset(), statement.getBindCount(), statement.isAggregate(), statement.hasSequence(),
+                statement.getSelects(), statement.getUdfParseNodes());
     }
 
     public SelectStatement select(SelectStatement statement, List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset) {

@@ -190,7 +190,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
-        byte[] scanOffsetBytes = scan.getAttribute(QueryConstants.OFFSET);
+        byte[] scanOffsetBytes = scan.getAttribute(QueryConstants.SCAN_OFFSET);
         Integer scanOffset = null;
         if (scanOffsetBytes != null) {
             scanOffset = Bytes.toInt(scanOffsetBytes);
@@ -231,7 +231,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         if (scanOffset != null) {
             innerScanner = getOffsetScanner(c, innerScanner,
                     new OffsetResultIterator(new RegionScannerResultIterator(innerScanner), scanOffset),
-                    scan.getAttribute(QueryConstants.LAST_SCAN) == null ? false : true);
+                    scan.getAttribute(QueryConstants.LAST_SCAN) != null);
         }
         final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
         if (iterator == null) {
@@ -254,7 +254,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
                 List<KeyValue> kvList = new ArrayList<KeyValue>(1);
-                KeyValue kv = new KeyValue(QueryConstants.offsetRowKeyBytes, QueryConstants.OFFSET_FAMILY,
+                KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
                         QueryConstants.OFFSET_COLUMN, Bytes.toBytes(iterator.getUnusedOffset()));
                 kvList.add(kv);
                 Result r = new Result(kvList);

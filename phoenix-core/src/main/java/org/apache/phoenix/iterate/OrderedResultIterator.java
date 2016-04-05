@@ -287,8 +287,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         delegate.explain(planSteps);
-		planSteps.add("CLIENT" + (limit == null ? ""
-				: (offset == null ? "" : " OFFSET " + offset) +" TOP " + limit + " ROW"  + (limit == 1 ? "" : "S"))  + " SORTED BY " + orderByExpressions.toString());
+        planSteps.add("CLIENT" + (offset != null ? "" : " OFFSET " + offset)
+                + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY "
+                + orderByExpressions.toString());
     }
 
     @Override

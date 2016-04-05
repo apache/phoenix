@@ -47,7 +47,6 @@ import org.apache.phoenix.iterate.RoundRobinResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.iterate.SpoolingResultIterator;
-import org.apache.phoenix.iterate.TableSerialIterators;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -203,7 +202,7 @@ public class ScanPlan extends BaseQueryPlan {
         boolean hasOffset = offset != null;
         BaseResultIterators iterators;
         if (hasOffset && !isOrdered) {
-            iterators = new TableSerialIterators(this, perScanLimit, offset, parallelIteratorFactory,
+            iterators = new SerialIterators(this, perScanLimit, offset, parallelIteratorFactory,
                     OffsetScanGrouper.getInstance());
         } else if (isSerial) {
             iterators = new SerialIterators(this, perScanLimit, null, parallelIteratorFactory, scanGrouper);

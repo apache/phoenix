@@ -127,13 +127,13 @@ public class TableResultIterator implements ResultIterator {
         ResultIterator delegate = this.scanIterator;
         if (delegate == UNINITIALIZED_SCANNER) {
             try {
-                if (previousIterator != null && scan.getAttribute(QueryConstants.OFFSET) != null) {
+                if (previousIterator != null && scan.getAttribute(QueryConstants.SCAN_OFFSET) != null) {
                     byte[] unusedOffset = QueryUtil.getUnusedOffset(previousIterator.peek());
                     if (unusedOffset != null) {
-                        scan.setAttribute(QueryConstants.OFFSET, unusedOffset);
+                        scan.setAttribute(QueryConstants.SCAN_OFFSET, unusedOffset);
                         previousIterator.next();
                     } else {
-                        scan.setAttribute(QueryConstants.OFFSET, null);
+                        scan.setAttribute(QueryConstants.SCAN_OFFSET, null);
                     }
                 }
                 this.scanIterator =

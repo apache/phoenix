@@ -36,6 +36,7 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
     private final int limit;
     private int count = 0;
+    private int offsetCount = 0;
     private final List<OrderByExpression> orderByColumns;
     private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
     private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
@@ -74,9 +75,9 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
     @Override
     public Tuple peek() throws SQLException {
-        while (count < offset) {
+        while (offsetCount < offset) {
             if (super.next() == null) { return null; }
-            count++;
+            offsetCount++;
         }
         if (limit >= 0 && count >= limit) {
             return null;
@@ -86,9 +87,9 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
     @Override
     public Tuple next() throws SQLException {
-        while (count < offset) {
+        while (offsetCount < offset) {
             if (super.next() == null) { return null; }
-            count++;
+            offsetCount++;
         }
         if (limit >= 0 && count++ >= limit) { return null; }
         return super.next();

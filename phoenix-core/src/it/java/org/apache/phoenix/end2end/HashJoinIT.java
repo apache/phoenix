@@ -450,7 +450,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
                  *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
                  */
-                "CLIENT TABLE_SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER OFFSET 2\n" +
                 "    SERVER 3 ROW LIMIT\n" +
                 "CLIENT 1 ROW LIMIT\n" +
@@ -466,7 +466,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
                  *     JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
                  */
-                "CLIENT TABLE_SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER OFFSET 2\n" +
                 "CLIENT 1 ROW LIMIT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
@@ -814,7 +814,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
                  *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
                  */
-                "CLIENT TABLE_SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER OFFSET 2\n" +
                 "    SERVER 3 ROW LIMIT\n" +
                 "CLIENT 1 ROW LIMIT\n" +
@@ -830,7 +830,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
                  *     JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
                  */
-                "CLIENT TABLE_SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER OFFSET 2\n" +
                 "CLIENT 1 ROW LIMIT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
@@ -1202,7 +1202,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
                  *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
                  */
-                "CLIENT TABLE_SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER OFFSET 2\n" +
                 "    SERVER 3 ROW LIMIT\n" +
                 "CLIENT 1 ROW LIMIT\n" +
@@ -1219,7 +1219,7 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                  *     JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
                  *     JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
                  */
-                "CLIENT TABLE_SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
                 "    SERVER OFFSET 2\n" +
                 "CLIENT 1 ROW LIMIT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +

@@ -805,7 +805,7 @@ public class ScanUtil {
     }
 
     public static void addOffsetAttribute(Scan scan, Integer offset) {
-        scan.setAttribute(QueryConstants.OFFSET, Bytes.toBytes(offset));
+        scan.setAttribute(QueryConstants.SCAN_OFFSET, Bytes.toBytes(offset));
     }
 
 }

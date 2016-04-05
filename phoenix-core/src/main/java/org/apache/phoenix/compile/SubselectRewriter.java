@@ -191,7 +191,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         }
         
         OffsetNode offset = select.getOffset();
-        if (offsetRewrite != null || (limitRewrite != null & offset != null)) {
+        if (offsetRewrite != null || (limitRewrite != null && offset != null)) {
             return select;
         } else {
             offsetRewrite = offset;
