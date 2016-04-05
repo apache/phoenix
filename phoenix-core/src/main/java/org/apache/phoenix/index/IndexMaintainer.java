@@ -705,7 +705,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         int dataPosOffset = isDataTableSalted ? 1 : 0 ;
         if (isMultiTenant) {
-            builder.addField(dataRowKeySchema.getField(dataPosOffset++));
+            Field field = dataRowKeySchema.getField(dataPosOffset++);
+            builder.addField(field, field.isNullable(), field.getSortOrder());
             nIndexedColumns--;
         }
         if (viewIndexId != null) {
