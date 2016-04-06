@@ -175,9 +175,9 @@ public class PDouble extends PRealNumber<Double> {
       } else if (targetType.equals(PSmallint.INSTANCE)) {
         return (d >= Short.MIN_VALUE && d <= Short.MAX_VALUE);
       } else if (targetType.equals(PTinyint.INSTANCE)) {
-        return (d >= Byte.MIN_VALUE && d < Byte.MAX_VALUE);
+        return (d >= Byte.MIN_VALUE && d <= Byte.MAX_VALUE);
       } else if (targetType.equals(PUnsignedTinyint.INSTANCE)) {
-        return (d >= 0 && d < Byte.MAX_VALUE);
+        return (d >= 0 && d <= Byte.MAX_VALUE);
       }
     }
     return super.isCoercibleTo(targetType, value);
