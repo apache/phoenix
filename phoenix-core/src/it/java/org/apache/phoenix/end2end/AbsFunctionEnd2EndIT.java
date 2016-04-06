@@ -44,7 +44,6 @@ public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
-            System.out.println("TABLE_NAME = " + TABLE_NAME);
             conn = DriverManager.getConnection(getUrl());
             String ddl;
             ddl = "CREATE TABLE " + TABLE_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, dec DECIMAL, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
