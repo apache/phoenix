@@ -53,16 +53,11 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
   lazy val hbaseConfiguration = {
     val conf = PhoenixSparkITHelper.getTestClusterConfig
-    // The zookeeper quorum address defaults to "localhost" which is incorrect, let's fix it
-    val quorum = conf.get("hbase.zookeeper.quorum")
-    val clientPort = conf.get("hbase.zookeeper.property.clientPort")
-    val znodeParent = conf.get("zookeeper.znode.parent")
-    conf.set(HConstants.ZOOKEEPER_QUORUM, s"$quorum:$clientPort:$znodeParent")
     conf
   }
 
   lazy val quorumAddress = {
-    hbaseConfiguration.get(HConstants.ZOOKEEPER_QUORUM)
+    ConfigurationUtil.getZookeeperURL(hbaseConfiguration).get
   }
 
   override def beforeAll() {
