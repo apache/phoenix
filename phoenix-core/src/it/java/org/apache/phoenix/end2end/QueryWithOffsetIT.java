@@ -31,6 +31,8 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
@@ -39,23 +41,38 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
 
+@RunWith(Parameterized.class)
 public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
     
-    private static String tableName = "T";
-    private static String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
+    private String tableName;
+    private final String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
             "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
-    private static String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
-            + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
-            + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) split on ('e','i','o')";
+    private final String ddl;
+
+    public QueryWithOffsetIT(String preSplit) {
+        this.tableName=tableName + "_" + preSplit.charAt(2);
+        this.ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+                + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
+                + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) " + preSplit;
+    }
 
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
+    @Parameters(name="preSplit = {0}")
+    public static Collection<String> data() {
+        return Arrays.asList(new String[] { " SPLIT ON ('e','i','o')", " SALT_BUCKETS=10" });
     }
 
     @Test
@@ -159,7 +176,7 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.close();
     }
 
-    private static void initTableValues(Connection conn) throws SQLException {
+    private void initTableValues(Connection conn) throws SQLException {
         for (int i = 0; i < 26; i++) {
             conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
                     + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
@@ -167,9 +184,9 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.commit();
     }
 
-    private static void updateStatistics(Connection conn) throws SQLException {
+    private void updateStatistics(Connection conn) throws SQLException {
         String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
-                + "\"=" + Long.toString(100);
+                + "\"=" + Long.toString(500);
         conn.createStatement().execute(query);
     }
 

@@ -32,9 +32,9 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -127,13 +127,13 @@ public class TableResultIterator implements ResultIterator {
         ResultIterator delegate = this.scanIterator;
         if (delegate == UNINITIALIZED_SCANNER) {
             try {
-                if (previousIterator != null && scan.getAttribute(QueryConstants.SCAN_OFFSET) != null) {
+                if (previousIterator != null && scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET) != null) {
                     byte[] unusedOffset = QueryUtil.getUnusedOffset(previousIterator.peek());
                     if (unusedOffset != null) {
-                        scan.setAttribute(QueryConstants.SCAN_OFFSET, unusedOffset);
+                        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, unusedOffset);
                         previousIterator.next();
                     } else {
-                        scan.setAttribute(QueryConstants.SCAN_OFFSET, null);
+                        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, null);
                     }
                 }
                 this.scanIterator =

@@ -38,7 +38,6 @@ import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
-import org.apache.phoenix.iterate.OffsetScanGrouper;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
@@ -181,6 +180,13 @@ public class ScanPlan extends BaseQueryPlan {
             return scans;
     }
 
+    private static boolean isOffsetPossibleOnServer(StatementContext context, OrderBy orderBy, Integer offset,
+            boolean isSalted, IndexType indexType) {
+        return offset != null && orderBy.getOrderByExpressions().isEmpty()
+                && !((isSalted || indexType == IndexType.LOCAL)
+                        && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context));
+    }
+
     @Override
     protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
@@ -199,11 +205,10 @@ public class ScanPlan extends BaseQueryPlan {
         if (perScanLimit != null) {
             perScanLimit = QueryUtil.getOffsetLimit(perScanLimit, offset);
         }
-        boolean hasOffset = offset != null;
         BaseResultIterators iterators;
-        if (hasOffset && !isOrdered) {
-            iterators = new SerialIterators(this, perScanLimit, offset, parallelIteratorFactory,
-                    OffsetScanGrouper.getInstance());
+        boolean isOffsetOnServer = isOffsetPossibleOnServer(context, orderBy, offset, isSalted, table.getIndexType());
+        if (isOffsetOnServer) {
+            iterators = new SerialIterators(this, perScanLimit, offset, parallelIteratorFactory, scanGrouper);
         } else if (isSerial) {
             iterators = new SerialIterators(this, perScanLimit, null, parallelIteratorFactory, scanGrouper);
         } else {
@@ -213,7 +218,7 @@ public class ScanPlan extends BaseQueryPlan {
         scans = iterators.getScans();
         estimatedSize = iterators.getEstimatedByteCount();
         estimatedRows = iterators.getEstimatedRowCount();
-        if (hasOffset && !isOrdered) {
+        if (isOffsetOnServer) {
             scanner = new ConcatResultIterator(iterators);
             if (limit != null) {
                 scanner = new LimitingResultIterator(scanner, limit);

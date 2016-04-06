@@ -138,7 +138,6 @@ public interface QueryConstants {
     public final static String SYSTEM_SCHEMA_NAME = "SYSTEM";
     public final static byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
     public final static String PHOENIX_METADATA = "table";
-    public final static String SCAN_OFFSET = "OFFSET";
     public final static String OFFSET_ROW_KEY = "_OFFSET_";
     public final static byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);
     public final static ImmutableBytesPtr offsetRowKeyPtr = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);

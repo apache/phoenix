@@ -135,7 +135,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
             SizedUtil.OBJECT_SIZE + estimatedRowSize;
 
         // Make sure we don't overflow Long, though this is really unlikely to happen.
-        assert (limit == null || Long.MAX_VALUE / estimatedEntrySize >= limit + this.offset);
+        assert(limit == null || Long.MAX_VALUE / estimatedEntrySize >= limit + this.offset);
 
         this.estimatedByteSize = limit == null ? 0 : (limit + this.offset) * estimatedEntrySize;
     }

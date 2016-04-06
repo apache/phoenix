@@ -190,7 +190,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
-        byte[] scanOffsetBytes = scan.getAttribute(QueryConstants.SCAN_OFFSET);
+        byte[] scanOffsetBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET);
         Integer scanOffset = null;
         if (scanOffsetBytes != null) {
             scanOffset = Bytes.toInt(scanOffsetBytes);
