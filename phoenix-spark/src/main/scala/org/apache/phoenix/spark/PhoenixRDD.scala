@@ -13,12 +13,12 @@
  */
 package org.apache.phoenix.spark
 
-import java.sql.{Timestamp, DriverManager}
+import java.sql.DriverManager
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.hadoop.io.NullWritable
-import org.apache.phoenix.jdbc.PhoenixDriver
+import org.apache.phoenix.jdbc.{PhoenixDriver, PhoenixEmbeddedDriver}
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.types._
@@ -26,8 +26,9 @@ import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.types._
+
 import scala.collection.JavaConverters._
 
 class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
@@ -86,9 +87,9 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 
     // Override the Zookeeper URL if present. Throw exception if no address given.
     zkUrl match {
-      case Some(url) => config.set(HConstants.ZOOKEEPER_QUORUM, url )
+      case Some(url) => ConfigurationUtil.setZookeeperURL(config, url)
       case _ => {
-        if(config.get(HConstants.ZOOKEEPER_QUORUM) == null) {
+        if(ConfigurationUtil.getZookeeperURL(config).isEmpty) {
           throw new UnsupportedOperationException(
             s"One of zkUrl or '${HConstants.ZOOKEEPER_QUORUM}' config property must be provided"
           )
