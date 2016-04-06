@@ -37,7 +37,9 @@ import org.junit.Test;
  */
 
 
-public class StatementHintsIT extends BaseHBaseManagedTimeIT {
+public class StatementHintsIT extends BaseHBaseManagedTimeTableReuseIT {
+
+    private static final String TABLE_NAME = generateRandomString();
 
     private static void initTableValues() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -45,7 +47,7 @@ public class StatementHintsIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
         
         try {
-            String ddl = "CREATE TABLE test_table" +
+            String ddl = "CREATE TABLE " + TABLE_NAME  +
                     "   (a_integer integer not null, \n" +
                     "    a_string varchar not null, \n" +
                     "    a_id char(3) not null,\n" +
@@ -56,7 +58,7 @@ public class StatementHintsIT extends BaseHBaseManagedTimeIT {
             String query;
             PreparedStatement stmt;
             
-            query = "UPSERT INTO test_table"
+            query = "UPSERT INTO " + TABLE_NAME
                     + "(a_integer, a_string, a_id, b_string) "
                     + "VALUES(?,?,?,?)";
             stmt = conn.prepareStatement(query);
@@ -108,7 +110,7 @@ public class StatementHintsIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             initTableValues();
-            String query = "SELECT /*+ RANGE_SCAN */ * FROM test_table WHERE a_integer IN (1, 2, 3, 4)";
+            String query = "SELECT /*+ RANGE_SCAN */ * FROM " + TABLE_NAME + " WHERE a_integer IN (1, 2, 3, 4)";
             PreparedStatement stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             
@@ -145,7 +147,7 @@ public class StatementHintsIT extends BaseHBaseManagedTimeIT {
         try {
             initTableValues();
             // second slot on the 
-            String query = "SELECT /*+ SKIP_SCAN */ * FROM test_table WHERE a_string = 'abc'";
+            String query = "SELECT /*+ SKIP_SCAN */ * FROM " + TABLE_NAME + " WHERE a_string = 'abc'";
             PreparedStatement stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             

@@ -44,7 +44,7 @@ import org.junit.Test;
 import com.google.common.collect.Lists;
 
 
-public class QueryMoreIT extends BaseHBaseManagedTimeIT {
+public class QueryMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     
     private String dataTableName;
     //queryAgainstTenantSpecificView = true, dataTableSalted = true 
@@ -74,8 +74,9 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
     private void testQueryMore(boolean queryAgainstTenantSpecificView, boolean dataTableSalted) throws Exception {
         String[] tenantIds = new String[] {"00Dxxxxxtenant1", "00Dxxxxxtenant2", "00Dxxxxxtenant3"};
         int numRowsPerTenant = 10;
-        String cursorTableName = "CURSOR_TABLE";
-        this.dataTableName = "BASE_HISTORY_TABLE" + (dataTableSalted ? "_SALTED" : "");
+        String cursorTableName = generateRandomString();
+        String base_history_table = generateRandomString();
+        this.dataTableName = base_history_table + (dataTableSalted ? "_SALTED" : "");
         String cursorTableDDL = "CREATE TABLE IF NOT EXISTS " + 
                 cursorTableName +  " (\n" +  
                 "TENANT_ID VARCHAR(15) NOT NULL\n," +  
@@ -109,7 +110,8 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         String cursorQueryId = "00TcursrqueryId";
         String tableOrViewName = queryAgainstTenantSpecificView ? ("HISTORY_TABLE_" + tenantId) : dataTableName;
         
-        assertEquals(numRowsPerTenant, upsertSelectRecordsInCursorTableForTenant(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId));
+        assertEquals(numRowsPerTenant, upsertSelectRecordsInCursorTableForTenant(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId,
+            cursorTableName));
         
         /*// assert that the data inserted in cursor table matches the data in the data table for tenantId.
         String selectDataTable = "SELECT TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID FROM BASE_HISTORY_TABLE WHERE TENANT_ID = ? ";
@@ -142,7 +144,8 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         int numRecordsThatShouldBeRetrieved = numRowsPerTenant/2; // we will test for two rounds of query more.
         
         // get first batch of cursor ids out of the cursor table.
-        String[] cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder, endOrder);
+        String[] cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder, endOrder,
+            cursorTableName);
         assertEquals(numRecordsThatShouldBeRetrieved, cursorIds.length);
         // now query and fetch first batch of records.
         List<String> historyIds = doQueryMore(queryAgainstTenantSpecificView, tenantId, tableOrViewName, cursorIds);
@@ -150,7 +153,8 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         assertEquals(historyIdsPerTenant.get(tenantId).subList(startOrder, endOrder), historyIds);
         
         // get the next batch of cursor ids out of the cursor table.
-        cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder + numRecordsThatShouldBeRetrieved, endOrder + numRecordsThatShouldBeRetrieved);
+        cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder + numRecordsThatShouldBeRetrieved, endOrder + numRecordsThatShouldBeRetrieved,
+            cursorTableName);
         assertEquals(numRecordsThatShouldBeRetrieved, cursorIds.length);
         // now query and fetch the next batch of records.
         historyIds = doQueryMore(queryAgainstTenantSpecificView, tenantId, tableOrViewName, cursorIds);
@@ -158,7 +162,8 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         assertEquals(historyIdsPerTenant.get(tenantId).subList(startOrder + numRecordsThatShouldBeRetrieved, endOrder+ numRecordsThatShouldBeRetrieved), historyIds);
         
          // get the next batch of cursor ids out of the cursor table.
-        cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder + 2 * numRecordsThatShouldBeRetrieved, endOrder + 2 * numRecordsThatShouldBeRetrieved);
+        cursorIds = getRecordsOutofCursorTable(tableOrViewName, queryAgainstTenantSpecificView, tenantId, cursorQueryId, startOrder + 2 * numRecordsThatShouldBeRetrieved, endOrder + 2 * numRecordsThatShouldBeRetrieved,
+            cursorTableName);
         // assert that there are no more cursorids left for this tenant.
         assertEquals(0, cursorIds.length);
     }
@@ -193,7 +198,8 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    private int upsertSelectRecordsInCursorTableForTenant(String tableOrViewName, boolean queryAgainstTenantView, String tenantId, String cursorQueryId) throws Exception {
+    private int upsertSelectRecordsInCursorTableForTenant(String tableOrViewName, boolean queryAgainstTenantView, String tenantId, String cursorQueryId,
+        final String cursorTable) throws Exception {
         String sequenceName = "\"" + tenantId + "_SEQ\"";
         Connection conn = queryAgainstTenantView ? getTenantSpecificConnection(tenantId) : DriverManager.getConnection(getUrl());
         
@@ -207,7 +213,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
             String tenantIdFilter = queryAgainstTenantView ? "" : " WHERE TENANT_ID = ? ";
             
             // Using dynamic columns, we can use the same cursor table for storing primary keys for all the tables.  
-            String upsertSelectDML = "UPSERT INTO CURSOR_TABLE " +
+            String upsertSelectDML = "UPSERT INTO " + cursorTable + " " +
                                      "(TENANT_ID, QUERY_ID, CURSOR_ORDER, PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15)) " + 
                                      "SELECT ?, ?, NEXT VALUE FOR " + sequenceName + ", PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID " +
                                      " FROM " + tableOrViewName + tenantIdFilter;
@@ -240,13 +246,14 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
         return tenantViewName;
     }
     
-    private String[] getRecordsOutofCursorTable(String tableOrViewName, boolean queryAgainstTenantSpecificView, String tenantId, String cursorQueryId, int startOrder, int endOrder) throws Exception {
+    private String[] getRecordsOutofCursorTable(String tableOrViewName, boolean queryAgainstTenantSpecificView, String tenantId, String cursorQueryId,
+        int startOrder, int endOrder, final String cursorTable) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         List<String> pkIds = new ArrayList<String>();
         String cols = queryAgainstTenantSpecificView ? "PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID" : "TENANT_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID";
         String dynCols = queryAgainstTenantSpecificView ? "(PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15))" : "(TENANT_ID CHAR(15), PARENT_ID CHAR(15), CREATED_DATE DATE, ENTITY_HISTORY_ID CHAR(15))";
         String selectCursorSql = "SELECT " + cols + " " +
-                "FROM CURSOR_TABLE \n" +
+            "FROM " + cursorTable + " \n" +
                  dynCols +   " \n" + 
                 "WHERE TENANT_ID = ? AND \n" +  
                 "QUERY_ID = ? AND \n" + 
@@ -335,7 +342,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeIT {
     @SuppressWarnings("deprecation")
     @Test
     public void testNullBigDecimalWithScale() throws Exception {
-        final String table = "NULLBIGDECIMAL";
+        final String table = generateRandomString();
         final Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
         try (Statement stmt = conn.createStatement()) {

@@ -30,17 +30,21 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
-    @Before
-    public void doBeforeTestSetup() throws Exception {
+
+    private static final String TEST_TABLE = generateRandomString();
+
+    @BeforeClass
+    public static void doBeforeTestSetup() throws Exception {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE testTable (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)";
+            ddl = "CREATE TABLE " + TEST_TABLE + " (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -54,8 +58,9 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
         insertRow(conn, "321n7-App-2-", 32);
     }
 
-    private void insertRow(Connection conn, String k, int i) throws SQLException {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testTable VALUES (?, ?)");
+    private static void insertRow(Connection conn, String k, int i) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement(
+            "UPSERT INTO " + TEST_TABLE + " VALUES (?, ?)");
         stmt.setString(1, k);
         stmt.setInt(2, i);
         stmt.executeUpdate();
@@ -64,7 +69,7 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
 
     private void testLikeExpression(Connection conn, String likeStr, int numResult, int expectedSum)
             throws Exception {
-        String cmd = "select k, i from testTable where k like '" + likeStr + "'";
+        String cmd = "select k, i from " + TEST_TABLE + " where k like '" + likeStr + "'";
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(cmd);
         int sum = 0;
@@ -89,15 +94,18 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testLikeEverythingExpression() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
+        String table = generateRandomString();
+        String ddl = "CREATE TABLE " + table
+            + " (k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
         conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO t VALUES('aa','bb')");
-        conn.createStatement().execute("UPSERT INTO t VALUES('ab','bc')");
-        conn.createStatement().execute("UPSERT INTO t VALUES(null,'cc')");
-        conn.createStatement().execute("UPSERT INTO t VALUES('dd',null)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES('aa','bb')");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES('ab','bc')");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(null,'cc')");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES('dd',null)");
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t WHERE k1 LIKE '%'");
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT * FROM " + table + " WHERE k1 LIKE '%'");
         assertTrue(rs.next());
         assertEquals("aa", rs.getString(1));
         assertEquals("bb", rs.getString(2));
@@ -109,7 +117,7 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
         assertEquals(null, rs.getString(2));
         assertFalse(rs.next());
         
-        rs = conn.createStatement().executeQuery("SELECT * FROM t WHERE k2 LIKE '%'");
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + table + " WHERE k2 LIKE '%'");
         assertTrue(rs.next());
         assertEquals(null, rs.getString(1));
         assertEquals("cc", rs.getString(2));

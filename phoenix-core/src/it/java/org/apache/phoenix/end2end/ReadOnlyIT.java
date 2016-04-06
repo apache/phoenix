@@ -32,19 +32,20 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class ReadOnlyIT extends BaseHBaseManagedTimeIT {
+public class ReadOnlyIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testConnectionReadOnly() throws Exception {
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "CREATE TABLE test_table " +
+      String tableName = generateRandomString();
+      String ddl = "CREATE TABLE " + tableName + " " +
                         "  (row varchar not null, col1 integer" +
                         "  CONSTRAINT pk PRIMARY KEY (row))\n"; 
         createTestTable(getUrl(), ddl);
 
-        String query = "UPSERT INTO test_table(row, col1) VALUES('row1', 777)";
+        String query = "UPSERT INTO " + tableName + "(row, col1) VALUES('row1', 777)";
         PreparedStatement statement = conn.prepareStatement(query);
         statement.executeUpdate();
         conn.commit();
@@ -64,7 +65,7 @@ public class ReadOnlyIT extends BaseHBaseManagedTimeIT {
         }
 	  
 	try {  
-                query = "UPSERT INTO test_table(row, col1) VALUES('row1', 888)";
+                query = "UPSERT INTO " + tableName + "(row, col1) VALUES('row1', 888)";
                 statement = conn.prepareStatement(query);
                 statement.executeUpdate();
                 conn.commit();
@@ -75,14 +76,14 @@ public class ReadOnlyIT extends BaseHBaseManagedTimeIT {
 
 	conn.setReadOnly(false);
         assertFalse(conn.isReadOnly());
-        ddl = "ALTER TABLE test_table ADD col2 VARCHAR";
+        ddl = "ALTER TABLE " + tableName + " ADD col2 VARCHAR";
 	statement = conn.prepareStatement(ddl);
         statement.executeUpdate();
 	conn.commit();
 
         try {   
 		conn.setReadOnly(true);
-                ddl = "ALTER TABLE test_table ADD col3 VARCHAR";
+                ddl = "ALTER TABLE " + tableName + " ADD col3 VARCHAR";
 		statement = conn.prepareStatement(ddl);
         	statement.executeUpdate();
                 fail();

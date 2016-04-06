@@ -52,7 +52,8 @@ import org.junit.Test;
 public class MappingTableDataTypeIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMappingHbaseTableToPhoenixTable() throws Exception {
-        final TableName tableName = TableName.valueOf("MTEST");
+        String mtest = generateRandomString();
+        final TableName tableName = TableName.valueOf(mtest);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         
@@ -65,13 +66,13 @@ public class MappingTableDataTypeIT extends BaseHBaseManagedTimeIT {
             descriptor.addFamily(columnDescriptor1);
             descriptor.addFamily(columnDescriptor2);
             admin.createTable(descriptor);
-            HTableInterface t = conn.getQueryServices().getTable(Bytes.toBytes("MTEST"));
+            HTableInterface t = conn.getQueryServices().getTable(Bytes.toBytes(mtest));
             insertData(tableName.getName(), admin, t);
             t.close();
             // create phoenix table that maps to existing HBase table
-            createPhoenixTable();
+            createPhoenixTable(mtest);
             
-            String selectSql = "SELECT * FROM MTEST";
+            String selectSql = "SELECT * FROM " + mtest;
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             ResultSetMetaData rsMetaData = rs.getMetaData();
             assertTrue("Expected single row", rs.next());
@@ -81,7 +82,7 @@ public class MappingTableDataTypeIT extends BaseHBaseManagedTimeIT {
             assertFalse("Expected single row ", rs.next());
             
             // delete the row
-            String deleteSql = "DELETE FROM MTEST WHERE id = 'row'";
+            String deleteSql = "DELETE FROM " + mtest + " WHERE id = 'row'";
             conn.createStatement().executeUpdate(deleteSql);
             conn.commit();
             
@@ -116,8 +117,8 @@ public class MappingTableDataTypeIT extends BaseHBaseManagedTimeIT {
     /**
      * Create a table in Phoenix that only maps column family cf1
      */
-    private void createPhoenixTable() throws SQLException {
-        String ddl = "create table IF NOT EXISTS MTEST (" + " id varchar NOT NULL primary key,"
+    private void createPhoenixTable(String tableName) throws SQLException {
+        String ddl = "create table IF NOT EXISTS " + tableName+ " (" + " id varchar NOT NULL primary key,"
                 + " \"cf1\".\"q1\" varchar" + " ) ";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

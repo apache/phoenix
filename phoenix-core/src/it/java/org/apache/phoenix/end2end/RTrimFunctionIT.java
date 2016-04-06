@@ -33,7 +33,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
-public class RTrimFunctionIT extends BaseHBaseManagedTimeIT {
+public class RTrimFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testWithFixedLengthAscPK() throws Exception {
@@ -48,23 +48,25 @@ public class RTrimFunctionIT extends BaseHBaseManagedTimeIT {
     private void testWithFixedLengthPK(SortOrder sortOrder, List<Object> expectedResults) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE rtrim_test ( k VARCHAR PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
+        String tableName = generateRandomString();
+        conn.createStatement().execute(
+            "CREATE TABLE " + tableName + " ( k VARCHAR PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
 
-        conn.createStatement().execute("upsert into rtrim_test (k) values ('a')");
-        conn.createStatement().execute("upsert into rtrim_test (k) values ('b')");
-        conn.createStatement().execute("upsert into rtrim_test (k) values ('b ')");
-        conn.createStatement().execute("upsert into rtrim_test (k) values ('b  ')");
-        conn.createStatement().execute("upsert into rtrim_test (k) values ('b  a')");
-        conn.createStatement().execute("upsert into rtrim_test (k) values (' b  ')");
-        conn.createStatement().execute("upsert into rtrim_test (k) values ('c')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('a')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b ')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b  ')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('b  a')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values (' b  ')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('c')");
         conn.commit();
 
-        String query = "select k from rtrim_test WHERE rtrim(k)='b'";
+        String query = "select k from " + tableName + " WHERE rtrim(k)='b'";
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertValueEqualsResultSet(rs, expectedResults);
         
         rs = conn.createStatement().executeQuery("explain " + query);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains("RANGE SCAN OVER RTRIM_TEST"));
+        assertTrue(QueryUtil.getExplainPlan(rs).contains("RANGE SCAN OVER " + tableName));
         
         conn.close();
     }

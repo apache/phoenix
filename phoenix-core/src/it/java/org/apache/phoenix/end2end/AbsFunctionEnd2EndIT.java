@@ -34,8 +34,9 @@ import org.junit.Test;
 /**
  * End to end tests for {@link AbsFunction}
  */
-public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
+public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
 
+    private static final String TABLE_NAME = generateRandomString();
     private static final String KEY = "key";
 
     @Before
@@ -45,7 +46,7 @@ public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE testSigned (k VARCHAR NOT NULL PRIMARY KEY, dec DECIMAL, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
+            ddl = "CREATE TABLE " + TABLE_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, dec DECIMAL, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -54,7 +55,7 @@ public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
 
     private void updateSignedTable(Connection conn, double data) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testSigned VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TABLE_NAME + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, KEY);
         Double d = Double.valueOf(data);
         stmt.setBigDecimal(2, BigDecimal.valueOf(data));
@@ -70,7 +71,7 @@ public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
 
     private void testSignedNumberSpec(Connection conn, double data) throws Exception {
         updateSignedTable(conn, data);
-        ResultSet rs = conn.createStatement() .executeQuery("SELECT ABS(dec),ABS(doub),ABS(fl),ABS(inte),ABS(lon),ABS(smalli),ABS(tinyi) FROM testSigned");
+        ResultSet rs = conn.createStatement() .executeQuery("SELECT ABS(dec),ABS(doub),ABS(fl),ABS(inte),ABS(lon),ABS(smalli),ABS(tinyi) FROM " + TABLE_NAME);
         assertTrue(rs.next());
         Double d = Double.valueOf(data);
         assertEquals(rs.getBigDecimal(1).compareTo(BigDecimal.valueOf(data).abs()), 0);
@@ -82,7 +83,7 @@ public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertEquals(rs.getByte(7), Math.abs(d.byteValue()));
         assertTrue(!rs.next());
 
-        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM testSigned WHERE ABS(dec)=? AND ABS(doub)=? AND ABS(fl)=? AND ABS(inte)=? AND ABS(lon)=? AND ABS(smalli)=? AND ABS(tinyi)=?");
+        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM " + TABLE_NAME + " WHERE ABS(dec)=? AND ABS(doub)=? AND ABS(fl)=? AND ABS(inte)=? AND ABS(lon)=? AND ABS(smalli)=? AND ABS(tinyi)=?");
         stmt.setBigDecimal(1, BigDecimal.valueOf(data).abs());
         stmt.setDouble(2, Math.abs(d.doubleValue()));
         stmt.setFloat(3, Math.abs(d.floatValue()));

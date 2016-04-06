@@ -29,14 +29,18 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
  * Tests to validate that user specified property phoenix.query.timeoutMs
  * works as expected.
  */
-public class PhoenixQueryTimeoutIT extends BaseHBaseManagedTimeIT {
+public class PhoenixQueryTimeoutIT extends BaseHBaseManagedTimeTableReuseIT {
+
+    private static final String QUERY_TIMEOUT_TEST = generateRandomString();
 
     @Test
     /**
@@ -83,32 +87,31 @@ public class PhoenixQueryTimeoutIT extends BaseHBaseManagedTimeIT {
     //-----------------------------------------------------------------
     
     private PreparedStatement loadDataAndPrepareQuery(int timeoutMs, int timeoutSecs) throws Exception, SQLException {
-        createTableAndInsertRows(1000);
         Properties props = new Properties();
         props.setProperty("phoenix.query.timeoutMs", String.valueOf(timeoutMs));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement ps = conn.prepareStatement("SELECT * FROM QUERY_TIMEOUT_TEST");
+        PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + QUERY_TIMEOUT_TEST);
         PhoenixStatement phoenixStmt = ps.unwrap(PhoenixStatement.class);
         assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
         assertEquals(timeoutSecs, phoenixStmt.getQueryTimeout());
         return ps;
     }
-    
-    private Set<String> createTableAndInsertRows(int numRows) throws Exception {
-        String ddl = "CREATE TABLE QUERY_TIMEOUT_TEST (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+
+    @BeforeClass
+    public static void createTableAndInsertRows() throws Exception {
+        int numRows = 1000;
+        String ddl =
+            "CREATE TABLE " + QUERY_TIMEOUT_TEST + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO QUERY_TIMEOUT_TEST VALUES (?, ?)";
+        String dml = "UPSERT INTO " + QUERY_TIMEOUT_TEST + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
-        final Set<String> expectedKeys = new HashSet<>(numRows);
         for (int i = 1; i <= numRows; i++) {
             String key = "key" + i;
-            expectedKeys.add(key);
             stmt.setString(1, key);
             stmt.setString(2, "value" + i);
             stmt.executeUpdate();
         }
         conn.commit();
-        return expectedKeys;
     }
 }

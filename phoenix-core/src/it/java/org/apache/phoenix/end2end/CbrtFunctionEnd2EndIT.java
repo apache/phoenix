@@ -28,26 +28,31 @@ import java.sql.ResultSet;
 
 import org.apache.phoenix.expression.function.CbrtFunction;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
  * End to end tests for {@link CbrtFunction}
  */
-public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
+public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-8;
+    private static final String TEST_SIGNED = generateRandomString();
+    private static final String TEST_UNSIGNED = generateRandomString();
 
-    @Before
-    public void initTable() throws Exception {
+    @BeforeClass
+    public static void initTable() throws Exception {
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE testSigned (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
+            ddl = "CREATE TABLE " + TEST_SIGNED
+                + " (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
             conn.createStatement().execute(ddl);
-            ddl = "CREATE TABLE testUnsigned (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
+            ddl = "CREATE TABLE " + TEST_UNSIGNED
+                + " (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -56,7 +61,8 @@ public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
 
     private void updateSignedTable(Connection conn, double data) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testSigned VALUES (?, ?, ?, ?, ?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement(
+            "UPSERT INTO " + TEST_SIGNED + " VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, KEY);
         Double d = Double.valueOf(data);
         stmt.setDouble(2, d.doubleValue());
@@ -70,7 +76,8 @@ public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
 
     private void updateUnsignedTable(Connection conn, double data) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testUnsigned VALUES (?, ?, ?, ?, ?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement(
+            "UPSERT INTO " + TEST_UNSIGNED + " VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, KEY);
         Double d = Double.valueOf(data);
         stmt.setDouble(2, d.doubleValue());
@@ -85,7 +92,9 @@ public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
 
     private void testSignedNumberSpec(Connection conn, double data) throws Exception {
         updateSignedTable(conn, data);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT CBRT(doub),CBRT(fl),CBRT(inte),CBRT(lon),CBRT(smalli),CBRT(tinyi) FROM testSigned");
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT CBRT(doub),CBRT(fl),CBRT(inte),CBRT(lon),CBRT(smalli),CBRT(tinyi) FROM "
+                + TEST_SIGNED);
         assertTrue(rs.next());
         Double d = Double.valueOf(data);
         assertTrue(Math.abs(rs.getDouble(1) - Math.cbrt(d.doubleValue())) < ZERO);
@@ -95,7 +104,8 @@ public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertTrue(Math.abs(rs.getDouble(5) - Math.cbrt(d.shortValue())) < ZERO);
         assertTrue(Math.abs(rs.getDouble(6) - Math.cbrt(d.byteValue())) < ZERO);
         assertTrue(!rs.next());
-        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM testSigned WHERE CBRT(doub)>0 AND CBRT(fl)>0 AND CBRT(inte)>0 AND CBRT(lon)>0 AND CBRT(smalli)>0 AND CBRT(tinyi)>0");
+        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM " + TEST_SIGNED
+            + " WHERE CBRT(doub)>0 AND CBRT(fl)>0 AND CBRT(inte)>0 AND CBRT(lon)>0 AND CBRT(smalli)>0 AND CBRT(tinyi)>0");
         rs = stmt.executeQuery();
         if (data > 0) {
             assertTrue(rs.next());
@@ -106,7 +116,9 @@ public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
 
     private void testUnsignedNumberSpec(Connection conn, double data) throws Exception {
         updateUnsignedTable(conn, data);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT CBRT(doub),CBRT(fl),CBRT(inte),CBRT(lon),CBRT(smalli),CBRT(tinyi) FROM testUnsigned");
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT CBRT(doub),CBRT(fl),CBRT(inte),CBRT(lon),CBRT(smalli),CBRT(tinyi) FROM "
+                + TEST_UNSIGNED);
         assertTrue(rs.next());
         Double d = Double.valueOf(data);
         assertTrue(Math.abs(rs.getDouble(1) - Math.cbrt(d.doubleValue())) < ZERO);
@@ -116,7 +128,8 @@ public class CbrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertTrue(Math.abs(rs.getDouble(5) - Math.cbrt(d.shortValue())) < ZERO);
         assertTrue(Math.abs(rs.getDouble(6) - Math.cbrt(d.byteValue())) < ZERO);
         assertTrue(!rs.next());
-        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM testUnsigned WHERE CBRT(doub)>0 AND CBRT(fl)>0 AND CBRT(inte)>0 AND CBRT(lon)>0 AND CBRT(smalli)>0 AND CBRT(tinyi)>0");
+        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM " + TEST_UNSIGNED
+            + " WHERE CBRT(doub)>0 AND CBRT(fl)>0 AND CBRT(inte)>0 AND CBRT(lon)>0 AND CBRT(smalli)>0 AND CBRT(tinyi)>0");
         rs = stmt.executeQuery();
         if (data > 0) {
             assertTrue(rs.next());

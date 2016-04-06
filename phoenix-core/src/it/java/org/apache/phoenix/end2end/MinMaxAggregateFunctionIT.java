@@ -23,7 +23,9 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
-public class MinMaxAggregateFunctionIT extends BaseHBaseManagedTimeIT {
+public class MinMaxAggregateFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+
+    private static final String TABLE_NAME = generateRandomString();
 
     @Test
     public void testMinMaxAggregateFunctions() throws SQLException {
@@ -32,7 +34,7 @@ public class MinMaxAggregateFunctionIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
         try {
             conn.prepareStatement(
-                "create table TT("
+                "create table " + TABLE_NAME + "("
                         + "VAL1 integer not null, "
                         + "VAL2 char(2), "
                         + "VAL3 varchar, "
@@ -40,30 +42,30 @@ public class MinMaxAggregateFunctionIT extends BaseHBaseManagedTimeIT {
                         + "constraint PK primary key (VAL1))").execute();
             conn.commit();
 
-            conn.prepareStatement("upsert into TT values (0, '00', '00', '0')").execute();
-            conn.prepareStatement("upsert into TT values (1, '01', '01', '1')").execute();
-            conn.prepareStatement("upsert into TT values (2, '02', '02', '2')").execute();
+            conn.prepareStatement("upsert into " + TABLE_NAME + " values (0, '00', '00', '0')").execute();
+            conn.prepareStatement("upsert into " + TABLE_NAME + " values (1, '01', '01', '1')").execute();
+            conn.prepareStatement("upsert into " + TABLE_NAME + " values (2, '02', '02', '2')").execute();
             conn.commit();
 
-            ResultSet rs = conn.prepareStatement("select min(VAL2) from TT").executeQuery();
+            ResultSet rs = conn.prepareStatement("select min(VAL2) from " + TABLE_NAME).executeQuery();
             assertTrue(rs.next());
             assertEquals("00", rs.getString(1));
 
-            rs = conn.prepareStatement("select min(VAL3) from TT").executeQuery();
+            rs = conn.prepareStatement("select min(VAL3) from " + TABLE_NAME).executeQuery();
             assertTrue(rs.next());
             assertEquals("00", rs.getString(1));
 
-            rs = conn.prepareStatement("select max(VAL2)from TT").executeQuery();
+            rs = conn.prepareStatement("select max(VAL2)from " + TABLE_NAME).executeQuery();
             assertTrue(rs.next());
             assertEquals("02", rs.getString(1));
 
-            rs = conn.prepareStatement("select max(VAL3)from TT").executeQuery();
+            rs = conn.prepareStatement("select max(VAL3)from " + TABLE_NAME).executeQuery();
             assertTrue(rs.next());
             assertEquals("02", rs.getString(1));
 
             rs =
                     conn.prepareStatement(
-                        "select min(VAL1), min(VAL2), min(VAL3), min(VAL4) from TT").executeQuery();
+                        "select min(VAL1), min(VAL2), min(VAL3), min(VAL4) from " + TABLE_NAME).executeQuery();
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
             assertEquals("00", rs.getString(2));
@@ -72,7 +74,7 @@ public class MinMaxAggregateFunctionIT extends BaseHBaseManagedTimeIT {
 
             rs =
                     conn.prepareStatement(
-                        "select max(VAL1), max(VAL2), max(VAL3), max(VAL4) from TT").executeQuery();
+                        "select max(VAL1), max(VAL2), max(VAL3), max(VAL4) from " + TABLE_NAME).executeQuery();
 
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));

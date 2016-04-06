@@ -40,7 +40,7 @@ import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 
 
-public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
+public class ArithmeticQueryIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testDecimalUpsertValue() throws Exception {
@@ -48,13 +48,15 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE testDecimalArithmetic" + 
+            String testDecimalArithmetic = generateRandomString();
+            String ddl = "CREATE TABLE " + testDecimalArithmetic +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, " +
                     "col1 DECIMAL(31,0), col2 DECIMAL(5), col3 DECIMAL(5,2), col4 DECIMAL)";
             createTestTable(getUrl(), ddl);
             
             // Test upsert correct values 
-            String query = "UPSERT INTO testDecimalArithmetic(pk, col1, col2, col3, col4) VALUES(?,?,?,?,?)";
+            String query = "UPSERT INTO " + testDecimalArithmetic
+                + "(pk, col1, col2, col3, col4) VALUES(?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "valueOne");
             stmt.setBigDecimal(2, new BigDecimal("123456789123456789"));
@@ -64,7 +66,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
             
-            query = "SELECT col1, col2, col3, col4 FROM testDecimalArithmetic WHERE pk = 'valueOne'";
+            query = "SELECT col1, col2, col3, col4 FROM " + testDecimalArithmetic
+                + " WHERE pk = 'valueOne'";
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -74,7 +77,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("12345.6789"), rs.getBigDecimal(4));
             assertFalse(rs.next());
             
-            query = "UPSERT INTO testDecimalArithmetic(pk, col1, col2, col3) VALUES(?,?,?,?)";
+            query =
+                "UPSERT INTO " + testDecimalArithmetic + "(pk, col1, col2, col3) VALUES(?,?,?,?)";
             stmt = conn.prepareStatement(query);
             stmt.setString(1, "valueTwo");
             stmt.setBigDecimal(2, new BigDecimal("1234567890123456789012345678901.12345"));
@@ -83,7 +87,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
             
-            query = "SELECT col1, col2, col3 FROM testDecimalArithmetic WHERE pk = 'valueTwo'";
+            query =
+                "SELECT col1, col2, col3 FROM " + testDecimalArithmetic + " WHERE pk = 'valueTwo'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -94,7 +99,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             
             // Test upsert incorrect values and confirm exceptions would be thrown.
             try {
-                query = "UPSERT INTO testDecimalArithmetic(pk, col1, col2, col3) VALUES(?,?,?,?)";
+                query = "UPSERT INTO " + testDecimalArithmetic
+                    + "(pk, col1, col2, col3) VALUES(?,?,?,?)";
                 stmt = conn.prepareStatement(query);
                 stmt.setString(1, "badValues");
                 // one more than max_precision
@@ -108,7 +114,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             try {
-                query = "UPSERT INTO testDecimalArithmetic(pk, col1, col2, col3) VALUES(?,?,?,?)";
+                query = "UPSERT INTO " + testDecimalArithmetic
+                    + "(pk, col1, col2, col3) VALUES(?,?,?,?)";
                 stmt = conn.prepareStatement(query);
                 stmt.setString(1, "badValues");
                 stmt.setBigDecimal(2, new BigDecimal("123456"));
@@ -132,14 +139,16 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE source" + 
+            String source = generateRandomString();
+            String ddl = "CREATE TABLE " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col1 DECIMAL(5,2), col2 DECIMAL(5,1), col3 DECIMAL(5,2), col4 DECIMAL(4,4))";
             createTestTable(getUrl(), ddl);
-            ddl = "CREATE TABLE target" + 
+            String target = generateRandomString();
+            ddl = "CREATE TABLE " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col1 DECIMAL(5,1), col2 DECIMAL(5,2), col3 DECIMAL(4,4))";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO source(pk, col1) VALUES(?,?)";
+            String query = "UPSERT INTO " + source + "(pk, col1) VALUES(?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setBigDecimal(2, new BigDecimal("100.12"));
@@ -152,11 +161,11 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             
             // Evaluated on client side.
             // source and target in different tables, values scheme compatible.
-            query = "UPSERT INTO target(pk, col2) SELECT pk, col1 from source";
+            query = "UPSERT INTO " + target + "(pk, col2) SELECT pk, col1 from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            query = "SELECT col2 FROM target";
+            query = "SELECT col2 FROM " + target;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -165,11 +174,11 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("100.34"), rs.getBigDecimal(1));
             assertFalse(rs.next());
             // source and target in different tables, values requires scale chopping.
-            query = "UPSERT INTO target(pk, col1) SELECT pk, col1 from source";
+            query = "UPSERT INTO " + target + "(pk, col1) SELECT pk, col1 from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            query = "SELECT col1 FROM target";
+            query = "SELECT col1 FROM " + target;
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -179,7 +188,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             // source and target in different tables, values scheme incompatible.
             try {
-                query = "UPSERT INTO target(pk, col3) SELECT pk, col1 from source";
+                query = "UPSERT INTO " + target + "(pk, col3) SELECT pk, col1 from " + source;
                 stmt = conn.prepareStatement(query);
                 stmt.execute();
                 conn.commit();
@@ -191,11 +200,11 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             // Evaluate on server side.
             conn.setAutoCommit(true);
             // source and target in same table, values scheme compatible.
-            query = "UPSERT INTO source(pk, col3) SELECT pk, col1 from source";
+            query = "UPSERT INTO " + source + "(pk, col3) SELECT pk, col1 from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            query = "SELECT col3 FROM source";
+            query = "SELECT col3 FROM " + source;
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -204,11 +213,11 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("100.34"), rs.getBigDecimal(1));
             assertFalse(rs.next());
             // source and target in same table, values requires scale chopping.
-            query = "UPSERT INTO source(pk, col2) SELECT pk, col1 from source";
+            query = "UPSERT INTO " + source + "(pk, col2) SELECT pk, col1 from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            query = "SELECT col2 FROM source";
+            query = "SELECT col2 FROM " + source;
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -217,11 +226,11 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("100.3"), rs.getBigDecimal(1));
             assertFalse(rs.next());
             // source and target in same table, values scheme incompatible.
-            query = "UPSERT INTO source(pk, col4) SELECT pk, col1 from source";
+            query = "UPSERT INTO " + source + "(pk, col4) SELECT pk, col1 from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            query = "SELECT col4 FROM source";
+            query = "SELECT col4 FROM " + source;
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -240,11 +249,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE testDecimalArithmetic" + 
+            String testDecimalArithmetic = generateRandomString();
+            String ddl = "CREATE TABLE " + testDecimalArithmetic +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col1 DECIMAL(31, 11), col2 DECIMAL(31,1), col3 DECIMAL(38,1))";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO testDecimalArithmetic(pk, col1, col2, col3) VALUES(?,?,?,?)";
+            String query =
+                "UPSERT INTO " + testDecimalArithmetic + "(pk, col1, col2, col3) VALUES(?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setBigDecimal(2, new BigDecimal("99999999999999999999.1"));
@@ -268,14 +279,14 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             // Averaging
             // result scale should be: max(max(ls, rs), 4).
             // We are not imposing restriction on precisioin.
-            query = "SELECT avg(col1) FROM testDecimalArithmetic";
+            query = "SELECT avg(col1) FROM " + testDecimalArithmetic;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             BigDecimal result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("33333333333333333333.03333333333"), result);
             
-            query = "SELECT avg(col2) FROM testDecimalArithmetic";
+            query = "SELECT avg(col2) FROM " + testDecimalArithmetic;
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -283,7 +294,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("33333333333333333333.0333"), result);
             
             // We cap our decimal to a precision of 38.
-            query = "SELECT avg(col3) FROM testDecimalArithmetic";
+            query = "SELECT avg(col3) FROM " + testDecimalArithmetic;
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -300,14 +311,17 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE testRandomFunction (pk VARCHAR NOT NULL PRIMARY KEY)";
+            String testRandomFunction = generateRandomString();
+            String ddl =
+                "CREATE TABLE " + testRandomFunction + " (pk VARCHAR NOT NULL PRIMARY KEY)";
             createTestTable(getUrl(), ddl);
-            conn.createStatement().execute("upsert into testRandomFunction values ('x')");
-            conn.createStatement().execute("upsert into testRandomFunction values ('y')");
-            conn.createStatement().execute("upsert into testRandomFunction values ('z')");
+            conn.createStatement().execute("upsert into " + testRandomFunction + " values ('x')");
+            conn.createStatement().execute("upsert into " + testRandomFunction + " values ('y')");
+            conn.createStatement().execute("upsert into " + testRandomFunction + " values ('z')");
             conn.commit();
 
-            ResultSet rs = conn.createStatement().executeQuery("select rand(), rand(), rand(1), rand(2), rand(1) from testRandomFunction");
+            ResultSet rs = conn.createStatement().executeQuery(
+                "select rand(), rand(), rand(1), rand(2), rand(1) from " + testRandomFunction);
             assertTrue(rs.next());
             double rand0 = rs.getDouble(1);
             double rand1 = rs.getDouble(3);
@@ -337,7 +351,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.getDouble(4) != rs.getDouble(5));
             double rand12 = rs.getDouble(3);
 
-            rs = conn.createStatement().executeQuery("select rand(), rand(), rand(1), rand(2), rand(1) from testRandomFunction");
+            rs = conn.createStatement().executeQuery(
+                "select rand(), rand(), rand(1), rand(2), rand(1) from " + testRandomFunction);
             assertTrue(rs.next());
             assertTrue(rs.getDouble(1) != rs.getDouble(2));
             assertTrue(rs.getDouble(2) != rs.getDouble(3));
@@ -353,40 +368,52 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertTrue(rand12 == rs.getDouble(3));
 
-            ddl = "CREATE TABLE testRandomFunction1 (pk VARCHAR NOT NULL PRIMARY KEY, v1 UNSIGNED_DOUBLE)";
+            String testRandomFunction1 = generateRandomString();
+            ddl = "CREATE TABLE " + testRandomFunction1
+                + " (pk VARCHAR NOT NULL PRIMARY KEY, v1 UNSIGNED_DOUBLE)";
             createTestTable(getUrl(), ddl);
-            conn.createStatement().execute("upsert into testRandomFunction1 select pk, rand(1) from testRandomFunction");
+            conn.createStatement().execute(
+                "upsert into " + testRandomFunction1 + " select pk, rand(1) from " + testRandomFunction);
             conn.commit();
 
-            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            rs = conn.createStatement().executeQuery(
+                "select count(*) from " + testRandomFunction1 + " where v1 = rand(1)");
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
 
-            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            rs = conn.createStatement().executeQuery(
+                "select count(*) from " + testRandomFunction1 + " where v1 = rand(2)");
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
 
-            conn.createStatement().execute("delete from testRandomFunction1 where v1 = rand(2)");
+            conn.createStatement().execute(
+                "delete from " + testRandomFunction1 + " where v1 = rand(2)");
             conn.commit();
 
-            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            rs = conn.createStatement().executeQuery(
+                "select count(*) from " + testRandomFunction1 + " where v1 = rand(1)");
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
 
             conn.setAutoCommit(true);
-            conn.createStatement().execute("upsert into testRandomFunction1 select pk, rand(2) from testRandomFunction1");
+            conn.createStatement().execute("upsert into " + testRandomFunction1
+                + " select pk, rand(2) from " + testRandomFunction1);
 
-            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(1)");
+            rs = conn.createStatement().executeQuery(
+                "select count(*) from " + testRandomFunction1 + " where v1 = rand(1)");
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
 
-            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            rs = conn.createStatement().executeQuery(
+                "select count(*) from " + testRandomFunction1 + " where v1 = rand(2)");
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
 
-            conn.createStatement().execute("delete from testRandomFunction1 where v1 = rand(2)");
+            conn.createStatement().execute(
+                "delete from " + testRandomFunction1 + " where v1 = rand(2)");
 
-            rs = conn.createStatement().executeQuery("select count(*) from testRandomFunction1 where v1 = rand(2)");
+            rs = conn.createStatement().executeQuery(
+                "select count(*) from " + testRandomFunction1 + " where v1 = rand(2)");
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
         } finally {
@@ -400,12 +427,14 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE testDecimalArithmetic" + 
+            String testDecimalArithmetic = generateRandomString();
+            String ddl = "CREATE TABLE " + testDecimalArithmetic +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, " +
                     "col1 DECIMAL(38,0), col2 DECIMAL(5, 2), col3 INTEGER, col4 BIGINT, col5 DECIMAL)";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO testDecimalArithmetic(pk, col1, col2, col3, col4, col5) VALUES(?,?,?,?,?,?)";
+            String query = "UPSERT INTO " + testDecimalArithmetic
+                + "(pk, col1, col2, col3, col4, col5) VALUES(?,?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "testValueOne");
             stmt.setBigDecimal(2, new BigDecimal("1234567890123456789012345678901"));
@@ -427,105 +456,105 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             
             // INT has a default precision and scale of (10, 0)
             // LONG has a default precision and scale of (19, 0)
-            query = "SELECT col1 + col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 + col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             BigDecimal result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("1234567890123456789012345678911"), result);
             
-            query = "SELECT col1 + col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 + col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("1234567890123456789012345678911"), result);
             
-            query = "SELECT col2 + col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col2 + col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("133.45"), result);
             
-            query = "SELECT col2 + col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col2 + col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("133.45"), result);
             
-            query = "SELECT col5 + col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col5 + col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("121.111"), result);
             
-            query = "SELECT col5 + col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col5 + col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("121.111"), result);
             
-            query = "SELECT col1 - col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 - col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("1234567890123456789012345678891"), result);
             
-            query = "SELECT col1 - col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 - col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("1234567890123456789012345678891"), result);
             
-            query = "SELECT col2 - col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col2 - col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("113.45"), result);
             
-            query = "SELECT col2 - col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col2 - col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("113.45"), result);
             
-            query = "SELECT col5 - col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col5 - col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("101.111"), result);
             
-            query = "SELECT col5 - col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col5 - col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("101.111"), result);
             
-            query = "SELECT col1 * col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 * col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("1.234567890123456789012345678901E+31"), result);
             
-            query = "SELECT col1 * col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 * col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("1.234567890123456789012345678901E+31"), result);
 
-            query = "SELECT col1 * col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 * col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -533,7 +562,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("1.234567890123456789012345678901E+31"), result);
             
             try {
-            	query = "SELECT col1 * col3 FROM testDecimalArithmetic WHERE pk='testValueTwo'";
+            	query =
+                  "SELECT col1 * col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueTwo'";
             	stmt = conn.prepareStatement(query);
             	rs = stmt.executeQuery();
             	assertTrue(rs.next());
@@ -544,7 +574,8 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             }
             
             try {
-            	query = "SELECT col1 * col4 FROM testDecimalArithmetic WHERE pk='testValueTwo'";
+            	query =
+                  "SELECT col1 * col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueTwo'";
             	stmt = conn.prepareStatement(query);
             	rs = stmt.executeQuery();
             	assertTrue(rs.next());
@@ -554,21 +585,21 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
                 assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             
-            query = "SELECT col4 * col5 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col4 * col5 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(0, result.compareTo(new BigDecimal("1111.11")));
 
-            query = "SELECT col3 * col5 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col3 * col5 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(0, result.compareTo(new BigDecimal("1111.11")));
             
-            query = "SELECT col2 * col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col2 * col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -576,14 +607,14 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("1234.5"), result);
             
             // Result scale has value of 0
-            query = "SELECT col1 / col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 / col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("1.2345678901234567890123456789E+29"), result);
             
-            query = "SELECT col1 / col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col1 / col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -591,14 +622,14 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("1.2345678901234567890123456789E+29"), result);
             
             // Result scale is 2.
-            query = "SELECT col2 / col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col2 / col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("12.34"), result);
             
-            query = "SELECT col2 / col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col2 / col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -606,14 +637,14 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals(new BigDecimal("12.34"), result);
             
             // col5 has NO_SCALE, so the result's scale is not expected to be truncated to col5 value's scale of 4
-            query = "SELECT col5 / col3 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col5 / col3 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
             result = rs.getBigDecimal(1);
             assertEquals(new BigDecimal("11.1111"), result);
             
-            query = "SELECT col5 / col4 FROM testDecimalArithmetic WHERE pk='testValueOne'";
+            query = "SELECT col5 / col4 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -691,24 +722,27 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    private void initIntegerTable(Connection conn) throws SQLException {
-        String ddl = "CREATE TABLE ARITHMETIC_TEST (six INTEGER PRIMARY KEY, four INTEGER, three INTEGER)";
+    private String initIntegerTable(Connection conn) throws SQLException {
+        String arithmetic_test = generateRandomString();
+        String ddl = "CREATE TABLE " + arithmetic_test
+            + " (six INTEGER PRIMARY KEY, four INTEGER, three INTEGER)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO ARITHMETIC_TEST VALUES(6, 4, 3)";
+        String dml = "UPSERT INTO " + arithmetic_test + " VALUES(6, 4, 3)";
         conn.createStatement().execute(dml);
-        conn.commit();        
+        conn.commit();
+        return arithmetic_test;
     }
     
     @Test
     public void testOrderOfOperationsAdditionSubtraction() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 + 4 - 3
         // 10 - 3
         // 7
-        rs = conn.createStatement().executeQuery("SELECT six + four - three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six + four - three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(7, rs.getLong(1));
         assertFalse(rs.next());
@@ -716,7 +750,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 - 3 + 6
         // 1 + 6
         // 7
-        rs = conn.createStatement().executeQuery("SELECT four - three + six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four - three + six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(7, rs.getLong(1));
         assertFalse(rs.next());
@@ -725,13 +759,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsAdditionMultiplication() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 + 4 * 3
         // 6 + 12
         // 18
-        rs = conn.createStatement().executeQuery("SELECT six + four * three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six + four * three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(18, rs.getLong(1));
         assertFalse(rs.next());
@@ -739,7 +773,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 * 3 + 6
         // 12 * 6     
         // 18
-        rs = conn.createStatement().executeQuery("SELECT four * three + six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four * three + six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(18, rs.getLong(1));
         assertFalse(rs.next());
@@ -748,13 +782,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsAdditionDivision() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 + 4 / 3
         // 6 + 1
         // 7
-        rs = conn.createStatement().executeQuery("SELECT six + four / three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six + four / three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(7, rs.getLong(1));
         assertFalse(rs.next());
@@ -762,7 +796,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 / 3 + 6
         // 1 + 6     
         // 7
-        rs = conn.createStatement().executeQuery("SELECT four / three + six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four / three + six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(7, rs.getLong(1));
         assertFalse(rs.next());
@@ -771,13 +805,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsAdditionModulus() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 + 4 % 3
         // 6 + 1
         // 7
-        rs = conn.createStatement().executeQuery("SELECT six + four % three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six + four % three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(7, rs.getLong(1));
         assertFalse(rs.next());
@@ -785,7 +819,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 % 3 + 6
         // 1 + 6
         // 7
-        rs = conn.createStatement().executeQuery("SELECT four % three + six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four % three + six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(7, rs.getLong(1));
         assertFalse(rs.next());
@@ -794,13 +828,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsSubtrationMultiplication() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 - 4 * 3
         // 6 - 12
         // -6
-        rs = conn.createStatement().executeQuery("SELECT six - four * three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six - four * three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(-6, rs.getLong(1));
         assertFalse(rs.next());
@@ -808,7 +842,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 * 3 - 6
         // 12 - 6     
         // 6
-        rs = conn.createStatement().executeQuery("SELECT four * three - six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four * three - six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(6, rs.getLong(1));
         assertFalse(rs.next());
@@ -817,13 +851,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsSubtractionDivision() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 - 4 / 3
         // 6 - 1     (integer division)
         // 5
-        rs = conn.createStatement().executeQuery("SELECT six - four / three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six - four / three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(5, rs.getLong(1));
         assertFalse(rs.next());
@@ -831,7 +865,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 / 3 - 6
         // 1 - 6     (integer division)
         // -5
-        rs = conn.createStatement().executeQuery("SELECT four / three - six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four / three - six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(-5, rs.getLong(1));
         assertFalse(rs.next());
@@ -840,13 +874,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsSubtractionModulus() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 - 4 % 3
         // 6 - 1
         // 5
-        rs = conn.createStatement().executeQuery("SELECT six - four % three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six - four % three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(5, rs.getLong(1));
         assertFalse(rs.next());
@@ -854,7 +888,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 % 3 - 6
         // 1 - 6
         // -5
-        rs = conn.createStatement().executeQuery("SELECT four % three - six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four % three - six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(-5, rs.getLong(1));
         assertFalse(rs.next());
@@ -863,13 +897,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsMultiplicationDivision() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 * 4 / 3
         // 24 / 3
         // 8
-        rs = conn.createStatement().executeQuery("SELECT six * four / three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six * four / three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(8, rs.getLong(1));
         assertFalse(rs.next());
@@ -877,7 +911,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 / 3 * 6
         // 1 * 6     (integer division)
         // 6
-        rs = conn.createStatement().executeQuery("SELECT four / three * six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four / three * six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(6, rs.getLong(1));
         assertFalse(rs.next());
@@ -886,13 +920,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsMultiplicationModulus() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 * 4 % 3
         // 24 % 3
         // 0
-        rs = conn.createStatement().executeQuery("SELECT six * four % three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six * four % three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(0, rs.getLong(1));
         assertFalse(rs.next());
@@ -900,7 +934,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 % 3 * 6
         // 1 * 6
         // 6
-        rs = conn.createStatement().executeQuery("SELECT four % three * six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four % three * six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(6, rs.getLong(1));
         assertFalse(rs.next());
@@ -909,13 +943,13 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrderOfOperationsDivisionModulus() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initIntegerTable(conn);
+        String tableName = initIntegerTable(conn);
         ResultSet rs;
         
         // 6 / 4 % 3
         // 1 % 3     (integer division)
         // 1
-        rs = conn.createStatement().executeQuery("SELECT six / four % three FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT six / four % three FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(1, rs.getLong(1));
         assertFalse(rs.next());
@@ -923,7 +957,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         // 4 % 3 / 6
         // 1 / 6
         // 0         (integer division)
-        rs = conn.createStatement().executeQuery("SELECT four % three / six FROM ARITHMETIC_TEST");
+        rs = conn.createStatement().executeQuery("SELECT four % three / six FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(0, rs.getLong(1));
         assertFalse(rs.next());
@@ -932,13 +966,16 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testCastingOnConstantAddInArithmeticEvaluation() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE IF NOT EXISTS test_table (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
+        String testTable = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + testTable
+            + " (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO test_table (k1, v1) VALUES (2, 2)";
+        String dml = "UPSERT INTO " + testTable + " (k1, v1) VALUES (2, 2)";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1 / (v1 + 0.5) FROM test_table");
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT k1 / (v1 + 0.5) FROM " + testTable);
         assertTrue(rs.next());
         double d = rs.getDouble(1);
         assertEquals(0.8, d, 0.01);
@@ -947,13 +984,16 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testCastingOnConstantSubInArithmeticEvaluation() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE IF NOT EXISTS test_table (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
+        String testTable = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + testTable
+            + " (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO test_table (k1, v1) VALUES (2, 2)";
+        String dml = "UPSERT INTO " + testTable + " (k1, v1) VALUES (2, 2)";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1 / (v1 - 0.5) FROM test_table");
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT k1 / (v1 - 0.5) FROM " + testTable);
         assertTrue(rs.next());
         assertEquals(1.333333333, rs.getDouble(1), 0.001);
     }
@@ -961,13 +1001,15 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testFloatingPointUpsert() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        String test = generateRandomString();
+        String ddl =
+            "CREATE TABLE " + test + " (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00)";
+        String dml = "UPSERT INTO " + test + "(id,name,lat) VALUES ('testid', 'testname', -1.00)";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM " + test);
         assertTrue(rs.next());
         assertEquals(-1.0f, rs.getFloat(1), 0.001);
     }
@@ -975,13 +1017,16 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testFloatingPointMultiplicationUpsert() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
+        String test = generateRandomString();
+        String ddl =
+            "CREATE TABLE " + test + " (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO test(id,name,lat) VALUES ('testid', 'testname', -1.00 * 1)";
+        String dml =
+            "UPSERT INTO " + test + "(id,name,lat) VALUES ('testid', 'testname', -1.00 * 1)";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM test");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT lat FROM " + test);
         assertTrue(rs.next());
         assertEquals(-1.0f, rs.getFloat(1), 0.001);
     }
@@ -989,9 +1034,10 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSystemTableHasDoubleForExponentialNumber() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE test (id VARCHAR not null primary key, num FLOAT)";
+        String test = generateRandomString();
+        String ddl = "CREATE TABLE " + test + " (id VARCHAR not null primary key, num FLOAT)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO test(id,num) VALUES ('testid', 1.2E3)";
+        String dml = "UPSERT INTO " + test + "(id,num) VALUES ('testid', 1.2E3)";
         conn.createStatement().execute(dml);
         conn.commit();
 
@@ -1022,8 +1068,10 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
     
     private ResultSet createTableWithValues(String[] values, String valueType) throws SQLException {
     	Connection conn = DriverManager.getConnection(getUrl());
-        StringBuilder ddl = new StringBuilder("CREATE TABLE test (id VARCHAR not null primary key");
-        StringBuilder dmll = new StringBuilder("UPSERT INTO test(id,");
+        String test = generateRandomString();
+        StringBuilder ddl = new StringBuilder(
+            "CREATE TABLE " + test + " (id VARCHAR not null primary key");
+        StringBuilder dmll = new StringBuilder("UPSERT INTO " + test + "(id,");
         StringBuilder dmlr = new StringBuilder(") VALUES ('testid'");
         StringBuilder select = new StringBuilder("SELECT");
         for(int i = 0; i < values.length; i++) {
@@ -1036,7 +1084,7 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeIT {
         dmlr.append(")");
         dmll.deleteCharAt(dmll.length()-1);
         select.deleteCharAt(select.length()-1);
-        select.append(" FROM test");
+        select.append(" FROM " + test);
         conn.createStatement().execute(ddl.toString());
         conn.createStatement().execute(dmll.toString() + dmlr.toString());
         conn.commit();
