@@ -247,6 +247,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.consistency = JDBCUtil.getConsistencyLevel(url, this.info, this.services.getProps()
                  .get(QueryServices.CONSISTENCY_ATTRIB,
                          QueryServicesOptions.DEFAULT_CONSISTENCY_LEVEL));
+        // currently we are not resolving schema set through property, so if schema doesn't exists ,connection will not fail
+        // but queries may fail
         this.schema = JDBCUtil.getSchema(url, this.info,
                 this.services.getProps().get(QueryServices.SCHEMA_ATTRIB, QueryServicesOptions.DEFAULT_SCHEMA));
         this.tenantId = tenantId;

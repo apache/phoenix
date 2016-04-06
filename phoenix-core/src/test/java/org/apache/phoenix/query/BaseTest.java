@@ -830,16 +830,14 @@ public abstract class BaseTest {
     }
 
     public static void createSchema(String url, String tableName, Long ts) throws SQLException {
-        if (tableName.contains(".")) {
-            String schema = tableName.substring(0, tableName.indexOf("."));
-            if (!schema.equals("")) {
-                Properties props = new Properties();
-                if (ts != null) {
-                    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-                }
-                try (Connection conn = DriverManager.getConnection(url, props);) {
-                    conn.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + schema);
-                }
+        String schema = SchemaUtil.getSchemaNameFromFullName(tableName);
+        if (!schema.equals("")) {
+            Properties props = new Properties();
+            if (ts != null) {
+                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+            }
+            try (Connection conn = DriverManager.getConnection(url, props);) {
+                conn.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + schema);
             }
         }
     }

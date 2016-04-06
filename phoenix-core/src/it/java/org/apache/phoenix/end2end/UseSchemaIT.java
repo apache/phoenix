@@ -27,9 +27,18 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.NamespaceDescriptor;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class UseSchemaIT extends BaseHBaseManagedTimeIT {
@@ -91,6 +100,32 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("select schema_name from test");
         assertTrue(rs.next());
         assertEquals(schema, rs.getString(1));
+        conn.close();
+    }
+
+    @Test
+    public void testMappedView() throws Exception {
+        Properties props = new Properties();
+        String schema = "TEST_SCHEMA";
+        String tableName = "TEST";
+        String fullTablename = schema + QueryConstants.NAME_SEPARATOR + tableName;
+        props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        admin.createNamespace(NamespaceDescriptor.create(schema).build());
+        admin.createTable(new HTableDescriptor(fullTablename)
+                .addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)));
+        Put put = new Put(PVarchar.INSTANCE.toBytes(fullTablename));
+        put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES,
+                QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        HTable phoenixSchematable = new HTable(admin.getConfiguration(), fullTablename);
+        phoenixSchematable.put(put);
+        phoenixSchematable.close();
+        conn.createStatement().execute("CREATE VIEW " + tableName + " (tablename VARCHAR PRIMARY KEY)");
+        ResultSet rs = conn.createStatement().executeQuery("select tablename from " + tableName);
+        assertTrue(rs.next());
+        assertEquals(fullTablename, rs.getString(1));
+        admin.close();
         conn.close();
     }
 }

@@ -1305,27 +1305,24 @@ public class UpgradeUtil {
         return false;
     }
 
-    public static void mapTableToNamespace(HBaseAdmin admin, HTableInterface metatable, String srcTableName,
+    private static void mapTableToNamespace(HBaseAdmin admin, HTableInterface metatable, String srcTableName,
             String destTableName, ReadOnlyProps props, Long ts, String phoenixTableName, PTableType pTableType)
                     throws SnapshotCreationException, IllegalArgumentException, IOException, InterruptedException,
                     SQLException {
         srcTableName = SchemaUtil.normalizeIdentifier(srcTableName);
-        if (!SchemaUtil.isNamespaceMappingEnabled(
-                SchemaUtil.isSystemTable(srcTableName.getBytes()) ? PTableType.SYSTEM : null,
+        if (!SchemaUtil.isNamespaceMappingEnabled(pTableType,
                 props)) { throw new IllegalArgumentException(SchemaUtil.isSystemTable(srcTableName.getBytes())
                         ? "For system table " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
                                 + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                         : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
-
+        // we need to move physical table in actual namespace for TABLE and Index
         if (PTableType.TABLE.equals(pTableType) || PTableType.INDEX.equals(pTableType)) {
             admin.snapshot(srcTableName, srcTableName);
             admin.cloneSnapshot(srcTableName.getBytes(), destTableName.getBytes());
             admin.disableTable(srcTableName);
             admin.deleteTable(srcTableName);
         }
-        if (phoenixTableName == null) {
-            phoenixTableName = srcTableName;
-        }
+        // Update flag to represent table is mapped to namespace
         Put put = new Put(SchemaUtil.getTableKey(null, SchemaUtil.getSchemaNameFromFullName(phoenixTableName),
                 SchemaUtil.getTableNameFromFullName(phoenixTableName)), ts);
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES,
@@ -1333,12 +1330,16 @@ public class UpgradeUtil {
         metatable.put(put);
     }
 
+    /*
+     * Method to map existing phoenix table to a namespace. Should not be use if tables has views and indexes ,instead
+     * use map table utility in psql.py
+     */
     public static void mapTableToNamespace(HBaseAdmin admin, HTableInterface metatable, String tableName,
-            ReadOnlyProps props, Long ts) throws SnapshotCreationException, IllegalArgumentException, IOException,
-                    InterruptedException, SQLException {
+            ReadOnlyProps props, Long ts, PTableType pTableType) throws SnapshotCreationException,
+                    IllegalArgumentException, IOException, InterruptedException, SQLException {
         String destTablename = SchemaUtil
                 .normalizeIdentifier(SchemaUtil.getPhysicalTableName(tableName, props).getNameAsString());
-        mapTableToNamespace(admin, metatable, tableName, destTablename, props, ts, null, PTableType.TABLE);
+        mapTableToNamespace(admin, metatable, tableName, destTablename, props, ts, tableName, pTableType);
     }
 
     public static void upgradeTable(PhoenixConnection conn, String srcTable) throws SQLException,
@@ -1346,6 +1347,8 @@ public class UpgradeUtil {
         ReadOnlyProps readOnlyProps = conn.getQueryServices().getProps();
         if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) { throw new SQLException(
                 "May not specify the TENANT_ID_ATTRIB property when upgrading"); }
+        if (conn.getSchema() != null) { throw new IllegalArgumentException(
+                "Schema should not be set for connection!!"); }
         try (HBaseAdmin admin = conn.getQueryServices().getAdmin();
                 HTableInterface metatable = conn.getQueryServices()
                         .getTable(SchemaUtil
@@ -1360,16 +1363,18 @@ public class UpgradeUtil {
             // Confirm table is not already upgraded
             PTable table = PhoenixRuntime.getTable(conn, tableName);
             if (table.isNamespaceMapped()) { throw new IllegalArgumentException("Table is already upgraded"); }
+
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
-            String newPhysicalTablename = SchemaUtil
-                    .normalizeIdentifier(SchemaUtil.getPhysicalTableName(table.getPhysicalName().getString(), readOnlyProps).getNameAsString());
+            String newPhysicalTablename = SchemaUtil.normalizeIdentifier(SchemaUtil
+                    .getPhysicalTableName(table.getPhysicalName().getString(), readOnlyProps).getNameAsString());
 
             // Upgrade the data or main table
-            UpgradeUtil.mapTableToNamespace(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
+            mapTableToNamespace(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
                     PhoenixRuntime.getCurrentScn(readOnlyProps), tableName, table.getType());
 
             // clear the cache and get new table
-            conn.getQueryServices().clearCache();
+            conn.getQueryServices().clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, table.getSchemaName().getBytes(),
+                    table.getTableName().getBytes(), PhoenixRuntime.getCurrentScn(readOnlyProps));
             MetaDataMutationResult result = new MetaDataClient(conn).updateCache(schemaName,
                     SchemaUtil.getTableNameFromFullName(tableName));
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { throw new TableNotFoundException(
@@ -1379,23 +1384,24 @@ public class UpgradeUtil {
             if (table.isNamespaceMapped()) {
                 for (PTable index : table.getIndexes()) {
                     String srcTableName = index.getPhysicalName().getString();
-                    if(srcTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)){
-                        //this condition occurs in case of multiple views on table
-                        //skip already migrated tables 
+                    if (srcTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+                        // this condition occurs in case of multiple views on same table
+                        // as all view indexes uses the same physical table, so if one view is already migrated then we
+                        // can skip migrating the physical table again
                         continue;
                     }
                     String destTableName = null;
                     String phoenixTableName = index.getName().getString();
                     boolean updateLink = false;
-                    if (srcTableName.startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
+                    if (MetaDataUtil.isLocalIndex(srcTableName)) {
                         destTableName = Bytes
                                 .toString(MetaDataUtil.getLocalIndexPhysicalName(newPhysicalTablename.getBytes()));
-                        //update parent_table property in local index table descriptor
+                        // update parent_table property in local index table descriptor
                         conn.createStatement()
                                 .execute(String.format("ALTER TABLE %s set " + MetaDataUtil.PARENT_TABLE_KEY + "='%s'",
                                         phoenixTableName, table.getPhysicalName()));
                         updateLink = true;
-                    } else if (srcTableName.startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+                    } else if (MetaDataUtil.isViewIndex(srcTableName)) {
                         destTableName = Bytes
                                 .toString(MetaDataUtil.getViewIndexPhysicalName(newPhysicalTablename.getBytes()));
                         updateLink = true;
@@ -1407,10 +1413,12 @@ public class UpgradeUtil {
                     if (updateLink) {
                         updateLink(conn, srcTableName, destTableName);
                     }
-                    UpgradeUtil.mapTableToNamespace(admin, metatable, srcTableName, destTableName, readOnlyProps,
+                    mapTableToNamespace(admin, metatable, srcTableName, destTableName, readOnlyProps,
                             PhoenixRuntime.getCurrentScn(readOnlyProps), phoenixTableName, index.getType());
+                    conn.getQueryServices().clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
+                            index.getSchemaName().getBytes(), index.getTableName().getBytes(),
+                            PhoenixRuntime.getCurrentScn(readOnlyProps));
                 }
-                conn.getQueryServices().clearCache();
 
             } else {
                 throw new RuntimeException("Error: problem occured during upgrade. Table is not upgraded successfully");
@@ -1418,7 +1426,7 @@ public class UpgradeUtil {
         }
     }
 
-    public static void updateLink(PhoenixConnection conn, String srcTableName, String destTableName)
+    private static void updateLink(PhoenixConnection conn, String srcTableName, String destTableName)
             throws SQLException {
         PreparedStatement deleteLinkStatment = conn.prepareStatement(DELETE_LINK);
         deleteLinkStatment.setString(1, srcTableName);

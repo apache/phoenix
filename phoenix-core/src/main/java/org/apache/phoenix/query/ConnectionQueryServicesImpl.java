@@ -2581,12 +2581,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName());
                         if (tables.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
                             UpgradeUtil.mapTableToNamespace(admin, metatable, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                                    props, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
+                                    props, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
                             tables.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
                         }
                         for (HTableDescriptor table : tables) {
                             UpgradeUtil.mapTableToNamespace(admin, metatable, table.getTableName().getNameAsString(), props,
-                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
+                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
                         }
                     } finally {
                         if (metatable != null) {

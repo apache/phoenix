@@ -343,7 +343,7 @@ public class FromCompiler {
            theTable = this.addDynamicColumns(table.getDynamicColumns(), theTable);
            alias = null;
            tableRefs = ImmutableList.of(new TableRef(alias, theTable, timeStamp, !table.getDynamicColumns().isEmpty()));
-            schemas = ImmutableList.of(new PSchema(theTable.getSchemaName().toString(), timeStamp));
+           schemas = ImmutableList.of(new PSchema(theTable.getSchemaName().toString(), timeStamp));
        }
 
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {

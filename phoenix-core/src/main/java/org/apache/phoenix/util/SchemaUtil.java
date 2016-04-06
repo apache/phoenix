@@ -975,14 +975,6 @@ public class SchemaUtil {
         return TableName.valueOf(schemaName, tableName);
     }
 
-    public static String getSchemaNameFromHBaseFullName(byte[] tableName, ReadOnlyProps props) {
-        if (tableName == null) { return null; }
-        int index = isNamespaceMappingEnabled(null, props) ? indexOf(tableName, QueryConstants.NAMESPACE_SEPARATOR_BYTE)
-                : indexOf(tableName, QueryConstants.NAME_SEPARATOR_BYTE);
-        if (index < 0) { return StringUtil.EMPTY_STRING; }
-        return Bytes.toString(tableName, 0, index);
-    }
-
     public static PName getPhysicalHBaseTableName(String tableName, boolean isNamespaceMapped, PTableType type) {
         if (!isNamespaceMapped) { return PNameFactory.newName(tableName); }
         return PNameFactory
@@ -990,8 +982,7 @@ public class SchemaUtil {
     }
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {
-        if (PTableType.TABLE.equals(tableType) && isNamespaceMappingEnabled(tableType, props)) { return true; }
-        return false;
+        return PTableType.TABLE.equals(tableType) && isNamespaceMappingEnabled(tableType, props);
     }
 
     public static boolean isNamespaceMappingEnabled(PTableType type, ReadOnlyProps readOnlyProps) {
