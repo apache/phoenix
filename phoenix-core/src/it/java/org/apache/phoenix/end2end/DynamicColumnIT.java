@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS_SCHEMA_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -38,12 +39,18 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -81,25 +88,26 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
         try {
             // Insert rows using standard HBase mechanism with standard HBase "types"
             List<Row> mutations = new ArrayList<Row>();
-            byte[] dv = Bytes.toBytes("DV");
-            byte[] first = Bytes.toBytes("F");
-            byte[] f1v1 = Bytes.toBytes("F1V1");
-            byte[] f1v2 = Bytes.toBytes("F1V2");
-            byte[] f2v1 = Bytes.toBytes("F2V1");
-            byte[] f2v2 = Bytes.toBytes("F2V2");
-            byte[] key = Bytes.toBytes("entry1");
+            try (Connection conn = DriverManager.getConnection(url, TestUtil.TEST_PROPERTIES)) {
+                PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, SchemaUtil.getTableName(HBASE_DYNAMIC_COLUMNS_SCHEMA_NAME,HBASE_DYNAMIC_COLUMNS)));
+                byte[] dv = Bytes.toBytes("DV");
+                byte[] first = EncodedColumnsUtil.getEncodedColumnQualifier(getColumn(table, "F", Bytes.toString(DEFAULT_COLUMN_FAMILY_BYTES)));
+                byte[] f1v1 = EncodedColumnsUtil.getEncodedColumnQualifier(getColumn(table, "F1V1", Bytes.toString(FAMILY_NAME)));
+                byte[] f1v2 = EncodedColumnsUtil.getEncodedColumnQualifier(getColumn(table, "F1V2", Bytes.toString(FAMILY_NAME)));
+                byte[] f2v1 = EncodedColumnsUtil.getEncodedColumnQualifier(getColumn(table, "F2V1", Bytes.toString(FAMILY_NAME2)));
+                byte[] f2v2 = Bytes.toBytes("F2V2");
+                byte[] key = Bytes.toBytes("entry1");
 
-            Put put = new Put(key);
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
-            put.add(FAMILY_NAME, f1v1, Bytes.toBytes("f1value1"));
-            put.add(FAMILY_NAME, f1v2, Bytes.toBytes("f1value2"));
-            put.add(FAMILY_NAME2, f2v1, Bytes.toBytes("f2value1"));
-            put.add(FAMILY_NAME2, f2v2, Bytes.toBytes("f2value2"));
-            mutations.add(put);
-
-            hTable.batch(mutations);
-
+                Put put = new Put(key);
+                put.add(DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
+                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
+                put.add(FAMILY_NAME, f1v1, Bytes.toBytes("f1value1"));
+                put.add(FAMILY_NAME, f1v2, Bytes.toBytes("f1value2"));
+                put.add(FAMILY_NAME2, f2v1, Bytes.toBytes("f2value1"));
+                put.add(FAMILY_NAME2, f2v2, Bytes.toBytes("f2value2"));
+                mutations.add(put);
+                hTable.batch(mutations);
+            }
         } finally {
             hTable.close();
         }
@@ -107,7 +115,18 @@ public class DynamicColumnIT extends BaseClientManagedTimeIT {
         // The timestamp of the table creation must be later than the timestamp of the data
         ensureTableCreated(getUrl(), HBASE_DYNAMIC_COLUMNS);
     }
-
+    
+    private static PColumn getColumn(PTable table, String columnName, String familyName) {
+        for (PColumn column : table.getColumns()) {
+            if (column.getName().getString().equals(columnName)
+                    && ((familyName == null && column.getFamilyName() == null)
+                            || (familyName == null && column.getFamilyName().getString() == null) || (familyName
+                                .equals(column.getFamilyName().getString())))) {
+                return column;
+            }
+        }
+        throw new IllegalArgumentException("Column " + columnName + " not found in " + table.getName().getString());
+    }
     /**
      * Test a simple select with a dynamic Column
      */

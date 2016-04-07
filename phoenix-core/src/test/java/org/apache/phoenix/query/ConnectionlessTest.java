@@ -136,13 +136,9 @@ public class ConnectionlessTest {
         conn.rollback(); // to clear the list of mutations for the next
     }
     
-    @SuppressWarnings("deprecation")
     private static void assertRow1(Iterator<KeyValue> iterator, byte[] expectedRowKey1) {
         KeyValue kv;
         assertTrue(iterator.hasNext());
-        kv = iterator.next();
-        assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
         assertEquals(name1, PVarchar.INSTANCE.toObject(kv.getValue()));
@@ -150,15 +146,15 @@ public class ConnectionlessTest {
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
         assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
+        assertTrue(iterator.hasNext());
+        kv = iterator.next();
+        assertArrayEquals(expectedRowKey1, kv.getRow());        
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
     }
 
-    @SuppressWarnings("deprecation")
     private static void assertRow2(Iterator<KeyValue> iterator, byte[] expectedRowKey2) {
         KeyValue kv;
         assertTrue(iterator.hasNext());
-        kv = iterator.next();
-        assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
         assertEquals(name2, PVarchar.INSTANCE.toObject(kv.getValue()));
@@ -166,7 +162,10 @@ public class ConnectionlessTest {
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
         assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
-        assertFalse(iterator.hasNext());
+        assertTrue(iterator.hasNext());
+        kv = iterator.next();
+        assertArrayEquals(expectedRowKey2, kv.getRow());        
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
     }
     
     @Test

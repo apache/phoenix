@@ -18,6 +18,14 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODED_COLUMN_QUALIFIER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODED_COLUMN_QUALIFIER_COUNTER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -40,10 +48,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -71,15 +81,15 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
     public static Collection<Boolean> data() {
         return Arrays.asList(false, true);
     }
-	
-	@BeforeClass
+    
+    @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-	
+    
     private String generateDDL(String format) {
         return String.format(format, isMultiTenant ? "TENANT_ID VARCHAR NOT NULL, " : "",
             isMultiTenant ? "TENANT_ID, " : "", isMultiTenant ? "MULTI_TENANT=true" : "");
@@ -674,6 +684,209 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
             assertTrue(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
             assertTrue(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, "VIEWOFTABLE")).isTransactional());
         } 
+    }
+    
+    @Test
+    public void testClientAndServerMetadataForEncodedColumns() throws Exception {
+        String schemaName = "XYZ";
+        String baseTableName = "TABLEWITHVIEW";
+        String viewName = "VIEW1";
+        String fullTableName = schemaName + "." + baseTableName;
+        String fullViewName = schemaName + "." + viewName;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + fullTableName + " ("
+                    + " ID char(1) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
+                    + " )");
+            PTable baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
+            long initBaseTableSeqNumber = baseTable.getSequenceNumber(); 
+                    
+            // assert that the client side cache is updated.
+            Map<String, Integer> cqCounters = baseTable.getEncodedCQCounters();
+            assertEquals(1, cqCounters.size());
+            int counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
+            assertEquals(1, counter);
+            
+            // assert that the server side metadata is updated correctly.
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 1);
+            assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber);
+            
+            // now create a view and validate client and server side metadata
+            String viewDDL = "CREATE VIEW " + fullViewName + " ( VIEW_COL1 INTEGER, A.VIEW_COL2 VARCHAR ) AS SELECT * FROM " + fullTableName;
+            conn.createStatement().execute(viewDDL);
+            baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
+            PTable view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullViewName));
+            
+            // verify that the client side cache is updated. Base table's cq counters should be updated.
+            cqCounters = baseTable.getEncodedCQCounters();
+            counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
+            assertEquals(2, counter);
+            counter = cqCounters.get("A");
+            assertEquals(2, counter);
+            cqCounters = view.getEncodedCQCounters();
+            assertTrue("A view should always have the column qualifier counters map empty", cqCounters.isEmpty());
+            
+            // assert that the server side metadata for the base table and the view is also updated correctly.
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 2);
+            assertEncodedCQCounter("A", schemaName, baseTableName, 2);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "VIEW_COL1", schemaName, viewName, 1);
+            assertEncodedCQValue("A", "VIEW_COL2", schemaName, viewName, 1);
+            assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 1);
+            assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM);
+        }
+    }
+    
+    @Test
+    public void testAddingColumnsToTablesAndViewsWithEncodedColumns() throws Exception {
+        String schemaName = "XYZ";
+        String baseTableName = "testAddingColumnsWithEncodedColumns".toUpperCase();
+        String viewName = "VIEW1";
+        String fullTableName = schemaName + "." + baseTableName;
+        String fullViewName = schemaName + "." + viewName;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + fullTableName + " ("
+                    + " ID char(1) NOT NULL,"
+                    + " COL1 integer NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
+                    + " )");
+            PTable baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
+            long initBaseTableSeqNumber = baseTable.getSequenceNumber(); 
+
+            // Add a column to the base table and see if the client and server metadata is updated correctly
+            String alterDDL = "ALTER TABLE " + fullTableName + " ADD COL3 VARCHAR PRIMARY KEY, COL4 INTEGER, COL5 VARCHAR, B.COL6 DECIMAL (10, 2)";
+            conn.createStatement().execute(alterDDL);
+
+            // assert that the client side cache is updated.
+            baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
+            Map<String, Integer> cqCounters = baseTable.getEncodedCQCounters();
+            int counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
+            assertEquals(3, counter);
+            counter = cqCounters.get("B");
+            assertEquals(2, counter);
+
+            // assert that the server side metadata is updated correctly.
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 3);
+            assertEncodedCQCounter("B", schemaName, baseTableName, 2);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL4", schemaName, baseTableName, 1);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL5", schemaName, baseTableName, 2);
+            assertEncodedCQValue("B", "COL6", schemaName, baseTableName, 1);
+            assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 1);
+
+            // Create a view
+            String viewDDL = "CREATE VIEW " + fullViewName + " ( VIEW_COL1 INTEGER, A.VIEW_COL2 VARCHAR ) AS SELECT * FROM " + fullTableName;
+            conn.createStatement().execute(viewDDL);
+            // Creating a view that adds its own columns should increment the base table's sequence number too.
+            assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 2);
+
+            // Add column to the view
+            viewDDL = "ALTER VIEW " + fullViewName + " ADD VIEW_COL3 DECIMAL(10, 2), A.VIEW_COL4 VARCHAR, B.VIEW_COL5 INTEGER";
+            conn.createStatement().execute(viewDDL);
+
+            // assert that the client cache for the base table is updated
+            baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
+            cqCounters = baseTable.getEncodedCQCounters();
+            counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
+            assertEquals(5, counter);
+            counter = cqCounters.get("B");
+            assertEquals(3, counter);
+            counter = cqCounters.get("A");
+            assertEquals(3, counter);
+
+            // assert client cache for view
+            PTable view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullViewName));
+            cqCounters = view.getEncodedCQCounters();
+            assertTrue("A view should always have the column qualifier counters map empty", cqCounters.isEmpty());
+
+            // assert that the server side metadata for the base table and the view is also updated correctly.
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 5);
+            assertEncodedCQCounter("A", schemaName, baseTableName, 3);
+            assertEncodedCQCounter("B", schemaName, baseTableName, 3);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "VIEW_COL3", schemaName, viewName, 4);
+            assertEncodedCQValue("A", "VIEW_COL4", schemaName, viewName, 2);
+            assertEncodedCQValue("B", "VIEW_COL5", schemaName, viewName, 2);
+            // Adding a column to the should increment the base table's sequence number too since we update the cq counters for column families.
+            assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 3);
+            assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 1);
+            
+            // Add column to the base table which doesn't already exist in the view.
+            alterDDL = "ALTER TABLE " + fullTableName + " ADD COL10 VARCHAR, A.COL11 INTEGER";
+            conn.createStatement().execute(alterDDL);
+            baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
+            
+            // assert that the client cache for the base table is updated 
+            cqCounters = baseTable.getEncodedCQCounters();
+            counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
+            assertEquals(6, counter);
+            counter = cqCounters.get("B");
+            assertEquals(3, counter);
+            counter = cqCounters.get("A");
+            assertEquals(4, counter);
+            
+            // assert client cache for view
+            view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullViewName));
+            cqCounters = view.getEncodedCQCounters();
+            assertTrue("A view should always have the column qualifier counters map empty", cqCounters.isEmpty());
+            
+            // assert that the server side metadata for the base table and the view is also updated correctly.
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 6);
+            assertEncodedCQCounter("A", schemaName, baseTableName, 4);
+            assertEncodedCQCounter("B", schemaName, baseTableName, 3);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL10", schemaName, viewName, 5);
+            assertEncodedCQValue("A", "COL11", schemaName, viewName, 3);
+            assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 4);
+            assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 2);
+        }
+    }
+    
+    private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
+        String query = "SELECT " + ENCODED_COLUMN_QUALIFIER + " FROM SYSTEM.CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
+                + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            stmt.setString(3, columnFamily);
+            stmt.setString(4, columnName);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(expectedValue, rs.getInt(1));
+            assertFalse(rs.next());
+        }
+    }
+    
+    private void assertEncodedCQCounter(String columnFamily, String schemaName, String tableName, int expectedValue) throws Exception {
+        String query = "SELECT " + ENCODED_COLUMN_QUALIFIER_COUNTER + " FROM SYSTEM.CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
+                + " = ? " + " AND " + COLUMN_FAMILY + " = ? AND " + ENCODED_COLUMN_QUALIFIER_COUNTER + " IS NOT NULL";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            stmt.setString(3, columnFamily);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(expectedValue, rs.getInt(1));
+            assertFalse(rs.next());
+        }
+    }
+    
+    private void assertSequenceNumber(String schemaName, String tableName, long expectedSequenceNumber) throws Exception {
+        String query = "SELECT " + TABLE_SEQ_NUM + " FROM SYSTEM.CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
+                + " = ? AND " +  TABLE_SEQ_NUM + " IS NOT NULL AND " + COLUMN_NAME + " IS NULL AND "
+                + COLUMN_FAMILY + " IS NULL ";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(query);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            ResultSet rs = stmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(expectedSequenceNumber, rs.getInt(1));
+            assertFalse(rs.next());
+        }
     }
     
 }

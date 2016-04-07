@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -285,5 +286,10 @@ public class DelegateTable implements PTable {
     @Override
     public PColumn getPColumnForColumnQualifier(byte[] cq) throws ColumnNotFoundException, AmbiguousColumnException {
         return delegate.getPColumnForColumnQualifier(cq);
+    }
+
+    @Override
+    public Map<String, Integer> getEncodedCQCounters() {
+        return delegate.getEncodedCQCounters();
     }
 }

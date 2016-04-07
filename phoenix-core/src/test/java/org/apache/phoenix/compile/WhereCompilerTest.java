@@ -122,7 +122,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         ColumnExpression idExpression = new ColumnRef(plan.getTableRef(), plan.getTableRef().getTable().getPColumnForColumnName("ID").getPosition()).newColumnExpression();
         Expression id = new RowKeyColumnExpression(idExpression,new RowKeyValueAccessor(plan.getTableRef().getTable().getPKColumns(),0));
-        Expression company = new KeyValueColumnExpression(plan.getTableRef().getTable().getPColumnForColumnName("COMPANY"), true);
+        Expression company = new KeyValueColumnExpression(plan.getTableRef().getTable().getPColumnForColumnName("COMPANY"), false);
         // FilterList has no equals implementation
         assertTrue(filter instanceof FilterList);
         FilterList filterList = (FilterList)filter;
@@ -154,7 +154,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(
                 singleKVFilter(constantComparison(
                     CompareOp.EQUAL,
-                    new KeyValueColumnExpression(column, true),
+                    new KeyValueColumnExpression(column, false),
                     "c3")),
                 filter);
     }

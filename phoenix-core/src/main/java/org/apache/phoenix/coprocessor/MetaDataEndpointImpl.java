@@ -19,14 +19,12 @@ package org.apache.phoenix.coprocessor;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import static org.apache.phoenix.schema.PTable.StorageScheme;
 import static org.apache.hadoop.hbase.KeyValue.createFirstOnRow;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME_INDEX;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE_BYTES;
@@ -34,6 +32,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS_BYT
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODED_COLUMN_QUALIFIER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
@@ -85,9 +84,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-
+import java.util.Map;
+import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -184,6 +185,7 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
+import org.apache.phoenix.schema.PTable.StorageScheme;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
@@ -339,7 +341,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final KeyValue IS_VIEW_REFERENCED_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_VIEW_REFERENCED_BYTES);
     private static final KeyValue COLUMN_DEF_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_DEF_BYTES);
     private static final KeyValue IS_ROW_TIMESTAMP_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_ROW_TIMESTAMP_BYTES);
-    private static final KeyValue COLUMN_QUALIFIER_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_QUALIFIER_BYTES);
+    private static final KeyValue ENCODED_COLUMN_QUALIFIER_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ENCODED_COLUMN_QUALIFIER_BYTES);
     private static final List<KeyValue> COLUMN_KV_COLUMNS = Arrays.<KeyValue>asList(
             DECIMAL_DIGITS_KV,
             COLUMN_SIZE_KV,
@@ -353,7 +355,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             IS_VIEW_REFERENCED_KV,
             COLUMN_DEF_KV,
             IS_ROW_TIMESTAMP_KV,
-            COLUMN_QUALIFIER_KV
+            ENCODED_COLUMN_QUALIFIER_KV
             );
     static {
         Collections.sort(COLUMN_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -369,10 +371,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final int IS_VIEW_REFERENCED_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_VIEW_REFERENCED_KV);
     private static final int COLUMN_DEF_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_DEF_KV);
     private static final int IS_ROW_TIMESTAMP_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_ROW_TIMESTAMP_KV);
-    private static final int COLUMN_QUALIFIER_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_QUALIFIER_KV);
+    private static final int ENCODED_COLUMN_QUALIFIER_INDEX = COLUMN_KV_COLUMNS.indexOf(ENCODED_COLUMN_QUALIFIER_KV);
     
     private static final int LINK_TYPE_INDEX = 0;
-
+    
     private static final KeyValue CLASS_NAME_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, CLASS_NAME_BYTES);
     private static final KeyValue JAR_PATH_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, JAR_PATH_BYTES);
     private static final KeyValue RETURN_TYPE_KV = KeyValue.createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, RETURN_TYPE_BYTES);
@@ -708,7 +710,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 isRowTimestampKV == null ? false : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(
                         isRowTimestampKV.getValueArray(), isRowTimestampKV.getValueOffset(),
                         isRowTimestampKV.getValueLength()));
-        Cell columnQualifierKV = colKeyValues[COLUMN_QUALIFIER_INDEX];
+        Cell columnQualifierKV = colKeyValues[ENCODED_COLUMN_QUALIFIER_INDEX];
         Integer columnQualifier = columnQualifierKV == null ? null :
             PInteger.INSTANCE.getCodec().decodeInt(columnQualifierKV.getValueArray(), columnQualifierKV.getValueOffset(), SortOrder.getDefault());
 
@@ -915,10 +917,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         isNamespaceMappedKv.getValueOffset(), isNamespaceMappedKv.getValueLength()));
         Cell storageSchemeKv = tableKeyValues[STORAGE_SCHEME_INDEX];
         byte v = (byte)PTinyint.INSTANCE.toObject(storageSchemeKv.getValueArray(), storageSchemeKv.getValueOffset(), storageSchemeKv.getValueLength());
-        StorageScheme storageScheme = storageSchemeKv == null ? null : StorageScheme.fromSerializedValue(v);
+        //TODO: change this once we start having other values for storage schemes
+        StorageScheme storageScheme = storageSchemeKv == null ? StorageScheme.NON_ENCODED_COLUMN_NAMES : StorageScheme.fromSerializedValue(v);
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = new ArrayList<PTable>();
         List<PName> physicalTables = new ArrayList<PName>();
+        Map<String, Integer> encodedColumnQualifierCounters = new HashMap<>(); //TODO: samarth size properly.
         while (true) {
           results.clear();
           scanner.next(results);
@@ -926,19 +930,36 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               break;
           }
           Cell colKv = results.get(LINK_TYPE_INDEX);
-          int colKeyLength = colKv.getRowLength();
-          PName colName = newPName(colKv.getRowArray(), colKv.getRowOffset() + offset, colKeyLength-offset);
-          int colKeyOffset = offset + colName.getBytes().length + 1;
-          PName famName = newPName(colKv.getRowArray(), colKv.getRowOffset() + colKeyOffset, colKeyLength-colKeyOffset);
-          if (colName.getString().isEmpty() && famName != null) {
-              LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
-              if (linkType == LinkType.INDEX_TABLE) {
-                  addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
-              } else if (linkType == LinkType.PHYSICAL_TABLE) {
-                  physicalTables.add(famName);
+          Cell qualifierCounterKv = null;
+          if (storageScheme == StorageScheme.ENCODED_COLUMN_NAMES) {
+              int index = tableType == PTableType.VIEW ? 1 : 0;
+              qualifierCounterKv = results.get(index);
+          }
+          if (colKv != null) {
+              int colKeyLength = colKv.getRowLength();
+              PName colName = newPName(colKv.getRowArray(), colKv.getRowOffset() + offset, colKeyLength-offset);
+              int colKeyOffset = offset + colName.getBytes().length + 1;
+              PName famName = newPName(colKv.getRowArray(), colKv.getRowOffset() + colKeyOffset, colKeyLength-colKeyOffset);
+              if (colName.getString().isEmpty() && famName != null) {
+                  LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
+                  if (linkType == LinkType.INDEX_TABLE) {
+                      addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
+                  } else if (linkType == LinkType.PHYSICAL_TABLE) {
+                      physicalTables.add(famName);
+                  }
+              } else {
+                  addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
               }
-          } else {
-              addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
+          } 
+          if (qualifierCounterKv != null) {
+              int length = qualifierCounterKv.getRowLength();
+              PName colName = newPName(qualifierCounterKv.getRowArray(), qualifierCounterKv.getRowOffset() + offset, length - offset);
+              int colKeyOffset = offset + colName.getBytes().length + 1;
+              PName famName = newPName(qualifierCounterKv.getRowArray(), qualifierCounterKv.getRowOffset() + colKeyOffset, length - colKeyOffset);
+              if (colName.getString().isEmpty() && famName != null) {
+                  Integer counter = (Integer)PInteger.INSTANCE.toObject(qualifierCounterKv.getValueArray(), qualifierCounterKv.getValueOffset(), qualifierCounterKv.getValueLength());
+                  encodedColumnQualifierCounters.put(famName.getString(), counter);
+              }
           }
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getPhysicalTableName(
@@ -965,7 +986,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName,
                 viewStatement, disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType,
                 rowKeyOrderOptimizable, transactional, updateCacheFrequency, stats, baseColumnCount,
-                indexDisableTimestamp, isNamespaceMapped, storageScheme);
+                indexDisableTimestamp, isNamespaceMapped, storageScheme, encodedColumnQualifierCounters);
     }
 
     private PSchema getSchema(RegionScanner scanner, long clientTimeStamp) throws IOException, SQLException {
@@ -1866,7 +1887,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     return result;
                 }
                 region.mutateRowsWithLocks(tableMetadata, Collections.<byte[]> emptySet());
-                // Invalidate from cache
+                // Invalidate from cache. //TODO: samarth should we invalidate the base table from the cache too here.
                 for (ImmutableBytesPtr invalidateKey : invalidateList) {
                     metaDataCache.invalidate(invalidateKey);
                 }
@@ -2039,6 +2060,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 byte[][] rkmd = new byte[5][];
                 int pkCount = getVarChars(m.getRow(), rkmd);
                 if (pkCount > COLUMN_NAME_INDEX
+                        && rkmd[COLUMN_NAME_INDEX] != null && rkmd[COLUMN_NAME_INDEX].length > 0
                         && Bytes.compareTo(schemaName, rkmd[SCHEMA_NAME_INDEX]) == 0
                         && Bytes.compareTo(tableName, rkmd[TABLE_NAME_INDEX]) == 0) {
                     columnPutsForBaseTable.add(new PutWithOrdinalPosition((Put)m, getInteger((Put)m, TABLE_FAMILY_BYTES, ORDINAL_POSITION_BYTES)));
@@ -2201,26 +2223,26 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     columnsAddedToBaseTable++;
                 }
             }
-            /*
-             * Allow adding a pk columns to base table : 1. if all the view pk columns are exactly the same as the base
-             * table pk columns 2. if we are adding all the existing view pk columns to the base table
-             */ 
-            if (addingExistingPkCol && !viewPkCols.equals(basePhysicalTable.getPKColumns())) {
-                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), basePhysicalTable);
-            }
-            addViewIndexesHeaderRowMutations(mutationsForAddingColumnsToViews, invalidateList, clientTimeStamp, view,
-                    deltaNumPkColsSoFar);
-            
-            /*
-             * Increment the sequence number by 1 if:
-             * 1) For a diverged view, there were columns (pk columns) added to the view.
-             * 2) For a non-diverged view if the base column count changed.
-             */
-            boolean changeSequenceNumber = (isDivergedView(view) && columnsAddedToView > 0)
-                    || (!isDivergedView(view) && columnsAddedToBaseTable > 0);
-            updateViewHeaderRow(basePhysicalTable, tableMetadata, mutationsForAddingColumnsToViews,
-                invalidateList, clientTimeStamp, columnsAddedToView, columnsAddedToBaseTable,
-                viewKey, view, ordinalPositionList, numCols, changeSequenceNumber);
+           /*
+            * Allow adding a pk columns to base table : 1. if all the view pk columns are exactly the same as the base
+            * table pk columns 2. if we are adding all the existing view pk columns to the base table
+            */ 
+           if (addingExistingPkCol && !viewPkCols.equals(basePhysicalTable.getPKColumns())) {
+               return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), basePhysicalTable);
+           }
+           addViewIndexesHeaderRowMutations(mutationsForAddingColumnsToViews, invalidateList, clientTimeStamp, view,
+                   deltaNumPkColsSoFar);
+           
+           /*
+            * Increment the sequence number by 1 if:
+            * 1) For a diverged view, there were columns (pk columns) added to the view.
+            * 2) For a non-diverged view if the base column count changed.
+            */
+           boolean changeSequenceNumber = (isDivergedView(view) && columnsAddedToView > 0)
+                   || (!isDivergedView(view) && columnsAddedToBaseTable > 0);
+           updateViewHeaderRow(basePhysicalTable, tableMetadata, mutationsForAddingColumnsToViews,
+               invalidateList, clientTimeStamp, columnsAddedToView, columnsAddedToBaseTable,
+               viewKey, view, ordinalPositionList, numCols, changeSequenceNumber);
         }
         return null;
     }
@@ -2445,7 +2467,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     
     private MetaDataMutationResult validateColumnForAddToBaseTable(PColumn existingViewColumn, Put columnToBeAdded, PTable basePhysicalTable, boolean isColumnToBeAddPkCol, PTable view) {
         if (existingViewColumn != null) {
-            
+            if (EncodedColumnsUtil.usesEncodedColumnNames(basePhysicalTable) && !SchemaUtil.isPKColumn(existingViewColumn)) {
+                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION, EnvironmentEdgeManager.currentTimeMillis(), basePhysicalTable);
+            }
             // Validate data type is same
             int baseColumnDataType = getInteger(columnToBeAdded, TABLE_FAMILY_BYTES, DATA_TYPE_BYTES);
             if (baseColumnDataType != existingViewColumn.getDataType().getSqlType()) {

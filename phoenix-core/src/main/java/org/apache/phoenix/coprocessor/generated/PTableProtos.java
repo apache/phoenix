@@ -3448,6 +3448,31 @@ public final class PTableProtos {
      * <code>optional bytes storageScheme = 31;</code>
      */
     com.google.protobuf.ByteString getStorageScheme();
+
+    // repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter> 
+        getEncodedColumnQualifierCountersList();
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter getEncodedColumnQualifierCounters(int index);
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    int getEncodedColumnQualifierCountersCount();
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder> 
+        getEncodedColumnQualifierCountersOrBuilderList();
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder getEncodedColumnQualifierCountersOrBuilder(
+        int index);
   }
   /**
    * Protobuf type {@code PTable}
@@ -3673,6 +3698,14 @@ public final class PTableProtos {
               storageScheme_ = input.readBytes();
               break;
             }
+            case 258: {
+              if (!((mutable_bitField0_ & 0x80000000) == 0x80000000)) {
+                encodedColumnQualifierCounters_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter>();
+                mutable_bitField0_ |= 0x80000000;
+              }
+              encodedColumnQualifierCounters_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.PARSER, extensionRegistry));
+              break;
+            }
           }
         }
       } catch (com.google.protobuf.InvalidProtocolBufferException e) {
@@ -3692,6 +3725,9 @@ public final class PTableProtos {
         }
         if (((mutable_bitField0_ & 0x00040000) == 0x00040000)) {
           physicalNames_ = java.util.Collections.unmodifiableList(physicalNames_);
+        }
+        if (((mutable_bitField0_ & 0x80000000) == 0x80000000)) {
+          encodedColumnQualifierCounters_ = java.util.Collections.unmodifiableList(encodedColumnQualifierCounters_);
         }
         this.unknownFields = unknownFields.build();
         makeExtensionsImmutable();
@@ -4315,6 +4351,42 @@ public final class PTableProtos {
       return storageScheme_;
     }
 
+    // repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;
+    public static final int ENCODEDCOLUMNQUALIFIERCOUNTERS_FIELD_NUMBER = 32;
+    private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter> encodedColumnQualifierCounters_;
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter> getEncodedColumnQualifierCountersList() {
+      return encodedColumnQualifierCounters_;
+    }
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder> 
+        getEncodedColumnQualifierCountersOrBuilderList() {
+      return encodedColumnQualifierCounters_;
+    }
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    public int getEncodedColumnQualifierCountersCount() {
+      return encodedColumnQualifierCounters_.size();
+    }
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter getEncodedColumnQualifierCounters(int index) {
+      return encodedColumnQualifierCounters_.get(index);
+    }
+    /**
+     * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder getEncodedColumnQualifierCountersOrBuilder(
+        int index) {
+      return encodedColumnQualifierCounters_.get(index);
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4347,6 +4419,7 @@ public final class PTableProtos {
       indexDisableTimestamp_ = 0L;
       isNamespaceMapped_ = false;
       storageScheme_ = com.google.protobuf.ByteString.EMPTY;
+      encodedColumnQualifierCounters_ = java.util.Collections.emptyList();
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4403,6 +4476,12 @@ public final class PTableProtos {
       }
       for (int i = 0; i < getGuidePostsCount(); i++) {
         if (!getGuidePosts(i).isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
+      for (int i = 0; i < getEncodedColumnQualifierCountersCount(); i++) {
+        if (!getEncodedColumnQualifierCounters(i).isInitialized()) {
           memoizedIsInitialized = 0;
           return false;
         }
@@ -4506,6 +4585,9 @@ public final class PTableProtos {
       }
       if (((bitField0_ & 0x04000000) == 0x04000000)) {
         output.writeBytes(31, storageScheme_);
+      }
+      for (int i = 0; i < encodedColumnQualifierCounters_.size(); i++) {
+        output.writeMessage(32, encodedColumnQualifierCounters_.get(i));
       }
       getUnknownFields().writeTo(output);
     }
@@ -4644,6 +4726,10 @@ public final class PTableProtos {
       if (((bitField0_ & 0x04000000) == 0x04000000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(31, storageScheme_);
+      }
+      for (int i = 0; i < encodedColumnQualifierCounters_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(32, encodedColumnQualifierCounters_.get(i));
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4811,6 +4897,8 @@ public final class PTableProtos {
         result = result && getStorageScheme()
             .equals(other.getStorageScheme());
       }
+      result = result && getEncodedColumnQualifierCountersList()
+          .equals(other.getEncodedColumnQualifierCountersList());
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4948,6 +5036,10 @@ public final class PTableProtos {
         hash = (37 * hash) + STORAGESCHEME_FIELD_NUMBER;
         hash = (53 * hash) + getStorageScheme().hashCode();
       }
+      if (getEncodedColumnQualifierCountersCount() > 0) {
+        hash = (37 * hash) + ENCODEDCOLUMNQUALIFIERCOUNTERS_FIELD_NUMBER;
+        hash = (53 * hash) + getEncodedColumnQualifierCountersList().hashCode();
+      }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -5052,6 +5144,7 @@ public final class PTableProtos {
           getColumnsFieldBuilder();
           getIndexesFieldBuilder();
           getGuidePostsFieldBuilder();
+          getEncodedColumnQualifierCountersFieldBuilder();
         }
       }
       private static Builder create() {
@@ -5134,6 +5227,12 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x20000000);
         storageScheme_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x40000000);
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          encodedColumnQualifierCounters_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x80000000);
+        } else {
+          encodedColumnQualifierCountersBuilder_.clear();
+        }
         return this;
       }
 
@@ -5302,6 +5401,15 @@ public final class PTableProtos {
           to_bitField0_ |= 0x04000000;
         }
         result.storageScheme_ = storageScheme_;
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          if (((bitField0_ & 0x80000000) == 0x80000000)) {
+            encodedColumnQualifierCounters_ = java.util.Collections.unmodifiableList(encodedColumnQualifierCounters_);
+            bitField0_ = (bitField0_ & ~0x80000000);
+          }
+          result.encodedColumnQualifierCounters_ = encodedColumnQualifierCounters_;
+        } else {
+          result.encodedColumnQualifierCounters_ = encodedColumnQualifierCountersBuilder_.build();
+        }
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -5489,6 +5597,32 @@ public final class PTableProtos {
         if (other.hasStorageScheme()) {
           setStorageScheme(other.getStorageScheme());
         }
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          if (!other.encodedColumnQualifierCounters_.isEmpty()) {
+            if (encodedColumnQualifierCounters_.isEmpty()) {
+              encodedColumnQualifierCounters_ = other.encodedColumnQualifierCounters_;
+              bitField0_ = (bitField0_ & ~0x80000000);
+            } else {
+              ensureEncodedColumnQualifierCountersIsMutable();
+              encodedColumnQualifierCounters_.addAll(other.encodedColumnQualifierCounters_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.encodedColumnQualifierCounters_.isEmpty()) {
+            if (encodedColumnQualifierCountersBuilder_.isEmpty()) {
+              encodedColumnQualifierCountersBuilder_.dispose();
+              encodedColumnQualifierCountersBuilder_ = null;
+              encodedColumnQualifierCounters_ = other.encodedColumnQualifierCounters_;
+              bitField0_ = (bitField0_ & ~0x80000000);
+              encodedColumnQualifierCountersBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   getEncodedColumnQualifierCountersFieldBuilder() : null;
+            } else {
+              encodedColumnQualifierCountersBuilder_.addAllMessages(other.encodedColumnQualifierCounters_);
+            }
+          }
+        }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
       }
@@ -5544,6 +5678,12 @@ public final class PTableProtos {
         }
         for (int i = 0; i < getGuidePostsCount(); i++) {
           if (!getGuidePosts(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        for (int i = 0; i < getEncodedColumnQualifierCountersCount(); i++) {
+          if (!getEncodedColumnQualifierCounters(i).isInitialized()) {
             
             return false;
           }
@@ -7327,6 +7467,246 @@ public final class PTableProtos {
         return this;
       }
 
+      // repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;
+      private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter> encodedColumnQualifierCounters_ =
+        java.util.Collections.emptyList();
+      private void ensureEncodedColumnQualifierCountersIsMutable() {
+        if (!((bitField0_ & 0x80000000) == 0x80000000)) {
+          encodedColumnQualifierCounters_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter>(encodedColumnQualifierCounters_);
+          bitField0_ |= 0x80000000;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder> encodedColumnQualifierCountersBuilder_;
+
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter> getEncodedColumnQualifierCountersList() {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(encodedColumnQualifierCounters_);
+        } else {
+          return encodedColumnQualifierCountersBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public int getEncodedColumnQualifierCountersCount() {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          return encodedColumnQualifierCounters_.size();
+        } else {
+          return encodedColumnQualifierCountersBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter getEncodedColumnQualifierCounters(int index) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          return encodedColumnQualifierCounters_.get(index);
+        } else {
+          return encodedColumnQualifierCountersBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder setEncodedColumnQualifierCounters(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter value) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureEncodedColumnQualifierCountersIsMutable();
+          encodedColumnQualifierCounters_.set(index, value);
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder setEncodedColumnQualifierCounters(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder builderForValue) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          ensureEncodedColumnQualifierCountersIsMutable();
+          encodedColumnQualifierCounters_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder addEncodedColumnQualifierCounters(org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter value) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureEncodedColumnQualifierCountersIsMutable();
+          encodedColumnQualifierCounters_.add(value);
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder addEncodedColumnQualifierCounters(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter value) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureEncodedColumnQualifierCountersIsMutable();
+          encodedColumnQualifierCounters_.add(index, value);
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder addEncodedColumnQualifierCounters(
+          org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder builderForValue) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          ensureEncodedColumnQualifierCountersIsMutable();
+          encodedColumnQualifierCounters_.add(builderForValue.build());
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder addEncodedColumnQualifierCounters(
+          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder builderForValue) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          ensureEncodedColumnQualifierCountersIsMutable();
+          encodedColumnQualifierCounters_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder addAllEncodedColumnQualifierCounters(
+          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter> values) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          ensureEncodedColumnQualifierCountersIsMutable();
+          super.addAll(values, encodedColumnQualifierCounters_);
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder clearEncodedColumnQualifierCounters() {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          encodedColumnQualifierCounters_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x80000000);
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public Builder removeEncodedColumnQualifierCounters(int index) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          ensureEncodedColumnQualifierCountersIsMutable();
+          encodedColumnQualifierCounters_.remove(index);
+          onChanged();
+        } else {
+          encodedColumnQualifierCountersBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder getEncodedColumnQualifierCountersBuilder(
+          int index) {
+        return getEncodedColumnQualifierCountersFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder getEncodedColumnQualifierCountersOrBuilder(
+          int index) {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          return encodedColumnQualifierCounters_.get(index);  } else {
+          return encodedColumnQualifierCountersBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder> 
+           getEncodedColumnQualifierCountersOrBuilderList() {
+        if (encodedColumnQualifierCountersBuilder_ != null) {
+          return encodedColumnQualifierCountersBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(encodedColumnQualifierCounters_);
+        }
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder addEncodedColumnQualifierCountersBuilder() {
+        return getEncodedColumnQualifierCountersFieldBuilder().addBuilder(
+            org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder addEncodedColumnQualifierCountersBuilder(
+          int index) {
+        return getEncodedColumnQualifierCountersFieldBuilder().addBuilder(
+            index, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder> 
+           getEncodedColumnQualifierCountersBuilderList() {
+        return getEncodedColumnQualifierCountersFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder> 
+          getEncodedColumnQualifierCountersFieldBuilder() {
+        if (encodedColumnQualifierCountersBuilder_ == null) {
+          encodedColumnQualifierCountersBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder>(
+                  encodedColumnQualifierCounters_,
+                  ((bitField0_ & 0x80000000) == 0x80000000),
+                  getParentForChildren(),
+                  isClean());
+          encodedColumnQualifierCounters_ = null;
+        }
+        return encodedColumnQualifierCountersBuilder_;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -7336,6 +7716,621 @@ public final class PTableProtos {
     }
 
     // @@protoc_insertion_point(class_scope:PTable)
+  }
+
+  public interface EncodedColumnQualifierCounterOrBuilder
+      extends com.google.protobuf.MessageOrBuilder {
+
+    // required string familyName = 1;
+    /**
+     * <code>required string familyName = 1;</code>
+     */
+    boolean hasFamilyName();
+    /**
+     * <code>required string familyName = 1;</code>
+     */
+    java.lang.String getFamilyName();
+    /**
+     * <code>required string familyName = 1;</code>
+     */
+    com.google.protobuf.ByteString
+        getFamilyNameBytes();
+
+    // required int32 counter = 2;
+    /**
+     * <code>required int32 counter = 2;</code>
+     */
+    boolean hasCounter();
+    /**
+     * <code>required int32 counter = 2;</code>
+     */
+    int getCounter();
+  }
+  /**
+   * Protobuf type {@code EncodedColumnQualifierCounter}
+   */
+  public static final class EncodedColumnQualifierCounter extends
+      com.google.protobuf.GeneratedMessage
+      implements EncodedColumnQualifierCounterOrBuilder {
+    // Use EncodedColumnQualifierCounter.newBuilder() to construct.
+    private EncodedColumnQualifierCounter(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+      this.unknownFields = builder.getUnknownFields();
+    }
+    private EncodedColumnQualifierCounter(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+
+    private static final EncodedColumnQualifierCounter defaultInstance;
+    public static EncodedColumnQualifierCounter getDefaultInstance() {
+      return defaultInstance;
+    }
+
+    public EncodedColumnQualifierCounter getDefaultInstanceForType() {
+      return defaultInstance;
+    }
+
+    private final com.google.protobuf.UnknownFieldSet unknownFields;
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+        getUnknownFields() {
+      return this.unknownFields;
+    }
+    private EncodedColumnQualifierCounter(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      initFields();
+      int mutable_bitField0_ = 0;
+      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+          com.google.protobuf.UnknownFieldSet.newBuilder();
+      try {
+        boolean done = false;
+        while (!done) {
+          int tag = input.readTag();
+          switch (tag) {
+            case 0:
+              done = true;
+              break;
+            default: {
+              if (!parseUnknownField(input, unknownFields,
+                                     extensionRegistry, tag)) {
+                done = true;
+              }
+              break;
+            }
+            case 10: {
+              bitField0_ |= 0x00000001;
+              familyName_ = input.readBytes();
+              break;
+            }
+            case 16: {
+              bitField0_ |= 0x00000002;
+              counter_ = input.readInt32();
+              break;
+            }
+          }
+        }
+      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+        throw e.setUnfinishedMessage(this);
+      } catch (java.io.IOException e) {
+        throw new com.google.protobuf.InvalidProtocolBufferException(
+            e.getMessage()).setUnfinishedMessage(this);
+      } finally {
+        this.unknownFields = unknownFields.build();
+        makeExtensionsImmutable();
+      }
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.phoenix.coprocessor.generated.PTableProtos.internal_static_EncodedColumnQualifierCounter_descriptor;
+    }
+
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.phoenix.coprocessor.generated.PTableProtos.internal_static_EncodedColumnQualifierCounter_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.class, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder.class);
+    }
+
+    public static com.google.protobuf.Parser<EncodedColumnQualifierCounter> PARSER =
+        new com.google.protobuf.AbstractParser<EncodedColumnQualifierCounter>() {
+      public EncodedColumnQualifierCounter parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return new EncodedColumnQualifierCounter(input, extensionRegistry);
+      }
+    };
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<EncodedColumnQualifierCounter> getParserForType() {
+      return PARSER;
+    }
+
+    private int bitField0_;
+    // required string familyName = 1;
+    public static final int FAMILYNAME_FIELD_NUMBER = 1;
+    private java.lang.Object familyName_;
+    /**
+     * <code>required string familyName = 1;</code>
+     */
+    public boolean hasFamilyName() {
+      return ((bitField0_ & 0x00000001) == 0x00000001);
+    }
+    /**
+     * <code>required string familyName = 1;</code>
+     */
+    public java.lang.String getFamilyName() {
+      java.lang.Object ref = familyName_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        if (bs.isValidUtf8()) {
+          familyName_ = s;
+        }
+        return s;
+      }
+    }
+    /**
+     * <code>required string familyName = 1;</code>
+     */
+    public com.google.protobuf.ByteString
+        getFamilyNameBytes() {
+      java.lang.Object ref = familyName_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        familyName_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    // required int32 counter = 2;
+    public static final int COUNTER_FIELD_NUMBER = 2;
+    private int counter_;
+    /**
+     * <code>required int32 counter = 2;</code>
+     */
+    public boolean hasCounter() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required int32 counter = 2;</code>
+     */
+    public int getCounter() {
+      return counter_;
+    }
+
+    private void initFields() {
+      familyName_ = "";
+      counter_ = 0;
+    }
+    private byte memoizedIsInitialized = -1;
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized != -1) return isInitialized == 1;
+
+      if (!hasFamilyName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasCounter()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getSerializedSize();
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        output.writeBytes(1, getFamilyNameBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeInt32(2, counter_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    private int memoizedSerializedSize = -1;
+    public int getSerializedSize() {
+      int size = memoizedSerializedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(1, getFamilyNameBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(2, counter_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSerializedSize = size;
+      return size;
+    }
+
+    private static final long serialVersionUID = 0L;
+    @java.lang.Override
+    protected java.lang.Object writeReplace()
+        throws java.io.ObjectStreamException {
+      return super.writeReplace();
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter)) {
+        return super.equals(obj);
+      }
+      org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter other = (org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter) obj;
+
+      boolean result = true;
+      result = result && (hasFamilyName() == other.hasFamilyName());
+      if (hasFamilyName()) {
+        result = result && getFamilyName()
+            .equals(other.getFamilyName());
+      }
+      result = result && (hasCounter() == other.hasCounter());
+      if (hasCounter()) {
+        result = result && (getCounter()
+            == other.getCounter());
+      }
+      result = result &&
+          getUnknownFields().equals(other.getUnknownFields());
+      return result;
+    }
+
+    private int memoizedHashCode = 0;
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptorForType().hashCode();
+      if (hasFamilyName()) {
+        hash = (37 * hash) + FAMILYNAME_FIELD_NUMBER;
+        hash = (53 * hash) + getFamilyName().hashCode();
+      }
+      if (hasCounter()) {
+        hash = (37 * hash) + COUNTER_FIELD_NUMBER;
+        hash = (53 * hash) + getCounter();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() { return Builder.create(); }
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter prototype) {
+      return newBuilder().mergeFrom(prototype);
+    }
+    public Builder toBuilder() { return newBuilder(this); }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code EncodedColumnQualifierCounter}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder>
+       implements org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounterOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.phoenix.coprocessor.generated.PTableProtos.internal_static_EncodedColumnQualifierCounter_descriptor;
+      }
+
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.phoenix.coprocessor.generated.PTableProtos.internal_static_EncodedColumnQualifierCounter_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.class, org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.Builder.class);
+      }
+
+      // Construct using org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
+        }
+      }
+      private static Builder create() {
+        return new Builder();
+      }
+
+      public Builder clear() {
+        super.clear();
+        familyName_ = "";
+        bitField0_ = (bitField0_ & ~0x00000001);
+        counter_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000002);
+        return this;
+      }
+
+      public Builder clone() {
+        return create().mergeFrom(buildPartial());
+      }
+
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.phoenix.coprocessor.generated.PTableProtos.internal_static_EncodedColumnQualifierCounter_descriptor;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.getDefaultInstance();
+      }
+
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter build() {
+        org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter buildPartial() {
+        org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter result = new org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter(this);
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
+          to_bitField0_ |= 0x00000001;
+        }
+        result.familyName_ = familyName_;
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.counter_ = counter_;
+        result.bitField0_ = to_bitField0_;
+        onBuilt();
+        return result;
+      }
+
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter other) {
+        if (other == org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter.getDefaultInstance()) return this;
+        if (other.hasFamilyName()) {
+          bitField0_ |= 0x00000001;
+          familyName_ = other.familyName_;
+          onChanged();
+        }
+        if (other.hasCounter()) {
+          setCounter(other.getCounter());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        return this;
+      }
+
+      public final boolean isInitialized() {
+        if (!hasFamilyName()) {
+          
+          return false;
+        }
+        if (!hasCounter()) {
+          
+          return false;
+        }
+        return true;
+      }
+
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter parsedMessage = null;
+        try {
+          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedColumnQualifierCounter) e.getUnfinishedMessage();
+          throw e;
+        } finally {
+          if (parsedMessage != null) {
+            mergeFrom(parsedMessage);
+          }
+        }
+        return this;
+      }
+      private int bitField0_;
+
+      // required string familyName = 1;
+      private java.lang.Object familyName_ = "";
+      /**
+       * <code>required string familyName = 1;</code>
+       */
+      public boolean hasFamilyName() {
+        return ((bitField0_ & 0x00000001) == 0x00000001);
+      }
+      /**
+       * <code>required string familyName = 1;</code>
+       */
+      public java.lang.String getFamilyName() {
+        java.lang.Object ref = familyName_;
+        if (!(ref instanceof java.lang.String)) {
+          java.lang.String s = ((com.google.protobuf.ByteString) ref)
+              .toStringUtf8();
+          familyName_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>required string familyName = 1;</code>
+       */
+      public com.google.protobuf.ByteString
+          getFamilyNameBytes() {
+        java.lang.Object ref = familyName_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          familyName_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>required string familyName = 1;</code>
+       */
+      public Builder setFamilyName(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000001;
+        familyName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required string familyName = 1;</code>
+       */
+      public Builder clearFamilyName() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        familyName_ = getDefaultInstance().getFamilyName();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required string familyName = 1;</code>
+       */
+      public Builder setFamilyNameBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000001;
+        familyName_ = value;
+        onChanged();
+        return this;
+      }
+
+      // required int32 counter = 2;
+      private int counter_ ;
+      /**
+       * <code>required int32 counter = 2;</code>
+       */
+      public boolean hasCounter() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
+      }
+      /**
+       * <code>required int32 counter = 2;</code>
+       */
+      public int getCounter() {
+        return counter_;
+      }
+      /**
+       * <code>required int32 counter = 2;</code>
+       */
+      public Builder setCounter(int value) {
+        bitField0_ |= 0x00000002;
+        counter_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int32 counter = 2;</code>
+       */
+      public Builder clearCounter() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        counter_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:EncodedColumnQualifierCounter)
+    }
+
+    static {
+      defaultInstance = new EncodedColumnQualifierCounter(true);
+      defaultInstance.initFields();
+    }
+
+    // @@protoc_insertion_point(class_scope:EncodedColumnQualifierCounter)
   }
 
   private static com.google.protobuf.Descriptors.Descriptor
@@ -7353,6 +8348,11 @@ public final class PTableProtos {
   private static
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_PTable_fieldAccessorTable;
+  private static com.google.protobuf.Descriptors.Descriptor
+    internal_static_EncodedColumnQualifierCounter_descriptor;
+  private static
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_EncodedColumnQualifierCounter_fieldAccessorTable;
 
   public static com.google.protobuf.Descriptors.FileDescriptor
       getDescriptor() {
@@ -7374,7 +8374,7 @@ public final class PTableProtos {
       "PTableStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030\002 \003(\014",
       "\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n\rkeyByte" +
       "sCount\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001(\005\022!\n" +
-      "\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\"\365\005\n\006PTa" +
+      "\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\"\275\006\n\006PTa" +
       "ble\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tableNam" +
       "eBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.PTable" +
       "Type\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenceNumb" +
@@ -7393,11 +8393,14 @@ public final class PTableProtos {
       "rOptimizable\030\032 \001(\010\022\025\n\rtransactional\030\033 \001(" +
       "\010\022\034\n\024updateCacheFrequency\030\034 \001(\003\022\035\n\025index",
       "DisableTimestamp\030\035 \001(\003\022\031\n\021isNamespaceMap" +
-      "ped\030\036 \001(\010\022\025\n\rstorageScheme\030\037 \001(\014*A\n\nPTab" +
-      "leType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t" +
-      "\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoeni" +
-      "x.coprocessor.generatedB\014PTableProtosH\001\210" +
-      "\001\001\240\001\001"
+      "ped\030\036 \001(\010\022\025\n\rstorageScheme\030\037 \001(\014\022F\n\036enco" +
+      "dedColumnQualifierCounters\030  \003(\0132\036.Encod" +
+      "edColumnQualifierCounter\"D\n\035EncodedColum" +
+      "nQualifierCounter\022\022\n\nfamilyName\030\001 \002(\t\022\017\n" +
+      "\007counter\030\002 \002(\005*A\n\nPTableType\022\n\n\006SYSTEM\020\000" +
+      "\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020" +
+      "\004B@\n(org.apache.phoenix.coprocessor.gene" +
+      "ratedB\014PTableProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -7421,7 +8424,13 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "StorageScheme", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "StorageScheme", "EncodedColumnQualifierCounters", });
+          internal_static_EncodedColumnQualifierCounter_descriptor =
+            getDescriptor().getMessageTypes().get(3);
+          internal_static_EncodedColumnQualifierCounter_fieldAccessorTable = new
+            com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+              internal_static_EncodedColumnQualifierCounter_descriptor,
+              new java.lang.String[] { "FamilyName", "Counter", });
           return null;
         }
       };

@@ -776,12 +776,12 @@ public class FromCompiler {
                         null, 0, 0, true, position++, SortOrder.ASC, null, null, false, null, false, false, null);
                 columns.add(column);
             }
-            //TODO: samarth confirm if the storage scheme should be passed as null here. Could it be non-encoded column names?
+            //TODO: samarth confirm if the storage scheme and encode cqcounters should be passed as null here. Could it be non-encoded column names?
             PTable t = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, PTableType.SUBQUERY, null,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, null, null, columns, null, null,
                     Collections.<PTable> emptyList(), false, Collections.<PName> emptyList(), null, null, false, false,
                     false, null, null, null, false, false, 0, 0L, SchemaUtil
-                            .isNamespaceMappingEnabled(PTableType.SUBQUERY, connection.getQueryServices().getProps()), null);
+                            .isNamespaceMappingEnabled(PTableType.SUBQUERY, connection.getQueryServices().getProps()), null, null);
 
             String alias = subselectNode.getAlias();
             TableRef tableRef = new TableRef(alias, t, MetaDataProtocol.MIN_TABLE_TIMESTAMP, false);

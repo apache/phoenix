@@ -1024,23 +1024,29 @@ public class SchemaUtil {
     /**
      * Return a map of column family -> next column qualifier number to use.
      */
-    public static Map<String, Integer> getNextEncodedColumnQualifiers(PTable table) {
-        if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
-            Map<String, Integer> map = Maps.newHashMapWithExpectedSize(table.getColumns().size());
-            int max = 0; 
-            for (PColumnFamily f : table.getColumnFamilies()) {
-                for (PColumn column : f.getColumns()) {
-                    if (column.getEncodedColumnQualifier() > max) {
-                        max = column.getEncodedColumnQualifier();
-                    }
-                }
-                // column qualifiers start with 1.
-                map.put(f.getName().getString(), max + 1);
-            }
-            return map;
-        }
-        return null;
-    }
+//    public static Map<String, Integer> getNextEncodedColumnQualifiers(PTable table) {
+//        if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+//            Map<String, Integer> map = Maps.newHashMapWithExpectedSize(table.getColumns().size());
+//            int max = 0; 
+//            for (PColumnFamily f : table.getColumnFamilies()) {
+//                for (PColumn column : f.getColumns()) {
+//                    if (column.getEncodedColumnQualifier() > max) {
+//                        max = column.getEncodedColumnQualifier();
+//                    }
+//                }
+//                // column qualifiers start with 1.
+//                map.put(f.getName().getString(), max + 1);
+//            }
+//            // When a table has only primary key columns table.getColumnFamilies() will be empty.
+//            // In that case, populate the map with the next column qualifier (1) for the default column
+//            // family of the table.
+//            if (map.isEmpty()) {
+//                map.put(SchemaUtil.getEmptyColumnFamilyAsString(table), 1);
+//            }
+//            return map;
+//        }
+//        return null;
+//    }
     
     public static boolean usesEncodedColumnNames(PTable table) {
         return table.getStorageScheme() != null && table.getStorageScheme() == StorageScheme.ENCODED_COLUMN_NAMES;

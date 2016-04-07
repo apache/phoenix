@@ -93,4 +93,10 @@ message PTable {
   optional int64 indexDisableTimestamp = 29;
   optional bool isNamespaceMapped = 30;
   optional bytes storageScheme = 31;
+  repeated EncodedColumnQualifierCounter encodedColumnQualifierCounters = 32;
+}
+
+message EncodedColumnQualifierCounter {
+  required string familyName = 1;
+  required int32 counter = 2; 
 }
