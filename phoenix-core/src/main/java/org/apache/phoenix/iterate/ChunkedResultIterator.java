@@ -135,7 +135,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             String tableName = tableRef.getTable().getPhysicalName().getString();
             long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
             ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(
-                new TableResultIterator(mutationState, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, plan), chunkSize);
+                new TableResultIterator(mutationState, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, plan, DefaultParallelScanGrouper.getInstance()), chunkSize);
             resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName, plan);
         }
         return resultIterator;

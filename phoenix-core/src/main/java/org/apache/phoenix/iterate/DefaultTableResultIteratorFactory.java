@@ -29,8 +29,8 @@ public class DefaultTableResultIteratorFactory implements TableResultIteratorFac
 
     @Override
     public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef, Scan scan,
-            CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan) throws SQLException {
-        return new TableResultIterator(mutationState, scan, scanMetrics, renewLeaseThreshold, plan);
+            CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+        return new TableResultIterator(mutationState, scan, scanMetrics, renewLeaseThreshold, plan, scanGrouper);
     }
 
 }

@@ -302,15 +302,22 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             private HRegionInfo regionInfo = c.getEnvironment().getRegionInfo();
             private byte[] actualStartKey = getActualStartKey();
 
-            private boolean checkForReferenceFiles(){
-                for(byte[] family: scan.getFamilies()) {
-                    if(c.getEnvironment().getRegion().getStore(family).hasReferences()) {
+            // If there are any reference files after local index region merge some cases we might
+            // get the records less than scan start row key. This will happen when we replace the
+            // actual region start key with merge region start key. This method gives whether are
+            // there any reference files in the region or not.
+            private boolean checkForReferenceFiles() {
+                if(!ScanUtil.isLocalIndex(scan)) return false;
+                for (byte[] family : scan.getFamilies()) {
+                    if (c.getEnvironment().getRegion().getStore(family).hasReferences()) {
                         return true;
                     }
                 }
                 return false;
             }
 
+            // Get the actual scan start row of local index. This will be used to compare the row
+            // key of the results less than scan start row when there are references.
             public byte[] getActualStartKey() {
                 return ScanUtil.isLocalIndex(scan) ? ScanUtil.getActualStartRow(scan, regionInfo)
                         : null;

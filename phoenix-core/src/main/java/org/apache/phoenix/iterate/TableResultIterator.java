@@ -67,6 +67,7 @@ public class TableResultIterator implements ResultIterator {
     private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
     private final long renewLeaseThreshold;
     private final QueryPlan plan;
+    private final ParallelScanGrouper scanGrouper;
     private Tuple lastTuple = null;
     private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
@@ -86,6 +87,7 @@ public class TableResultIterator implements ResultIterator {
         this.htable = null;
         this.scan = null;
         this.plan = null;
+        this.scanGrouper = null;
     }
 
     public static enum RenewLeaseStatus {
@@ -93,11 +95,7 @@ public class TableResultIterator implements ResultIterator {
     };
 
 
-    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan) throws SQLException {
-        this(mutationState, scan, scanMetrics, renewLeaseThreshold, plan, false);
-    }
-
-    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan, boolean handleSplitRegionBoundaryFailureDuringInitialization) throws SQLException {
+    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
         this.scan = scan;
         this.scanMetrics = scanMetrics;
         PTable table = plan.getTableRef().getTable();
@@ -105,6 +103,7 @@ public class TableResultIterator implements ResultIterator {
         this.scanIterator = UNINITIALIZED_SCANNER;
         this.renewLeaseThreshold = renewLeaseThreshold;
         this.plan = plan;
+        this.scanGrouper = scanGrouper;
     }
 
     @Override
@@ -152,7 +151,7 @@ public class TableResultIterator implements ResultIterator {
                     }
                     plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
                     this.scanIterator =
-                            plan.iterator(DefaultParallelScanGrouper.getInstance(), newScan);
+                            plan.iterator(scanGrouper, newScan);
                     lastTuple = scanIterator.next();
                 } else {
                     throw e;
