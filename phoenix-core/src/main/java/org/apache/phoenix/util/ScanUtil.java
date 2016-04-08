@@ -804,4 +804,8 @@ public class ScanUtil {
         return context.getConnection().getQueryServices().isRenewingLeasesEnabled();
     }
 
+    public static void addOffsetAttribute(Scan scan, Integer offset) {
+        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, Bytes.toBytes(offset));
+    }
+
 }

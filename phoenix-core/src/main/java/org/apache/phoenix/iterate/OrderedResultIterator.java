@@ -92,6 +92,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
 
     private final int thresholdBytes;
     private final Integer limit;
+    private final Integer offset;
     private final ResultIterator delegate;
     private final List<OrderByExpression> orderByExpressions;
     private final long estimatedByteSize;
@@ -103,24 +104,28 @@ public class OrderedResultIterator implements PeekingResultIterator {
         return delegate;
     }
     
-    public OrderedResultIterator(ResultIterator delegate,
-                                 List<OrderByExpression> orderByExpressions,
-                                 int thresholdBytes, Integer limit) {
-        this(delegate, orderByExpressions, thresholdBytes, limit, 0);
+    public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
+            int thresholdBytes, Integer limit, Integer offset) {
+        this(delegate, orderByExpressions, thresholdBytes, limit, offset, 0);
     }
 
-    public OrderedResultIterator(ResultIterator delegate,
-            List<OrderByExpression> orderByExpressions, int thresholdBytes) throws SQLException {
-        this(delegate, orderByExpressions, thresholdBytes, null);
+    public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
+            int thresholdBytes) throws SQLException {
+        this(delegate, orderByExpressions, thresholdBytes, null, null);
     }
 
     public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions, 
-            int thresholdBytes, Integer limit, int estimatedRowSize) {
+            int thresholdBytes, Integer limit, Integer offset,int estimatedRowSize) {
         checkArgument(!orderByExpressions.isEmpty());
         this.delegate = delegate;
         this.orderByExpressions = orderByExpressions;
         this.thresholdBytes = thresholdBytes;
-        this.limit = limit;
+        this.offset = offset == null ? 0 : offset;
+        if (limit != null) {
+            this.limit = limit + this.offset;
+        } else {
+            this.limit = null;
+        }
         long estimatedEntrySize =
             // ResultEntry
             SizedUtil.OBJECT_SIZE + 
@@ -130,9 +135,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
             SizedUtil.OBJECT_SIZE + estimatedRowSize;
 
         // Make sure we don't overflow Long, though this is really unlikely to happen.
-        assert(limit == null || Long.MAX_VALUE / estimatedEntrySize >= limit);
+        assert(limit == null || Long.MAX_VALUE / estimatedEntrySize >= limit + this.offset);
 
-        this.estimatedByteSize = limit == null ? 0 : limit * estimatedEntrySize;
+        this.estimatedByteSize = limit == null ? 0 : (limit + this.offset) * estimatedEntrySize;
     }
 
     public Integer getLimit() {
@@ -202,13 +207,20 @@ public class OrderedResultIterator implements PeekingResultIterator {
         List<Expression> expressions = Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
         final Comparator<ResultEntry> comparator = buildComparator(orderByExpressions);
         try{
-            final MappedByteBufferSortedQueue queueEntries = new MappedByteBufferSortedQueue(comparator, limit, thresholdBytes);
+            final MappedByteBufferSortedQueue queueEntries = new MappedByteBufferSortedQueue(comparator, limit,
+                    thresholdBytes);
             resultIterator = new PeekingResultIterator() {
                 int count = 0;
+
                 @Override
                 public Tuple next() throws SQLException {
                     ResultEntry entry = queueEntries.poll();
-                    if (entry == null || (limit != null && ++count > limit)) {
+                    while (entry != null && offset != null && count < offset) {
+                        count++;
+                        if (entry.getResult() == null) { return null; }
+                        entry = queueEntries.poll();
+                    }
+                    if (entry == null || (limit != null && count++ > limit)) {
                         resultIterator.close();
                         resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
                         return null;
@@ -218,13 +230,15 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 
                 @Override
                 public Tuple peek() throws SQLException {
-                    if (limit != null && count > limit) {
-                        return null;
+                    ResultEntry entry = queueEntries.peek();
+                    while (entry != null && offset != null && count < offset) {
+                        entry = queueEntries.poll();
+                        count++;
+                        if (entry == null) { return null; }
                     }
-                    ResultEntry entry =  queueEntries.peek();
-                    if (entry == null) {
-                        return null;
-                    }
+                    if (limit != null && count > limit) { return null; }
+                    entry = queueEntries.peek();
+                    if (entry == null) { return null; }
                     return entry.getResult();
                 }
 
@@ -273,13 +287,15 @@ public class OrderedResultIterator implements PeekingResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         delegate.explain(planSteps);
-        planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW"  + (limit == 1 ? "" : "S"))  + " SORTED BY " + orderByExpressions.toString());
+        planSteps.add("CLIENT" + (offset != null ? "" : " OFFSET " + offset)
+                + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S")) + " SORTED BY "
+                + orderByExpressions.toString());
     }
 
     @Override
     public String toString() {
         return "OrderedResultIterator [thresholdBytes=" + thresholdBytes
-                + ", limit=" + limit + ", delegate=" + delegate
+                + ", limit=" + limit + ", offset=" + offset + ", delegate=" + delegate
                 + ", orderByExpressions=" + orderByExpressions
                 + ", estimatedByteSize=" + estimatedByteSize
                 + ", resultIterator=" + resultIterator + ", byteSize="

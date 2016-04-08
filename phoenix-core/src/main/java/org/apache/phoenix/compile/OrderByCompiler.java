@@ -82,7 +82,8 @@ public class OrderByCompiler {
      */
     public static OrderBy compile(StatementContext context,
                                   SelectStatement statement,
-                                  GroupBy groupBy, Integer limit, 
+                                  GroupBy groupBy, Integer limit,
+                                  Integer offset,
                                   RowProjector rowProjector,
                                   TupleProjector tupleProjector,
                                   boolean isInRowKeyOrder) throws SQLException {

@@ -194,6 +194,11 @@ public class ListJarsQueryPlan implements QueryPlan {
     }
 
     @Override
+    public Integer getOffset() {
+        return null;
+    }
+
+    @Override
     public OrderBy getOrderBy() {
         return OrderBy.EMPTY_ORDER_BY;
     }
