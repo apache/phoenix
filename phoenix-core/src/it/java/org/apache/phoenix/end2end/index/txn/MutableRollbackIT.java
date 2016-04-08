@@ -278,7 +278,7 @@ public class MutableRollbackIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             //assert no rows exists in indexName2
-            rs = stmt.executeQuery("select * from " + fullTableName2);
+            rs = stmt.executeQuery("select /*+ INDEX(" + indexName1 + ")*/ k, v1 from " + fullTableName2);
             assertFalse(rs.next());
             
             stmt.executeUpdate("upsert into " + fullTableName1 + " values('x', 'z', 'a')");

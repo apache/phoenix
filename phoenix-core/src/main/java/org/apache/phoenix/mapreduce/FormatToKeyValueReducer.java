@@ -66,6 +66,7 @@ public class FormatToKeyValueReducer
     protected KeyValueBuilder builder;
     List<List<Pair<byte[], byte[]>>> columnIndexes;
     List<ImmutableBytesPtr> emptyFamilyName;
+    List<Pair<byte[], byte[]>> emptyKeyValueQualifier;
 
 
     @Override
@@ -87,7 +88,8 @@ public class FormatToKeyValueReducer
             logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
 
             columnIndexes = new ArrayList<>(tableNames.size());
-            emptyFamilyName = new ArrayList<>();
+            emptyFamilyName = new ArrayList<>(logicalNames.size());
+            emptyKeyValueQualifier = new ArrayList<>(logicalNames.size()); 
             initColumnsMap(conn);
         } catch (SQLException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -98,6 +100,7 @@ public class FormatToKeyValueReducer
         for (String tableName : logicalNames) {
             PTable table = PhoenixRuntime.getTable(conn, tableName);
             emptyFamilyName.add(SchemaUtil.getEmptyColumnFamilyPtr(table));
+            emptyKeyValueQualifier.add(EncodedColumnsUtil.getEmptyKeyValueInfo(table));
             List<PColumn> cls = table.getColumns();
             List<Pair<byte[], byte[]>> list = new ArrayList<>(cls.size());
             for (int i = 0; i < cls.size(); i++) {
@@ -153,10 +156,11 @@ public class FormatToKeyValueReducer
                 }
                 map.add(kv);
             }
+            Pair<byte[], byte[]> emptyKeyValue = emptyKeyValueQualifier.get(tableIndex);
             //FIXME: samarth need to supply the right empty column qualifier here.
             KeyValue empty = builder.buildPut(key.getRowkey(),
                     emptyFamilyName.get(tableIndex),
-                    QueryConstants.EMPTY_COLUMN_BYTES_PTR, ByteUtil.EMPTY_BYTE_ARRAY_PTR);
+                    new ImmutableBytesPtr(emptyKeyValue.getFirst()), new ImmutableBytesPtr(emptyKeyValue.getSecond()));
             map.add(empty);
             Closeables.closeQuietly(input);
         }

@@ -33,6 +33,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODED_COLUMN_QUALIFIER_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
@@ -274,6 +275,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final KeyValue IS_NAMESPACE_MAPPED_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
     private static final KeyValue STORAGE_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORAGE_SCHEME_BYTES);
+    private static final KeyValue QUALIIFIER_COUNTER_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_QUALIFIER_COUNTER_BYTES);
     
     private static final List<KeyValue> TABLE_KV_COLUMNS = Arrays.<KeyValue>asList(
             EMPTY_KEYVALUE_KV,
@@ -930,37 +932,28 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               break;
           }
           Cell colKv = results.get(LINK_TYPE_INDEX);
-          Cell qualifierCounterKv = null;
-          if (storageScheme == StorageScheme.ENCODED_COLUMN_NAMES) {
-              int index = tableType == PTableType.VIEW ? 1 : 0;
-              qualifierCounterKv = results.get(index);
-          }
           if (colKv != null) {
               int colKeyLength = colKv.getRowLength();
               PName colName = newPName(colKv.getRowArray(), colKv.getRowOffset() + offset, colKeyLength-offset);
               int colKeyOffset = offset + colName.getBytes().length + 1;
               PName famName = newPName(colKv.getRowArray(), colKv.getRowOffset() + colKeyOffset, colKeyLength-colKeyOffset);
-              if (colName.getString().isEmpty() && famName != null) {
-                  LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
-                  if (linkType == LinkType.INDEX_TABLE) {
-                      addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
-                  } else if (linkType == LinkType.PHYSICAL_TABLE) {
-                      physicalTables.add(famName);
-                  }
-              } else {
+                if (colName.getString().isEmpty() && famName != null) {
+                    if (isQualifierCounterKv(colKv)) {
+                        Integer counter = (Integer)PInteger.INSTANCE.toObject(colKv.getValueArray(),
+                                colKv.getValueOffset(), colKv.getValueLength());
+                        encodedColumnQualifierCounters.put(famName.getString(), counter);
+                    } else {
+                        LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
+                        if (linkType == LinkType.INDEX_TABLE) {
+                            addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
+                        } else if (linkType == LinkType.PHYSICAL_TABLE) {
+                            physicalTables.add(famName);
+                        }
+                    }
+                } else {
                   addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
               }
           } 
-          if (qualifierCounterKv != null) {
-              int length = qualifierCounterKv.getRowLength();
-              PName colName = newPName(qualifierCounterKv.getRowArray(), qualifierCounterKv.getRowOffset() + offset, length - offset);
-              int colKeyOffset = offset + colName.getBytes().length + 1;
-              PName famName = newPName(qualifierCounterKv.getRowArray(), qualifierCounterKv.getRowOffset() + colKeyOffset, length - colKeyOffset);
-              if (colName.getString().isEmpty() && famName != null) {
-                  Integer counter = (Integer)PInteger.INSTANCE.toObject(qualifierCounterKv.getValueArray(), qualifierCounterKv.getValueOffset(), qualifierCounterKv.getValueLength());
-                  encodedColumnQualifierCounters.put(famName.getString(), counter);
-              }
-          }
         }
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getPhysicalTableName(
                 Bytes.toBytes(SchemaUtil.getTableName(schemaName.getBytes(), tableName.getBytes())), isNamespaceMapped)
@@ -1006,6 +999,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         PName schemaName = newPName(keyBuffer, keyOffset + tenantIdLength + 1, keyLength - tenantIdLength - 1);
         long timeStamp = keyValue.getTimestamp();
         return new PSchema(schemaName.getString(), timeStamp);
+    }
+
+    private static boolean isQualifierCounterKv(Cell colKv) {
+        return Bytes.compareTo(colKv.getQualifierArray(), colKv.getQualifierOffset(),
+                colKv.getQualifierLength(), QUALIIFIER_COUNTER_KV.getQualifierArray(),
+                QUALIIFIER_COUNTER_KV.getQualifierOffset(), QUALIIFIER_COUNTER_KV.getQualifierLength()) == 0;
     }
 
     private PFunction getFunction(RegionScanner scanner, final boolean isReplace, long clientTimeStamp, List<Mutation> deleteMutationsForReplace)
@@ -3244,10 +3243,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         tableMetadata = new ArrayList<Mutation>(tableMetadata);
                         // insert an empty KV to trigger time stamp update on data table row
                         Put p = new Put(dataTableKey);
-                        // Decide on what column qualifier to use for empty key value.
-                        PTable currentTable = doGetTable(key, HConstants.LATEST_TIMESTAMP, rowLock);
-                        Pair<byte[], byte[]> emptyKeyValuePair = EncodedColumnsUtil.getEmptyKeyValueInfo(currentTable);
-                        p.add(TABLE_FAMILY_BYTES, emptyKeyValuePair.getFirst(), timeStamp, emptyKeyValuePair.getSecond());
+                        p.add(TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, timeStamp, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
                         tableMetadata.add(p);
                     }
                     boolean setRowKeyOrderOptimizableCell = newState == PIndexState.BUILDING && !rowKeyOrderOptimizable;

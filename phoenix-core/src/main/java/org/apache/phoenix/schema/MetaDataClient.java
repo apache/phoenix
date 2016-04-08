@@ -41,7 +41,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODED_COLUMN_QUALIFIER_COUNTER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
@@ -294,7 +294,7 @@ public class MetaDataClient {
             TABLE_SCHEM + "," +
             TABLE_NAME + "," +
             COLUMN_FAMILY + "," +
-            ENCODED_COLUMN_QUALIFIER_COUNTER + 
+            COLUMN_QUALIFIER_COUNTER + 
             ") VALUES (?, ?, ?, ?)";
     private static final String INCREMENT_SEQ_NUM =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
@@ -1966,12 +1966,12 @@ public class MetaDataClient {
                  * the column qualifiers that were used when populating the hbase table.
                  */
                 byte[] tableNameBytes = SchemaUtil.getTableNameAsBytes(schemaName, tableName);
-                boolean hbaseTableAlreadyExists = true;
+                boolean tableExists = true;
                 try (HBaseAdmin admin = connection.getQueryServices().getAdmin()) {
                     try {
                         admin.getTableDescriptor(tableNameBytes);
                     } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                        hbaseTableAlreadyExists = false;
+                        tableExists = false;
                     }
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -1980,7 +1980,7 @@ public class MetaDataClient {
                 }
                 if (parent != null) {
                     storageScheme = parent.getStorageScheme();
-                } else if (hbaseTableAlreadyExists) {
+                } else if (tableExists) {
                     storageScheme = StorageScheme.NON_ENCODED_COLUMN_NAMES;
                 } else {
                     storageScheme = StorageScheme.ENCODED_COLUMN_NAMES;
