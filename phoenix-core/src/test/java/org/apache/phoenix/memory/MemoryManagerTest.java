@@ -23,8 +23,6 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.spy;
 
-import com.google.common.base.Stopwatch;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
@@ -98,7 +96,6 @@ public class MemoryManagerTest {
             public void run() {
                 sleepFor(20);
                 // Will require waiting for a bit of time before t1 frees the requested memory
-                Stopwatch watch = new Stopwatch().start();
                 MemoryChunk c3 = rmm2.allocate(50);
                 Mockito.verify(gmm, atLeastOnce()).waitForBytesToFree(anyLong(), anyLong());
                 c3.close();

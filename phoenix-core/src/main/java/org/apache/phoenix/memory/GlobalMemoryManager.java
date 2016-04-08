@@ -85,7 +85,8 @@ public class GlobalMemoryManager implements MemoryManager {
         return nBytes;
     }
 
-    @VisibleForTesting void waitForBytesToFree(long minBytes, long startTimeMs) {
+    @VisibleForTesting
+    void waitForBytesToFree(long minBytes, long startTimeMs) {
         try {
             logger.debug("Waiting for " + (usedMemoryBytes + minBytes - maxMemoryBytes) + " bytes to be free " + startTimeMs);
             long remainingWaitTimeMs = maxWaitMs - (System.currentTimeMillis() - startTimeMs);
