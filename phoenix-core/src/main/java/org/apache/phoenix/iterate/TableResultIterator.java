@@ -69,7 +69,6 @@ public class TableResultIterator implements ResultIterator {
     private final QueryPlan plan;
     private Tuple lastTuple = null;
     private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-    private boolean handleSplitRegionBoundaryFailureDuringInitialization;
 
     @GuardedBy("this")
     private ResultIterator scanIterator;
@@ -106,7 +105,6 @@ public class TableResultIterator implements ResultIterator {
         this.scanIterator = UNINITIALIZED_SCANNER;
         this.renewLeaseThreshold = renewLeaseThreshold;
         this.plan = plan;
-        this.handleSplitRegionBoundaryFailureDuringInitialization = handleSplitRegionBoundaryFailureDuringInitialization;
     }
 
     @Override
@@ -137,12 +135,16 @@ public class TableResultIterator implements ResultIterator {
             try {
                 throw ServerUtil.parseServerException(e);
             } catch(StaleRegionBoundaryCacheException e1) {
-                if(scan.getAttribute(NON_AGGREGATE_QUERY)!=null) {
+                if(ScanUtil.isNonAggregateScan(scan)) {
+                    // For non aggregate queries if we get stale region boundary exception we can
+                    // continue scanning from the next value of lasted fetched result.
                     Scan newScan = ScanUtil.newScan(scan);
                     if(lastTuple != null) {
                         lastTuple.getKey(ptr);
                         byte[] startRowSuffix = ByteUtil.copyKeyBytesIfNecessary(ptr);
                         if(ScanUtil.isLocalIndex(newScan)) {
+                            // If we just set scan start row suffix then server side we prepare
+                            // actual scan boundaries by prefixing the region start key.
                             newScan.setAttribute(SCAN_START_ROW_SUFFIX, ByteUtil.nextKey(startRowSuffix));
                         } else {
                             newScan.setStartRow(ByteUtil.nextKey(startRowSuffix));
@@ -170,21 +172,8 @@ public class TableResultIterator implements ResultIterator {
                 this.scanIterator =
                         new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
             } catch (IOException e) {
-                if(handleSplitRegionBoundaryFailureDuringInitialization) {
-                    try {
-                        throw ServerUtil.parseServerException(e);
-                    } catch(StaleRegionBoundaryCacheException s) {
-                        if(scan.getAttribute(NON_AGGREGATE_QUERY)!=null) {
-                            plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
-                            this.scanIterator =
-                                    plan.iterator(DefaultParallelScanGrouper.getInstance(), scan);
-                        }
-                        
-                    }
-                } else {
-                    Closeables.closeQuietly(htable);
-                    throw ServerUtil.parseServerException(e);
-                }
+                Closeables.closeQuietly(htable);
+                throw ServerUtil.parseServerException(e);
             }
         }
     }

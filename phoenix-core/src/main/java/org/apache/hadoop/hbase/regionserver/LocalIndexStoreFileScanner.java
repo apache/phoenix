@@ -227,20 +227,21 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
         KeyValue keyToSeek = kv;
         if (reader.isTop()) {
-            if (getComparator().compare(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength(), reader.getSplitkey(), 0, reader.getSplitkey().length) >= 0) {
-                keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
+            if(getComparator().compare(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength(), reader.getSplitkey(), 0, reader.getSplitkey().length) < 0){
+                return seekOrReseekToProperKey(isSeek, new KeyValue.KeyOnlyKeyValue(reader.getFirstKey()));
             }
+            keyToSeek = getKeyPresentInHFiles(kv.getBuffer());
             return seekOrReseekToProperKey(isSeek, keyToSeek);
         } else {
             if (getComparator().compare(kv.getBuffer(), kv.getKeyOffset(), kv.getKeyLength(), reader.getSplitkey(), 0, reader.getSplitkey().length) >= 0) {
                 // we would place the scanner in the second half.
                 // it might be an error to return false here ever...
-                boolean res = seekToPreviousRow(new KeyValue.KeyOnlyKeyValue(reader.getSplitkey()));
+                boolean res = super.seekToPreviousRow(new KeyValue.KeyOnlyKeyValue(reader.getSplitkey()));
                 if (!res) {
                     throw new IOException(
                             "Seeking for a key in bottom of file, but key exists in top of file, failed on seekToPreviousRow(midkey)");
                 }
-                return res;
+                return super.next() != null;
             }
         }
         return seekOrReseekToProperKey(isSeek, keyToSeek);

@@ -727,7 +727,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            for (int i = 1; i < 2; i++) {
+            for (int i = 1; i < 5; i++) {
                 admin.split(Bytes.toBytes(TestUtil.DEFAULT_DATA_TABLE_NAME), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
                 List<HRegionInfo> regionsOfUserTable =
                         MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),

@@ -24,7 +24,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
@@ -210,10 +209,7 @@ public class ScanPlan extends BaseQueryPlan {
             scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
         } else {
             if ((isSalted || table.getIndexType() == IndexType.LOCAL)
-                    && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)
-                    || (table.getIndexType() == IndexType.LOCAL && (Bytes.compareTo(
-                        scan.getStartRow(), this.context.getScan().getStartRow()) != 0 || Bytes
-                            .compareTo(scan.getStopRow(), this.context.getScan().getStopRow()) != 0))) {
+                    && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)) {
                 /*
                  * For salted tables or local index, a merge sort is needed if: 
                  * 1) The config phoenix.query.force.rowkeyorder is set to true 

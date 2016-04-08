@@ -39,10 +39,7 @@ import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.DoNotRetryIOException;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -426,14 +423,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         }
                     } while (hasMore && groupByCache.size() < limit);
                 }
-            }  catch(NotServingRegionException e){
-                if(ScanUtil.isLocalIndex(scan)) {
-                    Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
-                    throw new DoNotRetryIOException(cause.getMessage(), cause);
-                } else {
-                    throw e;
-                }
-                    } finally {
+            }  finally {
                 region.closeRegionOperation();
             }
 
@@ -513,13 +503,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                             // Do rowCount + 1 b/c we don't have to wait for a complete
                             // row in the case of a DISTINCT with a LIMIT
                         } while (hasMore && !aggBoundary && !atLimit);
-                    }
-                } catch(NotServingRegionException e){
-                    if(ScanUtil.isLocalIndex(scan)) {
-                        Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
-                        throw new DoNotRetryIOException(cause.getMessage(), cause);
-                    } else {
-                        throw e;
                     }
                 } finally {
                     region.closeRegionOperation();

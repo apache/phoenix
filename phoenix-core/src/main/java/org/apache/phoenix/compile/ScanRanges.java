@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 
@@ -231,7 +230,7 @@ public class ScanRanges {
         return temp;
     }
     
-    private static byte[] stripPrefix(byte[] key, int keyOffset) {
+    public static byte[] stripPrefix(byte[] key, int keyOffset) {
         if (key.length == 0) {
             return key;
         }
@@ -240,7 +239,7 @@ public class ScanRanges {
         return temp;
     }
     
-    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary,  byte[] regionStartKey, byte[] regionEndKey) {
+    public Scan intersectScan(Scan scan, final byte[] originalStartKey, final byte[] originalStopKey, final int keyOffset, boolean crossesRegionBoundary) {
         byte[] startKey = originalStartKey;
         byte[] stopKey = originalStopKey;
         if (stopKey.length > 0 && Bytes.compareTo(startKey, stopKey) >= 0) { 
@@ -387,29 +386,9 @@ public class ScanRanges {
         if (scanStopKey.length > 0 && Bytes.compareTo(scanStartKey, scanStopKey) >= 0) { 
             return null; 
         }
-        if(ScanUtil.isLocalIndex(scan)) {
-            newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
-            newScan.setStartRow(regionStartKey);
-            newScan.setStopRow(regionEndKey);
-            if (keyOffset > 0 ) {
-                newScan.setAttribute(SCAN_START_ROW_SUFFIX, stripPrefix(scanStartKey, keyOffset));
-            } else {
-                newScan.setAttribute(SCAN_START_ROW_SUFFIX, scanStartKey);
-            }
-            if (keyOffset > 0) {
-                newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, stripPrefix(scanStopKey, keyOffset));
-            } else {
-                newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, scanStopKey);
-            }
-        } else {
-            newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
-            newScan.setStartRow(scanStartKey);
-            newScan.setStopRow(scanStopKey);
-        }
-        if(keyOffset > 0) {
-            newScan.setAttribute(STARTKEY_OFFSET, Bytes.toBytes(keyOffset));
-        }
-
+        newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
+        newScan.setStartRow(scanStartKey);
+        newScan.setStopRow(scanStopKey);
         return newScan;
     }
 
@@ -436,7 +415,7 @@ public class ScanRanges {
         }
         
         //return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
-        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset, crossesRegionBoundary, lowerInclusiveKey, upperExclusiveKey) == HAS_INTERSECTION;
+        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset, crossesRegionBoundary) == HAS_INTERSECTION;
     }
     
     public SkipScanFilter getSkipScanFilter() {

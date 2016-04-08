@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -330,7 +332,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         this.plan = plan;
         this.scanGrouper = scanGrouper;
         StatementContext context = plan.getContext();
-        this.scan = scan == null ? context.getScan() : scan;
+        this.scan = scan;
         // Clone MutationState as the one on the connection will change if auto commit is on
         // yet we need the original one with the original transaction from TableResultIterator.
         this.mutationState = new MutationState(context.getConnection().getMutationState());
@@ -465,14 +467,66 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
 
     private List<List<Scan>> getParallelScans() throws SQLException {
-        if (scan == null
-                || (ScanUtil.isLocalIndex(scan)
-                        && Bytes.compareTo(context.getScan().getStartRow(), scan.getStartRow()) == 0 && Bytes
-                        .compareTo(context.getScan().getStopRow(), scan.getStopRow()) == 0)) {
-            return getParallelScans(EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
-        } else {
-            return getParallelScans(scan.getStartRow(), scan.getStopRow());
+        // If the scan boundaries are not matching with scan in context that means we need to get
+        // parallel scans for the chunk after split/merge.
+        if (!ScanUtil.isConextScan(scan, context)) {
+            return getParallelScans(scan);
         }
+        return getParallelScans(EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
+    }
+
+    /**
+     * Get parallel scans of the specified scan boundaries. This can be used for getting parallel
+     * scans when there is split/merges while scanning a chunk. In this case we need not go by all
+     * the regions or guideposts.
+     * @param scan
+     * @return
+     * @throws SQLException
+     */
+    private List<List<Scan>> getParallelScans(Scan scan) throws SQLException {
+        List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
+                .getAllTableRegions(physicalTableName);
+        List<byte[]> regionBoundaries = toBoundaries(regionLocations);
+        int regionIndex = 0;
+        int stopIndex = regionBoundaries.size();
+        if (scan.getStartRow().length > 0) {
+            regionIndex = getIndexContainingInclusive(regionBoundaries, scan.getStartRow());
+        }
+        if (scan.getStopRow().length > 0) {
+            stopIndex = Math.min(stopIndex, regionIndex + getIndexContainingExclusive(regionBoundaries.subList(regionIndex, stopIndex), scan.getStopRow()));
+        }
+        List<List<Scan>> parallelScans = Lists.newArrayListWithExpectedSize(stopIndex - regionIndex + 1);
+        List<Scan> scans = Lists.newArrayListWithExpectedSize(2);
+        while (regionIndex <= stopIndex) {
+            HRegionLocation regionLocation = regionLocations.get(regionIndex);
+            HRegionInfo regionInfo = regionLocation.getRegionInfo();
+            Scan newScan = ScanUtil.newScan(scan);
+            byte[] endKey;
+            if (regionIndex == stopIndex) {
+                endKey = scan.getStopRow();
+            } else {
+                endKey = regionBoundaries.get(regionIndex);
+            }
+            if(ScanUtil.isLocalIndex(scan)) {
+                ScanUtil.setLocalIndexAttributes(newScan, 0, regionInfo.getStartKey(),
+                    regionInfo.getEndKey(), newScan.getAttribute(SCAN_START_ROW_SUFFIX),
+                    newScan.getAttribute(SCAN_STOP_ROW_SUFFIX));
+            } else {
+                if(Bytes.compareTo(scan.getStartRow(), regionInfo.getStartKey())<=0) {
+                    newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionInfo.getStartKey());
+                    newScan.setStartRow(regionInfo.getStartKey());
+                }
+                if(scan.getStopRow().length == 0 || (regionInfo.getEndKey().length != 0 && Bytes.compareTo(scan.getStopRow(), regionInfo.getEndKey())>0)) {
+                    newScan.setStopRow(regionInfo.getEndKey());
+                }
+            }
+            scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
+            regionIndex++;
+        }
+        if (!scans.isEmpty()) { // Add any remaining scans
+            parallelScans.add(scans);
+        }
+        return parallelScans;
     }
 
     /**
@@ -564,55 +618,32 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 } else {
                     endKey = regionBoundaries.get(regionIndex);
                 }
-                if (Bytes.compareTo(scan.getStartRow(), context.getScan().getStartRow()) != 0
-                     || Bytes.compareTo(scan.getStopRow(), context.getScan().getStopRow()) != 0) {
-                    Scan newScan = ScanUtil.newScan(scan);
-                    if(ScanUtil.isLocalIndex(scan)) {
-                        newScan.setStartRow(regionInfo.getStartKey());
-                        newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionInfo.getStartKey());
-                        newScan.setStopRow(regionInfo.getEndKey());
-                        newScan.setAttribute(EXPECTED_UPPER_REGION_KEY, regionInfo.getEndKey());
-                    } else {
-                        if(Bytes.compareTo(scan.getStartRow(), regionInfo.getStartKey())<=0) {
-                            newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionInfo.getStartKey());
-                            newScan.setStartRow(regionInfo.getStartKey());
-                        }
-                        if(scan.getStopRow().length == 0 || (regionInfo.getEndKey().length != 0 && Bytes.compareTo(scan.getStopRow(), regionInfo.getEndKey())>0)) {
-                            newScan.setStopRow(regionInfo.getEndKey());
-                        }
-                    }   
-                    scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
-                 } else {
-                     if (isLocalIndex) {
-                         endRegionKey = regionInfo.getEndKey();
-                         keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
-                     }
-                     try {
-                         while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
-                             Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
-                                     false, regionInfo.getStartKey(), regionInfo.getEndKey());
-                             estimatedRows += gps.getRowCounts().get(guideIndex);
-                             estimatedSize += gps.getByteCounts().get(guideIndex);
-                             scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
-                             currentKeyBytes = currentGuidePost.copyBytes();
-                             currentGuidePost = PrefixByteCodec.decode(decoder, input);
-                             currentGuidePostBytes = currentGuidePost.copyBytes();
-                             guideIndex++;
-                         }
-                     } catch (EOFException e) {}
-                     Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true, regionInfo.getStartKey(), regionInfo.getEndKey());
-                     if (isLocalIndex) {
-                         if (newScan != null) {
-                             newScan.setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
-                         } else if (!scans.isEmpty()) {
-                             scans.get(scans.size()-1).setAttribute(EXPECTED_UPPER_REGION_KEY, endRegionKey);
-                         }
-                     }
-                     scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
-                     currentKeyBytes = endKey;
-                 }
-                
-
+                if (isLocalIndex) {
+                    endRegionKey = regionInfo.getEndKey();
+                    keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
+                }
+                try {
+                    while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
+                        Scan newScan =
+                                scanRanges.intersectScan(scan, currentKeyBytes,
+                                    currentGuidePostBytes, keyOffset, false);
+                        ScanUtil.setLocalIndexAttributes(newScan, keyOffset,
+                            regionInfo.getStartKey(), regionInfo.getEndKey(),
+                            newScan.getStartRow(), newScan.getStopRow());
+                        estimatedRows += gps.getRowCounts().get(guideIndex);
+                        estimatedSize += gps.getByteCounts().get(guideIndex);
+                        scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                        currentKeyBytes = currentGuidePost.copyBytes();
+                        currentGuidePost = PrefixByteCodec.decode(decoder, input);
+                        currentGuidePostBytes = currentGuidePost.copyBytes();
+                        guideIndex++;
+                    }
+                } catch (EOFException e) {}
+                Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, endKey, keyOffset, true);
+                ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
+                    regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
+                scans = addNewScan(parallelScans, scans, newScan, endKey, true, regionLocation);
+                currentKeyBytes = endKey;
                 regionIndex++;
             }
             if (hasGuidePosts) {
@@ -707,11 +738,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                         previousScan.getScan().getStopRow()) < 0)
                                 || (isReverse && Bytes.compareTo(scanPair.getFirst().getAttribute(SCAN_ACTUAL_START_ROW),
                                         previousScan.getScan().getStopRow()) > 0)
-                                || (scanPair.getFirst().getAttribute(EXPECTED_UPPER_REGION_KEY) != null
-                                        && previousScan.getScan().getAttribute(EXPECTED_UPPER_REGION_KEY) != null
-                                        && Bytes.compareTo(scanPair.getFirst().getAttribute(EXPECTED_UPPER_REGION_KEY),
-                                                previousScan.getScan()
-                                                        .getAttribute(EXPECTED_UPPER_REGION_KEY)) == 0))) {
+                                || (Bytes.compareTo(scanPair.getFirst().getStopRow(),
+                                                previousScan.getScan().getStopRow()) == 0))) {
                             continue;
                         }
                         PeekingResultIterator iterator = scanPair.getSecond().get(timeOutForScan, TimeUnit.MILLISECONDS);
@@ -730,9 +758,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             Scan oldScan = scanPair.getFirst();
                             byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
                             byte[] endKey = oldScan.getStopRow();
-                            if (isLocalIndex) {
-                                endKey = oldScan.getAttribute(EXPECTED_UPPER_REGION_KEY);
-                            }
                             
                             List<List<Scan>> newNestedScans = this.getParallelScans(startKey, endKey);
                             // Add any concatIterators that were successful so far

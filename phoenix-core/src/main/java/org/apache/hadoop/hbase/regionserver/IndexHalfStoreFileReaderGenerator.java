@@ -162,7 +162,6 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             } catch (ClassNotFoundException e) {
                 throw new IOException(e);
             } catch (SQLException e) {
-                e.printStackTrace();
                 throw new IOException(e);
             } finally {
                 if (conn != null) {

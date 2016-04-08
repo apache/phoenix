@@ -629,15 +629,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
             splitDuringScan(conn1, strings, admin, isReverse);
-            props = new Properties();
-            props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "10");
-            props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(4));
-            try(Connection conn = DriverManager.getConnection(getUrl(), props)){
-                dropTable(admin, conn);
-                createTableAndLoadData(conn, strings, isReverse);
-                splitDuringScan(conn, strings, admin, isReverse);
-                dropTable(admin, conn);
-            }
+            dropTable(admin, conn1);
        } 
     }
 
@@ -770,18 +762,14 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         String query = "SELECT t_id,k1,v1 FROM " + tableName;
         rs = conn1.createStatement().executeQuery(query);
-    
+        String[] tIdColumnValues = new String[26]; 
+        String[] v1ColumnValues = new String[26];
+        int[] k1ColumnValue = new int[26];
         for (int j = 0; j < 5; j++) {
             assertTrue(rs.next());
-            if(isReverse) {
-                assertEquals(strings[j], rs.getString("t_id"));
-                assertEquals(j, rs.getInt("k1"));
-                assertEquals(strings[25-j], rs.getString("V1"));
-            } else {
-                assertEquals(strings[25 - j], rs.getString("t_id"));
-                assertEquals(25 - j, rs.getInt("k1"));
-                assertEquals(strings[j], rs.getString("V1"));
-            }
+            tIdColumnValues[j] = rs.getString("t_id");
+            k1ColumnValue[j] = rs.getInt("k1");
+            v1ColumnValues[j] = rs.getString("V1");
         }
 
         String[] splitKeys = new String[2];
@@ -817,15 +805,17 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
         }
         for (int j = 5; j < 26; j++) {
             assertTrue(rs.next());
-            if(isReverse) {
-                assertEquals(strings[j], rs.getString("t_id"));
-                assertEquals(j, rs.getInt("k1"));
-                assertEquals(strings[25-j], rs.getString("V1"));
-            } else {
-                assertEquals(strings[25 - j], rs.getString("t_id"));
-                assertEquals(25 - j, rs.getInt("k1"));
-                assertEquals(strings[j], rs.getString("V1"));
-            }
+            tIdColumnValues[j] = rs.getString("t_id");
+            k1ColumnValue[j] = rs.getInt("k1");
+            v1ColumnValues[j] = rs.getString("V1");
+        }
+        Arrays.sort(tIdColumnValues);
+        Arrays.sort(v1ColumnValues);
+        Arrays.sort(k1ColumnValue);
+        assertTrue(Arrays.equals(strings, tIdColumnValues));
+        assertTrue(Arrays.equals(strings, v1ColumnValues));
+        for(int i=0;i<26;i++) {
+            assertEquals(i, k1ColumnValue[i]);
         }
         assertFalse(rs.next());
         return regionsOfUserTable;

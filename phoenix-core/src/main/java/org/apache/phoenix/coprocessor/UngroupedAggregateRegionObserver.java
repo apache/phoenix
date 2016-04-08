@@ -41,11 +41,9 @@ import java.util.concurrent.Callable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -527,13 +525,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         hasAny = true;
                     }
                 } while (hasMore);
-            }
-        } catch(NotServingRegionException e){
-            if(ScanUtil.isLocalIndex(scan)) {
-                Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
-                throw new DoNotRetryIOException(cause.getMessage(), cause);
-            } else {
-                throw e;
             }
         } finally {
             try {
