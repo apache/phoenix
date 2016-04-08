@@ -2,6 +2,9 @@ package org.apache.phoenix.calcite.metadata;
 
 import org.apache.calcite.plan.volcano.RelSubset;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.metadata.BuiltInMetadata;
+import org.apache.calcite.rel.metadata.MetadataDef;
+import org.apache.calcite.rel.metadata.MetadataHandler;
 import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
@@ -13,14 +16,19 @@ import org.apache.phoenix.calcite.rel.PhoenixAbstractSemiJoin;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.calcite.rel.PhoenixUnion;
 
-public class PhoenixRelMdSize {
+public class PhoenixRelMdSize implements MetadataHandler<BuiltInMetadata.Size> {
     /** Source for
      * {@link org.apache.calcite.rel.metadata.BuiltInMetadata.Size}. */
     public static final RelMetadataProvider SOURCE =
         ReflectiveRelMetadataProvider.reflectiveSource(new PhoenixRelMdSize(),
             BuiltInMethod.AVERAGE_ROW_SIZE.method);
 
-    protected PhoenixRelMdSize() { }
+    private PhoenixRelMdSize() { }
+    
+    @Override
+    public MetadataDef<BuiltInMetadata.Size> getDef() {
+        return BuiltInMetadata.Size.DEF;
+    }
     
     public Double averageRowSize(PhoenixUnion rel, RelMetadataQuery mq) {
         double rowSize = 0;
