@@ -143,7 +143,7 @@ public class UnnestArrayPlanTest {
         List<Object[]> ret = Lists.newArrayList();
         for (Object[] array : arrays) {
             for (int i = 0; i < array.length; i++) {
-                ret.add(new Object[] {array[i], i});
+                ret.add(new Object[] {array[i], i + 1});
             }
         }
         return ret;
