@@ -32,7 +32,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class AutoCommitIT extends BaseHBaseManagedTimeIT {
+public class AutoCommitIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testMutationJoin() throws Exception {
@@ -40,42 +40,43 @@ public class AutoCommitIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        
-        String ddl = "CREATE TABLE test_table " +
+
+            String testTable = generateRandomString();
+            String ddl = "CREATE TABLE " + testTable + " " +
                 "  (r varchar not null, col1 integer" +
                 "  CONSTRAINT pk PRIMARY KEY (r))\n";
         createTestTable(getUrl(), ddl);
         
-        String query = "UPSERT INTO test_table(r, col1) VALUES('row1', 1)";
+        String query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 1)";
         PreparedStatement statement = conn.prepareStatement(query);
         statement.executeUpdate();
         conn.commit();
         
         conn.setAutoCommit(false);
-        query = "UPSERT INTO test_table(r, col1) VALUES('row1', 2)";
+        query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 2)";
         statement = conn.prepareStatement(query);
         statement.executeUpdate();
         
-        query = "DELETE FROM test_table WHERE r='row1'";
+        query = "DELETE FROM " + testTable + " WHERE r='row1'";
         statement = conn.prepareStatement(query);
         statement.executeUpdate();
         conn.commit();
         
-        query = "SELECT * FROM test_table";
+        query = "SELECT * FROM " + testTable;
         statement = conn.prepareStatement(query);
         ResultSet rs = statement.executeQuery();
         assertFalse(rs.next());
 
-        query = "DELETE FROM test_table WHERE r='row1'";
+        query = "DELETE FROM " + testTable + " WHERE r='row1'";
         statement = conn.prepareStatement(query);
         statement.executeUpdate();
 
-        query = "UPSERT INTO test_table(r, col1) VALUES('row1', 3)";
+        query = "UPSERT INTO " + testTable + "(r, col1) VALUES('row1', 3)";
         statement = conn.prepareStatement(query);
         statement.executeUpdate();
         conn.commit();
         
-        query = "SELECT * FROM test_table";
+        query = "SELECT * FROM " + testTable;
         statement = conn.prepareStatement(query);
         rs = statement.executeQuery();
         assertTrue(rs.next());

@@ -34,7 +34,10 @@ import org.junit.experimental.categories.Category;
  * to set timestamps, because we create/destroy the Phoenix tables
  * between tests and only allow a table time stamp to increase.
  * Without this separation table deletion/creation would fail.
- * 
+ *
+ * Try and use (@link BaseHBaseManagedTimeTableReuseIT) and only
+ * extend this class if really necessary.  It is very slow as
+ * we have to delete tables which takes up to 10 seconds per test case.
  * All tests extending this class use the mini cluster that is
  * different from the mini cluster used by test classes extending 
  * {@link BaseClientManagedTimeIT}.

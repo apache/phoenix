@@ -35,6 +35,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -57,24 +58,26 @@ import static org.junit.Assert.assertTrue;
  * functionality allows having row-level versioning (similar to how KEEP_DELETED_CELLS works), but
  * also allows permanently deleting a row.
  */
-public class StoreNullsIT extends BaseHBaseManagedTimeIT {
+public class StoreNullsIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final Log LOG = LogFactory.getLog(StoreNullsIT.class);
+    private static final String WITH_NULLS = generateRandomString();
+    private static final String WITHOUT_NULLS = generateRandomString();
 
-    private Connection conn;
-    private Statement stmt;
+    private static Connection conn;
+    private static Statement stmt;
 
-    @Before
-    public void setUp() throws SQLException {
+    @BeforeClass
+    public static void setUp() throws SQLException {
         conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
 
         stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE with_nulls (" +
+        stmt.execute("CREATE TABLE " + WITH_NULLS + " (" +
                         "id SMALLINT NOT NULL PRIMARY KEY, " +
                         "name VARCHAR) " +
                 "STORE_NULLS = true, VERSIONS = 1000, KEEP_DELETED_CELLS = false");
-        stmt.execute("CREATE TABLE without_nulls (" +
+        stmt.execute("CREATE TABLE " + WITHOUT_NULLS + " (" +
                         "id SMALLINT NOT NULL PRIMARY KEY, " +
                         "name VARCHAR) " +
                 "VERSIONS = 1000, KEEP_DELETED_CELLS = false");
@@ -88,19 +91,19 @@ public class StoreNullsIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testQueryingHistory() throws SQLException, InterruptedException, IOException {
-        stmt.executeUpdate("UPSERT INTO with_nulls VALUES (1, 'v1')");
-        stmt.executeUpdate("UPSERT INTO without_nulls VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + WITH_NULLS + " VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + WITHOUT_NULLS + " VALUES (1, 'v1')");
 
         Thread.sleep(10L);
         long afterFirstInsert = System.currentTimeMillis();
         Thread.sleep(10L);
 
-        stmt.executeUpdate("UPSERT INTO with_nulls VALUES (1, null)");
-        stmt.executeUpdate("UPSERT INTO without_nulls VALUES (1, null)");
+        stmt.executeUpdate("UPSERT INTO " + WITH_NULLS + " VALUES (1, null)");
+        stmt.executeUpdate("UPSERT INTO " + WITHOUT_NULLS + " VALUES (1, null)");
         Thread.sleep(10L);
 
-        doMajorCompaction("with_nulls");
-        doMajorCompaction("without_nulls");
+        doMajorCompaction(WITH_NULLS);
+        doMajorCompaction(WITHOUT_NULLS);
 
         Properties historicalProps = new Properties();
         historicalProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -108,13 +111,14 @@ public class StoreNullsIT extends BaseHBaseManagedTimeIT {
         Connection historicalConn = DriverManager.getConnection(getUrl(), historicalProps);
         Statement historicalStmt = historicalConn.createStatement();
 
-        ResultSet rs = historicalStmt.executeQuery("SELECT name FROM with_nulls WHERE id = 1");
+        ResultSet rs = historicalStmt.executeQuery(
+            "SELECT name FROM " + WITH_NULLS + " WHERE id = 1");
         assertTrue(rs.next());
         assertEquals("v1", rs.getString(1));
         rs.close();
 
         // The single null wipes out all history for a field if STORE_NULLS is not enabled
-        rs = historicalStmt.executeQuery("SELECT name FROM without_nulls WHERE id = 1");
+        rs = historicalStmt.executeQuery("SELECT name FROM " + WITHOUT_NULLS + " WHERE id = 1");
         assertTrue(rs.next());
         assertNull(rs.getString(1));
         rs.close();
@@ -126,19 +130,19 @@ public class StoreNullsIT extends BaseHBaseManagedTimeIT {
     // Row deletes should work in the same way regardless of what STORE_NULLS is set to
     @Test
     public void testDeletes() throws SQLException, InterruptedException, IOException {
-        stmt.executeUpdate("UPSERT INTO with_nulls VALUES (1, 'v1')");
-        stmt.executeUpdate("UPSERT INTO without_nulls VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + WITH_NULLS + " VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + WITHOUT_NULLS + " VALUES (1, 'v1')");
 
         Thread.sleep(10L);
         long afterFirstInsert = System.currentTimeMillis();
         Thread.sleep(10L);
 
-        stmt.executeUpdate("DELETE FROM with_nulls WHERE id = 1");
-        stmt.executeUpdate("DELETE FROM without_nulls WHERE id = 1");
+        stmt.executeUpdate("DELETE FROM " + WITH_NULLS + " WHERE id = 1");
+        stmt.executeUpdate("DELETE FROM " + WITHOUT_NULLS + " WHERE id = 1");
         Thread.sleep(10L);
 
-        doMajorCompaction("with_nulls");
-        doMajorCompaction("without_nulls");
+        doMajorCompaction(WITH_NULLS);
+        doMajorCompaction(WITHOUT_NULLS);
 
         Properties historicalProps = new Properties();
         historicalProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -148,11 +152,12 @@ public class StoreNullsIT extends BaseHBaseManagedTimeIT {
 
         // The row should be completely gone for both tables now
 
-        ResultSet rs = historicalStmt.executeQuery("SELECT name FROM with_nulls WHERE id = 1");
+        ResultSet rs = historicalStmt.executeQuery(
+            "SELECT name FROM " + WITH_NULLS + " WHERE id = 1");
         assertFalse(rs.next());
         rs.close();
 
-        rs = historicalStmt.executeQuery("SELECT name FROM without_nulls WHERE id = 1");
+        rs = historicalStmt.executeQuery("SELECT name FROM " + WITHOUT_NULLS + " WHERE id = 1");
         assertFalse(rs.next());
         rs.close();
     }

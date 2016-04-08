@@ -32,11 +32,12 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
+public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testUpsertIntoSaltedTableFromNormalTable() throws Exception {
@@ -44,26 +45,28 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE IF NOT EXISTS source" + 
+            String source = generateRandomString();
+            String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER)";
             createTestTable(getUrl(), ddl);
-            ddl = "CREATE TABLE IF NOT EXISTS target" + 
+            String target = generateRandomString();
+            ddl = "CREATE TABLE IF NOT EXISTS " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO source(pk, col) VALUES(?,?)";
+            String query = "UPSERT INTO " + source + "(pk, col) VALUES(?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setInt(2, 1);
             stmt.execute();
             conn.commit();
             
-            query = "UPSERT INTO target(pk, col) SELECT pk, col from source";
+            query = "UPSERT INTO " + target + "(pk, col) SELECT pk, col from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
             
-            query = "SELECT * FROM target";
+            query = "SELECT * FROM " + target;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -81,26 +84,28 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE IF NOT EXISTS source" + 
+            String source = generateRandomString();
+            String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
-            ddl = "CREATE TABLE IF NOT EXISTS target" + 
+            String target = generateRandomString();
+            ddl = "CREATE TABLE IF NOT EXISTS " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER)";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO source(pk, col) VALUES(?,?)";
+            String query = "UPSERT INTO " + source + "(pk, col) VALUES(?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setInt(2, 1);
             stmt.execute();
             conn.commit();
-            query = "UPSERT INTO target(pk, col) SELECT pk, col from source";
+            query = "UPSERT INTO " + target + "(pk, col) SELECT pk, col from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            analyzeTable(conn, "source");
-            analyzeTable(conn, "target");
-            query = "SELECT * FROM target";
+            analyzeTable(conn, source);
+            analyzeTable(conn, target);
+            query = "SELECT * FROM " + target;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -123,26 +128,28 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE IF NOT EXISTS source" + 
+            String source = generateRandomString();
+            String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
-            ddl = "CREATE TABLE IF NOT EXISTS target" + 
+            String target = generateRandomString();
+            ddl = "CREATE TABLE IF NOT EXISTS " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO source(pk, col) VALUES(?,?)";
+            String query = "UPSERT INTO " + source + "(pk, col) VALUES(?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setInt(2, 1);
             stmt.execute();
             conn.commit();
             
-            query = "UPSERT INTO target(pk, col) SELECT pk, col from source";
+            query = "UPSERT INTO " + target + "(pk, col) SELECT pk, col from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
             
-            query = "SELECT * FROM target";
+            query = "SELECT * FROM " + target;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -160,23 +167,24 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE IF NOT EXISTS source" + 
+            String source = generateRandomString();
+            String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col1 INTEGER, col2 INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO source(pk, col1) VALUES(?,?)";
+            String query = "UPSERT INTO " + source + "(pk, col1) VALUES(?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setInt(2, 1);
             stmt.execute();
             conn.commit();
             
-            query = "UPSERT INTO source(pk, col2) SELECT pk, col1 from source";
+            query = "UPSERT INTO " + source + "(pk, col2) SELECT pk, col1 from " + source;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
             
-            query = "SELECT col2 FROM source";
+            query = "SELECT col2 FROM " + source;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -193,12 +201,13 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE IF NOT EXISTS source1" + 
+            String source1 = generateRandomString();
+            String ddl = "CREATE TABLE IF NOT EXISTS " + source1 +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" + 
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
             
-            String query = "UPSERT INTO source1(pk1, pk2, pk3, col1) VALUES(?,?,?,?)";
+            String query = "UPSERT INTO " + source1 + "(pk1, pk2, pk3, col1) VALUES(?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "1");
             stmt.setString(2, "2");
@@ -208,12 +217,13 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
             conn.commit();
             
             conn.setAutoCommit(true);
-            query = "UPSERT INTO source1(pk3, col1, pk1) SELECT pk3+1, col1+1, pk2 from source1";
+            query = "UPSERT INTO " + source1
+                + "(pk3, col1, pk1) SELECT pk3+1, col1+1, pk2 from " + source1;
             stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
-            analyzeTable(conn, "source1");
-            query = "SELECT col1 FROM source1";
+            analyzeTable(conn, source1);
+            query = "SELECT col1 FROM " + source1;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
@@ -232,13 +242,14 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "CREATE TABLE IF NOT EXISTS source1" +
+            String source1 = generateRandomString();
+            String ddl = "CREATE TABLE IF NOT EXISTS " + source1 +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
 
             for (int i = 0; i < 1000; i++) {
-                String upsert = "UPSERT INTO source1(pk1, pk2, pk3, col1) VALUES (?,?,?,?)";
+                String upsert = "UPSERT INTO " + source1 + "(pk1, pk2, pk3, col1) VALUES (?,?,?,?)";
                 PreparedStatement stmt = conn.prepareStatement(upsert);
                 stmt.setString(1, Integer.toString(i));
                 stmt.setString(2, Integer.toString(i));
@@ -248,13 +259,14 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
             }
             conn.commit();
 
-            String ddl2 = "CREATE TABLE IF NOT EXISTS source2" +
+            String source2 = generateRandomString();
+            String ddl2 = "CREATE TABLE IF NOT EXISTS " + source2 +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl2);
 
             for (int i = 0; i < 1000; i++) {
-                String upsert = "UPSERT INTO source2(pk1, pk2, pk3, col1) VALUES (?,?,?,?)";
+                String upsert = "UPSERT INTO " + source2 + "(pk1, pk2, pk3, col1) VALUES (?,?,?,?)";
                 PreparedStatement stmt = conn.prepareStatement(upsert);
                 stmt.setString(1, Integer.toString(i));
                 stmt.setString(2, Integer.toString(i));
@@ -264,16 +276,22 @@ public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeIT {
             }
             conn.commit();
 
-            String ddl3 = "CREATE TABLE IF NOT EXISTS dest" +
+            String dest = generateRandomString();
+            String ddl3 = "CREATE TABLE IF NOT EXISTS " + dest +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl3);
 
-            String query = "UPSERT INTO dest(pk1, pk2, pk3, col1) SELECT S1.pk1, S1.pk2, S2.pk3, S2.col1 FROM source1 AS S1 JOIN source2 AS S2 ON S1.pk1 = S2.pk1 AND S1.pk2 = S2.pk2 AND S1.pk3 = S2.pk3";
+            String query =
+                "UPSERT INTO " + dest
+                    + "(pk1, pk2, pk3, col1) SELECT S1.pk1, S1.pk2, S2.pk3, S2.col1 FROM "
+                    + source1
+                    + " AS S1 JOIN " + source2
+                    + " AS S2 ON S1.pk1 = S2.pk1 AND S1.pk2 = S2.pk2 AND S1.pk3 = S2.pk3";
             conn.createStatement().execute(query);
             conn.commit();
 
-            query = "SELECT COUNT(*) FROM dest";
+            query = "SELECT COUNT(*) FROM " + dest;
             PreparedStatement stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());

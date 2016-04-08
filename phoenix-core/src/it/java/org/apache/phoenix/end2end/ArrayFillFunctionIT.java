@@ -25,14 +25,22 @@ import static org.junit.Assert.assertTrue;
 import java.math.BigDecimal;
 import java.sql.*;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
+public class ArrayFillFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
 
-    private void initTables(Connection conn) throws Exception {
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,length1 INTEGER, length2 INTEGER,date DATE,time TIME,timestamp TIMESTAMP,varchar VARCHAR,integer INTEGER,double DOUBLE,bigint BIGINT,char CHAR(15),double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], varchars2 VARCHAR[])";
+    private static final String REGIONS = generateRandomString();
+
+    @BeforeClass
+    public static void initTables() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE " + REGIONS
+            + " (region_name VARCHAR PRIMARY KEY,length1 INTEGER, length2 INTEGER,date DATE,time TIME,timestamp TIMESTAMP,varchar VARCHAR,integer INTEGER,double DOUBLE,bigint BIGINT,char CHAR(15),double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], varchars2 VARCHAR[])";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO regions(region_name,length1,length2,date,time,timestamp,varchar,integer,double,bigint,char,double1,char1,nullcheck,chars2,varchars2) VALUES('SF Bay Area'," +
+        String dml = "UPSERT INTO " + REGIONS
+            + "(region_name,length1,length2,date,time,timestamp,varchar,integer,double,bigint,char,double1,char1,nullcheck,chars2,varchars2) VALUES('SF Bay Area',"
+            +
                 "0," +
                 "-3," +
                 "to_date('2015-05-20 06:12:14.184')," +
@@ -57,10 +65,10 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionVarchar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(varchar,5) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(varchar,5) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"foo", "foo", "foo", "foo", "foo"};
@@ -74,10 +82,10 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInteger() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(integer,4) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(integer,4) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{34, 34, 34, 34};
@@ -91,10 +99,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionDouble() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(double,4) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(double,4) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{23.45, 23.45, 23.45, 23.45};
@@ -108,10 +117,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionBigint() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(bigint,4) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(bigint,4) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{34567l, 34567l, 34567l, 34567l};
@@ -125,10 +135,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionChar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(char,4) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(char,4) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{"foo", "foo", "foo", "foo"};
@@ -141,10 +152,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionVarChar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(varchar,4) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(varchar,4) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{"foo", "foo", "foo", "foo"};
@@ -157,10 +169,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionDate() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(date,3) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(date,3) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Date(1432102334184l), new Date(1432102334184l), new Date(1432102334184l)};
@@ -173,10 +186,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionTime() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(time,3) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(time,3) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Time(1432102334184l), new Time(1432102334184l), new Time(1432102334184l)};
@@ -189,10 +203,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionTimestamp() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(timestamp,3) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(timestamp,3) FROM " + REGIONS + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Timestamp(1432102334184l), new Timestamp(1432102334184l), new Timestamp(1432102334184l)};
@@ -205,10 +220,12 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test(expected = IllegalArgumentException.class)
     public void testArrayFillFunctionInvalidLength1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(timestamp,length2) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(timestamp,length2) FROM " + REGIONS
+                + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Timestamp(1432102334184l), new Timestamp(1432102334184l), new Timestamp(1432102334184l)};
@@ -221,10 +238,12 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test(expected = IllegalArgumentException.class)
     public void testArrayFillFunctionInvalidLength2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(timestamp,length1) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(timestamp,length1) FROM " + REGIONS
+                + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Timestamp(1432102334184l), new Timestamp(1432102334184l), new Timestamp(1432102334184l)};
@@ -237,10 +256,12 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionWithNestedFunctions1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(ARRAY_ELEM(ARRAY[23,45],1),3) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(ARRAY_ELEM(ARRAY[23,45],1),3) FROM " + REGIONS
+                + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Integer[] integers = new Integer[]{23, 23, 23};
@@ -254,10 +275,12 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionWithNestedFunctions2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL('hello', ARRAY_LENGTH(ARRAY[34, 45])) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL('hello', ARRAY_LENGTH(ARRAY[34, 45])) FROM " + REGIONS
+                + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{"hello", "hello"};
@@ -271,10 +294,12 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionWithNestedFunctions3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_FILL(3.4, ARRAY_LENGTH(ARRAY[34, 45])) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT ARRAY_FILL(3.4, ARRAY_LENGTH(ARRAY[34, 45])) FROM " + REGIONS
+                + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{BigDecimal.valueOf(3.4), BigDecimal.valueOf(3.4)};
@@ -289,15 +314,19 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayFillFunctionWithUpsert1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
+        String regions = generateRandomString();
+        String ddl =
+            "CREATE TABLE " + regions + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO regions(region_name,varchars) VALUES('SF Bay Area',ARRAY_FILL('hello',3))";
+        String dml = "UPSERT INTO " + regions
+            + "(region_name,varchars) VALUES('SF Bay Area',ARRAY_FILL('hello',3))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT varchars FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT varchars FROM " + regions + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"hello", "hello", "hello"};
@@ -312,15 +341,19 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayFillFunctionWithUpsert2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
+        String regions = generateRandomString();
+        String ddl =
+            "CREATE TABLE " + regions + " (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO regions(region_name,integers) VALUES('SF Bay Area',ARRAY_FILL(3456,3))";
+        String dml = "UPSERT INTO " + regions
+            + "(region_name,integers) VALUES('SF Bay Area',ARRAY_FILL(3456,3))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT integers FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT integers FROM " + regions + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Integer[] integers = new Integer[]{3456, 3456, 3456};
@@ -335,15 +368,19 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayFillFunctionWithUpsert3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
+        String regions = generateRandomString();
+        String ddl =
+            "CREATE TABLE " + regions + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO regions(region_name,doubles) VALUES('SF Bay Area',ARRAY_FILL(2.5,3))";
+        String dml = "UPSERT INTO " + regions
+            + "(region_name,doubles) VALUES('SF Bay Area',ARRAY_FILL(2.5,3))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT doubles FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery(
+            "SELECT doubles FROM " + regions + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Double[] doubles = new Double[]{2.5, 2.5, 2.5};
@@ -400,25 +437,34 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayFillFunctionWithUpsertSelect2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE source (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
+        String source = generateRandomString();
+        String ddl =
+            "CREATE TABLE " + source + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        ddl = "CREATE TABLE target (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],varchars2 VARCHAR[])";
+        String target = generateRandomString();
+        ddl = "CREATE TABLE " + target
+            + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],varchars2 VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO source(region_name,varchars) VALUES('SF Bay Area',ARRAY_FILL('foo',3))";
+        String dml = "UPSERT INTO " + source
+            + "(region_name,varchars) VALUES('SF Bay Area',ARRAY_FILL('foo',3))";
         conn.createStatement().execute(dml);
 
-        dml = "UPSERT INTO source(region_name,varchars) VALUES('SF Bay Area2',ARRAY_FILL('hello',3))";
+        dml = "UPSERT INTO " + source
+            + "(region_name,varchars) VALUES('SF Bay Area2',ARRAY_FILL('hello',3))";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        dml = "UPSERT INTO target(region_name, varchars, varchars2) SELECT region_name, varchars,ARRAY_FILL(':-)',5) FROM source";
+        dml =
+            "UPSERT INTO " + target
+                + "(region_name, varchars, varchars2) SELECT region_name, varchars,ARRAY_FILL(':-)',5) FROM "
+                + source;
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT varchars, varchars2 FROM target");
+        rs = conn.createStatement().executeQuery("SELECT varchars, varchars2 FROM " + target);
         assertTrue(rs.next());
 
         String[] strings = new String[]{"foo", "foo", "foo"};
@@ -441,10 +487,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInWhere1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY[12, 12, 12, 12]=ARRAY_FILL(12,4)");
+        rs = conn.createStatement().executeQuery(
+            "SELECT region_name FROM " + REGIONS + " WHERE ARRAY[12, 12, 12, 12]=ARRAY_FILL(12,4)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -454,10 +501,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInWhere2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE varchar=ANY(ARRAY_FILL('foo',3))");
+        rs = conn.createStatement().executeQuery(
+            "SELECT region_name FROM " + REGIONS + " WHERE varchar=ANY(ARRAY_FILL('foo',3))");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -467,10 +515,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInWhere3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY['2345', '2345', '2345', '2345']=ARRAY_FILL('2345', 4)");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+            + " WHERE ARRAY['2345', '2345', '2345', '2345']=ARRAY_FILL('2345', 4)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -480,10 +529,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInWhere4() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY[23.45, 23.45, 23.45]=ARRAY_FILL(23.45, 3)");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+            + " WHERE ARRAY[23.45, 23.45, 23.45]=ARRAY_FILL(23.45, 3)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -493,10 +543,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInWhere5() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY['foo','foo','foo','foo','foo']=ARRAY_FILL(varchar,5)");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+            + " WHERE ARRAY['foo','foo','foo','foo','foo']=ARRAY_FILL(varchar,5)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -506,10 +557,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInWhere6() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE varchars2=ARRAY_FILL('hello',3)");
+        rs = conn.createStatement().executeQuery(
+            "SELECT region_name FROM " + REGIONS + " WHERE varchars2=ARRAY_FILL('hello',3)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -519,10 +571,11 @@ public class ArrayFillFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayFillFunctionInWhere7() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY[2,2,2,2]=ARRAY_FILL(2,4)");
+        rs = conn.createStatement().executeQuery(
+            "SELECT region_name FROM " + REGIONS + " WHERE ARRAY[2,2,2,2]=ARRAY_FILL(2,4)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));

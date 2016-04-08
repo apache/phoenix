@@ -34,22 +34,25 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
 
 
-public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
+public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
 
 	@Test
 	public void testTimezoneOffset() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-		String ddl = "CREATE TABLE IF NOT EXISTS TIMEZONE_OFFSET_TEST"
+		String timezone_offset_test = generateRandomString();
+		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
 				+ " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
 		conn.createStatement().execute(ddl);
-		String dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates) VALUES (1, TO_DATE('2014-02-02 00:00:00'))";
+		String dml = "UPSERT INTO " + timezone_offset_test
+				+ " (k1, dates) VALUES (1, TO_DATE('2014-02-02 00:00:00'))";
 		conn.createStatement().execute(dml);
-		dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates) VALUES (2, TO_DATE('2014-06-02 00:00:00'))";
+		dml = "UPSERT INTO " + timezone_offset_test
+				+ " (k1, dates) VALUES (2, TO_DATE('2014-06-02 00:00:00'))";
 		conn.createStatement().execute(dml);
 		conn.commit();
 
 		ResultSet rs = conn.createStatement().executeQuery(
-				"SELECT k1, dates, TIMEZONE_OFFSET('Indian/Cocos', dates) FROM TIMEZONE_OFFSET_TEST");
+				"SELECT k1, dates, TIMEZONE_OFFSET('Indian/Cocos', dates) FROM " + timezone_offset_test);
 
 		assertTrue(rs.next());
 		assertEquals(390, rs.getInt(3));
@@ -61,16 +64,19 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 	@Test
 	public void testUnknownTimezone() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-		String ddl = "CREATE TABLE IF NOT EXISTS TIMEZONE_OFFSET_TEST"
+		String timezone_offset_test = generateRandomString();
+		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
 				+ " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
 		conn.createStatement().execute(ddl);
-		String dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates) VALUES (1, TO_DATE('2014-02-02 00:00:00'))";
+		String dml = "UPSERT INTO " + timezone_offset_test
+				+ " (k1, dates) VALUES (1, TO_DATE('2014-02-02 00:00:00'))";
 		conn.createStatement().execute(dml);
 		conn.commit();
 
 		try {
 			ResultSet rs = conn.createStatement().executeQuery(
-					"SELECT k1, dates, TIMEZONE_OFFSET('Unknown_Timezone', dates) FROM TIMEZONE_OFFSET_TEST");
+					"SELECT k1, dates, TIMEZONE_OFFSET('Unknown_Timezone', dates) FROM "
+							+ timezone_offset_test);
 
 			rs.next();
 			assertEquals(0, rs.getInt(3));
@@ -83,18 +89,21 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 	@Test
 	public void testInRowKeyDSTTimezoneDesc() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-		String ddl = "CREATE TABLE IF NOT EXISTS TIMEZONE_OFFSET_TEST "
+		String timezone_offset_test = generateRandomString();
+		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE NOT NULL CONSTRAINT pk PRIMARY KEY (k1, dates DESC))";
 		conn.createStatement().execute(ddl);
-		String dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates) VALUES (1, TO_DATE('2014-02-02 00:00:00'))";
+		String dml = "UPSERT INTO " + timezone_offset_test
+				+ " (k1, dates) VALUES (1, TO_DATE('2014-02-02 00:00:00'))";
 		conn.createStatement().execute(dml);
-		dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates) VALUES (2, TO_DATE('2014-06-02 00:00:00'))";
+		dml = "UPSERT INTO " + timezone_offset_test
+				+ " (k1, dates) VALUES (2, TO_DATE('2014-06-02 00:00:00'))";
 		conn.createStatement().execute(dml);
 		conn.commit();
 
 		ResultSet rs = conn.createStatement().executeQuery(
 				"SELECT k1, dates, TIMEZONE_OFFSET('Europe/Prague', dates)"
-				+ "FROM TIMEZONE_OFFSET_TEST ORDER BY k1 ASC");
+				+ "FROM " + timezone_offset_test + " ORDER BY k1 ASC");
 
 		assertTrue(rs.next());
 		assertEquals(60, rs.getInt(3));
@@ -105,16 +114,17 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 	@Test
 	public void testBothParametersNull() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-		String ddl = "CREATE TABLE IF NOT EXISTS TIMEZONE_OFFSET_TEST "
+		String timezone_offset_test = generateRandomString();
+		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE, v1 VARCHAR CONSTRAINT pk PRIMARY KEY (k1))";
 		conn.createStatement().execute(ddl);
-		String dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates, v1) VALUES (2, null, null)";
+		String dml = "UPSERT INTO " + timezone_offset_test + " (k1, dates, v1) VALUES (2, null, null)";
 		conn.createStatement().execute(dml);
 		conn.commit();
 
 		ResultSet rs = conn.createStatement().executeQuery(
 				"SELECT k1, dates, TIMEZONE_OFFSET(v1, dates)"
-				+ "FROM TIMEZONE_OFFSET_TEST ORDER BY k1 ASC");
+				+ "FROM " + timezone_offset_test + " ORDER BY k1 ASC");
 
 		assertTrue(rs.next());
 		rs.getInt(3);
@@ -124,16 +134,18 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 	@Test
 	public void timezoneParameterNull() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-		String ddl = "CREATE TABLE IF NOT EXISTS TIMEZONE_OFFSET_TEST "
+		String timezone_offset_test = generateRandomString();
+		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE, v1 VARCHAR CONSTRAINT pk PRIMARY KEY (k1))";
 		conn.createStatement().execute(ddl);
-		String dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates, v1) VALUES (2, TO_DATE('2014-06-02 00:00:00'), null)";
+		String dml = "UPSERT INTO " + timezone_offset_test
+				+ " (k1, dates, v1) VALUES (2, TO_DATE('2014-06-02 00:00:00'), null)";
 		conn.createStatement().execute(dml);
 		conn.commit();
 
 		ResultSet rs = conn.createStatement().executeQuery(
 				"SELECT k1, dates, TIMEZONE_OFFSET(v1, dates)"
-				+ "FROM TIMEZONE_OFFSET_TEST ORDER BY k1 ASC");
+				+ "FROM " + timezone_offset_test + " ORDER BY k1 ASC");
 
 		assertTrue(rs.next());
 		rs.getInt(3);
@@ -143,16 +155,18 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 	@Test
 	public void dateParameterNull() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-		String ddl = "CREATE TABLE IF NOT EXISTS TIMEZONE_OFFSET_TEST "
+		String timezone_offset_test = generateRandomString();
+		String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test + " "
 				+ "(k1 INTEGER NOT NULL, dates DATE, v1 VARCHAR CONSTRAINT pk PRIMARY KEY (k1))";
 		conn.createStatement().execute(ddl);
-		String dml = "UPSERT INTO TIMEZONE_OFFSET_TEST (k1, dates, v1) VALUES (2, null, 'Asia/Aden')";
+		String dml =
+				"UPSERT INTO " + timezone_offset_test + " (k1, dates, v1) VALUES (2, null, 'Asia/Aden')";
 		conn.createStatement().execute(dml);
 		conn.commit();
 
 		ResultSet rs = conn.createStatement().executeQuery(
 				"SELECT k1, dates, TIMEZONE_OFFSET(v1, dates)"
-				+ "FROM TIMEZONE_OFFSET_TEST ORDER BY k1 ASC");
+				+ "FROM " + timezone_offset_test + " ORDER BY k1 ASC");
 
 		assertTrue(rs.next());
 		rs.getInt(3);
@@ -162,9 +176,10 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
 	@Test
 	public void testInsertingRetrivingTimestamp() throws Exception {
 	    Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE T (K INTEGER NOT NULL PRIMARY KEY, V TIMESTAMP)";
+		String t = generateRandomString();
+		String ddl = "CREATE TABLE " + t + " (K INTEGER NOT NULL PRIMARY KEY, V TIMESTAMP)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T VALUES (?, ?)";
+        String dml = "UPSERT INTO " + t + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setInt(1, 1);
         Calendar cal = Calendar.getInstance();
@@ -173,7 +188,7 @@ public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeIT {
         stmt.setTimestamp(2, new Timestamp(time), cal);
         stmt.executeUpdate();
         conn.commit();
-        String query = "SELECT V FROM T";
+        String query = "SELECT V FROM " + t;
         ResultSet rs = conn.createStatement().executeQuery(query);
         rs.next();
         assertEquals(new Timestamp(time), rs.getTimestamp(1));
