@@ -30,6 +30,7 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.LimitNode;
+import org.apache.phoenix.parse.OffsetNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeRewriter;
@@ -111,6 +112,7 @@ public class SubselectRewriter extends ParseNodeRewriter {
         ParseNode havingRewrite = subselect.getHaving();
         List<OrderByNode> orderByRewrite = subselect.getOrderBy();
         LimitNode limitRewrite = subselect.getLimit();
+        OffsetNode offsetRewrite = subselect.getOffset();
         HintNode hintRewrite = subselect.getHint();
         boolean isDistinctRewrite = subselect.isDistinct();
         boolean isAggregateRewrite = subselect.isAggregate();
@@ -188,6 +190,13 @@ public class SubselectRewriter extends ParseNodeRewriter {
             }
         }
         
+        OffsetNode offset = select.getOffset();
+        if (offsetRewrite != null || (limitRewrite != null && offset != null)) {
+            return select;
+        } else {
+            offsetRewrite = offset;
+        }
+        
         LimitNode limit = select.getLimit();
         if (limit != null) {
             if (limitRewrite == null) {
@@ -202,14 +211,16 @@ public class SubselectRewriter extends ParseNodeRewriter {
                 }
             }
         }
-        
+
         HintNode hint = select.getHint();
         if (hint != null) {
             hintRewrite = hintRewrite == null ? hint : HintNode.combine(hint, hintRewrite);
         }
         
-        SelectStatement stmt = NODE_FACTORY.select(subselect.getFrom(), hintRewrite, isDistinctRewrite, selectNodesRewrite, whereRewrite, groupByRewrite, 
-            havingRewrite, orderByRewrite, limitRewrite, select.getBindCount(), isAggregateRewrite, select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
+        SelectStatement stmt = NODE_FACTORY.select(subselect.getFrom(), hintRewrite, isDistinctRewrite,
+                selectNodesRewrite, whereRewrite, groupByRewrite, havingRewrite, orderByRewrite, limitRewrite,
+                offsetRewrite, select.getBindCount(), isAggregateRewrite, select.hasSequence(), select.getSelects(),
+                select.getUdfParseNodes());
         if (tableAlias != null) {
             this.removeAlias = true;
             stmt = ParseNodeRewriter.rewrite(stmt, this);

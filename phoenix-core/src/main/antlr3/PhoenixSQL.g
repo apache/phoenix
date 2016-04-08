@@ -126,6 +126,11 @@ tokens
     LIST = 'list';
     JARS='jars';
     ROW_TIMESTAMP='row_timestamp';
+    OFFSET ='offset';
+    FETCH = 'fetch';
+    ROW = 'row';
+    ROWS = 'rows';
+    ONLY = 'only';
 }
 
 
@@ -658,7 +663,7 @@ single_select returns [SelectStatement ret]
         (WHERE where=expression)?
         (GROUP BY group=group_by)?
         (HAVING having=expression)?
-        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null, getBindCount(), context.isAggregate(), context.hasSequences(), null, new HashMap<String,UDFParseNode>(udfParseNodes)); }
+        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null,null, getBindCount(), context.isAggregate(), context.hasSequences(), null, new HashMap<String,UDFParseNode>(udfParseNodes)); }
     ;
 finally{ contextStack.pop(); }
 
@@ -673,7 +678,9 @@ select_node returns [SelectStatement ret]
     :   u=unioned_selects
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.peek(); $ret = factory.select(u, order, l, getBindCount(), context.isAggregate()); }
+        (OFFSET o=offset (ROW | ROWS)?)?
+        (FETCH (FIRST | NEXT) (l=limit)? (ROW | ROWS) ONLY)?
+        { ParseContext context = contextStack.peek(); $ret = factory.select(u, order, l, o, getBindCount(), context.isAggregate()); }
     ;
 finally{ contextStack.pop(); }
 
@@ -705,6 +712,11 @@ limit returns [LimitNode ret]
     | l=int_or_long_literal { $ret = factory.limit(l); }
     ;
     
+offset returns [OffsetNode ret]
+	: b=bind_expression { $ret = factory.offset(b); }
+    | l=int_or_long_literal { $ret = factory.offset(l); }
+    ;
+
 sampling_rate returns [LiteralParseNode ret]
     : l=literal { $ret = l; }
     ;

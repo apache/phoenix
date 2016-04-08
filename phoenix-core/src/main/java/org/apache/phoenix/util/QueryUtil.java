@@ -34,17 +34,21 @@ import javax.annotation.Nullable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.tuple.Tuple;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -81,6 +85,7 @@ public final class QueryUtil {
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
     private static final String[] CompareOpString = new String[CompareOp.values().length];
+
     static {
         CompareOpString[CompareOp.EQUAL.ordinal()] = "=";
         CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = "!=";
@@ -352,5 +357,28 @@ public final class QueryUtil {
                 ("\"" + tableName + "\" ") +
                 (WHERE + " " + where);
     }
-    
+
+    public static Integer getOffsetLimit(Integer limit, Integer offset) {
+        if (limit == null) {
+            return null;
+        } else if (offset == null) {
+            return limit;
+        } else {
+            return limit + offset;
+        }
+
+    }
+
+    public static byte[] getUnusedOffset(Tuple offsetTuple) {
+        if (offsetTuple != null) {
+            ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr();
+            offsetTuple.getKey(rowKeyPtr);
+            if (QueryConstants.offsetRowKeyPtr.compareTo(rowKeyPtr) == 0) {
+                Cell value = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN);
+                return value.getValue();
+            }
+        }
+        return null;
+    }
+ 
 }

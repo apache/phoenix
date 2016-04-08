@@ -222,7 +222,7 @@ public class HashJoinInfo {
                 forceProjection = input.readBoolean();
             } catch (EOFException ignore) {
             }
-            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null, forceProjection);
+            return new HashJoinInfo(joinedSchema, joinIds, joinExpressions, joinTypes, earlyEvaluation, schemas, fieldPositions, postJoinFilterExpression, limit >= 0 ? limit : null,  forceProjection);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
