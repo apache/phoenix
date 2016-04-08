@@ -54,180 +54,217 @@ import com.google.common.collect.Lists;
  */
 
 
-public class SortOrderIT extends BaseHBaseManagedTimeIT {
+public class SortOrderIT extends BaseHBaseManagedTimeTableReuseIT {
     
-    private static final String TABLE = "DescColumnSortOrderTest";
-
     @Test
     public void noOrder() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (pk VARCHAR NOT NULL PRIMARY KEY)";
-        runQueryTest(ddl, "pk", new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"a"}, {"b"}, {"c"}});
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (pk VARCHAR NOT NULL PRIMARY KEY)";
+        runQueryTest(ddl, "pk", new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"a"}, {"b"}, {"c"}},
+            table);
     }                                                           
 
     @Test
     public void noOrderCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid, code))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid, code))";
         Object[][] rows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
-        runQueryTest(ddl, upsert("oid", "code"), rows, rows);
+        runQueryTest(ddl, upsert("oid", "code"), rows, rows, table);
     }
     
     @Test
     public void ascOrderInlinePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (pk VARCHAR NOT NULL PRIMARY KEY ASC)";
-        runQueryTest(ddl, "pk", new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"a"}, {"b"}, {"c"}});
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (pk VARCHAR NOT NULL PRIMARY KEY ASC)";
+        runQueryTest(ddl, "pk", new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"a"}, {"b"}, {"c"}},
+            table);
     }
     
     @Test
     public void ascOrderCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid ASC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid ASC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         Object[][] expectedRows = new Object[][]{{"o1", 3}, {"o1", 2}, {"o1", 1}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows);        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, table);
     }
 
     @Test
     public void descOrderInlinePK() throws Exception {
+        String table = generateRandomString();
         for (String type : new String[]{"CHAR(2)", "VARCHAR"}) {
-            String ddl = "CREATE TABLE " + TABLE + " (pk ${type} NOT NULL PRIMARY KEY DESC)".replace("${type}", type);
-            runQueryTest(ddl, "pk", new Object[][]{{"aa"}, {"bb"}, {"cc"}}, new Object[][]{{"cc"}, {"bb"}, {"aa"}});
+            String ddl = "CREATE table " + table + " (pk ${type} NOT NULL PRIMARY KEY DESC)".replace("${type}", type);
+            runQueryTest(ddl, "pk", new Object[][]{{"aa"}, {"bb"}, {"cc"}}, new Object[][]{{"cc"}, {"bb"}, {"aa"}},
+                table);
         }
     }
     
     @Test
     public void descOrderCompositePK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
         Object[][] expectedRows = new Object[][]{{"o3", 3}, {"o2", 2}, {"o1", 1}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows);        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, table);
     }
     
     @Test
     public void descOrderCompositePK2() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         Object[][] expectedRows = new Object[][]{{"o1", 3}, {"o1", 2}, {"o1", 1}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows);        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, table);
     }    
 
     @Test
     public void equalityDescInlinePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (pk VARCHAR NOT NULL PRIMARY KEY DESC)";
-        runQueryTest(ddl, upsert("pk"), new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"b"}}, new WhereCondition("pk", "=", "'b'"));
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (pk VARCHAR NOT NULL PRIMARY KEY DESC)";
+        runQueryTest(ddl, upsert("pk"), new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"b"}}, new WhereCondition("pk", "=", "'b'"),
+            table);
     }
     
     @Test
     public void equalityDescCompositePK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", 2}}, new WhereCondition("oid", "=", "'o2'"));        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", 2}}, new WhereCondition("oid", "=", "'o2'"),
+            table);
     }
     
     @Test
     public void equalityDescCompositePK2() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o1", 2}}, new WhereCondition("code", "=", "2"));        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o1", 2}}, new WhereCondition("code", "=", "2"),
+            table);
     }
     
     @Test
     public void inDescCompositePK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o1", 2}}, new WhereCondition("code", "IN", "(2)"));        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o1", 2}}, new WhereCondition("code", "IN", "(2)"),
+            table);
     }
     
     @Test
     public void inDescCompositePK2() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", 2}}, new WhereCondition("oid", "IN", "('o2')"));        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", 2}}, new WhereCondition("oid", "IN", "('o2')"),
+            table);
     }
     
     @Test
     public void likeDescCompositePK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"a1", 1}, {"b2", 2}, {"c3", 3}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"b2", 2}}, new WhereCondition("oid", "LIKE", "('b%')"));        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"b2", 2}}, new WhereCondition("oid", "LIKE", "('b%')"),
+            table);
     }
     
     @Test
     public void likeDescCompositePK2() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code CHAR(2) NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code CHAR(2) NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"a1", "11"}, {"b2", "22"}, {"c3", "33"}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"b2", "22"}}, new WhereCondition("code", "LIKE", "('2%')"));        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"b2", "22"}}, new WhereCondition("code", "LIKE", "('2%')"),
+            table);
     }
     
     @Test
     public void greaterThanDescCompositePK3() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         Object[][] expectedRows = new Object[][]{{"o1", 2}, {"o1", 1}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("code", "<", "3"));        
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("code", "<", "3"),
+            table);
     }
     
     @Test
     public void substrDescCompositePK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(3) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(3) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
         Object[][] insertedRows = new Object[][]{{"ao1", 1}, {"bo2", 2}, {"co3", 3}};
         Object[][] expectedRows = new Object[][]{{"co3", 3}, {"bo2", 2}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 3, 1)", ">", "'1'"));
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 3, 1)", ">", "'1'"),
+            table);
     }
         
     @Test
     public void substrDescCompositePK2() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(4) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(4) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
         Object[][] insertedRows = new Object[][]{{"aaaa", 1}, {"bbbb", 2}, {"cccd", 3}};
         Object[][] expectedRows = new Object[][]{{"cccd", 3}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 4, 1)", "=", "'d'"));
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 4, 1)", "=", "'d'"),
+            table);
     }    
     
     @Test
     public void substrFixedLengthDescPK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(3) PRIMARY KEY DESC)";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(3) PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
-        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"));
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"),
+            table);
     }
         
     @Test
     public void substrVarLengthDescPK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR PRIMARY KEY DESC)";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid VARCHAR PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
-        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"));
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("SUBSTR(oid, 1, 1)", "=", "'a'"),
+            table);
     }
         
     @Test
     public void likeVarLengthDescPK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR PRIMARY KEY DESC)";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid VARCHAR PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
-        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"));
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"),
+            table);
     }
         
     @Test
     public void likeFixedLengthDescPK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(3) PRIMARY KEY DESC)";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(3) PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
-        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"));
+        runQueryTest(ddl, upsert("oid"), insertedRows, expectedRows, new WhereCondition("oid", "like", "'a%'"),
+            table);
     }
         
     @Test
     public void decimalRangeDescPK1() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid DECIMAL PRIMARY KEY DESC)";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid DECIMAL PRIMARY KEY DESC)";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(4.99)");
-        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(4.0)");
-        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.0)");
-        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.001)");
-        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(5.999)");
-        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(6.0)");
-        conn.createStatement().execute("UPSERT INTO " + TABLE + " VALUES(6.001)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(4.99)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(4.0)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(5.0)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(5.001)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(5.999)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(6.0)");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(6.001)");
         conn.commit();
         
-        String query = "SELECT * FROM " + TABLE + " WHERE oid >= 5.0 AND oid < 6.0";
+        String query = "SELECT * FROM " + table + " WHERE oid >= 5.0 AND oid < 6.0";
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertTrue(new BigDecimal("5.999").compareTo(rs.getBigDecimal(1)) == 0);
@@ -240,193 +277,225 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
         
     @Test
     public void lTrimDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{" o1 ", 1}, {"  o2", 2}, {"  o3", 3}};
         Object[][] expectedRows = new Object[][]{{"  o2", 2}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("LTRIM(oid)", "=", "'o2'"));
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("LTRIM(oid)", "=", "'o2'"),
+            table);
     }
     
     @Test
     public void lPadDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"aaaa", 1}, {"bbbb", 2}, {"cccc", 3}};
         Object[][] expectedRows = new Object[][]{{"bbbb", 2}};
-        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("LPAD(oid, 8, '123')", "=", "'1231bbbb'"));
+        runQueryTest(ddl, upsert("oid", "code"), insertedRows, expectedRows, new WhereCondition("LPAD(oid, 8, '123')", "=", "'1231bbbb'"),
+            table);
     }
 
     @Test
     public void countDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
         Object[][] expectedRows = new Object[][]{{3l}};
-        runQueryTest(ddl, upsert("oid", "code"), select("COUNT(oid)"), insertedRows, expectedRows);
+        runQueryTest(ddl, upsert("oid", "code"), select("COUNT(oid)"), insertedRows, expectedRows,
+            table);
     }
     
     @Test
     public void sumDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
         Object[][] expectedRows = new Object[][]{{60l, bdec(60.6), 96l}};
-        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("SUM(n1), SUM(n2), SUM(n3)"), insertedRows, expectedRows);
+        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("SUM(n1), SUM(n2), SUM(n3)"), insertedRows, expectedRows,
+            table);
     }    
     
     @Test
     public void avgDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
         Object[][] expectedRows = new Object[][]{{new BigDecimal(bint(2), -1), bdec(20.2), BigDecimal.valueOf(32)}};
-        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("AVG(n1), AVG(n2), AVG(n3)"), insertedRows, expectedRows);
+        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("AVG(n1), AVG(n2), AVG(n3)"), insertedRows, expectedRows,
+            table);
     }
     
     @Test
     public void minDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
         Object[][] expectedRows = new Object[][]{{10, bdec(10.2), 21l}};
-        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("MIN(n1), MIN(n2), MIN(n3)"), insertedRows, expectedRows);
+        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("MIN(n1), MIN(n2), MIN(n3)"), insertedRows, expectedRows,
+            table);
     }
     
     @Test
     public void maxDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
         Object[][] expectedRows = new Object[][]{{30, bdec(30.2), 43l}};
-        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("MAX(n1), MAX(n2), MAX(n3)"), insertedRows, expectedRows);
+        runQueryTest(ddl, upsert("n1", "n2", "n3"), select("MAX(n1), MAX(n2), MAX(n3)"), insertedRows, expectedRows,
+            table);
     }
     
     @Test
     public void havingSumDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (name CHAR(1) NOT NULL, code INTEGER NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (name CHAR(1) NOT NULL, code INTEGER NOT NULL " +
             "constraint pk primary key (name DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"a", 10}, {"a", 20}, {"b", 100}}; 
         Object[][] expectedRows = new Object[][]{{"a", 30l}};
         runQueryTest(ddl, upsert("name", "code"), select("name", "SUM(code)"), insertedRows, expectedRows, 
-            new HavingCondition("name", "SUM(code) = 30"));
+            new HavingCondition("name", "SUM(code) = 30"), table);
     }
     
     @Test
     public void queryDescDateWithExplicitOrderBy() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (c1 CHAR(1) NOT NULL, c2 CHAR(1) NOT NULL, d1 DATE NOT NULL, c3 CHAR(1) NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (c1 CHAR(1) NOT NULL, c2 CHAR(1) NOT NULL, d1 DATE NOT NULL, c3 CHAR(1) NOT NULL " +
             "constraint pk primary key (c1, c2, d1 DESC, c3))";
         Object[] row1 = {"1", "2", date(10, 11, 2001), "3"};
         Object[] row2 = {"1", "2", date(10, 11, 2003), "3"};
         Object[][] insertedRows = new Object[][]{row1, row2};
         runQueryTest(ddl, upsert("c1", "c2", "d1", "c3"), select("c1, c2, d1", "c3"), insertedRows, new Object[][]{row2, row1},
-            null, null, new OrderBy("d1", OrderBy.Direction.DESC));
+            null, null, new OrderBy("d1", OrderBy.Direction.DESC), table);
     }    
     
     @Test
     public void additionOnDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL, d1 DATE NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL, d1 DATE NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC, d1 DESC))";
         Object[][] insertedRows = new Object[][]{
             {10, bdec(10.2), 21l, date(1, 10, 2001)}, {20, bdec(20.2), 32l, date(2, 6, 2001)}, {30, bdec(30.2), 43l, date(3, 1, 2001)}};
         Object[][] expectedRows = new Object[][]{
             {31l, bdec(32.2), 46l, date(3, 5, 2001)}, {21l, bdec(22.2), 35l, date(2, 10, 2001)}, {11l, bdec(12.2), 24l, date(1, 14, 2001)}};
-        runQueryTest(ddl, upsert("n1", "n2", "n3", "d1"), select("n1+1, n2+2, n3+3", "d1+4"), insertedRows, expectedRows);
+        runQueryTest(ddl, upsert("n1", "n2", "n3", "d1"), select("n1+1, n2+2, n3+3", "d1+4"), insertedRows, expectedRows,
+            table);
     }
     
     @Test
     public void subtractionOnDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL, d1 DATE NOT NULL " + 
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL, d1 DATE NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC, d1 DESC))";
         Object[][] insertedRows = new Object[][]{
             {10, bdec(10.2), 21l, date(1, 10, 2001)}, {20, bdec(20.2), 32l, date(2, 6, 2001)}, {30, bdec(30.2), 43l, date(3, 10, 2001)}};
         Object[][] expectedRows = new Object[][]{
             {29l, bdec(28.2), 40l, date(3, 6, 2001)}, {19l, bdec(18.2), 29l, date(2, 2, 2001)}, {9l, bdec(8.2), 18l, date(1, 6, 2001)}};
-        runQueryTest(ddl, upsert("n1", "n2", "n3", "d1"), select("n1-1, n2-2, n3-3", "d1-4"), insertedRows, expectedRows);
+        runQueryTest(ddl, upsert("n1", "n2", "n3", "d1"), select("n1-1, n2-2, n3-3", "d1-4"), insertedRows, expectedRows,
+            table);
     }
     
     @Test
     public void lessThanLeadingDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (id INTEGER NOT NULL, date DATE NOT NULL constraint pk primary key (id DESC, date))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, date DATE NOT NULL constraint pk primary key (id DESC, date))";
         Object[][] insertedRows = new Object[][]{{1, date(1, 1, 2012)}, {3, date(1, 1, 2013)}, {2, date(1, 1, 2011)}};
         Object[][] expectedRows = new Object[][]{{1, date(1, 1, 2012)}};
-        runQueryTest(ddl, upsert("id", "date"), insertedRows, expectedRows, new WhereCondition("id", "<", "2"));
+        runQueryTest(ddl, upsert("id", "date"), insertedRows, expectedRows, new WhereCondition("id", "<", "2"),
+            table);
     }
     
     @Test
     public void lessThanTrailingDescCompositePK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (id INTEGER NOT NULL, date DATE NOT NULL constraint pk primary key (id DESC, date))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, date DATE NOT NULL constraint pk primary key (id DESC, date))";
         Object[][] insertedRows = new Object[][]{{1, date(1, 1, 2002)}, {3, date(1, 1, 2003)}, {2, date(1, 1, 2001)}};
         Object[][] expectedRows = new Object[][]{{2, date(1, 1, 2001)}};
-        runQueryTest(ddl, upsert("id", "date"), insertedRows, expectedRows, new WhereCondition("date", "<", "TO_DATE('02-02-2001','mm-dd-yyyy')"));
+        runQueryTest(ddl, upsert("id", "date"), insertedRows, expectedRows, new WhereCondition("date", "<", "TO_DATE('02-02-2001','mm-dd-yyyy')"),
+            table);
     }
     
     @Test
     public void descVarLengthPK() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (id VARCHAR PRIMARY KEY DESC)";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (id VARCHAR PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}, {"abc"}};
         Object[][] expectedRows = new Object[][]{{"abc"}, {"ab"}, {"a"}};
         runQueryTest(ddl, upsert("id"), select("id"), insertedRows, expectedRows,
-                null, null, new OrderBy("id", OrderBy.Direction.DESC));
+                null, null, new OrderBy("id", OrderBy.Direction.DESC), table);
     }
     
     @Test
     public void descVarLengthAscPKGT() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "baa"}, {5, "c"}, {6, "d"}};
         Object[][] expectedRows = new Object[][]{{3}, {4}, {5}, {6}};
         runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
-                new WhereCondition("k2", ">", "'b'"), null, null);
+                new WhereCondition("k2", ">", "'b'"), null, null, table);
     }
         
     @Test
     public void descVarLengthDescPKGT() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "baa"}, {5, "c"}, {6, "d"}};
         Object[][] expectedRows = new Object[][]{{3}, {4}, {5}, {6}};
         runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
-                new WhereCondition("k2", ">", "'b'"), null, null);
+                new WhereCondition("k2", ">", "'b'"), null, null, table);
     }
         
     @Test
     public void descVarLengthDescPKLTE() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "bb"}, {5, "bc"}, {6, "bba"}, {7, "c"}};
         Object[][] expectedRows = new Object[][]{{1}, {2}, {3}, {4}};
         runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
-                new WhereCondition("k2", "<=", "'bb'"), null, null);
+                new WhereCondition("k2", "<=", "'bb'"), null, null, table);
     }
         
     @Test
     public void descVarLengthAscPKLTE() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "bb"}, {5, "bc"}, {6, "bba"}, {7, "c"}};
         Object[][] expectedRows = new Object[][]{{1}, {2}, {3}, {4}};
         runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
-                new WhereCondition("k2", "<=", "'bb'"), null, null);
+                new WhereCondition("k2", "<=", "'bb'"), null, null, table);
     }
         
     @Test
     public void varLengthAscLT() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}};
         Object[][] expectedRows = new Object[][]{{"a"}};
         runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
-                new WhereCondition("k1", "<", "'b'"), null, null);
+                new WhereCondition("k1", "<", "'b'"), null, null, table);
     }
         
     @Test
     public void varLengthDescLT() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
         Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}};
         Object[][] expectedRows = new Object[][]{{"a"}};
         runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
-                new WhereCondition("k1", "<", "'b'"), null, null);
+                new WhereCondition("k1", "<", "'b'"), null, null, table);
     }
         
     @Test
     public void varLengthDescGT() throws Exception {
-        String ddl = "CREATE TABLE " + TABLE + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
+        String table = generateRandomString();
+        String ddl = "CREATE table " + table + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
         Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}, {"ba","a"}};
         Object[][] expectedRows = new Object[][]{{"ba"}};
         runQueryTest(ddl, upsert("k1", "k2"), select("k1"), insertedRows, expectedRows,
-                new WhereCondition("k1", ">", "'b'"), null, null);
+                new WhereCondition("k1", ">", "'b'"), null, null, table);
     }
         
    @Test
@@ -489,35 +558,37 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
         }
     }
 
-    private void runQueryTest(String ddl, String columnName, Object[][] rows, Object[][] expectedRows) throws Exception {
-        runQueryTest(ddl, new String[]{columnName}, rows, expectedRows, null);
+    private void runQueryTest(String ddl, String columnName, Object[][] rows,
+        Object[][] expectedRows, String table) throws Exception {
+        runQueryTest(ddl, new String[]{columnName}, rows, expectedRows, null, table);
     }
     
-    private void runQueryTest(String ddl, String[] columnNames, Object[][] rows, Object[][] expectedRows) throws Exception {
-        runQueryTest(ddl, columnNames, rows, expectedRows, null);
+    private void runQueryTest(String ddl, String[] columnNames, Object[][] rows,
+        Object[][] expectedRows, String table) throws Exception {
+        runQueryTest(ddl, columnNames, rows, expectedRows, null, table);
     }
     
-    private void runQueryTest(String ddl, String[] columnNames, Object[][] rows, Object[][] expectedRows, WhereCondition condition) throws Exception {
-        runQueryTest(ddl, columnNames, columnNames, rows, expectedRows, condition, null, null);
+    private void runQueryTest(String ddl, String[] columnNames, Object[][] rows, Object[][] expectedRows, WhereCondition condition,
+        String table) throws Exception {
+        runQueryTest(ddl, columnNames, columnNames, rows, expectedRows, condition, null, null,
+            table);
     }
     
-    private void runQueryTest(String ddl, String[] columnNames, String[] projections, Object[][] rows, Object[][] expectedRows) throws Exception {
-        runQueryTest(ddl, columnNames, projections, rows, expectedRows, null, null, null);
+    private void runQueryTest(String ddl, String[] columnNames, String[] projections, Object[][] rows, Object[][] expectedRows,
+        String table) throws Exception {
+        runQueryTest(ddl, columnNames, projections, rows, expectedRows, null, null, null, table);
     }
     
-    private void runQueryTest(String ddl, String[] columnNames, String[] projections, Object[][] rows, Object[][] expectedRows, HavingCondition havingCondition) throws Exception {
-        runQueryTest(ddl, columnNames, projections, rows, expectedRows, null, havingCondition, null);
+    private void runQueryTest(String ddl, String[] columnNames, String[] projections, Object[][] rows, Object[][] expectedRows, HavingCondition havingCondition,
+        String table) throws Exception {
+        runQueryTest(ddl, columnNames, projections, rows, expectedRows, null, havingCondition, null,
+            table);
     }
     
 
-    private void runQueryTest(
-        String ddl, 
-        String[] columnNames, 
-        String[] projections, 
-        Object[][] rows, Object[][] expectedRows, 
-        WhereCondition whereCondition, 
-        HavingCondition havingCondition,
-        OrderBy orderBy) 
+    private void runQueryTest(String ddl, String[] columnNames, String[] projections, Object[][] rows, Object[][] expectedRows,
+        WhereCondition whereCondition, HavingCondition havingCondition, OrderBy orderBy,
+        String table)
         throws Exception 
     {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -531,7 +602,7 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
 
             String columns = appendColumns(columnNames);
             String placeholders = appendPlaceholders(columnNames);
-            String dml = "UPSERT INTO " + TABLE + " (" + columns + ") VALUES(" + placeholders +")";
+            String dml = "UPSERT INTO " + table + " (" + columns + ") VALUES(" + placeholders +")";
             PreparedStatement stmt = conn.prepareStatement(dml);
 
             for (int row = 0; row < rows.length; row++) {
@@ -543,7 +614,7 @@ public class SortOrderIT extends BaseHBaseManagedTimeIT {
             }
             conn.commit();
             
-            String selectClause = "SELECT " + appendColumns(projections) + " FROM " + TABLE;
+            String selectClause = "SELECT " + appendColumns(projections) + " FROM " + table;
             
             for (WhereCondition whereConditionClause : new WhereCondition[]{whereCondition, WhereCondition.reverse(whereCondition)}) {
                 String query = WhereCondition.appendWhere(whereConditionClause, selectClause);

@@ -30,11 +30,14 @@ import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class SaltedTableVarLengthRowKeyIT extends BaseHBaseManagedTimeIT {
+public class SaltedTableVarLengthRowKeyIT extends BaseHBaseManagedTimeTableReuseIT {
+
+    private static final String TEST_TABLE = generateRandomString();
 
     private static void initTableValues() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -42,9 +45,9 @@ public class SaltedTableVarLengthRowKeyIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
         
         try {
-            createTestTable(getUrl(), "create table testVarcharKey " +
+            createTestTable(getUrl(), "create table " + TEST_TABLE + " " +
                     " (key_string varchar not null primary key, kv integer) SALT_BUCKETS=4\n");
-            String query = "UPSERT INTO testVarcharKey VALUES(?,?)";
+            String query = "UPSERT INTO " + TEST_TABLE + " VALUES(?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, "a");
             stmt.setInt(2, 1);
@@ -74,7 +77,7 @@ public class SaltedTableVarLengthRowKeyIT extends BaseHBaseManagedTimeIT {
             PreparedStatement stmt;
             ResultSet rs;
             
-            query = "SELECT * FROM testVarcharKey where key_string = 'abc'";
+            query = "SELECT * FROM " + TEST_TABLE + " where key_string = 'abc'";
             stmt = conn.prepareStatement(query);
             rs = stmt.executeQuery();
             assertTrue(rs.next());
