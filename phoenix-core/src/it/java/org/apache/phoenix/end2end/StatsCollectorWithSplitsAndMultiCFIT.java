@@ -116,25 +116,25 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
         assertTrue(rs.next());
         assertEquals("A", rs.getString(1));
         assertEquals(25, rs.getInt(2));
-        assertEquals(12420, rs.getInt(3));
+        assertEquals(12530, rs.getInt(3));
         assertEquals(25, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("B", rs.getString(1));
         assertEquals(20, rs.getInt(2));
-        assertEquals(5540, rs.getInt(3));
+        assertEquals(5600, rs.getInt(3));
         assertEquals(20, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("C", rs.getString(1));
         assertEquals(25, rs.getInt(2));
-        assertEquals(6930, rs.getInt(3));
+        assertEquals(7005, rs.getInt(3));
         assertEquals(25, rs.getInt(4));
 
         assertTrue(rs.next());
         assertEquals("D", rs.getString(1));
         assertEquals(25, rs.getInt(2));
-        assertEquals(6930, rs.getInt(3));
+        assertEquals(7005, rs.getInt(3));
         assertEquals(25, rs.getInt(4));
 
     }
@@ -166,7 +166,7 @@ public class StatsCollectorWithSplitsAndMultiCFIT extends StatsCollectorAbstract
             int startIndex = r.nextInt(strings.length);
             int endIndex = r.nextInt(strings.length - startIndex) + startIndex;
             long rows = endIndex - startIndex;
-            long c2Bytes = rows * 35;
+            long c2Bytes = rows * 37;
             System.out.println(rows + ":" + startIndex + ":" + endIndex);
             rs = conn.createStatement().executeQuery(
                     "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from SYSTEM.STATS where PHYSICAL_NAME = '"
