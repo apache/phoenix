@@ -36,13 +36,17 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
     private final int limit;
     private int count = 0;
+    private int offsetCount = 0;
     private final List<OrderByExpression> orderByColumns;
     private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
     private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
+    private final int offset;
     
-    public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit, List<OrderByExpression> orderByColumns) {
+    public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit, Integer offset,
+            List<OrderByExpression> orderByColumns) {
         super(iterators);
         this.limit = limit == null ? -1 : limit;
+        this.offset = offset == null ? -1 : offset;
         this.orderByColumns = orderByColumns;
     }
 
@@ -71,6 +75,10 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
     @Override
     public Tuple peek() throws SQLException {
+        while (offsetCount < offset) {
+            if (super.next() == null) { return null; }
+            offsetCount++;
+        }
         if (limit >= 0 && count >= limit) {
             return null;
         }
@@ -79,9 +87,11 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
 
     @Override
     public Tuple next() throws SQLException {
-        if (limit >= 0 && count++ >= limit) {
-            return null;
+        while (offsetCount < offset) {
+            if (super.next() == null) { return null; }
+            offsetCount++;
         }
+        if (limit >= 0 && count++ >= limit) { return null; }
         return super.next();
     }
 
@@ -90,12 +100,15 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     public void explain(List<String> planSteps) {
         resultIterators.explain(planSteps);
         planSteps.add("CLIENT MERGE SORT");
+        if (offset > 0) {
+            planSteps.add("CLIENT OFFSET " + offset);
+        }
     }
 
 	@Override
 	public String toString() {
 		return "MergeSortTopNResultIterator [limit=" + limit + ", count="
 				+ count + ", orderByColumns=" + orderByColumns + ", ptr1="
-				+ ptr1 + ", ptr2=" + ptr2 + "]";
+				+ ptr1 + ", ptr2=" + ptr2 + ",offset=" + offset + "]";
 	}
 }

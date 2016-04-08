@@ -441,6 +441,38 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    DYNAMIC SERVER FILTER BY \"I.item_id\" IN (\"O.item_id\")\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
+                /*
+                 * testJoinWithOffset()
+                 *     SELECT order_id, i.name, s.name, s.address, quantity 
+                 *     FROM joinSupplierTable s 
+                 *     LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
+                 *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
+                 */
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER OFFSET 2\n" +
+                "    SERVER 3 ROW LIMIT\n" +
+                "CLIENT 1 ROW LIMIT\n" +
+                "    PARALLEL LEFT-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL LEFT-JOIN TABLE 1(DELAYED EVALUATION)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    JOIN-SCANNER 3 ROW LIMIT",
+                /*
+                 * testJoinWithOffset()
+                 *     SELECT order_id, i.name, s.name, s.address, quantity 
+                 *     FROM joinSupplierTable s 
+                 *     JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
+                 */
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER OFFSET 2\n" +
+                "CLIENT 1 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ITEM_TABLE_DISPLAY_NAME + "\n" +
+                "    PARALLEL INNER-JOIN TABLE 1(DELAYED EVALUATION)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.supplier_id\")\n" +
+                "    JOIN-SCANNER 3 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -770,6 +802,38 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".OrderTable\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
+                /*
+                 * testJoinWithLimit()
+                 *     SELECT order_id, i.name, s.name, s.address, quantity 
+                 *     FROM joinSupplierTable s 
+                 *     LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
+                 *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
+                 */
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER OFFSET 2\n" +
+                "    SERVER 3 ROW LIMIT\n" +
+                "CLIENT 1 ROW LIMIT\n" +
+                "    PARALLEL LEFT-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".idx_item\n" +
+                "    PARALLEL LEFT-JOIN TABLE 1(DELAYED EVALUATION)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    JOIN-SCANNER 3 ROW LIMIT",
+                /*
+                 * testJoinWithLimit()
+                 *     SELECT order_id, i.name, s.name, s.address, quantity 
+                 *     FROM joinSupplierTable s 
+                 *     JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
+                 */
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER OFFSET 2\n" +
+                "CLIENT 1 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_SCHEMA + ".idx_item\n" +
+                "    PARALLEL INNER-JOIN TABLE 1(DELAYED EVALUATION)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.0:supplier_id\")\n" +
+                "    JOIN-SCANNER 3 ROW LIMIT",
                 }});
         testCases.add(new String[][] {
                 {
@@ -1124,6 +1188,40 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
                 "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")\n" +
                 "    JOIN-SCANNER 4 ROW LIMIT",
+                /*
+                 * testJoinWithOffset()
+                 *     SELECT order_id, i.name, s.name, s.address, quantity 
+                 *     FROM joinSupplierTable s 
+                 *     LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
+                 *     LEFT JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
+                 */
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER OFFSET 2\n" +
+                "    SERVER 3 ROW LIMIT\n" +
+                "CLIENT 1 ROW LIMIT\n" +
+                "    PARALLEL LEFT-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "        CLIENT MERGE SORT\n" +      
+                "    PARALLEL LEFT-JOIN TABLE 1(DELAYED EVALUATION)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    JOIN-SCANNER 3 ROW LIMIT",
+                /*
+                 * testJoinWithOffset()
+                 *     SELECT order_id, i.name, s.name, s.address, quantity 
+                 *     FROM joinSupplierTable s 
+                 *     JOIN joinItemTable i ON i.supplier_id = s.supplier_id 
+                 *     JOIN joinOrderTable o ON o.item_id = i.item_id LIMIT 1 OFFSET 2
+                 */
+                "CLIENT SERIAL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n" +
+                "    SERVER OFFSET 2\n" +
+                "CLIENT 1 ROW LIMIT\n" +
+                "    PARALLEL INNER-JOIN TABLE 0\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "+ MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX +""+JOIN_ITEM_TABLE_DISPLAY_NAME + " [-32768]\n" +
+                "        CLIENT MERGE SORT\n" +
+                "    PARALLEL INNER-JOIN TABLE 1(DELAYED EVALUATION)\n" +
+                "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "+ JOIN_ORDER_TABLE_DISPLAY_NAME + "\n" +
+                "    DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.0:supplier_id\")\n" +
+                "    JOIN-SCANNER 3 ROW LIMIT",
                 }});
         return testCases;
     }
@@ -2920,6 +3018,26 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             assertEquals(rs.getString(4), "S5");
 
             assertFalse(rs.next());
+
+            query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM "
+                    + JOIN_ITEM_TABLE_FULL_NAME
+                    + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM "
+                    + JOIN_SUPPLIER_TABLE_FULL_NAME
+                    + " ORDER BY \"supplier_id\"  OFFSET 2) AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name != 'S1')";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "0000000005");
+            assertEquals(rs.getString(2), "T5");
+            assertEquals(rs.getString(3), "0000000005");
+            assertEquals(rs.getString(4), "S5");
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "0000000006");
+            assertEquals(rs.getString(2), "T6");
+            assertEquals(rs.getString(3), "0000000006");
+            assertEquals(rs.getString(4), "S6");
+            assertFalse(rs.next());
+
         } finally {
             conn.close();
         }
@@ -3228,6 +3346,49 @@ public class HashJoinIT extends BaseHBaseManagedTimeIT {
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
             assertEquals(plans[20], QueryUtil.getExplainPlan(rs));
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testJoinWithOffset() throws Exception {
+        String query1 = "SELECT \"order_id\", i.name, s.name, s.address, quantity FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME
+                + " s LEFT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON i.\"supplier_id\" = s.\"supplier_id\" LEFT JOIN "
+                + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 1 OFFSET 2 ";
+        String query2 = "SELECT \"order_id\", i.name, s.name, s.address, quantity FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME
+                + " s JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON i.\"supplier_id\" = s.\"supplier_id\" JOIN "
+                + JOIN_ORDER_TABLE_FULL_NAME + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 1 OFFSET 2 ";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getString(4), "202 YYY Street");
+            assertEquals(rs.getInt(5), 5000);
+
+            assertFalse(rs.next());
+
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
+            assertEquals(plans[22], QueryUtil.getExplainPlan(rs));
+
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getString(4), "202 YYY Street");
+            assertEquals(rs.getInt(5), 5000);
+            assertFalse(rs.next());
+
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query2);
+            assertEquals(plans[23], QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
