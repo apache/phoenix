@@ -90,6 +90,6 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
         
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), 
                 implementor.getTableMapping().getTableRef(), RowProjector.EMPTY_PROJECTOR, 
-                fetchValue, null, OrderBy.EMPTY_ORDER_BY, plan);
+                fetchValue, null, null, OrderBy.EMPTY_ORDER_BY, plan);
     }
 }

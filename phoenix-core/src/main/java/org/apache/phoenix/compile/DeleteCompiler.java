@@ -352,12 +352,10 @@ public class DeleteCompiler {
                     PColumn column = table.getPKColumns().get(i);
                     aliasedNodes.add(FACTORY.aliasedNode(null, FACTORY.column(null, '"' + column.getName().getString() + '"', null)));
                 }
-                select = FACTORY.select(
-                        delete.getTable(), 
-                        hint, false, aliasedNodes, delete.getWhere(), 
-                        Collections.<ParseNode>emptyList(), null, 
-                        delete.getOrderBy(), delete.getLimit(),
-                        delete.getBindCount(), false, false, Collections.<SelectStatement>emptyList(), delete.getUdfParseNodes());
+                select = FACTORY.select(delete.getTable(), hint, false, aliasedNodes, delete.getWhere(),
+                        Collections.<ParseNode> emptyList(), null, delete.getOrderBy(), delete.getLimit(), null,
+                        delete.getBindCount(), false, false, Collections.<SelectStatement> emptyList(),
+                        delete.getUdfParseNodes());
                 select = StatementNormalizer.normalize(select, resolverToBe);
                 SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolverToBe, connection);
                 if (transformedSelect != select) {
@@ -514,7 +512,8 @@ public class DeleteCompiler {
                     projectorToBe = new RowProjector(projectorToBe,true);
                 }
                 final RowProjector projector = projectorToBe;
-                final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, projector, null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
+                final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, projector, null, null,
+                        OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                 mutationPlans.add(new MutationPlan() {
                     @Override
                     public ParameterMetaData getParameterMetaData() {

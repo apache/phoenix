@@ -34,6 +34,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
+import org.apache.phoenix.iterate.OffsetResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.UnionResultIterators;
@@ -55,13 +56,14 @@ public class UnionPlan implements QueryPlan {
     private final OrderBy orderBy;
     private final StatementContext parentContext;
     private final Integer limit;
+    private final Integer offset;
     private final GroupBy groupBy;
     private final RowProjector projector;
     private final List<QueryPlan> plans;
     private UnionResultIterators iterators;
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
-            Integer limit, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) {
+            Integer limit, Integer offset, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) {
         this.parentContext = context;
         this.statement = statement;
         this.tableRef = table;
@@ -70,6 +72,7 @@ public class UnionPlan implements QueryPlan {
         this.orderBy = orderBy;
         this.groupBy = groupBy;
         this.plans = plans;
+        this.offset= offset;
         this.paramMetaData = paramMetaData;
     }
 
@@ -113,6 +116,11 @@ public class UnionPlan implements QueryPlan {
     }
 
     @Override
+    public Integer getOffset() {
+        return offset;
+    }
+
+    @Override
     public RowProjector getProjector() {
         return projector;
     }
@@ -133,9 +141,12 @@ public class UnionPlan implements QueryPlan {
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
 
         if (isOrdered) { // TopN
-            scanner = new MergeSortTopNResultIterator(iterators, limit, orderBy.getOrderByExpressions());
+            scanner = new MergeSortTopNResultIterator(iterators, limit, offset, orderBy.getOrderByExpressions());
         } else {
             scanner = new ConcatResultIterator(iterators);
+            if (offset != null) {
+                scanner = new OffsetResultIterator(scanner, offset);
+            }
             if (limit != null) {
                 scanner = new LimitingResultIterator(scanner, limit);
             }          
@@ -198,7 +209,7 @@ public class UnionPlan implements QueryPlan {
             return this;
         
         return new UnionPlan(this.parentContext, this.statement, this.tableRef, this.projector,
-            limit, this.orderBy, this.groupBy, this.plans, this.paramMetaData);
+            limit, this.offset, this.orderBy, this.groupBy, this.plans, this.paramMetaData);
     }
 
 	@Override

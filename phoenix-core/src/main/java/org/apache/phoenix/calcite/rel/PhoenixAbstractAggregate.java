@@ -149,11 +149,8 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             return GroupBy.EMPTY_GROUP_BY;
         }
         
-        String groupExprAttribName = isOrderedGroupBy?
-                BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS
-              : BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
         // TODO sort group by keys. not sure if there is a way to avoid this sorting,
-        //      otherwise we would have add an extra projection.
+        //      otherwise we would have to add an extra projection.
         // TODO convert key types. can be avoided?
         List<Expression> keyExprs = Lists.newArrayListWithExpectedSize(ordinals.size());
         for (int i = 0; i < ordinals.size(); i++) {
@@ -161,7 +158,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             keyExprs.add(expr);
         }
         
-        return new GroupBy.GroupByBuilder().setScanAttribName(groupExprAttribName).setExpressions(keyExprs).setKeyExpressions(keyExprs).build();        
+        return new GroupBy.GroupByBuilder().setIsOrderPreserving(isOrderedGroupBy).setExpressions(keyExprs).setKeyExpressions(keyExprs).build();        
     }
     
     protected void serializeAggregators(Implementor implementor, StatementContext context, boolean isEmptyGroupBy) {

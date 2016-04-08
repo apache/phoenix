@@ -212,7 +212,7 @@ public class CorrelatePlan extends DelegateQueryPlan {
             return this;
         
         return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
-                this.getProjector(), limit, null, OrderBy.EMPTY_ORDER_BY, this);
+                this.getProjector(), limit, this.getOffset(), null, OrderBy.EMPTY_ORDER_BY, this);
     }
 
 }

@@ -60,6 +60,8 @@ public interface QueryPlan extends StatementPlan {
     
     Integer getLimit();
 
+    Integer getOffset();
+    
     OrderBy getOrderBy();
 
     GroupBy getGroupBy();

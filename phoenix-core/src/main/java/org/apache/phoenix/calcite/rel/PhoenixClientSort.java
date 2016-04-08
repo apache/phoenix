@@ -70,7 +70,7 @@ public class PhoenixClientSort extends PhoenixAbstractSort {
         
         OrderBy orderBy = super.getOrderBy(getCollation(), implementor, null);
         
-        return new ClientScanPlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, null, null, orderBy, plan);
+        return new ClientScanPlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, null, null, null, orderBy, plan);
     }
 
 }

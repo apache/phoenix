@@ -74,7 +74,7 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
         GroupBy groupBy = super.getGroupBy(implementor);       
         super.serializeAggregators(implementor, context, groupBy.isEmpty());
         
-        QueryPlan aggPlan = new ClientAggregatePlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, null, null, OrderBy.EMPTY_ORDER_BY, groupBy, null, plan);
+        QueryPlan aggPlan = new ClientAggregatePlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, null, null, null, OrderBy.EMPTY_ORDER_BY, groupBy, null, plan);
         
         return PhoenixAbstractAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));
     }

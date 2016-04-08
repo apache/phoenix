@@ -187,6 +187,11 @@ public class SortMergeJoinPlan implements QueryPlan {
     }
 
     @Override
+    public Integer getOffset() {
+        return null;
+    }
+
+    @Override
     public OrderBy getOrderBy() {
         return null;
     }
@@ -663,7 +668,7 @@ public class SortMergeJoinPlan implements QueryPlan {
             return this;
         
         return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
-                this.getProjector(), limit, null, OrderBy.EMPTY_ORDER_BY, this);
+                this.getProjector(), limit, this.getOffset(), null, OrderBy.EMPTY_ORDER_BY, this);
     }
 
     public Set<TableRef> getSourceRefs() {

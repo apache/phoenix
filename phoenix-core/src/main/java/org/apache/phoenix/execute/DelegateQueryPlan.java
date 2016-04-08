@@ -124,4 +124,8 @@ public abstract class DelegateQueryPlan implements QueryPlan {
 		return delegate.getOperation();
 	}
 	
+	@Override
+    public Integer getOffset() {
+        return delegate.getOffset();
+    }
 }

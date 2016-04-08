@@ -69,6 +69,6 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
         implementor.popContext();
         Expression expr = CalciteUtils.toExpression(condition, implementor);
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(),
-                plan.getProjector(), null, expr, OrderBy.EMPTY_ORDER_BY, plan);
+                plan.getProjector(), null, null, expr, OrderBy.EMPTY_ORDER_BY, plan);
     }
 }

@@ -153,7 +153,7 @@ public class PhoenixClientJoin extends PhoenixAbstractJoin {
         Expression postFilterExpr = postFilter.isAlwaysTrue() ? null : CalciteUtils.toExpression(postFilter, implementor);
         if (postFilter != null) {
             plan = new ClientScanPlan(context, plan.getStatement(), tableRef, 
-                    RowProjector.EMPTY_PROJECTOR, null, postFilterExpr, 
+                    RowProjector.EMPTY_PROJECTOR, null, null, postFilterExpr, 
                     OrderBy.EMPTY_ORDER_BY, plan);
         }
         

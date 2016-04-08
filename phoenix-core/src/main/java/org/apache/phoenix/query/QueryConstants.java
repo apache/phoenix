@@ -138,6 +138,9 @@ public interface QueryConstants {
     public final static String SYSTEM_SCHEMA_NAME = "SYSTEM";
     public final static byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
     public final static String PHOENIX_METADATA = "table";
+    public final static String OFFSET_ROW_KEY = "_OFFSET_";
+    public final static byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);
+    public final static ImmutableBytesPtr offsetRowKeyPtr = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);
 
     public final static PName SINGLE_COLUMN_NAME = PNameFactory.newNormalizedName("s");
     public final static PName SINGLE_COLUMN_FAMILY_NAME = PNameFactory.newNormalizedName("s");
@@ -328,5 +331,8 @@ public interface QueryConstants {
             // Install split policy to prevent a tenant's metadata from being split across regions.
             HTableDescriptor.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName() + "',\n" + 
             PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
+    public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
+    public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
+    public static final String LAST_SCAN = "LAST_SCAN";
 
 }

@@ -59,6 +59,6 @@ public class PhoenixUnion extends Union implements PhoenixRel {
         }
         
         return new UnionPlan(subPlans.get(0).getContext(), SelectStatement.SELECT_ONE, subPlans.get(0).getTableRef(), RowProjector.EMPTY_PROJECTOR,
-                null, OrderBy.EMPTY_ORDER_BY, GroupBy.EMPTY_GROUP_BY, subPlans, null);
+                null, null, OrderBy.EMPTY_ORDER_BY, GroupBy.EMPTY_GROUP_BY, subPlans, null);
     }
 }

@@ -2383,6 +2383,50 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
     }
 
     @Test
+    public void testJoinWithOffset() throws Exception {
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM "
+                + JOIN_SUPPLIER_TABLE_FULL_NAME + " s LEFT JOIN " + JOIN_ITEM_TABLE_FULL_NAME
+                + " i ON i.\"supplier_id\" = s.\"supplier_id\" LEFT JOIN " + JOIN_ORDER_TABLE_FULL_NAME
+                + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 2 OFFSET 1";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM "
+                + JOIN_SUPPLIER_TABLE_FULL_NAME + " s JOIN " + JOIN_ITEM_TABLE_FULL_NAME
+                + " i ON i.\"supplier_id\" = s.\"supplier_id\" JOIN " + JOIN_ORDER_TABLE_FULL_NAME
+                + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 1 OFFSET 2";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            ResultSet rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertNull(rs.getString(1));
+            assertNull(rs.getString(2));
+            assertEquals(rs.getString(3), "S4");
+            assertEquals(rs.getString(4), "404 YYY Street");
+            assertEquals(rs.getInt(5), 0);
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "000000000000001");
+            assertEquals(rs.getString(2), "T1");
+            assertEquals(rs.getString(3), "S1");
+            assertEquals(rs.getString(4), "101 YYY Street");
+            assertEquals(rs.getInt(5), 1000);
+            assertFalse(rs.next());
+
+            statement = conn.prepareStatement(query2);
+            rs = statement.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(rs.getString(1), "000000000000005");
+            assertEquals(rs.getString(2), "T3");
+            assertEquals(rs.getString(3), "S2");
+            assertEquals(rs.getString(4), "202 YYY Street");
+            assertEquals(rs.getInt(5), 5000);
+
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
     public void testNonEquiJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

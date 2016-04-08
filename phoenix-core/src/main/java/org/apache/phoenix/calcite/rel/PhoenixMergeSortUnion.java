@@ -73,6 +73,6 @@ public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
         
         final OrderBy orderBy = PhoenixAbstractSort.getOrderBy(collation, implementor, null);
         return new UnionPlan(subPlans.get(0).getContext(), SelectStatement.SELECT_ONE, subPlans.get(0).getTableRef(), RowProjector.EMPTY_PROJECTOR,
-                null, orderBy, GroupBy.EMPTY_GROUP_BY, subPlans, null);
+                null, null, orderBy, GroupBy.EMPTY_GROUP_BY, subPlans, null);
     }
 }

@@ -279,14 +279,13 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 PTable projectedTable = tableMapping.createProjectedTable(retainPKColumns);
                 implementor.setTableMapping(new TableMapping(projectedTable));
             }
-            Integer limit = null;
             OrderBy orderBy = scanOrder == ScanOrder.NONE ?
                       OrderBy.EMPTY_ORDER_BY
                     : (scanOrder == ScanOrder.FORWARD ?
                               OrderBy.FWD_ROW_KEY_ORDER_BY
                             : OrderBy.REV_ROW_KEY_ORDER_BY);
             ParallelIteratorFactory iteratorFactory = null;
-            return new ScanPlan(context, select, tableMapping.getTableRef(), RowProjector.EMPTY_PROJECTOR, limit, orderBy, iteratorFactory, true, dynamicFilter);
+            return new ScanPlan(context, select, tableMapping.getTableRef(), RowProjector.EMPTY_PROJECTOR, null, null, orderBy, iteratorFactory, true, dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

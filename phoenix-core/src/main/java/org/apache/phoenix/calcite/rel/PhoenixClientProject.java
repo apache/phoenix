@@ -88,7 +88,7 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
                         new Scan(), seqManager);
                 plan = new ClientScanPlan(
                         context, plan.getStatement(), plan.getTableRef(), 
-                        RowProjector.EMPTY_PROJECTOR, null, null, 
+                        RowProjector.EMPTY_PROJECTOR, null, null, null,
                         OrderBy.EMPTY_ORDER_BY, plan);
             } catch (SQLException e) {
                 throw new RuntimeException(e);
