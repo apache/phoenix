@@ -171,7 +171,7 @@ public class UnnestArrayPlan extends DelegateQueryPlan {
         @Override
         public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
             byte[] lengthBuf = new byte[PInteger.INSTANCE.getByteSize()];
-            PInteger.INSTANCE.getCodec().encodeInt(index, lengthBuf, 0);
+            PInteger.INSTANCE.getCodec().encodeInt(index + 1, lengthBuf, 0);
             ptr.set(lengthBuf);
             return true;
         }
