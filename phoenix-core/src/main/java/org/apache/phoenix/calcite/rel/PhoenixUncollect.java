@@ -1,7 +1,7 @@
 package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
-import java.util.Arrays;
+import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
@@ -17,24 +17,27 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+
+import com.google.common.collect.Lists;
 
 public class PhoenixUncollect extends Uncollect implements PhoenixRel {
     
-    public static PhoenixUncollect create(RelNode input) {
+    public static PhoenixUncollect create(RelNode input, boolean withOrdinality) {
         RelOptCluster cluster = input.getCluster();
         RelTraitSet traits = cluster.traitSetOf(PhoenixConvention.CLIENT);
-        return new PhoenixUncollect(cluster, traits, input);
+        return new PhoenixUncollect(cluster, traits, input, withOrdinality);
     }
 
     private PhoenixUncollect(RelOptCluster cluster, RelTraitSet traitSet,
-            RelNode child) {
-        super(cluster, traitSet, child);
+            RelNode child, boolean withOrdinality) {
+        super(cluster, traitSet, child, withOrdinality);
     }
 
     @Override
     public PhoenixUncollect copy(RelTraitSet traitSet,
         RelNode newInput) {
-        return create(newInput);
+        return create(newInput, withOrdinality);
     }
 
     @Override
@@ -52,13 +55,18 @@ public class PhoenixUncollect extends Uncollect implements PhoenixRel {
         @SuppressWarnings("rawtypes")
         PDataType baseType = PDataType.fromTypeId(arrayExpression.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE);
         try {
-            implementor.project(Arrays.<Expression> asList(LiteralExpression.newConstant(null, baseType)));
+            List<Expression> fields = Lists.newArrayList();
+            fields.add(LiteralExpression.newConstant(null, baseType));
+            if (withOrdinality) {
+                fields.add(LiteralExpression.newConstant(null, PInteger.INSTANCE));
+            }
+            implementor.project(fields);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
         PTable projectedTable = implementor.getTableMapping().createProjectedTable(implementor.getCurrentContext().retainPKColumns);
         implementor.setTableMapping(new TableMapping(projectedTable));
-        return new UnnestArrayPlan(plan, arrayExpression, false);
+        return new UnnestArrayPlan(plan, arrayExpression, withOrdinality);
     }
 
 }

@@ -899,6 +899,20 @@ public class CalciteIT extends BaseCalciteIT {
                         {88}, 
                         {80}})
                 .close();
+        start(false, 1000f).sql("SELECT t.o, t.s FROM UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + ")) WITH ORDINALITY AS t(s, o)")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(O=[$1], S=[$0])\n" +
+                           "    PhoenixUncollect(withOrdinality=[true])\n" +
+                           "      PhoenixServerProject(EXPR$0=[$2])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, SCORES]])\n")
+                .resultIs(0, new Object[][] {
+                        {1, 85},
+                        {2, 80},
+                        {3, 82},
+                        {1, 87},
+                        {2, 88},
+                        {3, 80}})
+                .close();
         start(false, 1000f).sql("SELECT s.student_id, t.score FROM " + SCORES_TABLE_NAME + " s, UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + " s2 where s.student_id = s2.student_id)) AS t(score)")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(STUDENT_ID=[$0], SCORE=[$3])\n" +
