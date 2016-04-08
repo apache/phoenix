@@ -60,8 +60,14 @@ public class GroupByCompiler {
         private final boolean isOrderPreserving;
         public static final GroupByCompiler.GroupBy EMPTY_GROUP_BY = new GroupBy(new GroupByBuilder()) {
             @Override
+            public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
+                return this;
+            }
+            
+            @Override
             public void explain(List<String> planSteps, Integer limit) {
             }
+            
             @Override
             public String getScanAttribName() {
                 return null;
@@ -69,9 +75,15 @@ public class GroupByCompiler {
         };
         public static final GroupByCompiler.GroupBy UNGROUPED_GROUP_BY = new GroupBy(new GroupByBuilder().setIsOrderPreserving(true)) {
             @Override
+            public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
+                return this;
+            }
+
+            @Override
             public void explain(List<String> planSteps, Integer limit) {
                 planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
             }
+            
             @Override
             public String getScanAttribName() {
                 return BaseScannerRegionObserver.UNGROUPED_AGG;
