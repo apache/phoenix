@@ -2284,7 +2284,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 String columnsToAdd = "";
                                 if(currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
                                     // We know that we always need to add the STORE_NULLS column for 4.3 release
-                                    columnsToAdd += "," + PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName();
+                                    columnsToAdd = addColumn(columnsToAdd, PhoenixDatabaseMetaData.STORE_NULLS + " " + PBoolean.INSTANCE.getSqlTypeName());
                                     try (HBaseAdmin admin = getAdmin()) {
                                         HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
                                         for (HTableDescriptor table : localIndexTables) {
@@ -2310,8 +2310,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 // we should just have a ALTER TABLE ADD IF NOT EXISTS statement with all 
                                 // the column names that have been added to SYSTEM.CATALOG since 4.0. 
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0) {
-                                    columnsToAdd += ", " + PhoenixDatabaseMetaData.INDEX_TYPE + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName()
-                                            + ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName();
+                                    columnsToAdd = addColumn(columnsToAdd, PhoenixDatabaseMetaData.INDEX_TYPE + " " + PUnsignedTinyint.INSTANCE.getSqlTypeName()
+                                        + ", " + PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName());
                                 }
                                 
                                 // If we have some new columns from 4.1-4.3 to add, add them now.
@@ -2483,6 +2483,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             throw Throwables.propagate(e);
+        }
+    }
+    
+    private String addColumn(String columnsToAddSoFar, String columns) {
+        if (columnsToAddSoFar == null || columnsToAddSoFar.isEmpty()) {
+            return columns;
+        } else {
+            return columnsToAddSoFar + ", " + columns;
         }
     }
     
