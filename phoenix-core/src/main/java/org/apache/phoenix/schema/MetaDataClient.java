@@ -664,7 +664,7 @@ public class MetaDataClient {
         if (view.getType() != PTableType.VIEW || view.getViewType() == ViewType.MAPPED) {
             return false;
         }
-        String physicalName = view.getPhysicalNames().get(0).toString();
+        String physicalName = view.getPhysicalName().getString();
         String schemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
         String tableName = SchemaUtil.getTableNameFromFullName(physicalName);
         MetaDataMutationResult parentResult = updateCache(null, schemaName, tableName, false, resolvedTimestamp);

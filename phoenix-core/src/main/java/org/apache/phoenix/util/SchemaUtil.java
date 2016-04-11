@@ -644,6 +644,7 @@ public class SchemaUtil {
     }
 
     public static String getTableNameFromFullName(String tableName) {
+        if (tableName.contains(":")) { return getTableNameFromFullName(tableName, QueryConstants.NAMESPACE_SEPARATOR); }
         return getTableNameFromFullName(tableName, QueryConstants.NAME_SEPARATOR);
     }
 

@@ -502,8 +502,11 @@ public class MetaDataUtil {
     }
 
     public static boolean isViewIndex(String physicalName) {
-        if (physicalName.contains(VIEW_INDEX_TABLE_PREFIX)) { return true; }
-        return false;
+        if (physicalName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+            return SchemaUtil.getTableNameFromFullName(physicalName).startsWith(VIEW_INDEX_TABLE_PREFIX);
+        } else {
+            return physicalName.startsWith(VIEW_INDEX_TABLE_PREFIX);
+        }
     }
 
     public static Set<String> getViewNames(PhoenixConnection conn, String table) throws SQLException {

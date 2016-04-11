@@ -1316,7 +1316,8 @@ public class UpgradeUtil {
                                 + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                         : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
         // we need to move physical table in actual namespace for TABLE and Index
-        if (PTableType.TABLE.equals(pTableType) || PTableType.INDEX.equals(pTableType)) {
+        if (admin.tableExists(srcTableName)
+                && (PTableType.TABLE.equals(pTableType) || PTableType.INDEX.equals(pTableType))) {
             admin.snapshot(srcTableName, srcTableName);
             admin.cloneSnapshot(srcTableName.getBytes(), destTableName.getBytes());
             admin.disableTable(srcTableName);
@@ -1384,7 +1385,8 @@ public class UpgradeUtil {
             if (table.isNamespaceMapped()) {
                 for (PTable index : table.getIndexes()) {
                     String srcTableName = index.getPhysicalName().getString();
-                    if (srcTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+                    if (srcTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)
+                            || (!MetaDataUtil.isViewIndex(srcTableName) && PTableType.VIEW.equals(table.getType()))) {
                         // this condition occurs in case of multiple views on same table
                         // as all view indexes uses the same physical table, so if one view is already migrated then we
                         // can skip migrating the physical table again

@@ -2449,7 +2449,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     metaConnection = updateSystemCatalogTimestamp(metaConnection, 
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
                                     ConnectionQueryServicesImpl.this.removeTable(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0);
-                                    logger.info("Update of SYSTEM.CATALOG complete");
 									clearCache();
                                 }
 
