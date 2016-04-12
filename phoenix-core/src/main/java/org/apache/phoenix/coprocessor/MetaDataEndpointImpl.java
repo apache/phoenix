@@ -911,8 +911,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
           }
         }
-        PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getTableName(
-                schemaName.getString(), tableName.getString())) : physicalTables.get(0);
+        PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getPhysicalTableName(
+                Bytes.toBytes(SchemaUtil.getTableName(schemaName.getBytes(), tableName.getBytes())), isNamespaceMapped)
+                .getNameAsString()) : physicalTables.get(0);
         PTableStats stats = PTableStats.EMPTY_STATS;
         if (tenantId == null) {
             HTableInterface statsHTable = null;

@@ -970,7 +970,8 @@ public class SchemaUtil {
     }
 
     public static TableName getPhysicalTableName(byte[] fullTableName, boolean isNamespaceMappingEnabled) {
-        if (!isNamespaceMappingEnabled) { return TableName.valueOf(fullTableName); }
+        if (indexOf(fullTableName, QueryConstants.NAMESPACE_SEPARATOR_BYTE) > 0
+                || !isNamespaceMappingEnabled) { return TableName.valueOf(fullTableName); }
         String tableName = getTableNameFromFullName(fullTableName);
         String schemaName = getSchemaNameFromFullName(fullTableName);
         return TableName.valueOf(schemaName, tableName);

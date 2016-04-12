@@ -1803,7 +1803,7 @@ public class MetaDataClient {
             }
 
             if (tableType == PTableType.VIEW) {
-                physicalNames = Collections.singletonList(parent.getName());
+                physicalNames = Collections.singletonList(PNameFactory.newName(parent.getPhysicalName().getString()));
                 if (viewType == ViewType.MAPPED) {
                     columns = newArrayListWithExpectedSize(colDefs.size());
                     pkColumns = newLinkedHashSetWithExpectedSize(colDefs.size());
@@ -1862,7 +1862,8 @@ public class MetaDataClient {
                         linkStatement.setString(4, physicalName.getString());
                         linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
                         if (tableType == PTableType.VIEW) {
-                            PTable physicalTable = connection.getTable(new PTableKey(null, physicalName.getString()));
+                            PTable physicalTable = connection.getTable(new PTableKey(null, physicalName.getString()
+                                    .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR)));
                             linkStatement.setLong(6, physicalTable.getSequenceNumber());
                         } else {
                             linkStatement.setLong(6, parent.getSequenceNumber());
@@ -3314,7 +3315,8 @@ public class MetaDataClient {
                     getCurrentScn());
         }
         boolean isView = table.getType() == PTableType.VIEW;
-        String physicalName = table.getPhysicalName().toString();
+        String physicalName = table.getPhysicalName().toString().replace(QueryConstants.NAMESPACE_SEPARATOR,
+                QueryConstants.NAME_SEPARATOR);
         if (isView && table.getViewType() != ViewType.MAPPED) {
             try {
                 return connection.getTable(new PTableKey(null, physicalName)).getTableStats();

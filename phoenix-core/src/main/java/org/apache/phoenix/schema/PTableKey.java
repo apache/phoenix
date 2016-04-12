@@ -28,8 +28,7 @@ public class PTableKey {
     public PTableKey(PName tenantId, String name) {
         Preconditions.checkNotNull(name);
         this.tenantId = tenantId;
-        this.name = !name.contains(QueryConstants.NAMESPACE_SEPARATOR) ? name
-                : name.replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
+        this.name = name;
     }
 
     public PName getTenantId() {

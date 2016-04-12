@@ -1641,8 +1641,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void ensureViewIndexTableCreated(PName tenantId, byte[] physicalIndexTableName, long timestamp,
             boolean isNamespaceMapped) throws SQLException {
         PTable table;
-        String name = Bytes.toString(SchemaUtil.getParentTableNameFromIndexTable(physicalIndexTableName,
-                MetaDataUtil.VIEW_INDEX_TABLE_PREFIX));
+        String name = Bytes
+                .toString(SchemaUtil.getParentTableNameFromIndexTable(physicalIndexTableName,
+                        MetaDataUtil.VIEW_INDEX_TABLE_PREFIX))
+                .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
         
         try {
             PMetaData metadata = latestMetaData;

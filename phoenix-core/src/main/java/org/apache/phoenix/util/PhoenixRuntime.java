@@ -216,6 +216,7 @@ public class PhoenixRuntime {
                 String srcTable = execCmd.getSrcTable();
                 UpgradeUtil.upgradeTable(conn, srcTable);
                 Set<String> viewNames = MetaDataUtil.getViewNames(conn, srcTable);
+                System.out.println("Views found:"+viewNames);
                 for (String viewName : viewNames) {
                     UpgradeUtil.upgradeTable(conn, viewName);
                 }

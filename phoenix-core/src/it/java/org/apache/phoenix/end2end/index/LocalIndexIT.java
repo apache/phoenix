@@ -102,7 +102,8 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
         this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.indexPhysicalTableName = MetaDataUtil.getLocalIndexTableName(physicalTableName.getNameAsString());
+        this.indexPhysicalTableName = Bytes
+                .toString(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName.getName()));
     }
     
     @BeforeClass 
@@ -187,18 +188,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         HTableDescriptor htd = admin
-                .getTableDescriptor(MetaDataUtil
-                        .getLocalIndexTableName(
-                                SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped).getNameAsString())
-                        .getBytes());
+                .getTableDescriptor(Bytes.toBytes(indexPhysicalTableName));
         assertEquals(IndexRegionSplitPolicy.class.getName(), htd.getValue(HTableDescriptor.SPLIT_POLICY));
         try (HTable userTable = new HTable(admin.getConfiguration(),
                 SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped))) {
-            try (HTable indexTable = new HTable(admin.getConfiguration(),
-                    MetaDataUtil
-                            .getLocalIndexTableName(
-                                    SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped).getNameAsString())
-                            .getBytes())) {
+            try (HTable indexTable = new HTable(admin.getConfiguration(), Bytes.toBytes(indexPhysicalTableName))) {
                 assertArrayEquals("Both user table and index table should have same split keys.",
                         userTable.getStartKeys(), indexTable.getStartKeys());
             }
@@ -220,12 +214,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertTrue("Local index table should be present.", admin.tableExists(MetaDataUtil.getLocalIndexTableName(
-                SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped).getNameAsString())));
+        assertTrue("Local index table should be present.", admin.tableExists(indexPhysicalTableName));
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertFalse("Local index table should be deleted.", admin.tableExists(MetaDataUtil.getLocalIndexTableName(
-                SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped).getNameAsString())));
+        assertFalse("Local index table should be deleted.", admin.tableExists(indexPhysicalTableName));
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
@@ -247,11 +239,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration(),
-                MetaDataUtil
-                        .getLocalIndexTableName(
-                                SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped).getNameAsString())
-                        .getBytes());
+        HTable indexTable = new HTable(admin.getConfiguration(), indexPhysicalTableName);
         Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
@@ -284,11 +272,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        HTable indexTable = new HTable(admin.getConfiguration(),
-                MetaDataUtil
-                        .getLocalIndexTableName(
-                                SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped).getNameAsString())
-                        .getBytes());
+        HTable indexTable = new HTable(admin.getConfiguration(),Bytes.toBytes(indexPhysicalTableName));
         Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
         byte[][] startKeys = startEndKeys.getFirst();
         byte[][] endKeys = startEndKeys.getSecond();
@@ -586,8 +570,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         conn1.createStatement().execute("CREATE INDEX " + indexName + "2" + " ON " + tableName + "(v1)");
         String query = "SELECT t_id, k1, k2,V1 FROM " + tableName +" where v1='a'";
         ResultSet rs1 = conn1.createStatement().executeQuery("EXPLAIN "+ query);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + "2" + " ['a']\n"
-                + "    SERVER FILTER BY FIRST KEY ONLY",QueryUtil.getExplainPlan(rs1));
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
+                + SchemaUtil.getPhysicalTableName(Bytes.toBytes(indexTableName), isNamespaceMapped) + "2" + " ['a']\n"
+                + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs1));
         conn1.close();
     }
 

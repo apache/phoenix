@@ -106,7 +106,7 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMappedView() throws Exception {
         Properties props = new Properties();
-        String schema = "TEST_SCHEMA";
+        String schema = "TEST_SCHEMA_V";
         String tableName = "TEST";
         String fullTablename = schema + QueryConstants.NAME_SEPARATOR + tableName;
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
