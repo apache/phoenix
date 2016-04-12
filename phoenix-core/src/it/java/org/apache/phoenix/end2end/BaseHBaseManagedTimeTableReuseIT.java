@@ -30,7 +30,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @since 0.1
  */
 @NotThreadSafe
-@Category(HBaseManagedTimeTest.class)
+@Category(HBaseManagedTimeTableReuseTest.class)
 public class BaseHBaseManagedTimeTableReuseIT extends BaseTest {
 
   protected static Configuration getTestClusterConfig() {
@@ -46,6 +46,8 @@ public class BaseHBaseManagedTimeTableReuseIT extends BaseTest {
   @AfterClass
   public static void doTeardown() throws Exception {
     // no teardown since we are creating unique table names
+    // just destroy our test driver
+    destroyDriver();
   }
 
   @After
