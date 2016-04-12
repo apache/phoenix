@@ -58,11 +58,11 @@ public abstract class ArrayModifierFunction extends ScalarFunction {
 
         // If the base type of an element is fixed width, make sure the element
         // being appended will fit
-        if (getDataType() != null && otherExpressionType.getByteSize() == null
-                && otherExpressionType != null && baseDataType.isFixedWidth()
+        if (getDataType() != null && otherExpressionType != null
+                && otherExpressionType.getByteSize() == null && baseDataType.isFixedWidth()
                 && otherExpressionType.isFixedWidth() && arrayExpr.getMaxLength() != null
-                && otherExpr.getMaxLength() != null
-                && otherExpr.getMaxLength() > arrayExpr.getMaxLength()) {
+                && otherExpr.getMaxLength() != null && otherExpr.getMaxLength() > arrayExpr
+                .getMaxLength()) {
             throw new DataExceedsCapacityException("Values are not size compatible");
         }
         // If the base type has a scale, make sure the element being appended has a

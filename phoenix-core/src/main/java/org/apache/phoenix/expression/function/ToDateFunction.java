@@ -94,6 +94,7 @@ public class ToDateFunction extends ScalarFunction {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
+        if (obj == null) return false;
         if (getClass() != obj.getClass()) return false;
         ToDateFunction other = (ToDateFunction)obj;
         // Only compare first child, as the other two are potentially resolved on the fly.
