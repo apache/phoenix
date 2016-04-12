@@ -33,7 +33,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
+public class LikeExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final String TEST_TABLE = generateRandomString();
 
@@ -135,14 +135,16 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testLikeWithEscapenLParen() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE t (k VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k))";
+        String t = generateRandomString();
+        String ddl = "CREATE TABLE " + t + " (k VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k))";
         conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO t VALUES('aa','bb')");
-        conn.createStatement().execute("UPSERT INTO t VALUES('a\\(d','xx')");
-        conn.createStatement().execute("UPSERT INTO t VALUES('dd',null)");
+        conn.createStatement().execute("UPSERT INTO " + t + " VALUES('aa','bb')");
+        conn.createStatement().execute("UPSERT INTO " + t + " VALUES('a\\(d','xx')");
+        conn.createStatement().execute("UPSERT INTO " + t + " VALUES('dd',null)");
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM t WHERE k not like '%\\(%'");
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT * FROM " + t + " WHERE k not like '%\\(%'");
         assertTrue(rs.next());
         assertEquals("aa", rs.getString(1));
         assertEquals("bb", rs.getString(2));
