@@ -247,8 +247,13 @@ public class SpillManager implements Closeable {
 
     // Determines the partition, i.e. spillFile the tuple should get spilled to.
     private int getPartition(ImmutableBytesWritable key) {
+        int hashCode = key.hashCode();
+        // *Math.abs(Integer.MIN_VALUE) == Integer.MIN_VALUE
+        if (hashCode == Integer.MIN_VALUE) {
+            hashCode = hashCode >> 1;
+        }
         // Simple implementation hash mod numFiles
-        return Math.abs(key.hashCode()) % numSpillFiles;
+        return Math.abs(hashCode) % numSpillFiles;
     }
 
     /**
