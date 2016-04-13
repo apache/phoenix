@@ -46,6 +46,7 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testUseSchema() throws Exception {
         Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "CREATE SCHEMA IF NOT EXISTS TEST_SCHEMA";
         conn.createStatement().execute(ddl);
@@ -78,6 +79,7 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
         Properties props = new Properties();
         String schema = "TEST_SCHEMA";
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String ddl = "CREATE SCHEMA IF NOT EXISTS " + schema;

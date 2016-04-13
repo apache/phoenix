@@ -79,6 +79,7 @@ public enum SQLExceptionCode {
     MISSING_MAX_LENGTH(207, "22004", "Max length must be specified for type."),
     NONPOSITIVE_MAX_LENGTH(208, "22006", "Max length must have a positive length for type."),
     DECIMAL_PRECISION_OUT_OF_RANGE(209, "22003", "Decimal precision outside of range. Should be within 1 and " + PDataType.MAX_PRECISION + "."),
+    ILLEGAL_OPERATION(210, "22010", "Illegal Operation."),
     SERVER_ARITHMETIC_ERROR(212, "22012", "Arithmetic error on server."),
     VALUE_OUTSIDE_RANGE(213,"22003","Value outside range."),
     VALUE_IN_LIST_NOT_CONSTANT(214, "22008", "Values in IN must evaluate to a constant."),

@@ -912,7 +912,7 @@ public class MetaDataClient {
                     names.add(PNameFactory.newName(SchemaUtil.getTableName(
                             MetaDataUtil.getLocalIndexSchemaName(table.getSchemaName().getString()),
                             MetaDataUtil.getLocalIndexTableName(table.getTableName().getString()))));
-                    physicalNames.add(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes())));
+                    physicalNames.add(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(table.getPhysicalName().getBytes())));
                 }
                 int i = 0;
                 for (final PName name : names) {
@@ -3363,6 +3363,10 @@ public class MetaDataClient {
         boolean wasAutoCommit = connection.getAutoCommit();
         connection.rollback();
         try {
+            if (!SchemaUtil.isNamespaceMappingEnabled(null,
+                    connection.getQueryServices()
+                            .getProps())) { throw new IllegalOperationException("CREATE SCHEMA is not allowed when "
+                                    + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not set to true"); }
             boolean isIfNotExists = create.isIfNotExists();
             validateSchema(create.getSchemaName());
             PSchema schema = new PSchema(create.getSchemaName());

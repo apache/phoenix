@@ -2577,17 +2577,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
                         List<HTableDescriptor> tables = Arrays
                                 .asList(admin.listTables(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*", false));
-                        if (tables.size() == 0) { return; }
+                        List<String> tableNames = getTableNames(tables);
+                        if (tableNames.size() == 0) { return; }
+                        if (tableNames.size() > 4) { throw new IllegalArgumentException(
+                                "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
                         metatable = getTable(SchemaUtil
                                 .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName());
-                        if (tables.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES)) {
-                            UpgradeUtil.mapTableToNamespace(admin, metatable, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                                    props, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
-                            tables.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
-                        }
-                        for (HTableDescriptor table : tables) {
-                            UpgradeUtil.mapTableToNamespace(admin, metatable, table.getTableName().getNameAsString(), props,
+                        if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)) {
+                            UpgradeUtil.mapTableToNamespace(admin, metatable,
+                                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
+                            tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                            ConnectionQueryServicesImpl.this.removeTable(null,
+                                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
+                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
+                        }
+                        for (String table : tableNames) {
+                            UpgradeUtil.mapTableToNamespace(admin, metatable, table, props,
+                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
+                            ConnectionQueryServicesImpl.this.removeTable(null, table, null,
+                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
+                            clearCache();
                         }
                     } finally {
                         if (metatable != null) {
@@ -2602,6 +2612,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private List<String> getTableNames(List<HTableDescriptor> tables) {
+        List<String> tableNames = new ArrayList<String>(4);
+        for (HTableDescriptor desc : tables) {
+            tableNames.add(desc.getNameAsString());
+        }
+        return tableNames;
+    }
+    
     /**
      * Set IMMUTABLE_ROWS to true for all index tables over immutable tables.
      * @param metaConnection connection over which to run the upgrade

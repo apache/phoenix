@@ -28,8 +28,10 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
@@ -45,12 +47,15 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
         Properties props = new Properties();
         String ddl = "DROP SCHEMA " + schema;
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-
             conn.createStatement().execute("CREATE SCHEMA " + schema);
-            conn.createStatement().execute("CREATE TABLE " + schema + "." + tableName + "(id INTEGER PRIMARY KEY)");
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute("CREATE TABLE " + schema + "." + tableName + "(id INTEGER PRIMARY KEY)");
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
 
@@ -75,6 +80,9 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + schema + "." + tableName);
+            //Dropping table manually because Drop_meta_attrib is not working
+            admin.disableTable(TableName.valueOf(schema, tableName));
+            admin.deleteTable(TableName.valueOf(schema, tableName));
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {

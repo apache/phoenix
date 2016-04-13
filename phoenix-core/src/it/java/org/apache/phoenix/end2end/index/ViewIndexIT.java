@@ -74,7 +74,9 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
 
     private void createBaseTable(String tableName, Integer saltBuckets, String splits) throws SQLException {
         Connection conn = getConnection();
-        conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS "+ schemaName);
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+        }
         String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
                 "k1 INTEGER NOT NULL,\n" +
                 "k2 INTEGER NOT NULL,\n" +

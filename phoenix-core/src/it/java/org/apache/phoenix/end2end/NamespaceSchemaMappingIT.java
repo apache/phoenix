@@ -84,7 +84,6 @@ public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("create schema " + schemaName);
         String ddl = "create table " + phoenixFullTableName + "(tableName varchar primary key)";
         conn.createStatement().execute(ddl);
         String query = "select tableName from " + phoenixFullTableName;

@@ -115,11 +115,14 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + tableName);
-            conn.createStatement().execute("CREATE SCHEMA " + schemaName);
         }
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
             assertNotEquals(null,
@@ -127,7 +130,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         } finally {
             admin.close();
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         props.setProperty(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + tableName);
@@ -465,9 +468,9 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testCreateTableWithoutSchema() throws Exception {
-        String createSchemaDDL = "CREATE SCHEMA TEST_SCHEMA";
-        String createTableDDL = "CREATE TABLE TEST_SCHEMA.TEST(pk INTEGER PRIMARY KEY)";
-        String dropTableDDL = "DROP TABLE TEST_SCHEMA.TEST";
+        String createSchemaDDL = "CREATE SCHEMA T_SCHEMA";
+        String createTableDDL = "CREATE TABLE T_SCHEMA.TEST(pk INTEGER PRIMARY KEY)";
+        String dropTableDDL = "DROP TABLE T_SCHEMA.TEST";
         Properties props = new Properties();
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {

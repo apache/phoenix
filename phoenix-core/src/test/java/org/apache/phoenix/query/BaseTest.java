@@ -143,6 +143,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -837,7 +838,10 @@ public abstract class BaseTest {
                 props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
             }
             try (Connection conn = DriverManager.getConnection(url, props);) {
-                conn.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + schema);
+                if (SchemaUtil.isNamespaceMappingEnabled(null,
+                        conn.unwrap(PhoenixConnection.class).getQueryServices().getProps())) {
+                    conn.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + schema);
+                }
             }
         }
     }

@@ -1316,8 +1316,8 @@ public class UpgradeUtil {
                                 + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                         : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
         // we need to move physical table in actual namespace for TABLE and Index
-        if (admin.tableExists(srcTableName)
-                && (PTableType.TABLE.equals(pTableType) || PTableType.INDEX.equals(pTableType))) {
+        if (admin.tableExists(srcTableName) && (PTableType.TABLE.equals(pTableType)
+                || PTableType.INDEX.equals(pTableType) || PTableType.SYSTEM.equals(pTableType))) {
             String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
             logger.info("Disabling table " + srcTableName + " ..");
             admin.disableTable(srcTableName);
