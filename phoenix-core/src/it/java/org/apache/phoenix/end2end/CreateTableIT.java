@@ -39,6 +39,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -460,5 +461,31 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             
         }
         connAt20.close();
+    }
+
+    @Test
+    public void testCreateTableWithoutSchema() throws Exception {
+        String createSchemaDDL = "CREATE SCHEMA TEST_SCHEMA";
+        String createTableDDL = "CREATE TABLE TEST_SCHEMA.TEST(pk INTEGER PRIMARY KEY)";
+        String dropTableDDL = "DROP TABLE TEST_SCHEMA.TEST";
+        Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            try {
+                conn.createStatement().execute(createTableDDL);
+                fail();
+            } catch (SchemaNotFoundException snfe) {
+                //expected
+            }
+            conn.createStatement().execute(createSchemaDDL);
+            conn.createStatement().execute(createTableDDL);
+            conn.createStatement().execute(dropTableDDL);
+        }
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(false));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute(createTableDDL);
+        } catch (SchemaNotFoundException e) {
+            fail();
+        }
     }
 }
