@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,15 +17,10 @@
  */
 package org.apache.phoenix.hive.query;
 
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
+import com.google.common.base.CharMatcher;
+import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -36,10 +31,18 @@ import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
 import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.hive.util.PhoenixUtil;
 
-import com.google.common.base.CharMatcher;
-import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Query builder. Produces a query depending on the colummn list and conditions
+ */
 
 public class PhoenixQueryBuilder {
 
@@ -134,7 +137,6 @@ public class PhoenixQueryBuilder {
             selectColumns = "*";
         } else {
             if (PhoenixStorageHandlerUtil.isTransactionalTable(jobConf)) {
-                // 2016-01-27 Added by JeongMin Ju : Maybe only delete execution.
                 List<String> pkColumnList = PhoenixUtil.getPrimaryKeyColumnList(jobConf, tableName);
                 StringBuilder pkColumns = new StringBuilder();
 
@@ -160,8 +162,7 @@ public class PhoenixQueryBuilder {
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Building query with columns : " + readColumnList + " table name : " +
-                    tableName + "  with where conditions : " + whereClause + "  hints : " + hints +
-                    " >>>>>>>>>>");
+                    tableName + "  with where conditions : " + whereClause + "  hints : " + hints);
         }
 
         return makeQueryString(jobConf, tableName, Lists.newArrayList(readColumnList),
@@ -216,11 +217,9 @@ public class PhoenixQueryBuilder {
 
                 if (PhoenixStorageHandlerConstants.DATE_TYPE.equals(columnTypeMap.get(columnName)
                 )) {
-//					whereClause = applyDateFunction(whereClause, columnName);
                     whereClause = applyDateFunctionUsingRegex(whereClause, columnName);
                 } else if (PhoenixStorageHandlerConstants.TIMESTAMP_TYPE.equals(columnTypeMap.get
                         (columnName))) {
-//					whereClause = applyTimestampFunction(whereClause, columnName);
                     whereClause = applyTimestampFunctionUsingRegex(whereClause, columnName);
                 }
             }
@@ -252,7 +251,7 @@ public class PhoenixQueryBuilder {
         String targetPattern = isDate ? PhoenixStorageHandlerConstants.DATE_PATTERN :
                 PhoenixStorageHandlerConstants.TIMESTAMP_PATTERN;
         String pattern = StringUtils.replaceEach(PhoenixStorageHandlerConstants
-                .COMMON_OPERATOR_PATTERN,
+                        .COMMON_OPERATOR_PATTERN,
                 new String[]{PhoenixStorageHandlerConstants.COLUMNE_MARKER,
                         PhoenixStorageHandlerConstants.PATERN_MARKER}, new String[]{columnName,
                         targetPattern});
@@ -278,7 +277,7 @@ public class PhoenixQueryBuilder {
         String targetPattern = isDate ? PhoenixStorageHandlerConstants.DATE_PATTERN :
                 PhoenixStorageHandlerConstants.TIMESTAMP_PATTERN;
         String pattern = StringUtils.replaceEach(PhoenixStorageHandlerConstants
-                .BETWEEN_OPERATOR_PATTERN,
+                        .BETWEEN_OPERATOR_PATTERN,
                 new String[]{PhoenixStorageHandlerConstants.COLUMNE_MARKER,
                         PhoenixStorageHandlerConstants.PATERN_MARKER}, new String[]{columnName,
                         targetPattern});
@@ -432,7 +431,6 @@ public class PhoenixQueryBuilder {
 
                         whereCondition.append(PhoenixStorageHandlerConstants.SPACE);
                     }
-//				} else if (PhoenixStorageHandlerConstants.EQUAL.equalsIgnoreCase(comparator)) {
                 } else if (PhoenixStorageHandlerConstants.COMMON_COMPARATOR.contains(comparator)) {
                     String compareValue = getCompareValueForDateAndTimestampFunction(iterator
                             .next());
@@ -568,7 +566,6 @@ public class PhoenixQueryBuilder {
 
                         whereCondition.append(PhoenixStorageHandlerConstants.SPACE);
                     }
-//				} else if (PhoenixStorageHandlerConstants.EQUAL.equalsIgnoreCase(comparator)) {
                 } else if (PhoenixStorageHandlerConstants.COMMON_COMPARATOR.contains(comparator)) {
                     String timestampValue = iterator.next() + PhoenixStorageHandlerConstants
                             .SPACE + iterator.next();
@@ -655,7 +652,7 @@ public class PhoenixQueryBuilder {
             String typeName = condition.getColumnDesc().getTypeString();
 
             if (LOG.isDebugEnabled()) {
-                LOG.debug("<<<<<<<<<< " + columnName + " : " + condition + " >>>>>>>>>>");
+                LOG.debug(columnName + " has condition: " + condition);
             }
 
             conditionColumnList.add(columnName);

@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,30 +22,30 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.IntWritable;
 
 public class PhoenixIntObjectInspector extends AbstractPhoenixObjectInspector<IntWritable>
-		implements IntObjectInspector {
+        implements IntObjectInspector {
 
-	public PhoenixIntObjectInspector() {
-		super(TypeInfoFactory.intTypeInfo);
-	}
+    public PhoenixIntObjectInspector() {
+        super(TypeInfoFactory.intTypeInfo);
+    }
 
-	@Override
-	public Object copyObject(Object o) {
-		return o == null ? null : new Integer((Integer)o);
-	}
+    @Override
+    public Object copyObject(Object o) {
+        return o == null ? null : new Integer((Integer) o);
+    }
 
-	@Override
-	public int get(Object o) {
-		Integer value = null;
+    @Override
+    public int get(Object o) {
+        Integer value = null;
 
-		if (o != null) {
-			try {
-				value = ((Integer)o).intValue();
-			} catch (Exception e) {
-				logExceptionMessage(o, "INT");
-			}
-		}
+        if (o != null) {
+            try {
+                value = ((Integer) o).intValue();
+            } catch (Exception e) {
+                logExceptionMessage(o, "INT");
+            }
+        }
 
-		return value;
-	}
+        return value;
+    }
 
 }

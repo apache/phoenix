@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,12 +17,8 @@
  */
 package org.apache.phoenix.hive.mapreduce;
 
-import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
-
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.List;
-
+import com.google.common.base.Throwables;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -49,20 +45,23 @@ import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+
+import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 
 /**
- * Record iterator
+ * @RecordReader implementation that iterates over the the records.
  */
 @SuppressWarnings("rawtypes")
-public class PhoenixRecordReader<T extends DBWritable> implements RecordReader<WritableComparable, T> {
+public class PhoenixRecordReader<T extends DBWritable> implements
+        RecordReader<WritableComparable, T> {
 
     private static final Log LOG = LogFactory.getLog(PhoenixRecordReader.class);
 
     private final Configuration configuration;
     private final QueryPlan queryPlan;
-    //    private NullWritable key =  NullWritable.get();
     private WritableComparable key;
     private T value = null;
     private Class<T> inputClass;
@@ -72,7 +71,8 @@ public class PhoenixRecordReader<T extends DBWritable> implements RecordReader<W
 
     private boolean isTransactional;
 
-    public PhoenixRecordReader(Class<T> inputClass, final Configuration configuration, final QueryPlan queryPlan) throws IOException {
+    public PhoenixRecordReader(Class<T> inputClass, final Configuration configuration, final
+    QueryPlan queryPlan) throws IOException {
         this.inputClass = inputClass;
         this.configuration = configuration;
         this.queryPlan = queryPlan;
@@ -90,43 +90,54 @@ public class PhoenixRecordReader<T extends DBWritable> implements RecordReader<W
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans.get(0)
-                    .getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans.size() - 1).getStopRow()));
-            LOG.debug("First scan : " + scans.get(0) + " scanAttribute : " + scans.get(0).getAttributesMap());
+                    .getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans.size() - 1)
+                    .getStopRow()));
+            LOG.debug("First scan : " + scans.get(0) + " scanAttribute : " + scans.get(0)
+                    .getAttributesMap());
 
             for (int i = 0, limit = scans.size(); i < limit; i++) {
                 LOG.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " +
-                        Bytes.toStringBinary(scans.get(i).getAttribute(BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
+                        Bytes.toStringBinary(scans.get(i).getAttribute(BaseScannerRegionObserver
+                                .EXPECTED_UPPER_REGION_KEY)));
             }
         }
 
         try {
-            List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
+            List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size
+                    ());
             StatementContext ctx = queryPlan.getContext();
             ReadMetricQueue readMetrics = ctx.getReadMetricsQueue();
             String tableName = queryPlan.getTableRef().getTable().getPhysicalName().getString();
-            long renewScannerLeaseThreshold = queryPlan.getContext().getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
+            long renewScannerLeaseThreshold = queryPlan.getContext().getConnection()
+                    .getQueryServices().getRenewLeaseThresholdMilliSeconds();
             for (Scan scan : scans) {
-                scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
-                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan.getContext().getConnection().getMutationState(),
-                        queryPlan.getTableRef(), scan, readMetrics.allotMetric(SCAN_BYTES, tableName), renewScannerLeaseThreshold);
+                scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes
+                        .toBytes(true));
+                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan
+                        .getContext().getConnection().getMutationState(),
+                        queryPlan.getTableRef(), scan, readMetrics.allotMetric(SCAN_BYTES,
+                        tableName), renewScannerLeaseThreshold);
 
-                PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
+                PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap
+                        (tableResultIterator);
                 iterators.add(peekingResultIterator);
             }
             ResultIterator iterator = queryPlan.useRoundRobinIterator()
                     ? RoundRobinResultIterator.newIterator(iterators, queryPlan)
                     : ConcatResultIterator.newIterator(iterators);
             if (queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
-                iterator = new SequenceResultIterator(iterator, queryPlan.getContext().getSequenceManager());
+                iterator = new SequenceResultIterator(iterator, queryPlan.getContext()
+                        .getSequenceManager());
             }
             this.resultIterator = iterator;
             // Clone the row projector as it's not thread safe and would be used
-            // simultaneously by
-            // multiple threads otherwise.
-            this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector().cloneIfNecessary(),
+            // simultaneously by multiple threads otherwise.
+            this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector()
+                    .cloneIfNecessary(),
                     queryPlan.getContext());
         } catch (SQLException e) {
-            LOG.error(String.format(" Error [%s] initializing PhoenixRecordReader. ", e.getMessage()));
+            LOG.error(String.format(" Error [%s] initializing PhoenixRecordReader. ", e
+                    .getMessage()));
             Throwables.propagate(e);
         }
     }
@@ -152,7 +163,8 @@ public class PhoenixRecordReader<T extends DBWritable> implements RecordReader<W
 
             return true;
         } catch (SQLException e) {
-            LOG.error(String.format(" Error [%s] occurred while iterating over the resultset. ", e.getMessage()));
+            LOG.error(String.format(" Error [%s] occurred while iterating over the resultset. ",
+                    e.getMessage()));
             throw new RuntimeException(e);
         }
     }

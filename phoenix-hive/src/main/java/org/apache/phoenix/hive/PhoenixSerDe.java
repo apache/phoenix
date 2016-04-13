@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,10 +17,8 @@
  */
 package org.apache.phoenix.hive;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Properties;
-
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -40,8 +38,9 @@ import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.mapreduce.PhoenixResultWritable;
 import org.apache.phoenix.hive.objectinspector.PhoenixObjectInspectorFactory;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Properties;
 
 /**
  * SerDe implementation for Phoenix Hive Storage
@@ -149,10 +148,12 @@ public class PhoenixSerDe extends AbstractSerDe {
                 (columnTypeList.size());
 
         for (TypeInfo typeInfo : columnTypeList) {
-            columnObjectInspectors.add(PhoenixObjectInspectorFactory.createObjectInspector(typeInfo, serdeParams));
+            columnObjectInspectors.add(PhoenixObjectInspectorFactory.createObjectInspector
+                    (typeInfo, serdeParams));
         }
 
         return LazyObjectInspectorFactory.getLazySimpleStructObjectInspector(columnNameList,
-                columnObjectInspectors, null, serdeParams.getSeparators()[0], serdeParams, ObjectInspectorOptions.JAVA);
+                columnObjectInspectors, null, serdeParams.getSeparators()[0], serdeParams,
+                ObjectInspectorOptions.JAVA);
     }
 }

@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,31 +21,34 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.ByteObjectInspect
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.ByteWritable;
 
+/**
+ * ObjectInspector for byte type
+ */
 public class PhoenixByteObjectInspector extends AbstractPhoenixObjectInspector<ByteWritable>
-		implements ByteObjectInspector {
+        implements ByteObjectInspector {
 
-	public PhoenixByteObjectInspector() {
-		super(TypeInfoFactory.byteTypeInfo);
-	}
+    public PhoenixByteObjectInspector() {
+        super(TypeInfoFactory.byteTypeInfo);
+    }
 
-	@Override
-	public Object copyObject(Object o) {
-		return o == null ? null : new Byte((Byte)o);
-	}
+    @Override
+    public Object copyObject(Object o) {
+        return o == null ? null : new Byte((Byte) o);
+    }
 
-	@Override
-	public byte get(Object o) {
-		Byte value = null;
+    @Override
+    public byte get(Object o) {
+        Byte value = null;
 
-		if (o != null) {
-			try {
-				value = (Byte)o;
-			} catch (Exception e) {
-				logExceptionMessage(o, "BYTE");
-			}
-		}
+        if (o != null) {
+            try {
+                value = (Byte) o;
+            } catch (Exception e) {
+                logExceptionMessage(o, "BYTE");
+            }
+        }
 
-		return value;
-	}
+        return value;
+    }
 
 }

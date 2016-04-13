@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,30 +22,30 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.ShortWritable;
 
 public class PhoenixShortObjectInspector extends AbstractPhoenixObjectInspector<ShortWritable>
-		implements ShortObjectInspector {
+        implements ShortObjectInspector {
 
-	public PhoenixShortObjectInspector() {
-		super(TypeInfoFactory.shortTypeInfo);
-	}
+    public PhoenixShortObjectInspector() {
+        super(TypeInfoFactory.shortTypeInfo);
+    }
 
-	@Override
-	public Object copyObject(Object o) {
-		return o == null ? null : new Short((Short)o);
-	}
+    @Override
+    public Object copyObject(Object o) {
+        return o == null ? null : new Short((Short) o);
+    }
 
-	@Override
-	public short get(Object o) {
-		Short value = null;
+    @Override
+    public short get(Object o) {
+        Short value = null;
 
-		if (o != null) {
-			try {
-				value = ((Short)o).shortValue();
-			} catch (Exception e) {
-				logExceptionMessage(o, "SHORT");
-			}
-		}
+        if (o != null) {
+            try {
+                value = ((Short) o).shortValue();
+            } catch (Exception e) {
+                logExceptionMessage(o, "SHORT");
+            }
+        }
 
-		return value;
-	}
+        return value;
+    }
 
 }

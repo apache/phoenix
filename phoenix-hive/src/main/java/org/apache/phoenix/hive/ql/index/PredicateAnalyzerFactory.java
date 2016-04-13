@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,22 +17,24 @@
  */
 package org.apache.phoenix.hive.ql.index;
 
-import java.util.List;
-
 import org.apache.phoenix.hive.ql.index.IndexPredicateAnalyzer.FieldValidator;
 
+import java.util.List;
+
 public class PredicateAnalyzerFactory {
-	public static IndexPredicateAnalyzer createPredicateAnalyzer(List<String> ppdColumnList, FieldValidator fieldValdator) {
-		IndexPredicateAnalyzer analyzer = IndexPredicateAnalyzer.createAnalyzer(false);		// including =, <, <=, >, >=
+    public static IndexPredicateAnalyzer createPredicateAnalyzer(List<String> ppdColumnList,
+                                                                 FieldValidator fieldValdator) {
+        // Create analyzer for conditions  =, <, <=, >, >=
+        IndexPredicateAnalyzer analyzer = IndexPredicateAnalyzer.createAnalyzer(false);
 
-		for (String columnName : ppdColumnList) {
-			analyzer.allowColumnName(columnName);
-		}
+        for (String columnName : ppdColumnList) {
+            analyzer.allowColumnName(columnName);
+        }
 
-		analyzer.setAcceptsFields(true);
-		analyzer.setFieldValidator(fieldValdator);
+        analyzer.setAcceptsFields(true);
+        analyzer.setFieldValidator(fieldValdator);
 
-		return analyzer;
-	}
+        return analyzer;
+    }
 
 }

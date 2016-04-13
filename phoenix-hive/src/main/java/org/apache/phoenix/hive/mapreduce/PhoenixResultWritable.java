@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,16 +17,8 @@
  */
 package org.apache.phoenix.hive.mapreduce;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
-
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configurable;
@@ -39,8 +31,15 @@ import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.hive.util.PhoenixUtil;
 import org.apache.phoenix.util.ColumnInfo;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Serialized class for SerDe
@@ -68,7 +67,8 @@ public class PhoenixResultWritable implements Writable, DBWritable, Configurable
         setConf(config);
     }
 
-    public PhoenixResultWritable(Configuration config, List<ColumnInfo> columnMetadataList) throws IOException {
+    public PhoenixResultWritable(Configuration config, List<ColumnInfo> columnMetadataList)
+            throws IOException {
         this(config);
         this.columnMetadataList = columnMetadataList;
 
@@ -172,13 +172,6 @@ public class PhoenixResultWritable implements Writable, DBWritable, Configurable
 
     public void readPrimaryKey(PhoenixRowKey rowKey) {
         rowKey.setRowKeyMap(rowKeyMap);
-//		rowKey.setPrimaryKeyMap(Maps.transformValues(rowKeyMap, new Function<Object, String>() {
-//
-//			@Override
-//			public String apply(Object input) {
-//				return input.toString();
-//			}
-//		}));
     }
 
     public List<ColumnInfo> getColumnMetadataList() {
@@ -204,7 +197,8 @@ public class PhoenixResultWritable implements Writable, DBWritable, Configurable
         isTransactional = PhoenixStorageHandlerUtil.isTransactionalTable(config);
 
         if (isTransactional) {
-            primaryKeyColumnList = PhoenixUtil.getPrimaryKeyColumnList(config, config.get(PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME));
+            primaryKeyColumnList = PhoenixUtil.getPrimaryKeyColumnList(config, config.get
+                    (PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME));
         }
     }
 

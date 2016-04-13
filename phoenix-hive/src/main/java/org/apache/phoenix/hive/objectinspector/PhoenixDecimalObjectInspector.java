@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,46 +17,47 @@
  */
 package org.apache.phoenix.hive.objectinspector;
 
-import java.math.BigDecimal;
-
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.metastore.api.Decimal;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 
-public class PhoenixDecimalObjectInspector extends AbstractPhoenixObjectInspector<HiveDecimalWritable>
-		implements HiveDecimalObjectInspector {
+import java.math.BigDecimal;
 
-	public PhoenixDecimalObjectInspector() {
-		super(TypeInfoFactory.decimalTypeInfo);
-	}
+public class PhoenixDecimalObjectInspector extends
+        AbstractPhoenixObjectInspector<HiveDecimalWritable>
+        implements HiveDecimalObjectInspector {
 
-	@Override
-	public Object copyObject(Object o) {
-		return o == null ? null : new Decimal((Decimal)o);
-	}
+    public PhoenixDecimalObjectInspector() {
+        super(TypeInfoFactory.decimalTypeInfo);
+    }
 
-	@Override
-	public HiveDecimal getPrimitiveJavaObject(Object o) {
-		return HiveDecimal.create((BigDecimal)o);
-	}
+    @Override
+    public Object copyObject(Object o) {
+        return o == null ? null : new Decimal((Decimal) o);
+    }
 
-	@Override
-	public HiveDecimalWritable getPrimitiveWritableObject(Object o) {
-		HiveDecimalWritable value = null;
+    @Override
+    public HiveDecimal getPrimitiveJavaObject(Object o) {
+        return HiveDecimal.create((BigDecimal) o);
+    }
 
-		if (o != null) {
-			try {
-				value = new HiveDecimalWritable((HiveDecimalWritable)o);
-			} catch (Exception e) {
-				logExceptionMessage(o, "DECIMAL");
-			}
-		}
+    @Override
+    public HiveDecimalWritable getPrimitiveWritableObject(Object o) {
+        HiveDecimalWritable value = null;
 
-		return value;
+        if (o != null) {
+            try {
+                value = new HiveDecimalWritable((HiveDecimalWritable) o);
+            } catch (Exception e) {
+                logExceptionMessage(o, "DECIMAL");
+            }
+        }
+
+        return value;
 
 //		return super.getPrimitiveWritableObject(o);
-	}
+    }
 
 }

@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,16 +17,7 @@
  */
 package org.apache.phoenix.hive.ql.index;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Stack;
-
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
@@ -62,7 +53,15 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFToUtcTimestamp;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFToVarchar;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 
-import com.google.common.collect.Lists;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Stack;
 
 /**
  * Clone of org.apache.hadoop.hive.ql.index.IndexPredicateAnalyzer with modifying
@@ -143,12 +142,14 @@ public class IndexPredicateAnalyzer {
      * @return residual predicate which could not be translated to
      * searchConditions
      */
-    public ExprNodeDesc analyzePredicate(ExprNodeDesc predicate, final List<IndexSearchCondition> searchConditions) {
+    public ExprNodeDesc analyzePredicate(ExprNodeDesc predicate, final List<IndexSearchCondition>
+            searchConditions) {
 
         Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
         NodeProcessor nodeProcessor = new NodeProcessor() {
             @Override
-            public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx, Object... nodeOutputs) throws SemanticException {
+            public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx, Object...
+                    nodeOutputs) throws SemanticException {
 
                 // We can only push down stuff which appears as part of
                 // a pure conjunction: reject OR, CASE, etc.
@@ -196,7 +197,8 @@ public class IndexPredicateAnalyzer {
         }
         GenericUDF udf = funcDesc.getGenericUDF();
         // check if its a simple cast expression.
-        if ((udf instanceof GenericUDFBridge || udf instanceof GenericUDFToBinary || udf instanceof GenericUDFToChar
+        if ((udf instanceof GenericUDFBridge || udf instanceof GenericUDFToBinary || udf
+                instanceof GenericUDFToChar
                 || udf instanceof GenericUDFToVarchar || udf instanceof GenericUDFToDecimal
                 || udf instanceof GenericUDFToDate || udf instanceof GenericUDFToUnixTimeStamp
                 || udf instanceof GenericUDFToUtcTimestamp) && funcDesc.getChildren().size() == 1
@@ -206,7 +208,9 @@ public class IndexPredicateAnalyzer {
         return expr;
     }
 
-    private void processingBetweenOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition> searchConditions, Object... nodeOutputs) {
+    private void processingBetweenOperator(ExprNodeGenericFuncDesc expr,
+                                           List<IndexSearchCondition> searchConditions, Object...
+                                                   nodeOutputs) {
         ExprNodeColumnDesc columnDesc = null;
         String[] fields = null;
 
@@ -215,22 +219,27 @@ public class IndexPredicateAnalyzer {
             ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[1];
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
-            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc) nodeOutputs[1], (ExprNodeDesc) nodeOutputs[2]);
+            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
+                    nodeOutputs[1], (ExprNodeDesc) nodeOutputs[2]);
             columnDesc = (ExprNodeColumnDesc) extracted[0];
         } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[1]).getChildren().get(0);
+            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[1])
+                    .getChildren().get(0);
         } else {
             columnDesc = (ExprNodeColumnDesc) nodeOutputs[1];
         }
 
         String udfName = expr.getGenericUDF().getUdfName();
-        ExprNodeConstantDesc[] betweenConstants = new ExprNodeConstantDesc[]{(ExprNodeConstantDesc) nodeOutputs[2], (ExprNodeConstantDesc) nodeOutputs[3]};
+        ExprNodeConstantDesc[] betweenConstants = new ExprNodeConstantDesc[]{
+                (ExprNodeConstantDesc) nodeOutputs[2], (ExprNodeConstantDesc) nodeOutputs[3]};
         boolean isNot = (Boolean) ((ExprNodeConstantDesc) nodeOutputs[0]).getValue();
 
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, betweenConstants, expr, fields, isNot));
+        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, betweenConstants,
+                expr, fields, isNot));
     }
 
-    private void processingInOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition> searchConditions, boolean isNot, Object... nodeOutputs) {
+    private void processingInOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition>
+            searchConditions, boolean isNot, Object... nodeOutputs) {
         ExprNodeColumnDesc columnDesc = null;
         String[] fields = null;
 
@@ -243,7 +252,8 @@ public class IndexPredicateAnalyzer {
             ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[0];
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
-            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc) nodeOutputs[0], (ExprNodeDesc) nodeOutputs[1]);
+            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
+                    nodeOutputs[0], (ExprNodeDesc) nodeOutputs[1]);
 
             if (extracted == null) {    // adding for tez
                 return;
@@ -256,7 +266,8 @@ public class IndexPredicateAnalyzer {
 
             columnDesc = (ExprNodeColumnDesc) extracted[0];
         } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0]).getChildren().get(0);
+            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0])
+                    .getChildren().get(0);
         } else {
             columnDesc = (ExprNodeColumnDesc) nodeOutputs[0];
         }
@@ -272,10 +283,12 @@ public class IndexPredicateAnalyzer {
             inConstantDescs[i] = (ExprNodeConstantDesc) nodeOutputs[i + 1];
         }
 
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, inConstantDescs, expr, fields, isNot));
+        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, inConstantDescs, expr,
+                fields, isNot));
     }
 
-    private void processingNullOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition> searchConditions, Object... nodeOutputs) {
+    private void processingNullOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition>
+            searchConditions, Object... nodeOutputs) {
         ExprNodeColumnDesc columnDesc = null;
         String[] fields = null;
 
@@ -284,20 +297,25 @@ public class IndexPredicateAnalyzer {
             ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[0];
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
-            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc) nodeOutputs[0], new ExprNodeConstantDesc());
+            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
+                    nodeOutputs[0], new ExprNodeConstantDesc());
             columnDesc = (ExprNodeColumnDesc) extracted[0];
         } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0]).getChildren().get(0);
+            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0])
+                    .getChildren().get(0);
         } else {
             columnDesc = (ExprNodeColumnDesc) nodeOutputs[0];
         }
 
         String udfName = expr.getGenericUDF().getUdfName();
 
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, null, expr, fields, false));
+        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, null, expr, fields,
+                false));
     }
 
-    private void processingNotNullOperator(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition> searchConditions, Object... nodeOutputs) {
+    private void processingNotNullOperator(ExprNodeGenericFuncDesc expr,
+                                           List<IndexSearchCondition> searchConditions, Object...
+                                                   nodeOutputs) {
         ExprNodeColumnDesc columnDesc = null;
         String[] fields = null;
 
@@ -306,20 +324,24 @@ public class IndexPredicateAnalyzer {
             ExprNodeFieldDesc fieldDesc = (ExprNodeFieldDesc) nodeOutputs[0];
             fields = ExprNodeDescUtils.extractFields(fieldDesc);
 
-            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc) nodeOutputs[0], new ExprNodeConstantDesc());
+            ExprNodeDesc[] extracted = ExprNodeDescUtils.extractComparePair((ExprNodeDesc)
+                    nodeOutputs[0], new ExprNodeConstantDesc());
             columnDesc = (ExprNodeColumnDesc) extracted[0];
         } else if (nodeOutputs[0] instanceof ExprNodeGenericFuncDesc) {
-            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0]).getChildren().get(0);
+            columnDesc = (ExprNodeColumnDesc) ((ExprNodeGenericFuncDesc) nodeOutputs[0])
+                    .getChildren().get(0);
         } else {
             columnDesc = (ExprNodeColumnDesc) nodeOutputs[0];
         }
 
         String udfName = expr.getGenericUDF().getUdfName();
 
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, null, expr, fields, true));
+        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, null, expr, fields,
+                true));
     }
 
-    private ExprNodeDesc analyzeExpr(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition> searchConditions, Object... nodeOutputs) throws SemanticException {
+    private ExprNodeDesc analyzeExpr(ExprNodeGenericFuncDesc expr, List<IndexSearchCondition>
+            searchConditions, Object... nodeOutputs) throws SemanticException {
 
         if (FunctionRegistry.isOpAnd(expr)) {
             assert (nodeOutputs.length == 2);
@@ -334,14 +356,16 @@ public class IndexPredicateAnalyzer {
             List<ExprNodeDesc> residuals = new ArrayList<ExprNodeDesc>();
             residuals.add(residual1);
             residuals.add(residual2);
-            return new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, FunctionRegistry.getGenericUDFForAnd(), residuals);
+            return new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, FunctionRegistry
+                    .getGenericUDFForAnd(), residuals);
         }
 
         GenericUDF genericUDF = expr.getGenericUDF();
         if (!(genericUDF instanceof GenericUDFBaseCompare)) {
             // 2015-10-22 Added by JeongMin Ju : Processing Between/In Operator
             if (genericUDF instanceof GenericUDFBetween) {
-                // In case of not between, The value of first element of nodeOutputs is true. otherwise false.
+                // In case of not between, The value of first element of nodeOutputs is true.
+                // otherwise false.
                 processingBetweenOperator(expr, searchConditions, nodeOutputs);
                 return expr;
             } else if (genericUDF instanceof GenericUDFIn) {
@@ -349,10 +373,12 @@ public class IndexPredicateAnalyzer {
                 processingInOperator(expr, searchConditions, false, nodeOutputs);
                 return expr;
             } else if (genericUDF instanceof GenericUDFOPNot &&
-                    ((ExprNodeGenericFuncDesc) expr.getChildren().get(0)).getGenericUDF() instanceof GenericUDFIn) {
+                    ((ExprNodeGenericFuncDesc) expr.getChildren().get(0)).getGenericUDF()
+                            instanceof GenericUDFIn) {
                 // In case of not in operator, in operator exist as child of not operator.
                 processingInOperator((ExprNodeGenericFuncDesc) expr.getChildren().get(0),
-                        searchConditions, true, ((ExprNodeGenericFuncDesc) nodeOutputs[0]).getChildren().toArray());
+                        searchConditions, true, ((ExprNodeGenericFuncDesc) nodeOutputs[0])
+                                .getChildren().toArray());
                 return expr;
             } else if (genericUDF instanceof GenericUDFOPNull) {
                 processingNullOperator(expr, searchConditions, nodeOutputs);
@@ -416,7 +442,8 @@ public class IndexPredicateAnalyzer {
         list.add(expr2);
         expr = new ExprNodeGenericFuncDesc(expr.getTypeInfo(), expr.getGenericUDF(), list);
 
-        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, constantDesc, expr, fields));
+        searchConditions.add(new IndexSearchCondition(columnDesc, udfName, constantDesc, expr,
+                fields));
 
         // we converted the expression to a search condition, so
         // remove it from the residual predicate
@@ -434,7 +461,8 @@ public class IndexPredicateAnalyzer {
      * @param searchConditions (typically produced by analyzePredicate)
      * @return ExprNodeGenericFuncDesc form of search conditions
      */
-    public ExprNodeGenericFuncDesc translateSearchConditions(List<IndexSearchCondition> searchConditions) {
+    public ExprNodeGenericFuncDesc translateSearchConditions(List<IndexSearchCondition>
+                                                                     searchConditions) {
 
         ExprNodeGenericFuncDesc expr = null;
 
@@ -447,7 +475,8 @@ public class IndexPredicateAnalyzer {
             List<ExprNodeDesc> children = new ArrayList<ExprNodeDesc>();
             children.add(expr);
             children.add(searchCondition.getComparisonExpr());
-            expr = new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, FunctionRegistry.getGenericUDFForAnd(), children);
+            expr = new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, FunctionRegistry
+                    .getGenericUDFForAnd(), children);
         }
 
         return expr;
@@ -469,17 +498,25 @@ public class IndexPredicateAnalyzer {
             return analyzer;
         }
 
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPEqualOrGreaterThan");
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPEqualOrLessThan");
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic" +
+                ".GenericUDFOPEqualOrGreaterThan");
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic" +
+                ".GenericUDFOPEqualOrLessThan");
         analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPLessThan");
         analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPGreaterThan");
 
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNotEqual");        // apply !=
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFBetween");        // apply (Not) Between
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFIn");        // apply (Not) In
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFIn");        // apply In
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNull");        // apply Null
-        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNotNull");        // apply Not Null
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNotEqual");
+        // apply !=
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFBetween");
+        // apply (Not) Between
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFIn");        //
+        // apply (Not) In
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFIn");        //
+        // apply In
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNull");
+        // apply Null
+        analyzer.addComparisonOp("org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNotNull");
+        // apply Not Null
 
         return analyzer;
     }

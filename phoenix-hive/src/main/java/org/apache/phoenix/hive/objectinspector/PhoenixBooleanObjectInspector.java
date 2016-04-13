@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -22,29 +22,29 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.BooleanWritable;
 
 public class PhoenixBooleanObjectInspector extends AbstractPhoenixObjectInspector<BooleanWritable>
-		implements BooleanObjectInspector {
+        implements BooleanObjectInspector {
 
-	public PhoenixBooleanObjectInspector() {
-		super(TypeInfoFactory.booleanTypeInfo);
-	}
+    public PhoenixBooleanObjectInspector() {
+        super(TypeInfoFactory.booleanTypeInfo);
+    }
 
-	@Override
-	public Object copyObject(Object o) {
-		return o == null ? null : new Boolean((Boolean) o);
-	}
+    @Override
+    public Object copyObject(Object o) {
+        return o == null ? null : new Boolean((Boolean) o);
+    }
 
-	@Override
-	public boolean get(Object o) {
-		Boolean value = null;
+    @Override
+    public boolean get(Object o) {
+        Boolean value = null;
 
-		if (o != null) {
-			try {
-				value = (Boolean) o;
-			} catch (Exception e) {
-				logExceptionMessage(o, "BOOLEAN");
-			}
-		}
+        if (o != null) {
+            try {
+                value = (Boolean) o;
+            } catch (Exception e) {
+                logExceptionMessage(o, "BOOLEAN");
+            }
+        }
 
-		return value;
-	}
+        return value;
+    }
 }
