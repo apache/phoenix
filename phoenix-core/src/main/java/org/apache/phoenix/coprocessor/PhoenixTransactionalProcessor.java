@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import co.cask.tephra.hbase11.coprocessor.TransactionProcessor;
+import co.cask.tephra.hbase10cdh.coprocessor.TransactionProcessor;
 
 public class PhoenixTransactionalProcessor extends DelegateRegionObserver {
 
