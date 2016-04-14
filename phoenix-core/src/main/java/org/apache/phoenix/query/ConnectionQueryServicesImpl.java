@@ -2428,6 +2428,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         conn.close();
                                     }
                                 }
+                                // Add these columns one at a time, each with different timestamps so that if folks have
+                                // run the upgrade code already for a snapshot, we'll still enter this block (and do the
+                                // parts we haven't yet done).
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0) {
                                     columnsToAdd = PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP + " " + PBoolean.INSTANCE.getSqlTypeName();
                                     metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
@@ -2437,9 +2440,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // Drop old stats table so that new stats table is created
                                     metaConnection = dropStatsTable(metaConnection, 
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 4);
-                                    // Add these columns one at a time, each with different timestamps so that if folks have
-                                    // run the upgrade code already for a snapshot, we'll still enter this block (and do the
-                                    // parts we haven't yet done).
                                     metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG, 
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 - 3,
                                             PhoenixDatabaseMetaData.TRANSACTIONAL + " " + PBoolean.INSTANCE.getSqlTypeName());
@@ -2455,16 +2455,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
 
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0) {
-                                    // Add these columns one at a time, each with different timestamps so that if folks
-                                    // have
-                                    // run the upgrade code already for a snapshot, we'll still enter this block (and do
-                                    // the
-                                    // parts we haven't yet done).
                                     metaConnection = addColumnsIfNotExists(metaConnection,
                                             PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0,
                                             PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED + " "
                                                     + PBoolean.INSTANCE.getSqlTypeName());
+                                    ConnectionQueryServicesImpl.this.removeTable(null,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
                                     clearCache();
                                 }
                                 try {

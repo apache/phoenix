@@ -79,7 +79,6 @@ public enum SQLExceptionCode {
     MISSING_MAX_LENGTH(207, "22004", "Max length must be specified for type."),
     NONPOSITIVE_MAX_LENGTH(208, "22006", "Max length must have a positive length for type."),
     DECIMAL_PRECISION_OUT_OF_RANGE(209, "22003", "Decimal precision outside of range. Should be within 1 and " + PDataType.MAX_PRECISION + "."),
-    ILLEGAL_OPERATION(210, "22010", "Illegal Operation."),
     SERVER_ARITHMETIC_ERROR(212, "22012", "Arithmetic error on server."),
     VALUE_OUTSIDE_RANGE(213,"22003","Value outside range."),
     VALUE_IN_LIST_NOT_CONSTANT(214, "22008", "Values in IN must evaluate to a constant."),
@@ -390,7 +389,10 @@ public enum SQLExceptionCode {
             return new SchemaNotFoundException(info.getSchemaName());
         }
     }), CANNOT_MUTATE_SCHEMA(723, "43M06", "Cannot mutate schema as schema has existing tables"), SCHEMA_NOT_ALLOWED(
-            724, "43M07", "Schema name not allowed!!");
+            724, "43M07",
+            "Schema name not allowed!!"), CREATE_SCHEMA_NOT_ALLOWED(725, "43M08", "Cannot create schema because config "
+                    + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " for enabling name space mapping isn't enabled.");
+
 
     private final int errorCode;
     private final String sqlState;

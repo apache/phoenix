@@ -3365,8 +3365,9 @@ public class MetaDataClient {
         try {
             if (!SchemaUtil.isNamespaceMappingEnabled(null,
                     connection.getQueryServices()
-                            .getProps())) { throw new IllegalOperationException("CREATE SCHEMA is not allowed when "
-                                    + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not set to true"); }
+                            .getProps())) { throw new SQLExceptionInfo.Builder(
+                                    SQLExceptionCode.CREATE_SCHEMA_NOT_ALLOWED).setSchemaName(create.getSchemaName())
+                                            .build().buildException(); }
             boolean isIfNotExists = create.isIfNotExists();
             validateSchema(create.getSchemaName());
             PSchema schema = new PSchema(create.getSchemaName());
