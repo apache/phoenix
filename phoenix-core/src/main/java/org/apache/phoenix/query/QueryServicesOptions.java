@@ -39,6 +39,8 @@ import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_POPULATION_SLEEP_TIME;
+import static org.apache.phoenix.query.QueryServices.IS_NAMESPACE_MAPPING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE;
 import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
@@ -133,6 +135,8 @@ public class QueryServicesOptions {
     // latency and client-side spooling/buffering. Smaller means less initial
     // latency and less parallelization.
     public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = 2999;
+    public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
+    public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = false;
 
     //
     // Spillable GroupBy - SPGBY prefix
@@ -250,6 +254,7 @@ public class QueryServicesOptions {
         add("credential");
       }
     };
+    public static final String DEFAULT_SCHEMA = null;
     
     private final Configuration config;
 
@@ -313,8 +318,10 @@ public class QueryServicesOptions {
             .setIfUnset(ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE, DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE)
             .setIfUnset(RENEW_LEASE_THRESHOLD_MILLISECONDS, DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS)
             .setIfUnset(RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS, DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS)
-            .setIfUnset(RENEW_LEASE_THREAD_POOL_SIZE, DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE);
-            ;
+            .setIfUnset(RENEW_LEASE_THREAD_POOL_SIZE, DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE)
+            .setIfUnset(IS_NAMESPACE_MAPPING_ENABLED, DEFAULT_IS_NAMESPACE_MAPPING_ENABLED)
+            .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE);
+            
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.

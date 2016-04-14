@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Map;
@@ -107,6 +108,13 @@ public class JDBCUtilTest {
     public void testGetConsistency_TIMELINE_InUrl() {
         assertTrue(JDBCUtil.getConsistencyLevel("localhost;Consistency=TIMELINE", new Properties(),
                 Consistency.STRONG.toString()) == Consistency.TIMELINE);
+    }
+
+    @Test
+    public void testSchema() {
+        assertTrue(JDBCUtil.getSchema("localhost;schema=TEST", new Properties(), null).equals("TEST"));
+        assertNull(JDBCUtil.getSchema("localhost;schema=", new Properties(), null));
+        assertNull(JDBCUtil.getSchema("localhost;", new Properties(), null));
     }
 
     @Test

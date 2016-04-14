@@ -305,6 +305,10 @@ public interface PTable extends PMetaDataEntity {
      */
     public List<PName> getPhysicalNames();
 
+    /**
+     * For a view, return the name of table in HBase that physically stores data.
+     * @return the name of the physical HBase table storing the data.
+     */
     PName getPhysicalName();
     boolean isImmutableRows();
 
@@ -341,4 +345,6 @@ public interface PTable extends PMetaDataEntity {
      */
     int getRowTimestampColPos();
     long getUpdateCacheFrequency();
+
+    boolean isNamespaceMapped();
 }

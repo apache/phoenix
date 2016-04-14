@@ -115,7 +115,7 @@ public class SerialIterators extends BaseResultIterators {
                 public TaskExecutionMetricsHolder getTaskExecutionMetric() {
                     return taskMetrics;
                 }
-            }, "Serial scanner for table: " + tableRef.getTable().getName().getString()));
+            }, "Serial scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
             // Add our singleton Future which will execute serially
             nestedFutures.add(Collections.singletonList(new Pair<Scan,Future<PeekingResultIterator>>(overallScan,future)));
         }

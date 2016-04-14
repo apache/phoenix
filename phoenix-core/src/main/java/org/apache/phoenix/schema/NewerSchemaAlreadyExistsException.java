@@ -17,22 +17,10 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.phoenix.parse.PFunction;
-import org.apache.phoenix.parse.PSchema;
-import org.apache.phoenix.query.MetaDataMutated;
+public class NewerSchemaAlreadyExistsException extends SchemaAlreadyExistsException {
+    private static final long serialVersionUID = 1L;
 
-public interface PMetaData extends MetaDataMutated, Iterable<PTable>, Cloneable {
-
-    public static interface Pruner {
-        public boolean prune(PTable table);
-        public boolean prune(PFunction function);
+    public NewerSchemaAlreadyExistsException(String schemaName) {
+        super(schemaName);
     }
-    public int size();
-    public PMetaData clone();
-    public PTableRef getTableRef(PTableKey key) throws TableNotFoundException;
-    public PMetaData pruneTables(Pruner pruner);
-    public PFunction getFunction(PTableKey key) throws FunctionNotFoundException;
-    public PMetaData pruneFunctions(Pruner pruner);
-    public long getAge(PTableRef ref);
-    public PSchema getSchema(PTableKey key) throws SchemaNotFoundException;
 }

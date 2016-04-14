@@ -143,5 +143,5 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
         assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
         
     }
-
+    
 }

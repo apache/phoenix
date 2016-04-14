@@ -154,7 +154,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                             // Also, checking the prefix of the table name to determine if this is a local
                             // index is pretty hacky. If we're going to keep this, we should revisit that
                             // as well.
-                            if (tableReference.getTableName().startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
+                            if (MetaDataUtil.isLocalIndex(tableReference.getTableName())) {
                                 Region indexRegion = IndexUtil.getIndexRegion(env);
                                 if (indexRegion != null) {
                                     throwFailureIfDone();

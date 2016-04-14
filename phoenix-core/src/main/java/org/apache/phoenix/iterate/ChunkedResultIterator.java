@@ -74,7 +74,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
 
         @Override
         public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
-            if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("ChunkedResultIteratorFactory.newIterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
+            if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("ChunkedResultIteratorFactory.newIterator over " + tableRef.getTable().getPhysicalName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
             return new ChunkedResultIterator(delegateFactory, mutationState, context, tableRef, scan, 
                     mutationState.getConnection().getQueryServices().getProps().getLong(
                                 QueryServices.SCAN_RESULT_CHUNK_SIZE,
@@ -93,7 +93,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
         // Instantiate single chunk iterator and the delegate iterator in constructor
         // to get parallel scans kicked off in separate threads. If we delay this,
         // we'll get serialized behavior (see PHOENIX-
-        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get first chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
+        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get first chunked result iterator over " + tableRef.getTable().getPhysicalName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
         ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(scanner, chunkSize);
         String tableName = tableRef.getTable().getPhysicalName().getString();
         resultIterator = delegateIteratorFactory.newIterator(context, singleChunkResultIterator, scan, tableName);
@@ -124,7 +124,7 @@ public class ChunkedResultIterator implements PeekingResultIterator {
             resultIterator.close();
             scan = ScanUtil.newScan(scan);
             scan.setStartRow(ByteUtil.copyKeyBytesIfNecessary(lastKey));
-            if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get next chunked result iterator over " + tableRef.getTable().getName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
+            if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("Get next chunked result iterator over " + tableRef.getTable().getPhysicalName().getString() + " with " + scan, ScanUtil.getCustomAnnotations(scan)));
             String tableName = tableRef.getTable().getPhysicalName().getString();
             long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
             ResultIterator singleChunkResultIterator = new SingleChunkResultIterator(

@@ -160,7 +160,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
                 // If this is a new column family, verify that the directory exists
                 if (wl == null) {
                     // phoenix-2216: start : create a directory for table and family within the output dir 
-                    Path tableOutputPath = new Path(outputdir, tableName);
+                    Path tableOutputPath = CsvBulkImportUtil.getOutputPath(outputdir, tableName);
                     fs.mkdirs(new Path(tableOutputPath, Bytes.toString(family)));
                     // phoenix-2216: end
                 }
@@ -216,7 +216,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
               throws IOException {
           
               WriterLength wl = new WriterLength();
-              Path tableOutputPath = new Path(outputdir, tableName);
+              Path tableOutputPath = CsvBulkImportUtil.getOutputPath(outputdir, tableName);
               Path familydir = new Path(tableOutputPath, Bytes.toString(family));
             
               // phoenix-2216: start : fetching the configuration properties that were set to the table.

@@ -150,7 +150,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         // index is pretty hacky. If we're going to keep this, we should revisit that
                         // as well.
                         try {
-                            if (tableReference.getTableName().startsWith(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX)) {
+                            if (MetaDataUtil.isLocalIndex(tableReference.getTableName())) {
                                 Region indexRegion = IndexUtil.getIndexRegion(env);
                                 if (indexRegion != null) {
                                     throwFailureIfDone();

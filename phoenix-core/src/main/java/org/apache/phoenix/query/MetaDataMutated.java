@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
@@ -38,8 +39,10 @@ public interface MetaDataMutated {
     PMetaData addTable(PTable table, long resolvedTime) throws SQLException;
     PMetaData updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException;
     PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException;
-    PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime) throws SQLException;
+    PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime) throws SQLException;
     PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp, long tableSeqNum, long resolvedTime) throws SQLException;
     PMetaData addFunction(PFunction function) throws SQLException;
     PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp) throws SQLException;
+    PMetaData addSchema(PSchema schema) throws SQLException;
+    PMetaData removeSchema(PSchema schema, long schemaTimeStamp);
 }
