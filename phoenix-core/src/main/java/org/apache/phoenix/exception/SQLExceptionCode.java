@@ -33,6 +33,8 @@ import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.SchemaAlreadyExistsException;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
@@ -374,8 +376,23 @@ public enum SQLExceptionCode {
     }),
     UNALLOWED_USER_DEFINED_FUNCTIONS(6003, "42F03",
             "User defined functions are configured to not be allowed. To allow configure "
-                    + QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB + " to true."),
-    ;
+                    + QueryServices.ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB + " to true."), 
+
+    SCHEMA_ALREADY_EXISTS(721, "42M04", "Schema with given name already exists", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new SchemaAlreadyExistsException(info.getSchemaName());
+        }
+    }), SCHEMA_NOT_FOUND(722, "43M05", "Schema does not exists", new Factory() {
+        @Override
+        public SQLException newException(SQLExceptionInfo info) {
+            return new SchemaNotFoundException(info.getSchemaName());
+        }
+    }), CANNOT_MUTATE_SCHEMA(723, "43M06", "Cannot mutate schema as schema has existing tables"), SCHEMA_NOT_ALLOWED(
+            724, "43M07",
+            "Schema name not allowed!!"), CREATE_SCHEMA_NOT_ALLOWED(725, "43M08", "Cannot create schema because config "
+                    + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " for enabling name space mapping isn't enabled.");
+
 
     private final int errorCode;
     private final String sqlState;

@@ -130,7 +130,7 @@ public class ParallelIterators extends BaseResultIterators {
                 public TaskExecutionMetricsHolder getTaskExecutionMetric() {
                     return taskMetrics;
                 }
-            }, "Parallel scanner for table: " + tableRef.getTable().getName().getString()));
+            }, "Parallel scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
             // Add our future in the right place so that we can concatenate the
             // results of the inner futures versus merge sorting across all of them.
             nestedFutures.get(scanLocation.getOuterListIndex()).set(scanLocation.getInnerListIndex(), new Pair<Scan,Future<PeekingResultIterator>>(scan,future));

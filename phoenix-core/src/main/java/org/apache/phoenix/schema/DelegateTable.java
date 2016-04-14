@@ -271,4 +271,9 @@ public class DelegateTable implements PTable {
     public long getUpdateCacheFrequency() {
         return delegate.getUpdateCacheFrequency();
     }
+
+    @Override
+    public boolean isNamespaceMapped() {
+        return delegate.isNamespaceMapped();
+    }
 }
