@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
@@ -51,6 +52,7 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -202,9 +204,10 @@ public class IndexTool extends Configured implements Tool {
 
             // check if the index type is LOCAL, if so, derive and set the physicalIndexName that is
             // computed from the qDataTable name.
-            String physicalIndexTable = qIndexTable;
+            String physicalIndexTable = pindexTable.getPhysicalName().getString();
             if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
-                physicalIndexTable = MetaDataUtil.getLocalIndexTableName(qDataTable);
+                physicalIndexTable = Bytes
+                        .toString(MetaDataUtil.getLocalIndexPhysicalName(pdataTable.getPhysicalName().getBytes()));
             }
 
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
@@ -226,8 +229,8 @@ public class IndexTool extends Configured implements Tool {
                     PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
-            final Path outputPath =
-                    new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt()), physicalIndexTable);
+            final Path outputPath = CsvBulkImportUtil
+                    .getOutputPath(new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt())), physicalIndexTable);
             FileSystem.get(configuration).delete(outputPath, true);
             
             final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, dataTable, indexTable);
@@ -280,9 +283,9 @@ public class IndexTool extends Configured implements Tool {
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
         job.setMapOutputValueClass(KeyValue.class);
         final Configuration configuration = job.getConfiguration();
-        final String logicalIndexTable =
+        final String physicalIndexTable =
                 PhoenixConfigurationUtil.getPhysicalTableName(configuration);
-        final HTable htable = new HTable(configuration, logicalIndexTable);
+        final HTable htable = new HTable(configuration, physicalIndexTable);
         HFileOutputFormat.configureIncrementalLoad(job, htable);
         boolean status = job.waitForCompletion(true);
         if (!status) {

@@ -75,6 +75,7 @@ import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
@@ -89,6 +90,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
@@ -135,6 +137,7 @@ import co.cask.tephra.TransactionContext;
  */
 public class PhoenixConnection implements Connection, MetaDataMutated, SQLCloseable {
     private final String url;
+    private String schema;
     private final ConnectionQueryServices services;
     private final Properties info;
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
@@ -246,6 +249,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.consistency = JDBCUtil.getConsistencyLevel(url, this.info, this.services.getProps()
                  .get(QueryServices.CONSISTENCY_ATTRIB,
                          QueryServicesOptions.DEFAULT_CONSISTENCY_LEVEL));
+        // currently we are not resolving schema set through property, so if schema doesn't exists ,connection will not fail
+        // but queries may fail
+        this.schema = JDBCUtil.getSchema(url, this.info,
+                this.services.getProps().get(QueryServices.SCHEMA_ATTRIB, QueryServicesOptions.DEFAULT_SCHEMA));
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
@@ -857,14 +864,17 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     @Override
     public void setSchema(String schema) throws SQLException {
-        // TODO Auto-generated method stub
-        
+        this.schema = schema;
+
     }
 
     @Override
     public String getSchema() throws SQLException {
-        // TODO Auto-generated method stub
-        return null;
+        return this.schema;
+    }
+
+    public PSchema getSchema(PTableKey key) throws SchemaNotFoundException {
+        return metaData.getSchema(key);
     }
 
     @Override
@@ -914,11 +924,25 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime)
-            throws SQLException {
-        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
-        //Cascade through to connectionQueryServices too
-        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
+    public PMetaData addSchema(PSchema schema) throws SQLException {
+        metaData = metaData.addSchema(schema);
+        // Cascade through to connectionQueryServices too
+        getQueryServices().addSchema(schema);
+        return metaData;
+    }
+
+    @Override
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
+            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
+                    throws SQLException {
+        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
+                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
+                resolvedTime);
+        // Cascade through to connectionQueryServices too
+        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
+                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
+                resolvedTime);
         return metaData;
     }
 
@@ -1041,5 +1065,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     public void setTableResultIteratorFactory(TableResultIteratorFactory factory) {
         checkNotNull(factory);
         this.tableResultIteratorFactory = factory;
+    }
+
+    @Override
+    public PMetaData removeSchema(PSchema schema, long schemaTimeStamp) {
+        metaData = metaData.removeSchema(schema, schemaTimeStamp);
+        // Cascade through to connectionQueryServices too
+        getQueryServices().removeSchema(schema, schemaTimeStamp);
+        return metaData;
+
     }
 }
