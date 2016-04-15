@@ -30,6 +30,7 @@
     <module>phoenix-server</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
+    <module>phoenix-hive</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
   </modules>
@@ -66,6 +67,7 @@
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
+    <hive.version>1.2.1</hive.version>
     <hadoop.version>2.5.1</hadoop.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
