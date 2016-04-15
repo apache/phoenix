@@ -34,16 +34,22 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
+
 
 
 public class ViewIT extends BaseViewIT {
@@ -325,16 +331,37 @@ public class ViewIT extends BaseViewIT {
         assertEquals(5, count);
     }
 
+    
+    @Test
+    public void testViewAndTableInDifferentSchemasWithNamespaceMappingEnabled() throws Exception {
+        testViewAndTableInDifferentSchemas(true);
+    }
+
     @Test
     public void testViewAndTableInDifferentSchemas() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = "s1.t"+tableSuffix;
+        testViewAndTableInDifferentSchemas(false);
+
+    }
+
+    public void testViewAndTableInDifferentSchemas(boolean isNamespaceMapped) throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+        Connection conn = DriverManager.getConnection(getUrl(),props);
+        String fullTableName = "s1.t" + tableSuffix + (isNamespaceMapped ? "_N" : "");
+        if (isNamespaceMapped) {
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS s1");
+        }
 		String ddl = "CREATE TABLE " + fullTableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)" + tableDDLOptions;
+        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         conn.createStatement().execute(ddl);
+        assertTrue(admin.tableExists(SchemaUtil.getPhysicalTableName(SchemaUtil.normalizeIdentifier(fullTableName),
+                conn.unwrap(PhoenixConnection.class).getQueryServices().getProps())));
         ddl = "CREATE VIEW s2.v1 (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
         ddl = "CREATE VIEW v2 (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
+        conn.createStatement().executeQuery("SELECT * FROM s2.v1");
+        conn.createStatement().executeQuery("SELECT * FROM v2");
         ddl = "DROP VIEW v1";
         try {
             conn.createStatement().execute(ddl);

@@ -287,7 +287,7 @@ public class IndexUtil {
                     byte[] regionStartKey = null;
                     byte[] regionEndkey = null;
                     if(maintainer.isLocalIndex()) {
-                        HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getName().getBytes(), dataMutation.getRow());
+                        HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
                         regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
                         regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
                     }

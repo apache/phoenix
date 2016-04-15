@@ -174,12 +174,10 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testSchemaMetadataScan() throws SQLException {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
-        ensureTableCreated(getUrl(), PTSDB_NAME, null, ts);
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE SCHEMA " + CUSTOM_ENTITY_DATA_SCHEMA_NAME);
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs;
         rs = dbmd.getSchemas(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME);
@@ -190,13 +188,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
 
         rs = dbmd.getSchemas(null, null);
         assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),null);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
-        assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        assertEquals(rs.getString("TABLE_CATALOG"),null);
-        assertTrue(rs.next());
-        assertEquals(rs.getString("TABLE_SCHEM"),PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
         assertEquals(rs.getString("TABLE_CATALOG"),null);
         assertFalse(rs.next());
     }

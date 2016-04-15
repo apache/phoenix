@@ -25,6 +25,8 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
 import com.google.common.collect.Lists;
@@ -58,6 +60,7 @@ public class PMetaDataImpl implements PMetaData {
 
             private final Map<PTableKey,PTableRef> tables;
             private final Map<PTableKey,PFunction> functions;
+            private final Map<PTableKey,PSchema> schemas;
             
             private static Map<PTableKey,PTableRef> newMap(int expectedCapacity) {
                 // Use regular HashMap, as we cannot use a LinkedHashMap that orders by access time
@@ -73,6 +76,13 @@ public class PMetaDataImpl implements PMetaData {
                 return Maps.newHashMapWithExpectedSize(expectedCapacity);
             }
 
+            private static Map<PTableKey,PSchema> newSchemaMap(int expectedCapacity) {
+                // Use regular HashMap, as we cannot use a LinkedHashMap that orders by access time
+                // safely across multiple threads (as the underlying collection is not thread safe).
+                // Instead, we track access time and prune it based on the copy we've made.
+                return Maps.newHashMapWithExpectedSize(expectedCapacity);
+            }
+
             private static Map<PTableKey,PTableRef> cloneMap(Map<PTableKey,PTableRef> tables, int expectedCapacity) {
                 Map<PTableKey,PTableRef> newTables = newMap(Math.max(tables.size(),expectedCapacity));
                 // Copy value so that access time isn't changing anymore
@@ -80,6 +90,15 @@ public class PMetaDataImpl implements PMetaData {
                     newTables.put(tableAccess.getTable().getKey(), new PTableRef(tableAccess));
                 }
                 return newTables;
+            }
+
+            private static Map<PTableKey, PSchema> cloneSchemaMap(Map<PTableKey, PSchema> schemas, int expectedCapacity) {
+                Map<PTableKey, PSchema> newSchemas = newSchemaMap(Math.max(schemas.size(), expectedCapacity));
+                // Copy value so that access time isn't changing anymore
+                for (PSchema schema : schemas.values()) {
+                    newSchemas.put(schema.getSchemaKey(), new PSchema(schema));
+                }
+                return newSchemas;
             }
 
             private static Map<PTableKey,PFunction> cloneFunctionsMap(Map<PTableKey,PFunction> functions, int expectedCapacity) {
@@ -97,6 +116,7 @@ public class PMetaDataImpl implements PMetaData {
                 this.expectedCapacity = toClone.expectedCapacity;
                 this.tables = cloneMap(toClone.tables, expectedCapacity);
                 this.functions = cloneFunctionsMap(toClone.functions, expectedCapacity);
+                this.schemas = cloneSchemaMap(toClone.schemas, expectedCapacity);
             }
             
             public PMetaDataCache(int initialCapacity, long maxByteSize, TimeKeeper timeKeeper) {
@@ -106,6 +126,7 @@ public class PMetaDataImpl implements PMetaData {
                 this.tables = newMap(this.expectedCapacity);
                 this.functions = newFunctionMap(this.expectedCapacity);
                 this.timeKeeper = timeKeeper;
+                this.schemas = newSchemaMap(this.expectedCapacity);
             }
             
             public PTableRef get(PTableKey key) {
@@ -317,7 +338,10 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime) throws SQLException {
+    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp,
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
+            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
+                    throws SQLException {
         PTableRef oldTableRef = metaData.get(new PTableKey(tenantId, tableName));
         if (oldTableRef == null) {
             return this;
@@ -331,9 +355,9 @@ public class PMetaDataImpl implements PMetaData {
             newColumns.addAll(oldColumns);
             newColumns.addAll(columnsToAdd);
         }
-        PTable newTable = PTableImpl.makePTable(oldTableRef.getTable(),
-                tableTimeStamp, tableSeqNum, newColumns, isImmutableRows,
-                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency);
+        PTable newTable = PTableImpl.makePTable(oldTableRef.getTable(), tableTimeStamp, tableSeqNum, newColumns,
+                isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency,
+                isNamespaceMapped);
         return addTable(newTable, resolvedTime);
     }
 
@@ -482,5 +506,24 @@ public class PMetaDataImpl implements PMetaData {
     @Override
     public long getAge(PTableRef ref) {
         return this.metaData.getAge(ref);
+    }
+
+    @Override
+    public PMetaData addSchema(PSchema schema) throws SQLException {
+        this.metaData.schemas.put(schema.getSchemaKey(), schema);
+        return this;
+    }
+
+    @Override
+    public PSchema getSchema(PTableKey key) throws SchemaNotFoundException {
+        PSchema schema = metaData.schemas.get(key);
+        if (schema == null) { throw new SchemaNotFoundException(key.getName()); }
+        return schema;
+    }
+
+    @Override
+    public PMetaData removeSchema(PSchema schema, long schemaTimeStamp) {
+        this.metaData.schemas.remove(SchemaUtil.getSchemaKey(schema.getSchemaName()));
+        return this;
     }
 }
