@@ -26,6 +26,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -83,7 +84,12 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
 
     @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        ResultIterator iterator = delegate.iterator(scanGrouper);
+        return iterator(scanGrouper, delegate.getContext().getScan());
+    }
+
+    @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        ResultIterator iterator = delegate.iterator(scanGrouper, scan);
         if (where != null) {
             iterator = new FilterResultIterator(iterator, where);
         }

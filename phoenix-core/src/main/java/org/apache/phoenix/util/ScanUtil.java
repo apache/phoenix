@@ -20,6 +20,9 @@ package org.apache.phoenix.util;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -32,6 +35,7 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -99,6 +103,10 @@ public class ScanUtil {
 
     public static boolean isLocalIndex(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX) != null;
+    }
+
+    public static boolean isNonAggregateScan(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null;
     }
 
     // Use getTenantId and pass in column name to match against
@@ -616,6 +624,62 @@ public class ScanUtil {
         }
     }
 
+    /**
+     * prefix region start key to the start row/stop row suffix and set as scan boundaries.
+     * @param scan
+     * @param lowerInclusiveRegionKey
+     * @param upperExclusiveRegionKey
+     */
+    public static void setupLocalIndexScan(Scan scan, byte[] lowerInclusiveRegionKey,
+            byte[] upperExclusiveRegionKey) {
+        byte[] prefix = lowerInclusiveRegionKey.length == 0 ? new byte[upperExclusiveRegionKey.length]: lowerInclusiveRegionKey;
+        int prefixLength = lowerInclusiveRegionKey.length == 0? upperExclusiveRegionKey.length: lowerInclusiveRegionKey.length;
+        if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
+            scan.setStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
+        }
+        if(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)!=null) {
+            scan.setStopRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
+        }
+    }
+
+    public static byte[] getActualStartRow(Scan localIndexScan, HRegionInfo regionInfo) {
+        return localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX) == null ? localIndexScan
+                .getStartRow() : ScanRanges.prefixKey(localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX), 0 ,
+            regionInfo.getStartKey().length == 0 ? new byte[regionInfo.getEndKey().length]
+                    : regionInfo.getStartKey(),
+            regionInfo.getStartKey().length == 0 ? regionInfo.getEndKey().length : regionInfo
+                    .getStartKey().length);
+    }
+
+    /**
+     * Set all attributes required and boundaries for local index scan.
+     * @param keyOffset
+     * @param regionStartKey
+     * @param regionEndKey
+     * @param newScan
+     */
+    public static void setLocalIndexAttributes(Scan newScan, int keyOffset, byte[] regionStartKey, byte[] regionEndKey, byte[] startRowSuffix, byte[] stopRowSuffix) {
+        if(ScanUtil.isLocalIndex(newScan)) {
+             newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
+             newScan.setStartRow(regionStartKey);
+             newScan.setStopRow(regionEndKey);
+             if (keyOffset > 0 ) {
+                 newScan.setAttribute(SCAN_START_ROW_SUFFIX, ScanRanges.stripPrefix(startRowSuffix, keyOffset));
+             } else {
+                 newScan.setAttribute(SCAN_START_ROW_SUFFIX, startRowSuffix);
+             }
+             if (keyOffset > 0) {
+                 newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, ScanRanges.stripPrefix(stopRowSuffix, keyOffset));
+             } else {
+                 newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, stopRowSuffix);
+             }
+         }
+    }
+
+    public static boolean isConextScan(Scan scan, StatementContext context) {
+        return Bytes.compareTo(context.getScan().getStartRow(), scan.getStartRow()) == 0 && Bytes
+                .compareTo(context.getScan().getStopRow(), scan.getStopRow()) == 0;
+    }
     public static int getRowKeyOffset(byte[] regionStartKey, byte[] regionEndKey) {
         return regionStartKey.length > 0 ? regionStartKey.length : regionEndKey.length;
     }

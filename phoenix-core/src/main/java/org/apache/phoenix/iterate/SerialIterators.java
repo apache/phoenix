@@ -55,9 +55,9 @@ public class SerialIterators extends BaseResultIterators {
     private final ParallelIteratorFactory iteratorFactory;
     
     public SerialIterators(QueryPlan plan, Integer perScanLimit, Integer offset,
-            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
+            ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan)
             throws SQLException {
-        super(plan, perScanLimit, offset, scanGrouper);
+        super(plan, perScanLimit, offset, scanGrouper, scan);
         // must be a offset or a limit specified or a SERIAL hint
         Preconditions.checkArgument(
                 offset != null || perScanLimit != null || plan.getStatement().getHint().hasHint(HintNode.Hint.SERIAL));
@@ -66,7 +66,7 @@ public class SerialIterators extends BaseResultIterators {
 
     @Override
     protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize) {
+            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, final ParallelScanGrouper scanGrouper) {
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -90,9 +90,9 @@ public class SerialIterators extends BaseResultIterators {
                     PeekingResultIterator previousIterator = null;
                 	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
                 	for (final Scan scan : scans) {
-                	    TableResultIterator scanner = new TableResultIterator(mutationState, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, previousIterator);
+                	    TableResultIterator scanner = new TableResultIterator(mutationState, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, previousIterator, plan, scanGrouper);
                 	    conn.addIterator(scanner);
-                	    PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan, tableName);
+                	    PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan, tableName, plan);
                 	    concatIterators.add(iterator);
                 	    previousIterator = iterator;
                 	}
