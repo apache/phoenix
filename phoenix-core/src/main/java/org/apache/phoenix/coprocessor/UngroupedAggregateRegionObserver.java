@@ -86,6 +86,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
@@ -288,8 +289,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
-        region.startRegionOperation();
+        boolean aquiredLock = false;
         try {
+            region.startRegionOperation();
+            aquiredLock = true;
             synchronized (innerScanner) {
                 do {
                     List<Cell> results = new ArrayList<Cell>();
@@ -529,7 +532,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             try {
                 innerScanner.close();
             } finally {
-                region.closeRegionOperation();
+                if (aquiredLock) region.closeRegionOperation();
             }
         }
         if (logger.isDebugEnabled()) {
@@ -608,7 +611,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         InternalScanner internalScanner = scanner;
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             try {
-                Pair<HRegionInfo, HRegionInfo> mergeRegions = null;
                 long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
                 StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
                         c.getEnvironment(), table.getNameAsString(), clientTimeStamp,

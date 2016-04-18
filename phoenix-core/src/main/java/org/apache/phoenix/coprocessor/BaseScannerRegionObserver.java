@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
@@ -42,6 +43,7 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
+import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -85,7 +87,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String LOCAL_INDEX_JOIN_SCHEMA = "_LocalIndexJoinSchema";
     public static final String DATA_TABLE_COLUMNS_TO_JOIN = "_DataTableColumnsToJoin";
     public static final String VIEW_CONSTANTS = "_ViewConstants";
-    public static final String STARTKEY_OFFSET = "_StartKeyOffset";
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
     public static final String REVERSE_SCAN = "_ReverseScan";
     public static final String ANALYZE_TABLE = "_ANALYZETABLE";
@@ -100,6 +101,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String IGNORE_NEWER_MUTATIONS = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";
+    public static final String SCAN_START_ROW_SUFFIX = "_ScanStartRowSuffix";
+    public static final String SCAN_STOP_ROW_SUFFIX = "_ScanStopRowSuffix";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations
@@ -135,7 +138,9 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         byte[] upperExclusiveRegionKey = region.getRegionInfo().getEndKey();
         boolean isStaleRegionBoundaries;
         if (isLocalIndex) {
-            byte[] expectedUpperRegionKey = scan.getAttribute(EXPECTED_UPPER_REGION_KEY);
+            byte[] expectedUpperRegionKey =
+                    scan.getAttribute(EXPECTED_UPPER_REGION_KEY) == null ? scan.getStopRow() : scan
+                            .getAttribute(EXPECTED_UPPER_REGION_KEY);
             isStaleRegionBoundaries = expectedUpperRegionKey != null &&
                     Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0;
         } else {
@@ -146,6 +151,9 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         if (isStaleRegionBoundaries) {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
+        }
+        if(isLocalIndex) {
+            ScanUtil.setupLocalIndexScan(scan, lowerInclusiveRegionKey, upperExclusiveRegionKey);
         }
     }
 
@@ -166,7 +174,10 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
         }
         if (isRegionObserverFor(scan)) {
-            if (! skipRegionBoundaryCheck(scan)) {
+            // For local indexes, we need to throw if out of region as we'll get inconsistent
+            // results otherwise while in other cases, it may just mean out client-side data
+            // on region boundaries is out of date and can safely be ignored.
+            if (!skipRegionBoundaryCheck(scan) || ScanUtil.isLocalIndex(scan)) {
                 throwIfScanOutOfRegion(scan, c.getEnvironment().getRegion());
             }
             // Muck with the start/stop row of the scan and set as reversed at the
@@ -227,6 +238,13 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 }
             }
         } catch (Throwable t) {
+            // If the exception is NotServingRegionException then throw it as
+            // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
+            // client may recreate scans with wrong region boundaries.
+            if(t instanceof NotServingRegionException) {
+                Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
+                throw new DoNotRetryIOException(cause.getMessage(), cause);
+            }
             ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
             return null; // impossible
         }
@@ -279,6 +297,31 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
         return new RegionScanner() {
+
+            private boolean hasReferences = checkForReferenceFiles();
+            private HRegionInfo regionInfo = c.getEnvironment().getRegionInfo();
+            private byte[] actualStartKey = getActualStartKey();
+
+            // If there are any reference files after local index region merge some cases we might
+            // get the records less than scan start row key. This will happen when we replace the
+            // actual region start key with merge region start key. This method gives whether are
+            // there any reference files in the region or not.
+            private boolean checkForReferenceFiles() {
+                if(!ScanUtil.isLocalIndex(scan)) return false;
+                for (byte[] family : scan.getFamilies()) {
+                    if (c.getEnvironment().getRegion().getStore(family).hasReferences()) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // Get the actual scan start row of local index. This will be used to compare the row
+            // key of the results less than scan start row when there are references.
+            public byte[] getActualStartKey() {
+                return ScanUtil.isLocalIndex(scan) ? ScanUtil.getActualStartRow(scan, regionInfo)
+                        : null;
+            }
 
             @Override
             public boolean next(List<Cell> results) throws IOException {
@@ -338,6 +381,13 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                         arrayElementCell = result.get(arrayElementCellPosition);
                     }
                     if (ScanUtil.isLocalIndex(scan) && !ScanUtil.isAnalyzeTable(scan)) {
+                        if(hasReferences && actualStartKey!=null) {
+                            next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
+                                null);
+                            if (result.isEmpty()) {
+                                return next;
+                            }
+                        }
                         IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
                             tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                     }
@@ -370,6 +420,13 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     arrayElementCell = result.get(arrayElementCellPosition);
                 }
                 if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
+                    if(hasReferences && actualStartKey!=null) {
+                        next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
+                                    scannerContext);
+                        if (result.isEmpty()) {
+                            return next;
+                        }
+                    }
                     IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
                         tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                 }
@@ -386,6 +443,36 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
                 return false; // impossible
               }
+            }
+
+            /**
+             * When there is a merge in progress while scanning local indexes we might get the key values less than scan start row.
+             * In that case we need to scan until get the row key more or  equal to scan start key.
+             * TODO try to fix this case in LocalIndexStoreFileScanner when there is a merge.
+             */
+            private boolean scanTillScanStartRow(final RegionScanner s,
+                    final Set<KeyValueColumnExpression> arrayKVRefs,
+                    final Expression[] arrayFuncRefs, List<Cell> result,
+                    ScannerContext scannerContext) throws IOException {
+                boolean next = true;
+                Cell firstCell = result.get(0);
+                while (Bytes.compareTo(firstCell.getRowArray(), firstCell.getRowOffset(),
+                    firstCell.getRowLength(), actualStartKey, 0, actualStartKey.length) < 0) {
+                    result.clear();
+                    if(scannerContext == null) {
+                        next = s.nextRaw(result);
+                    } else {
+                        next = s.nextRaw(result, scannerContext);
+                    }
+                    if (result.isEmpty()) {
+                        return next;
+                    }
+                    if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
+                        replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
+                    }
+                    firstCell = result.get(0);
+                }
+                return next;
             }
 
             private int replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,

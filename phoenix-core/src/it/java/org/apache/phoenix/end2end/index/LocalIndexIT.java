@@ -1013,24 +1013,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(5, regionsOfIndexTable.size());
             boolean success = latch1.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
             assertTrue("Timed out waiting for MockedLocalIndexSplitter.preSplitAfterPONR to complete", success);
-            // Verify the metadata for index is correct.
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(schemaName), indexName,
-                    new String[] { PTableType.INDEX.toString() });
-            assertTrue(rs.next());
-            assertEquals(indexName, rs.getString(3));
-            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(schemaName), indexName+"_2",
-                new String[] { PTableType.INDEX.toString() });
-            assertTrue(rs.next());
-            assertEquals(indexName+"_2", rs.getString(3));
-            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-
-            String query = "SELECT t_id,k1,v1 FROM " + tableName+"2";
-            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT PARALLEL " + 1 + "-WAY FULL SCAN OVER " + tableName+"2",
-                QueryUtil.getExplainPlan(rs));
             latch2.countDown();
        } finally {
             conn1.close();
