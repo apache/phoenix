@@ -617,6 +617,39 @@
         <scope>test</scope>
       </dependency>
 
+      <!-- Required for mini-cluster since hbase built against old version of hadoop -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-auth</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-common</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <version>${hadoop-two.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
+      </dependency>
+
       <!-- General Dependencies -->
       <dependency>
         <groupId>org.apache.pig</groupId>
