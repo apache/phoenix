@@ -1214,17 +1214,17 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals("0", columnFamilies[0].getNameAsString());
             assertEquals(8, columnFamilies[0].getMinVersions());
             assertEquals(10, columnFamilies[0].getMaxVersions());
-            assertEquals(KeepDeletedCells.FALSE, columnFamilies[0].getKeepDeletedCells());
+            assertEquals(KeepDeletedCells.FALSE, columnFamilies[0].getKeepDeletedCellsAsEnum());
 
             assertEquals("CF1", columnFamilies[1].getNameAsString());
             assertEquals(1, columnFamilies[1].getMinVersions());
             assertEquals(10, columnFamilies[1].getMaxVersions());
-            assertEquals(KeepDeletedCells.TRUE, columnFamilies[1].getKeepDeletedCells());
+            assertEquals(KeepDeletedCells.TRUE, columnFamilies[1].getKeepDeletedCellsAsEnum());
 
             assertEquals("CF2", columnFamilies[2].getNameAsString());
             assertEquals(3, columnFamilies[2].getMinVersions());
             assertEquals(10, columnFamilies[2].getMaxVersions());
-            assertEquals(KeepDeletedCells.FALSE, columnFamilies[2].getKeepDeletedCells());
+            assertEquals(KeepDeletedCells.FALSE, columnFamilies[2].getKeepDeletedCellsAsEnum());
 
             assertEquals(Boolean.toString(false), tableDesc.getValue(HTableDescriptor.COMPACTION_ENABLED));
         }

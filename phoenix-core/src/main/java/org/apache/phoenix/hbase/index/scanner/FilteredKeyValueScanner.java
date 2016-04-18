@@ -104,7 +104,6 @@ public class FilteredKeyValueScanner implements ReseekableScanner {
         return this.seekToNextUnfilteredKeyValue();
     }
 
-
     @Override
     public void close() throws IOException {
         this.delegate.close();

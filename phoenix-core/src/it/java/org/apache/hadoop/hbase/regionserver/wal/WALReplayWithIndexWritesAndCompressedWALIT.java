@@ -200,7 +200,7 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     Mockito.when(mockRS.getServerName()).thenReturn(mockServerName);
     HRegion region = new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS);
     region.initialize();
-    region.getSequenceId().set(0);
+    assertEquals(0, region.getSequenceId());
 
     //make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");

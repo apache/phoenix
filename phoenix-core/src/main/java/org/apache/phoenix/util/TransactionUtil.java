@@ -22,7 +22,7 @@ import java.sql.SQLException;
 import co.cask.tephra.TransactionConflictException;
 import co.cask.tephra.TransactionFailureException;
 import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase11.TransactionAwareHTable;
+import co.cask.tephra.hbase10cdh.TransactionAwareHTable;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
