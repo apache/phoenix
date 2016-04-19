@@ -110,6 +110,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -117,6 +118,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
+
+import co.cask.tephra.TransactionContext;
 
 import co.cask.tephra.TransactionContext;
 
@@ -856,7 +859,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     @Override
     public String getSchema() throws SQLException {
-        return this.schema;
+        return SchemaUtil.normalizeIdentifier(this.schema);
     }
 
     public PSchema getSchema(PTableKey key) throws SchemaNotFoundException {

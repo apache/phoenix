@@ -24,6 +24,8 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.NamespaceDescriptor;
@@ -34,17 +36,33 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
+@RunWith(Parameterized.class)
 public class DropSchemaIT extends BaseClientManagedTimeIT {
+    private String schema;
+
+    public DropSchemaIT(String schema) {
+        this.schema = schema;
+    }
+
+    @Parameters(name = "schema = {0}")
+    public static Collection<String> data() {
+        return Arrays.asList("TEST_SCHEMA", "\"test_schema\"");
+    }
 
     @Test
     public void testDropSchema() throws Exception {
         long ts = nextTimestamp();
-        String schema = "TEST_SCHEMA";
+
         String tableName = "TEST";
         Properties props = new Properties();
+        String normalizeSchemaIdentifier = SchemaUtil.normalizeIdentifier(schema);
         String ddl = "DROP SCHEMA " + schema;
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
@@ -66,7 +84,7 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
                 e.printStackTrace();
                 assertEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_MUTATE_SCHEMA.getErrorCode());
             }
-            assertNotNull(admin.getNamespaceDescriptor(schema));
+            assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts - 20));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
@@ -75,20 +93,20 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
         } catch (SchemaNotFoundException e) {
             // expected
         }
-        assertNotNull(admin.getNamespaceDescriptor(schema));
+        assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + schema + "." + tableName);
-            //Dropping table manually because Drop_meta_attrib is not working
-            admin.disableTable(TableName.valueOf(schema, tableName));
-            admin.deleteTable(TableName.valueOf(schema, tableName));
+            // Dropping table manually because Drop_meta_attrib is not working
+            admin.disableTable(TableName.valueOf(normalizeSchemaIdentifier, tableName));
+            admin.deleteTable(TableName.valueOf(normalizeSchemaIdentifier, tableName));
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
             try {
-                admin.getNamespaceDescriptor(schema);
+                admin.getNamespaceDescriptor(normalizeSchemaIdentifier);
                 fail();
             } catch (NamespaceNotFoundException ne) {
                 // expected
@@ -100,11 +118,10 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
-            admin.createNamespace(NamespaceDescriptor.create(schema).build());
+            admin.createNamespace(NamespaceDescriptor.create(normalizeSchemaIdentifier).build());
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
-            assertNotNull(admin.getNamespaceDescriptor(schema));
+            assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
         }
         admin.close();
     }
-
 }
