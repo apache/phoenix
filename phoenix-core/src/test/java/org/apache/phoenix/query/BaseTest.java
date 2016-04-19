@@ -1506,7 +1506,7 @@ public abstract class BaseTest {
         if (ts != null) {
             props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
         }
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute("CREATE SEQUENCE my.seq");
             // Insert into customer table
