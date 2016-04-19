@@ -30,6 +30,7 @@
     <module>phoenix-server</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
+    <module>phoenix-hive</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
   </modules>
@@ -62,11 +63,12 @@
 
     <!-- Hadoop Versions -->
     <hbase.version>1.0.3</hbase.version>
-    <hadoop-two.version>2.5.1</hadoop-two.version>
+    <hadoop-two.version>2.7.1</hadoop-two.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
-    <hadoop.version>2.5.1</hadoop.version>
+    <hive.version>1.2.1</hive.version>
+    <hadoop.version>2.7.1</hadoop.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>
@@ -572,6 +574,39 @@
         <artifactId>hadoop-minicluster</artifactId>
         <version>${hadoop-two.version}</version>
         <optional>true</optional>
+        <scope>test</scope>
+      </dependency>
+
+      <!-- Required for mini-cluster since hbase built against old version of hadoop -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-auth</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-common</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <version>${hadoop-two.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <version>${hadoop-two.version}</version>
+        <type>test-jar</type>
         <scope>test</scope>
       </dependency>
 
