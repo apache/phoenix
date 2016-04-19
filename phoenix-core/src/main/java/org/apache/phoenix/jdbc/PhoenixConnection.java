@@ -110,8 +110,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
-
-import co.cask.tephra.TransactionContext;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -870,7 +869,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
 
     @Override
     public String getSchema() throws SQLException {
-        return this.schema;
+        return SchemaUtil.normalizeIdentifier(this.schema);
     }
 
     public PSchema getSchema(PTableKey key) throws SchemaNotFoundException {

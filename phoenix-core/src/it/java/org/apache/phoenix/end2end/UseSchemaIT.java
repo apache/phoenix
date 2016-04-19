@@ -44,16 +44,25 @@ import org.junit.Test;
 public class UseSchemaIT extends BaseHBaseManagedTimeIT {
 
     @Test
-    public void testUseSchema() throws Exception {
+    public void testUseSchemaCaseInsensitive() throws Exception {
+        testUseSchema("TEST_SCHEMA");
+    }
+
+    @Test
+    public void testUseSchemaCaseSensitive() throws Exception {
+        testUseSchema("\"test_schema\"");
+    }
+
+    public void testUseSchema(String schema) throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "CREATE SCHEMA IF NOT EXISTS TEST_SCHEMA";
+        String ddl = "CREATE SCHEMA IF NOT EXISTS "+schema;
         conn.createStatement().execute(ddl);
-        ddl = "create table test_schema.test(id varchar primary key)";
+        ddl = "create table "+schema+".TEST(id varchar primary key)";
         conn.createStatement().execute(ddl);
-        conn.createStatement().execute("use test_schema");
-        String query = "select count(*) from test";
+        conn.createStatement().execute("use "+schema);
+        String query = "select count(*) from TEST";
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(0, rs.getInt(1));
@@ -64,11 +73,11 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
             assertEquals(SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode(), e.getErrorCode());
         }
         conn.createStatement().execute("use default");
-        ddl = "create table IF NOT EXISTS test(schema_name varchar primary key)";
+        ddl = "create table IF NOT EXISTS TEST(schema_name varchar primary key)";
         conn.createStatement().execute(ddl);
         conn.createStatement().executeUpdate("upsert into test values('"+SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE+"')");
         conn.commit();
-        rs = conn.createStatement().executeQuery("select schema_name from test");
+        rs = conn.createStatement().executeQuery("select schema_name from TEST");
         assertTrue(rs.next());
         assertEquals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE, rs.getString(1));
         conn.close();

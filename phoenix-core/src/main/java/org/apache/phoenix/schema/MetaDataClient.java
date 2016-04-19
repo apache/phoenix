@@ -3464,7 +3464,8 @@ public class MetaDataClient {
         connection.rollback();
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
-            String schemaName = executableDropSchemaStatement.getSchemaName();
+            PSchema schema = new PSchema(executableDropSchemaStatement.getSchemaName());
+            String schemaName = schema.getSchemaName();
             boolean ifExists = executableDropSchemaStatement.ifExists();
             byte[] key = SchemaUtil.getSchemaKey(schemaName);
 
@@ -3475,7 +3476,7 @@ public class MetaDataClient {
             schemaMetaData.add(schemaDelete);
             MetaDataMutationResult result = connection.getQueryServices().dropSchema(schemaMetaData, schemaName);
             MutationCode code = result.getMutationCode();
-            PSchema schema = result.getSchema();
+            schema = result.getSchema();
             switch (code) {
             case SCHEMA_NOT_FOUND:
                 if (!ifExists) { throw new SchemaNotFoundException(schemaName); }
@@ -3503,7 +3504,7 @@ public class MetaDataClient {
         } else {
             PSchema schema = FromCompiler.getResolverForSchema(useSchemaStatement, connection)
                     .resolveSchema(useSchemaStatement.getSchemaName());
-            connection.setSchema(schema.getSchemaName());
+            connection.setSchema(useSchemaStatement.getSchemaName());
         }
         return new MutationState(0, connection);
     }
