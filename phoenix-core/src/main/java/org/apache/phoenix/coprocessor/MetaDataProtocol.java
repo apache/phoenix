@@ -107,6 +107,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
         SCHEMA_NOT_IN_REGION,
         TABLES_EXIST_ON_SCHEMA,
         UNALLOWED_SCHEMA_MUTATION,
+        AUTO_PARTITION_SEQUENCE_NOT_FOUND,
+        CANNOT_COERCE_AUTO_PARTITION_ID,
         NO_OP
     };
 
@@ -187,6 +189,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
         private PSchema schema;
 
         private List<PFunction> functions = new ArrayList<PFunction>(1);
+        private long autoPartitionNum;
 
         public MetaDataMutationResult() {
         }
@@ -278,6 +281,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
             return sharedTablesToDelete;
         }
 
+        public long getAutoPartitionNum() {
+            return autoPartitionNum;
+        }
+
         public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
           MetaDataMutationResult result = new MetaDataMutationResult();
           result.returnCode = MutationCode.values()[proto.getReturnCode().ordinal()];
@@ -315,6 +322,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
           }
           if (proto.hasSchema()) {
             result.schema = PSchema.createFromProto(proto.getSchema());
+          }
+          if (proto.hasAutoPartitionNum()) {
+              result.autoPartitionNum = proto.getAutoPartitionNum();
           }
           return result;
         }
@@ -362,6 +372,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
             if (result.getSchema() != null) {
               builder.setSchema(PSchema.toProto(result.schema));
             }
+            builder.setAutoPartitionNum(result.getAutoPartitionNum());
           }
           return builder.build();
         }

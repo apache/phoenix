@@ -49,6 +49,8 @@ enum MutationCode {
   SCHEMA_NOT_IN_REGION = 17;
   TABLES_EXIST_ON_SCHEMA = 18;
   UNALLOWED_SCHEMA_MUTATION = 19;
+  AUTO_PARTITION_SEQUENCE_NOT_FOUND = 20;
+  CANNOT_COERCE_AUTO_PARTITION_ID = 21;
 };
 
 message SharedTableState {
@@ -71,6 +73,7 @@ message MetaDataResponse {
   repeated PFunction function = 8;
   repeated SharedTableState sharedTablesToDelete = 9;
   optional PSchema schema = 10;
+  optional int64 autoPartitionNum = 11;
 }
 
 message GetTableRequest {
