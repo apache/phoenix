@@ -117,10 +117,6 @@ public class ListJarsQueryPlan implements QueryPlan {
     }
 
     @Override
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan s) throws SQLException {
-        return iterator(scanGrouper);
-    }
-    @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
         return new ResultIterator() {
             private RemoteIterator<LocatedFileStatus> listFiles = null;
