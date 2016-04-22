@@ -67,6 +67,8 @@ public enum TableProperty {
 	        return value;
 	    }	    
 	},
+	
+	AUTO_PARTITION_SEQ(PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, false),
     ;
 
 

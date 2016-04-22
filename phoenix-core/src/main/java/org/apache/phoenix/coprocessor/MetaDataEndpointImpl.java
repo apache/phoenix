@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF_BYTES;
@@ -76,14 +77,19 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.NavigableMap;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -114,6 +120,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion.RowLock;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.GlobalCache.FunctionBytesPtr;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -152,6 +159,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -184,6 +192,7 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
@@ -204,6 +213,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -266,6 +276,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final KeyValue UPDATE_CACHE_FREQUENCY_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, UPDATE_CACHE_FREQUENCY_BYTES);
     private static final KeyValue IS_NAMESPACE_MAPPED_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, IS_NAMESPACE_MAPPED_BYTES);
+    private static final KeyValue AUTO_PARTITION_SEQ_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, AUTO_PARTITION_SEQ_BYTES);
     
     private static final List<KeyValue> TABLE_KV_COLUMNS = Arrays.<KeyValue>asList(
             EMPTY_KEYVALUE_KV,
@@ -290,7 +301,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             ROW_KEY_ORDER_OPTIMIZABLE_KV,
             TRANSACTIONAL_KV,
             UPDATE_CACHE_FREQUENCY_KV,
-            IS_NAMESPACE_MAPPED_KV
+            IS_NAMESPACE_MAPPED_KV,
+            AUTO_PARTITION_SEQ_KV
             );
     static {
         Collections.sort(TABLE_KV_COLUMNS, KeyValue.COMPARATOR);
@@ -318,6 +330,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     private static final int UPDATE_CACHE_FREQUENCY_INDEX = TABLE_KV_COLUMNS.indexOf(UPDATE_CACHE_FREQUENCY_KV);
     private static final int INDEX_DISABLE_TIMESTAMP = TABLE_KV_COLUMNS.indexOf(INDEX_DISABLE_TIMESTAMP_KV);
     private static final int IS_NAMESPACE_MAPPED_INDEX = TABLE_KV_COLUMNS.indexOf(IS_NAMESPACE_MAPPED_KV);
+    private static final int AUTO_PARTITION_SEQ_INDEX = TABLE_KV_COLUMNS.indexOf(AUTO_PARTITION_SEQ_KV);
 
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -898,7 +911,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         boolean isNamespaceMapped = isNamespaceMappedKv == null ? false
                 : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isNamespaceMappedKv.getValueArray(),
                         isNamespaceMappedKv.getValueOffset(), isNamespaceMappedKv.getValueLength()));
-
+        Cell autoPartitionSeqKv = tableKeyValues[AUTO_PARTITION_SEQ_INDEX];
+        String autoPartitionSeq = autoPartitionSeqKv != null ? (String) PVarchar.INSTANCE.toObject(autoPartitionSeqKv.getValueArray(), autoPartitionSeqKv.getValueOffset(),
+            autoPartitionSeqKv.getValueLength()) : null;
+        
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = new ArrayList<PTable>();
         List<PName> physicalTables = new ArrayList<PName>();
@@ -948,7 +964,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName,
                 viewStatement, disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType,
                 rowKeyOrderOptimizable, transactional, updateCacheFrequency, stats, baseColumnCount,
-                indexDisableTimestamp, isNamespaceMapped);
+                indexDisableTimestamp, isNamespaceMapped, autoPartitionSeq);
     }
 
     private PSchema getSchema(RegionScanner scanner, long clientTimeStamp) throws IOException, SQLException {
@@ -1347,6 +1363,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
                 long clientTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 ImmutableBytesPtr parentCacheKey = null;
+                PTable parentTable = null;
                 if (parentTableName != null) {
                     // Check if the parent table resides in the same region. If not, don't worry about locking the parent table row
                     // or loading the parent table. For a view, the parent table that needs to be locked is the base physical table.
@@ -1355,7 +1372,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     if (result == null) {
                         acquireLock(region, parentTableKey, locks);
                         parentCacheKey = new ImmutableBytesPtr(parentTableKey);
-                        PTable parentTable = loadTable(env, parentTableKey, parentCacheKey, clientTimeStamp,
+                        parentTable = loadTable(env, parentTableKey, parentCacheKey, clientTimeStamp,
                                 clientTimeStamp);
                         if (parentTable == null || isTableDeleted(parentTable)) {
                             builder.setReturnCode(MetaDataProtos.MutationCode.PARENT_TABLE_NOT_FOUND);
@@ -1409,12 +1426,79 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         return;
                     }
                 }
+                
                 // Add cell for ROW_KEY_ORDER_OPTIMIZABLE = true, as we know that new tables
                 // conform the correct row key. The exception is for a VIEW, which the client
                 // sends over depending on its base physical table.
                 if (tableType != PTableType.VIEW) {
                     UpgradeUtil.addRowKeyOrderOptimizableCell(tableMetadata, tableKey, clientTimeStamp);
                 }
+                // If the parent table of the view has the auto partition sequence name attribute, modify the 
+                // tableMetadata and set the view statement and partition column correctly
+                if (parentTable!=null && parentTable.getAutoPartitionSeqName()!=null) {
+                    long autoPartitionNum = 1;
+                    final Properties props = new Properties();
+                    props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
+                    try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
+                            Statement stmt = connection.createStatement()) {
+                        String seqNextValueSql = String.format("SELECT NEXT VALUE FOR %s FROM %s LIMIT 1",
+                            SchemaUtil.getTableName(parentTable.getSchemaName().getString(), parentTable.getAutoPartitionSeqName()), PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                        ResultSet rs = stmt.executeQuery(seqNextValueSql);
+                        rs.next();
+                        autoPartitionNum = rs.getLong(1);
+                    }
+                    catch (SequenceNotFoundException e) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.AUTO_PARTITION_SEQUENCE_NOT_FOUND);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
+                    PColumn autoPartitionCol = parentTable.getColumns().get(MetaDataUtil.getAutoPartitionColIndex(parentTable));
+                    if (!PLong.INSTANCE.isCoercibleTo(autoPartitionCol.getDataType(), autoPartitionNum)) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.CANNOT_COERCE_AUTO_PARTITION_ID);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
+                    builder.setAutoPartitionNum(autoPartitionNum);
+                    
+                    // set the VIEW STATEMENT column of the header row
+                    Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+                    NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
+                    List<Cell> cells = familyCellMap.get(TABLE_FAMILY_BYTES);
+                    Cell cell = cells.get(0);
+                    String autoPartitionWhere = QueryUtil.getViewPartitionClause(MetaDataUtil.getAutoPartitionColumnName(parentTable), autoPartitionNum);
+                    String hbaseVersion = VersionInfo.getVersion();
+                    ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                    KeyValueBuilder kvBuilder = KeyValueBuilder.get(hbaseVersion);
+                    MetaDataUtil.getMutationValue(tableHeaderPut, VIEW_STATEMENT_BYTES, kvBuilder, ptr);
+                    byte[] value = ptr.copyBytesIfNecessary();
+                    byte[] viewStatement = null;
+                    // if we have an existing where clause add the auto partition where clause to it
+                    if (!Bytes.equals(value, QueryConstants.EMPTY_COLUMN_VALUE_BYTES)) {
+                        viewStatement = Bytes.add(value, Bytes.toBytes(" AND "), Bytes.toBytes(autoPartitionWhere));
+                    }
+                    else { 
+                        viewStatement = Bytes.toBytes(QueryUtil.getViewStatement(parentTable.getSchemaName().getString(), parentTable.getTableName().getString(), autoPartitionWhere));
+                    }
+                    Cell viewStatementCell = new KeyValue(cell.getRow(), cell.getFamily(), VIEW_STATEMENT_BYTES,
+                        cell.getTimestamp(), Type.codeToType(cell.getTypeByte()), viewStatement);
+                    cells.add(viewStatementCell);
+                    
+                    // set the IS_VIEW_REFERENCED column of the auto partition column row
+                    Put autoPartitionPut = MetaDataUtil.getPutOnlyAutoPartitionColumn(parentTable, tableMetadata);
+                    familyCellMap = autoPartitionPut.getFamilyCellMap();
+                    cells = familyCellMap.get(TABLE_FAMILY_BYTES);
+                    cell = cells.get(0);
+                    byte[] bytes = new byte [Bytes.SIZEOF_LONG + 1];
+                    PDataType dataType = autoPartitionCol.getDataType();
+                    Object val = dataType.toObject(autoPartitionNum, PLong.INSTANCE);
+                    dataType.toBytes(val, bytes, 0);
+                    Cell viewConstantCell = new KeyValue(cell.getRow(), cell.getFamily(), VIEW_CONSTANT_BYTES,
+                        cell.getTimestamp(), Type.codeToType(cell.getTypeByte()), bytes);
+                    cells.add(viewConstantCell);
+                }
+                
                 // TODO: Switch this to HRegion#batchMutate when we want to support indexes on the
                 // system table. Basically, we get all the locks that we don't already hold for all the
                 // tableMetadata rows. This ensures we don't have deadlock situations (ensuring

@@ -276,4 +276,8 @@ public class DelegateTable implements PTable {
     public boolean isNamespaceMapped() {
         return delegate.isNamespaceMapped();
     }
+
+    public String getAutoPartitionSeqName() {
+        return delegate.getAutoPartitionSeqName();
+    }
 }

@@ -27,6 +27,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_T
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_CREATED_DATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
@@ -202,6 +203,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -211,6 +213,8 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import co.cask.tephra.TxConstants;
+
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
@@ -218,8 +222,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
-
-import co.cask.tephra.TxConstants;
 
 public class MetaDataClient {
     private static final Logger logger = LoggerFactory.getLogger(MetaDataClient.class);
@@ -256,8 +258,9 @@ public class MetaDataClient {
             BASE_COLUMN_COUNT + "," +
             TRANSACTIONAL + "," +
             UPDATE_CACHE_FREQUENCY + "," +
-            IS_NAMESPACE_MAPPED +
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)";
+            IS_NAMESPACE_MAPPED + "," +
+            AUTO_PARTITION_SEQ +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -1547,9 +1550,8 @@ public class MetaDataClient {
             List<Mutation> tableMetaData = Lists.newArrayListWithExpectedSize(statement.getColumnDefs().size() + 3);
 
             TableName tableNameNode = statement.getTableName();
-            String schemaName = tableNameNode.getSchemaName();
-            schemaName = connection.getSchema() != null && schemaName == null ? connection.getSchema() : schemaName;
-            String tableName = tableNameNode.getTableName();
+            final String schemaName = connection.getSchema() != null && tableNameNode.getSchemaName() == null ? connection.getSchema() : tableNameNode.getSchemaName();
+            final String tableName = tableNameNode.getTableName();
             String parentTableName = null;
             PName tenantId = connection.getTenantId();
             String tenantIdStr = tenantId == null ? null : tenantId.getString();
@@ -1672,7 +1674,7 @@ public class MetaDataClient {
                 }
                 addSaltColumn = (saltBucketNum != null);
             }
-
+            
             // Can't set MULTI_TENANT or DEFAULT_COLUMN_FAMILY_NAME on an INDEX or a non mapped VIEW
             if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
                 Boolean multiTenantProp = (Boolean) tableProps.get(PhoenixDatabaseMetaData.MULTI_TENANT);
@@ -1690,6 +1692,7 @@ public class MetaDataClient {
             if (updateCacheFrequencyProp != null) {
                 updateCacheFrequency = updateCacheFrequencyProp;
             }
+            String autoPartitionSeq = (String) TableProperty.AUTO_PARTITION_SEQ.getValue(tableProps);
 
             Boolean storeNullsProp = (Boolean) TableProperty.STORE_NULLS.getValue(tableProps);
             if (storeNullsProp == null) {
@@ -1803,6 +1806,14 @@ public class MetaDataClient {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_TENANT_SPECIFIC_TABLE)
                     .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             }
+            if (autoPartitionSeq!=null) {
+                int autoPartitionColIndex = multiTenant ? 1 : 0;
+                PDataType dataType = colDefs.get(autoPartitionColIndex).getDataType();
+                if (!PLong.INSTANCE.isCastableTo(dataType)) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.SEQUENCE_NOT_CASTABLE_TO_AUTO_PARTITION_ID_COLUMN)
+                    .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                }
+            }
 
             if (tableType == PTableType.VIEW) {
                 physicalNames = Collections.singletonList(PNameFactory.newName(parent.getPhysicalName().getString()));
@@ -1872,6 +1883,8 @@ public class MetaDataClient {
                         }
                         linkStatement.execute();
                     }
+                    tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+                    connection.rollback();
                 }
             }
 
@@ -2023,7 +2036,7 @@ public class MetaDataClient {
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
-                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0, 0L, isNamespaceMapped);
+                        Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0, 0L, isNamespaceMapped, autoPartitionSeq);
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             } else if (tableType == PTableType.INDEX && indexId == null) {
                 if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
@@ -2051,12 +2064,30 @@ public class MetaDataClient {
 
             short nextKeySeq = 0;
             
+            List<Mutation> columnMetadata = Lists.newArrayListWithExpectedSize(columns.size());
             try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_CREATE_TABLE)) {
                 for (int i = 0; i < columns.size(); i++) {
                     PColumn column = columns.get(i);
                     final int columnPosition = column.getPosition();
                     // For client-side cache, we need to update the column
-                    if (isViewColumnReferenced != null) {
+                    // set the autoPartition column attributes   
+                    if (parent != null && parent.getAutoPartitionSeqName() != null
+                            && MetaDataUtil.getAutoPartitionColIndex(parent) == columnPosition) {
+                        columns.set(i, column = new DelegateColumn(column) {
+                            @Override
+                            public byte[] getViewConstant() {
+                                // set to non-null value so that we will generate a Put that 
+                                // will be set correctly on the server
+                                return QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
+                            }
+
+                            @Override
+                            public boolean isViewReferenced() {
+                                return true;
+                            }
+                        });
+                    }
+                    else if (isViewColumnReferenced != null) {
                         if (viewColumnConstants != null && columnPosition < viewColumnConstants.length) {
                             columns.set(i, column = new DelegateColumn(column) {
                                 @Override
@@ -2079,10 +2110,13 @@ public class MetaDataClient {
                     }
                     Short keySeq = SchemaUtil.isPKColumn(column) ? ++nextKeySeq : null;
                     addColumnMutation(schemaName, tableName, column, colUpsert, parentTableName, pkName, keySeq, saltBucketNum != null);
+                    columnMetadata.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+                    connection.rollback();
                 }
-                tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
-                connection.rollback();
             }
+            // add the columns in reverse order since we reverse the list later
+            Collections.reverse(columnMetadata);
+            tableMetaData.addAll(columnMetadata);
 
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
             PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : PIndexState.BUILDING;
@@ -2103,7 +2137,14 @@ public class MetaDataClient {
             tableUpsert.setString(10, indexState == null ? null : indexState.getSerializedValue());
             tableUpsert.setBoolean(11, isImmutableRows);
             tableUpsert.setString(12, defaultFamilyName);
-            tableUpsert.setString(13, viewStatement);
+            if (parent != null && parent.getAutoPartitionSeqName() != null && viewStatement==null) {
+                // set to non-null value so that we will generate a Put that 
+                // will be set correctly on the server
+                tableUpsert.setString(13, QueryConstants.EMPTY_COLUMN_VALUE);
+            }
+            else {
+                tableUpsert.setString(13, viewStatement);
+            }
             tableUpsert.setBoolean(14, disableWAL);
             tableUpsert.setBoolean(15, multiTenant);
             if (viewType == null) {
@@ -2130,6 +2171,11 @@ public class MetaDataClient {
             tableUpsert.setBoolean(21, transactional);
             tableUpsert.setLong(22, updateCacheFrequency);
             tableUpsert.setBoolean(23, isNamespaceMapped);
+            if (autoPartitionSeq == null) {
+                tableUpsert.setNull(24, Types.VARCHAR);
+            } else {
+                tableUpsert.setString(24, autoPartitionSeq);
+            }
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -2146,7 +2192,7 @@ public class MetaDataClient {
             /*
              * The table metadata must be in the following order:
              * 1) table header row
-             * 2) everything else
+             * 2) ordered column rows
              * 3) parent table header row
              */
             Collections.reverse(tableMetaData);
@@ -2187,14 +2233,48 @@ public class MetaDataClient {
             case CONCURRENT_TABLE_MUTATION:
                 addTableToCache(result);
                 throw new ConcurrentTableMutationException(schemaName, tableName);
+            case AUTO_PARTITION_SEQUENCE_NOT_FOUND:
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_PARTITION_SEQUENCE_UNDEFINED)
+                .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+            case CANNOT_COERCE_AUTO_PARTITION_ID:
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_COERCE_AUTO_PARTITION_ID)
+                .setSchemaName(schemaName).setTableName(tableName).build().buildException();
             default:
+                // If the parent table of the view has the auto partition sequence name attribute,
+                // set the view statement and relevant partition column attributes correctly
+                if (parent!=null && parent.getAutoPartitionSeqName()!=null) {
+                    int autoPartitionColIndex = parent.isMultiTenant() ? 1 : 0;
+                    final Long autoPartitionNum = Long.valueOf(result.getAutoPartitionNum());
+                    final PColumn column = columns.get(autoPartitionColIndex);
+                    columns.set(autoPartitionColIndex, new DelegateColumn(column) {
+                        @Override
+                        public byte[] getViewConstant() {
+                            byte[] bytes = new byte [Bytes.SIZEOF_LONG + 1];
+                            PDataType dataType = column.getDataType();
+                            Object val = dataType.toObject(autoPartitionNum, PLong.INSTANCE);
+                            dataType.toBytes(val, bytes, 0);
+                            return bytes;
+                        }
+                        @Override
+                        public boolean isViewReferenced() {
+                            return true;
+                        }
+                    });
+                    String viewPartitionClause = QueryUtil.getViewPartitionClause(MetaDataUtil.getAutoPartitionColumnName(parent), autoPartitionNum);
+                    if (viewStatement!=null) {
+                        viewStatement = viewStatement + " AND " + viewPartitionClause;
+                    }
+                    else {
+                        viewStatement = QueryUtil.getViewStatement(parent.getSchemaName().getString(), parent.getTableName().getString(), viewPartitionClause);
+                    }
+                }
                 PName newSchemaName = PNameFactory.newName(schemaName);
                 PTable table =  PTableImpl.makePTable(
                         tenantId, newSchemaName, PNameFactory.newName(tableName), tableType, indexState, timestamp!=null ? timestamp : result.getMutationTime(),
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns,
                         dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        indexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped);
+                        indexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;

@@ -3348,6 +3348,21 @@ public final class PTableProtos {
      * <code>optional bool isNamespaceMapped = 30;</code>
      */
     boolean getIsNamespaceMapped();
+
+    // optional string autoParititonSeqName = 31;
+    /**
+     * <code>optional string autoParititonSeqName = 31;</code>
+     */
+    boolean hasAutoParititonSeqName();
+    /**
+     * <code>optional string autoParititonSeqName = 31;</code>
+     */
+    java.lang.String getAutoParititonSeqName();
+    /**
+     * <code>optional string autoParititonSeqName = 31;</code>
+     */
+    com.google.protobuf.ByteString
+        getAutoParititonSeqNameBytes();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3566,6 +3581,11 @@ public final class PTableProtos {
             case 240: {
               bitField0_ |= 0x02000000;
               isNamespaceMapped_ = input.readBool();
+              break;
+            }
+            case 250: {
+              bitField0_ |= 0x04000000;
+              autoParititonSeqName_ = input.readBytes();
               break;
             }
           }
@@ -4194,6 +4214,49 @@ public final class PTableProtos {
       return isNamespaceMapped_;
     }
 
+    // optional string autoParititonSeqName = 31;
+    public static final int AUTOPARITITONSEQNAME_FIELD_NUMBER = 31;
+    private java.lang.Object autoParititonSeqName_;
+    /**
+     * <code>optional string autoParititonSeqName = 31;</code>
+     */
+    public boolean hasAutoParititonSeqName() {
+      return ((bitField0_ & 0x04000000) == 0x04000000);
+    }
+    /**
+     * <code>optional string autoParititonSeqName = 31;</code>
+     */
+    public java.lang.String getAutoParititonSeqName() {
+      java.lang.Object ref = autoParititonSeqName_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        if (bs.isValidUtf8()) {
+          autoParititonSeqName_ = s;
+        }
+        return s;
+      }
+    }
+    /**
+     * <code>optional string autoParititonSeqName = 31;</code>
+     */
+    public com.google.protobuf.ByteString
+        getAutoParititonSeqNameBytes() {
+      java.lang.Object ref = autoParititonSeqName_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        autoParititonSeqName_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4225,6 +4288,7 @@ public final class PTableProtos {
       updateCacheFrequency_ = 0L;
       indexDisableTimestamp_ = 0L;
       isNamespaceMapped_ = false;
+      autoParititonSeqName_ = "";
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4382,6 +4446,9 @@ public final class PTableProtos {
       if (((bitField0_ & 0x02000000) == 0x02000000)) {
         output.writeBool(30, isNamespaceMapped_);
       }
+      if (((bitField0_ & 0x04000000) == 0x04000000)) {
+        output.writeBytes(31, getAutoParititonSeqNameBytes());
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -4515,6 +4582,10 @@ public final class PTableProtos {
       if (((bitField0_ & 0x02000000) == 0x02000000)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(30, isNamespaceMapped_);
+      }
+      if (((bitField0_ & 0x04000000) == 0x04000000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(31, getAutoParititonSeqNameBytes());
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -4677,6 +4748,11 @@ public final class PTableProtos {
         result = result && (getIsNamespaceMapped()
             == other.getIsNamespaceMapped());
       }
+      result = result && (hasAutoParititonSeqName() == other.hasAutoParititonSeqName());
+      if (hasAutoParititonSeqName()) {
+        result = result && getAutoParititonSeqName()
+            .equals(other.getAutoParititonSeqName());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4809,6 +4885,10 @@ public final class PTableProtos {
       if (hasIsNamespaceMapped()) {
         hash = (37 * hash) + ISNAMESPACEMAPPED_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getIsNamespaceMapped());
+      }
+      if (hasAutoParititonSeqName()) {
+        hash = (37 * hash) + AUTOPARITITONSEQNAME_FIELD_NUMBER;
+        hash = (53 * hash) + getAutoParititonSeqName().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -4994,6 +5074,8 @@ public final class PTableProtos {
         bitField0_ = (bitField0_ & ~0x10000000);
         isNamespaceMapped_ = false;
         bitField0_ = (bitField0_ & ~0x20000000);
+        autoParititonSeqName_ = "";
+        bitField0_ = (bitField0_ & ~0x40000000);
         return this;
       }
 
@@ -5158,6 +5240,10 @@ public final class PTableProtos {
           to_bitField0_ |= 0x02000000;
         }
         result.isNamespaceMapped_ = isNamespaceMapped_;
+        if (((from_bitField0_ & 0x40000000) == 0x40000000)) {
+          to_bitField0_ |= 0x04000000;
+        }
+        result.autoParititonSeqName_ = autoParititonSeqName_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -5341,6 +5427,11 @@ public final class PTableProtos {
         }
         if (other.hasIsNamespaceMapped()) {
           setIsNamespaceMapped(other.getIsNamespaceMapped());
+        }
+        if (other.hasAutoParititonSeqName()) {
+          bitField0_ |= 0x40000000;
+          autoParititonSeqName_ = other.autoParititonSeqName_;
+          onChanged();
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -7144,6 +7235,80 @@ public final class PTableProtos {
         return this;
       }
 
+      // optional string autoParititonSeqName = 31;
+      private java.lang.Object autoParititonSeqName_ = "";
+      /**
+       * <code>optional string autoParititonSeqName = 31;</code>
+       */
+      public boolean hasAutoParititonSeqName() {
+        return ((bitField0_ & 0x40000000) == 0x40000000);
+      }
+      /**
+       * <code>optional string autoParititonSeqName = 31;</code>
+       */
+      public java.lang.String getAutoParititonSeqName() {
+        java.lang.Object ref = autoParititonSeqName_;
+        if (!(ref instanceof java.lang.String)) {
+          java.lang.String s = ((com.google.protobuf.ByteString) ref)
+              .toStringUtf8();
+          autoParititonSeqName_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>optional string autoParititonSeqName = 31;</code>
+       */
+      public com.google.protobuf.ByteString
+          getAutoParititonSeqNameBytes() {
+        java.lang.Object ref = autoParititonSeqName_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          autoParititonSeqName_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>optional string autoParititonSeqName = 31;</code>
+       */
+      public Builder setAutoParititonSeqName(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x40000000;
+        autoParititonSeqName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional string autoParititonSeqName = 31;</code>
+       */
+      public Builder clearAutoParititonSeqName() {
+        bitField0_ = (bitField0_ & ~0x40000000);
+        autoParititonSeqName_ = getDefaultInstance().getAutoParititonSeqName();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional string autoParititonSeqName = 31;</code>
+       */
+      public Builder setAutoParititonSeqNameBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x40000000;
+        autoParititonSeqName_ = value;
+        onChanged();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:PTable)
     }
 
@@ -7191,7 +7356,7 @@ public final class PTableProtos {
       "\016\n\006values\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003",
       " \001(\003\022\025\n\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePost" +
       "sCount\030\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGui" +
-      "dePosts\"\336\005\n\006PTable\022\027\n\017schemaNameBytes\030\001 " +
+      "dePosts\"\374\005\n\006PTable\022\027\n\017schemaNameBytes\030\001 " +
       "\002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttableType" +
       "\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022" +
       "\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002" +
@@ -7209,10 +7374,11 @@ public final class PTableProtos {
       "\005\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n\rtra" +
       "nsactional\030\033 \001(\010\022\034\n\024updateCacheFrequency" +
       "\030\034 \001(\003\022\035\n\025indexDisableTimestamp\030\035 \001(\003\022\031\n",
-      "\021isNamespaceMapped\030\036 \001(\010*A\n\nPTableType\022\n" +
-      "\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020" +
-      "\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoenix.coproc" +
-      "essor.generatedB\014PTableProtosH\001\210\001\001\240\001\001"
+      "\021isNamespaceMapped\030\036 \001(\010\022\034\n\024autoParitito" +
+      "nSeqName\030\037 \001(\t*A\n\nPTableType\022\n\n\006SYSTEM\020\000" +
+      "\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020" +
+      "\004B@\n(org.apache.phoenix.coprocessor.gene" +
+      "ratedB\014PTableProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -7236,7 +7402,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", });
           return null;
         }
       };
