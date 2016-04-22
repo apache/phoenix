@@ -42,7 +42,9 @@ import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -468,11 +470,13 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testCreateTableWithoutSchema() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         String createSchemaDDL = "CREATE SCHEMA T_SCHEMA";
         String createTableDDL = "CREATE TABLE T_SCHEMA.TEST(pk INTEGER PRIMARY KEY)";
         String dropTableDDL = "DROP TABLE T_SCHEMA.TEST";
-        Properties props = new Properties();
-        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             try {
                 conn.createStatement().execute(createTableDDL);
@@ -481,9 +485,16 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 //expected
             }
             conn.createStatement().execute(createSchemaDDL);
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL);
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+20));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(dropTableDDL);
         }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+30));
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(false));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(createTableDDL);
