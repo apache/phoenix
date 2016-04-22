@@ -87,6 +87,7 @@ public final class QueryUtil {
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
+    private static final String AND = "AND";
     private static final String[] CompareOpString = new String[CompareOp.values().length];
 
     static {
@@ -401,5 +402,9 @@ public final class QueryUtil {
         }
         return null;
     }
- 
+    
+    public static String getViewPartitionClause(String partitionColumnName, long autoPartitionNum) {
+        return partitionColumnName  + " " + toSQL(CompareOp.EQUAL) + " " + autoPartitionNum;
+    }
+    
 }
