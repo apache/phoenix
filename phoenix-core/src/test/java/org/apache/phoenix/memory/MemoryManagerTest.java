@@ -23,15 +23,13 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.spy;
 
-import com.google.common.base.Stopwatch;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
-import org.mockito.Mockito;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.mockito.Mockito;
 
 /**
  *
@@ -75,6 +73,7 @@ public class MemoryManagerTest {
         }
     }
 
+    @Ignore("See PHOENIX-2840")
     @Test
     public void testWaitForMemoryAvailable() throws Exception {
         final GlobalMemoryManager gmm = spy(new GlobalMemoryManager(100, 80));
@@ -98,7 +97,6 @@ public class MemoryManagerTest {
             public void run() {
                 sleepFor(20);
                 // Will require waiting for a bit of time before t1 frees the requested memory
-                Stopwatch watch = new Stopwatch().start();
                 MemoryChunk c3 = rmm2.allocate(50);
                 Mockito.verify(gmm, atLeastOnce()).waitForBytesToFree(anyLong(), anyLong());
                 c3.close();
@@ -189,7 +187,6 @@ public class MemoryManagerTest {
                 sleepFor(20);
                 ChildMemoryManager rmm2 = new ChildMemoryManager(gmm,100);
                 MemoryChunk c3 = rmm2.allocate(10);
-                long startTime = System.currentTimeMillis();
                 c3.resize(60); // Test that resize waits if memory not available
                 assertTrue(c1.getSize() == 20); // c1 was resized not closed
                 // we waited some time before the allocate happened
