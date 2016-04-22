@@ -23,13 +23,13 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.spy;
 
-import org.junit.Test;
-
-import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
-import org.mockito.Mockito;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.mockito.Mockito;
 
 /**
  *
@@ -73,6 +73,7 @@ public class MemoryManagerTest {
         }
     }
 
+    @Ignore("See PHOENIX-2840")
     @Test
     public void testWaitForMemoryAvailable() throws Exception {
         final GlobalMemoryManager gmm = spy(new GlobalMemoryManager(100, 80));
