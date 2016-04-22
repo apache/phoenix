@@ -85,7 +85,7 @@ public class UnionCompiler {
                 scn == null ? HConstants.LATEST_TIMESTAMP : scn, null, null, projectedColumns, null, null, null, true,
                 null, null, null, true, true, true, null, null, null, false, false, 0, 0L,
                 SchemaUtil.isNamespaceMappingEnabled(PTableType.SUBQUERY,
-                        statement.getConnection().getQueryServices().getProps()));
+                        statement.getConnection().getQueryServices().getProps()), null);
         TableRef tableRef = new TableRef(null, tempTable, 0, false);
         return tableRef;
     }

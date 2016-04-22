@@ -36,6 +36,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
@@ -45,6 +46,7 @@ import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.RequestConverter;
@@ -59,6 +61,7 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
@@ -242,11 +245,20 @@ public class MetaDataUtil {
      * Returns the first Put element in <code>tableMetaData</code>. There could be leading Delete elements before the
      * table header row
      */
-    public static Mutation getPutOnlyTableHeaderRow(List<Mutation> tableMetaData) {
+    public static Put getPutOnlyTableHeaderRow(List<Mutation> tableMetaData) {
         for (Mutation m : tableMetaData) {
-            if (m instanceof Put) { return m; }
+            if (m instanceof Put) { return (Put) m; }
         }
-        throw new IllegalStateException("No table header row found in table meatadata");
+        throw new IllegalStateException("No table header row found in table metadata");
+    }
+    
+    public static Put getPutOnlyAutoPartitionColumn(PTable parentTable, List<Mutation> tableMetaData) {
+        int autoPartitionPutIndex = parentTable.isMultiTenant() ? 2: 1;
+        int i=0;
+        for (Mutation m : tableMetaData) {
+            if (m instanceof Put && i++==autoPartitionPutIndex) { return (Put) m; }
+        }
+        throw new IllegalStateException("No auto partition column row found in table metadata");
     }
 
     public static Mutation getParentTableHeaderRow(List<Mutation> tableMetaData) {
@@ -518,5 +530,29 @@ public class MetaDataUtil {
             viewNames.add(SchemaUtil.getTableName(rs.getString(1), rs.getString(2)));
         }
         return viewNames;
+    }
+
+    public static String getAutoPartitionColumnName(PTable parentTable) {
+        List<PColumn> parentTableColumns = parentTable.getColumns();
+        PColumn column = parentTableColumns.get(getAutoPartitionColIndex(parentTable));
+        return column.getName().getString();
+    }
+
+    // this method should only be called on the parent table (since it has the _SALT column)
+    public static int getAutoPartitionColIndex(PTable parentTable) {
+        boolean isMultiTenant = parentTable.isMultiTenant();
+        boolean isSalted = parentTable.getBucketNum()!=null;
+        return (isMultiTenant && isSalted) ? 2 : (isMultiTenant || isSalted) ? 1 : 0;
+    }
+
+    public static String getJdbcUrl(RegionCoprocessorEnvironment env) {
+        String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
+        String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
+            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
+        String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
+            HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
+        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
+            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
+            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
     }
 }

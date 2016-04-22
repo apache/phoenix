@@ -347,4 +347,11 @@ public interface PTable extends PMetaDataEntity {
     long getUpdateCacheFrequency();
 
     boolean isNamespaceMapped();
+    
+    /**
+     * 
+     * @return The sequence name used to get the unique identifier for views
+     * that are automatically partitioned.
+     */
+    String getAutoPartitionSeqName(); 
 }
