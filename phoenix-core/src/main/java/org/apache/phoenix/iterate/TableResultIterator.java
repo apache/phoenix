@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
+
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NOT_RENEWED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
@@ -32,12 +35,17 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -57,6 +65,10 @@ public class TableResultIterator implements ResultIterator {
     private final CombinableMetric scanMetrics;
     private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
     private final long renewLeaseThreshold;
+    private final QueryPlan plan;
+    private final ParallelScanGrouper scanGrouper;
+    private Tuple lastTuple = null;
+    private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
     @GuardedBy("this")
     private ResultIterator scanIterator;
@@ -66,6 +78,7 @@ public class TableResultIterator implements ResultIterator {
 
     @GuardedBy("this")
     private long renewLeaseTime = 0;
+    private PeekingResultIterator previousIterator;
 
     @VisibleForTesting // Exposed for testing. DON'T USE ANYWHERE ELSE!
     TableResultIterator() {
@@ -73,20 +86,29 @@ public class TableResultIterator implements ResultIterator {
         this.renewLeaseThreshold = 0;
         this.htable = null;
         this.scan = null;
+        this.plan = null;
+        this.scanGrouper = null;
     }
 
     public static enum RenewLeaseStatus {
         RENEWED, CLOSED, UNINITIALIZED, THRESHOLD_NOT_REACHED, NOT_RENEWED
     };
 
-
-    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
+    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics,
+			long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+    	this(mutationState,scan,scanMetrics,renewLeaseThreshold,null, plan, scanGrouper);
+    }
+    
+    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics,
+            long renewLeaseThreshold, PeekingResultIterator previousIterator, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
         this.scan = scan;
         this.scanMetrics = scanMetrics;
-        PTable table = tableRef.getTable();
-        htable = mutationState.getHTable(table);
+        this.plan = plan;
+        htable = mutationState.getHTable(plan.getTableRef().getTable());
         this.scanIterator = UNINITIALIZED_SCANNER;
         this.renewLeaseThreshold = renewLeaseThreshold;
+        this.previousIterator = previousIterator;
+        this.scanGrouper = scanGrouper;
     }
 
     @Override
@@ -107,8 +129,42 @@ public class TableResultIterator implements ResultIterator {
     @Override
     public synchronized Tuple next() throws SQLException {
         initScanner();
-        Tuple t = scanIterator.next();
-        return t;
+        try {
+            lastTuple = scanIterator.next();
+            if (lastTuple != null) {
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                lastTuple.getKey(ptr);
+            }
+        } catch (SQLException e) {
+            try {
+                throw ServerUtil.parseServerException(e);
+            } catch(StaleRegionBoundaryCacheException e1) {
+                if(ScanUtil.isNonAggregateScan(scan)) {
+                    // For non aggregate queries if we get stale region boundary exception we can
+                    // continue scanning from the next value of lasted fetched result.
+                    Scan newScan = ScanUtil.newScan(scan);
+                    newScan.setStartRow(newScan.getAttribute(SCAN_ACTUAL_START_ROW));
+                    if(lastTuple != null) {
+                        lastTuple.getKey(ptr);
+                        byte[] startRowSuffix = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                        if(ScanUtil.isLocalIndex(newScan)) {
+                            // If we just set scan start row suffix then server side we prepare
+                            // actual scan boundaries by prefixing the region start key.
+                            newScan.setAttribute(SCAN_START_ROW_SUFFIX, ByteUtil.nextKey(startRowSuffix));
+                        } else {
+                            newScan.setStartRow(ByteUtil.nextKey(startRowSuffix));
+                        }
+                    }
+                    plan.getContext().getConnection().getQueryServices().clearTableRegionCache(htable.getTableName());
+                    this.scanIterator =
+                            plan.iterator(scanGrouper, newScan);
+                    lastTuple = scanIterator.next();
+                } else {
+                    throw e;
+                }
+            }
+        }
+        return lastTuple;
     }
 
     public synchronized void initScanner() throws SQLException {
@@ -118,6 +174,15 @@ public class TableResultIterator implements ResultIterator {
         ResultIterator delegate = this.scanIterator;
         if (delegate == UNINITIALIZED_SCANNER) {
             try {
+                if (previousIterator != null && scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET) != null) {
+                    byte[] unusedOffset = QueryUtil.getUnusedOffset(previousIterator.peek());
+                    if (unusedOffset != null) {
+                        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, unusedOffset);
+                        previousIterator.next();
+                    } else {
+                        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, null);
+                    }
+                }
                 this.scanIterator =
                         new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
             } catch (IOException e) {

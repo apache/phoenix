@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,9 +36,13 @@ public class BuiltinFunctionConstructorTest {
         for(int i = 0; i < types.length; i++) {
             try {
                 if((ScalarFunction.class.isAssignableFrom(types[i].getExpressionClass())) && (types[i].getExpressionClass() != UDFExpression.class)) {
-                    Constructor cons = types[i].getExpressionClass().getDeclaredConstructor(List.class);
-                    cons.setAccessible(true);
-                    cons.newInstance(children);
+                	Method cloneMethod = types[i].getExpressionClass().getMethod("clone", List.class);
+                	// ScalarFunctions that implement clone(List<Expression>) don't need to implement a constructor that takes a List<Expression>  
+                	if (cloneMethod==null) {
+	                    Constructor cons = types[i].getExpressionClass().getDeclaredConstructor(List.class);
+	                    cons.setAccessible(true);
+	                    cons.newInstance(children);
+                	}
                 }
             } catch (NoSuchMethodException e) {
                 throw new RuntimeException(e);

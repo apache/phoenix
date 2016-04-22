@@ -23,19 +23,20 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import co.cask.tephra.Transaction;
-
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
@@ -47,22 +48,26 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.iterate.OffsetResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.RegionScannerResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.ValueBitSet;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.phoenix.util.TransactionUtil;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+
+import co.cask.tephra.Transaction;
 
 
 /**
@@ -121,7 +126,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 orderByExpressions.add(orderByExpression);
             }
             ResultIterator inner = new RegionScannerResultIterator(s);
-            return new OrderedResultIterator(inner, orderByExpressions, thresholdBytes, limit >= 0 ? limit : null, estimatedRowSize);
+            return new OrderedResultIterator(inner, orderByExpressions, thresholdBytes, limit >= 0 ? limit : null, null,
+                    estimatedRowSize);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -184,7 +190,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 region.getRegionInfo().getEndKey().length;
             ScanUtil.setRowKeyOffset(scan, offset);
         }
-
+        byte[] scanOffsetBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET);
+        Integer scanOffset = null;
+        if (scanOffsetBytes != null) {
+            scanOffset = Bytes.toInt(scanOffsetBytes);
+        }
         RegionScanner innerScanner = s;
 
         Set<KeyValueColumnExpression> arrayKVRefs = Sets.newHashSet();
@@ -218,13 +228,84 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         if (j != null) {
             innerScanner = new HashJoinRegionScanner(innerScanner, p, j, tenantId, c.getEnvironment());
         }
-
+        if (scanOffset != null) {
+            innerScanner = getOffsetScanner(c, innerScanner,
+                    new OffsetResultIterator(new RegionScannerResultIterator(innerScanner), scanOffset),
+                    scan.getAttribute(QueryConstants.LAST_SCAN) != null);
+        }
         final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
         if (iterator == null) {
             return innerScanner;
         }
         // TODO:the above wrapped scanner should be used here also
         return getTopNScanner(c, innerScanner, iterator, tenantId);
+    }
+
+    private RegionScanner getOffsetScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s,
+            final OffsetResultIterator iterator, final boolean isLastScan) throws IOException {
+        final Tuple firstTuple;
+        final Region region = c.getEnvironment().getRegion();
+        region.startRegionOperation();
+        try {
+            // Once we return from the first call to next, we've run through and
+            // cached
+            // the topN rows, so we no longer need to start/stop a region
+            // operation.
+            Tuple tuple = iterator.next();
+            if (tuple == null && !isLastScan) {
+                List<KeyValue> kvList = new ArrayList<KeyValue>(1);
+                KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
+                        QueryConstants.OFFSET_COLUMN, Bytes.toBytes(iterator.getUnusedOffset()));
+                kvList.add(kv);
+                Result r = new Result(kvList);
+                firstTuple = new ResultTuple(r);
+            } else {
+                firstTuple = tuple;
+            }
+        } catch (Throwable t) {
+            ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
+            return null;
+        } finally {
+            region.closeRegionOperation();
+        }
+        return new BaseRegionScanner(s) {
+            private Tuple tuple = firstTuple;
+
+            @Override
+            public boolean isFilterDone() {
+                return tuple == null;
+            }
+
+            @Override
+            public boolean next(List<Cell> results) throws IOException {
+                try {
+                    if (isFilterDone()) { return false; }
+                    for (int i = 0; i < tuple.size(); i++) {
+                        results.add(tuple.getValue(i));
+                    }
+                    tuple = iterator.next();
+                    return !isFilterDone();
+                } catch (Throwable t) {
+                    ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
+                    return false;
+                }
+            }
+
+            @Override
+            public void close() throws IOException {
+                try {
+                    s.close();
+                } finally {
+                    try {
+                        if (iterator != null) {
+                            iterator.close();
+                        }
+                    } catch (SQLException e) {
+                        ServerUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), e);
+                    }
+                }
+            }
+        };
     }
 
     /**

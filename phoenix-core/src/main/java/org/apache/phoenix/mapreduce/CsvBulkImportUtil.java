@@ -18,8 +18,10 @@
 package org.apache.phoenix.mapreduce;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.QueryConstants;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -71,5 +73,10 @@ public class CsvBulkImportUtil {
             return null;
         }
         return new String(Base64.decode(strValue)).charAt(0);
+    }
+
+    public static Path getOutputPath(Path outputdir, String tableName) {
+        return new Path(outputdir,
+                tableName.replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR));
     }
 }

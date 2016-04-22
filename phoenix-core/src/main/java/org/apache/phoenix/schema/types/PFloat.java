@@ -173,9 +173,9 @@ public class PFloat extends PRealNumber<Float> {
       } else if (targetType.equals(PSmallint.INSTANCE)) {
         return (f >= Short.MIN_VALUE && f <= Short.MAX_VALUE);
       } else if (targetType.equals(PTinyint.INSTANCE)) {
-        return (f >= Byte.MIN_VALUE && f < Byte.MAX_VALUE);
+        return (f >= Byte.MIN_VALUE && f <= Byte.MAX_VALUE);
       } else if (targetType.equals(PUnsignedTinyint.INSTANCE)) {
-        return (f >= 0 && f < Byte.MAX_VALUE);
+        return (f >= 0 && f <= Byte.MAX_VALUE);
       }
     }
     return super.isCoercibleTo(targetType, value);

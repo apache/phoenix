@@ -106,7 +106,7 @@ public class PInteger extends PWholeNumber<Integer> {
         return (i >= Byte.MIN_VALUE && i <= Byte.MAX_VALUE);
       } else if (targetType.equals(PUnsignedTinyint.INSTANCE)) {
         i = (Integer) value;
-        return (i >= 0 && i < Byte.MAX_VALUE);
+        return (i >= 0 && i <= Byte.MAX_VALUE);
       }
     }
     return super.isCoercibleTo(targetType, value);

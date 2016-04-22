@@ -60,18 +60,21 @@ public abstract class ExplainTable {
     protected final OrderBy orderBy;
     protected final HintNode hint;
     protected final Integer limit;
+    protected final Integer offset;
    
     public ExplainTable(StatementContext context, TableRef table) {
-        this(context,table,GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE, null);
+        this(context, table, GroupBy.EMPTY_GROUP_BY, OrderBy.EMPTY_ORDER_BY, HintNode.EMPTY_HINT_NODE, null, null);
     }
 
-    public ExplainTable(StatementContext context, TableRef table, GroupBy groupBy, OrderBy orderBy, HintNode hintNode, Integer limit) {
+    public ExplainTable(StatementContext context, TableRef table, GroupBy groupBy, OrderBy orderBy, HintNode hintNode,
+            Integer limit, Integer offset) {
         this.context = context;
         this.tableRef = table;
         this.groupBy = groupBy;
         this.orderBy = orderBy;
         this.hint = hintNode;
         this.limit = limit;
+        this.offset = offset;
     }
 
     private boolean explainSkipScan(StringBuilder buf) {
@@ -154,8 +157,13 @@ public abstract class ExplainTable {
         if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
             planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
                     + " SORTED BY " + orderBy.getOrderByExpressions().toString());
-        } else if (pageFilter != null) {
-            planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");                
+        } else {
+            if (offset != null) {
+                planSteps.add("    SERVER OFFSET " + offset);
+            }
+            if (pageFilter != null) {
+                planSteps.add("    SERVER " + pageFilter.getPageSize() + " ROW LIMIT");
+            }
         }
         Integer groupByLimit = null;
         byte[] groupByLimitBytes = scan.getAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT);

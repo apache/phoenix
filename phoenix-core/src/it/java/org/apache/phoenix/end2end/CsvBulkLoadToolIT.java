@@ -101,6 +101,38 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
 
     @Test
+    public void testImportWithTabs() throws Exception {
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE TABLE8 (ID INTEGER NOT NULL PRIMARY KEY, " +
+                "NAME1 VARCHAR, NAME2 VARCHAR)");
+
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input8.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1\tName 1a\tName 2a");
+        printWriter.println("2\tName 2a\tName 2b");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(getUtility().getConfiguration());
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input8.csv",
+                "--table", "table8",
+                "--zookeeper", zkQuorum,
+                "--delimiter", "\\t"});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, name1, name2 FROM table8 ORDER BY id");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals("Name 1a", rs.getString(2));
+
+        rs.close();
+        stmt.close();
+    }
+
+    @Test
     public void testFullOptionImport() throws Exception {
 
         Statement stmt = conn.createStatement();

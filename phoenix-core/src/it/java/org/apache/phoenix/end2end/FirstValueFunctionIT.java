@@ -27,26 +27,33 @@ import java.sql.ResultSet;
 
 import org.junit.Test;
 
-public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
+public class FirstValueFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void signedLongAsBigInt() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date BIGINT, \"value\" BIGINT)";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (1, 8, 1, 3)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (5, 8, 5, 158)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (4, 8, 4, 5)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (1, 8, 1, 3)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (5, 8, 5, 158)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (4, 8, 4, 5)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM first_value_table GROUP BY page_id");
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+                + " GROUP BY page_id");
 
         assertTrue(rs.next());
         assertEquals(rs.getLong(1), 3);
@@ -57,20 +64,27 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
     public void testSortOrderInSortCol() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT CONSTRAINT pk PRIMARY KEY (id, dates DESC))";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (1, 8, 1, 3)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (2, 8, 2, 7)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (3, 8, 3, 9)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (5, 8, 5, 158)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (4, 8, 4, 5)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (1, 8, 1, 3)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (2, 8, 2, 7)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (3, 8, 3, 9)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (5, 8, 5, 158)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (4, 8, 4, 5)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY dates ASC) FROM first_value_table GROUP BY page_id");
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY dates ASC) FROM " + tableName
+                + " GROUP BY page_id");
 
         assertTrue(rs.next());
         assertEquals(rs.getLong(1), 3);
@@ -81,20 +95,27 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
     public void testSortOrderInDataCol() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT NOT NULL CONSTRAINT pk PRIMARY KEY (id, dates, \"value\" DESC))";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (1, 8, 1, 3)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (2, 8, 2, 7)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (3, 8, 3, 9)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (5, 8, 5, 158)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, dates, \"value\") VALUES (4, 8, 4, 5)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (1, 8, 1, 3)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (2, 8, 2, 7)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (3, 8, 3, 9)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (5, 8, 5, 158)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, dates, \"value\") VALUES (4, 8, 4, 5)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY dates ASC) FROM first_value_table GROUP BY page_id");
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY dates ASC) FROM " + tableName
+                + " GROUP BY page_id");
 
         assertTrue(rs.next());
         assertEquals(rs.getLong(1), 3);
@@ -105,20 +126,27 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
     public void doubleDataType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
                 + "date DOUBLE, \"value\" DOUBLE)";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (1, 8, 1, 300)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (4, 8, 5, 400)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (1, 8, 1, 300)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (4, 8, 5, 400)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM first_value_table GROUP BY page_id");
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+                + " GROUP BY page_id");
 
         assertTrue(rs.next());
         assertEquals("doubles", rs.getDouble(1), 300, 0.00001);
@@ -129,20 +157,27 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
     public void varcharFixedLenghtDatatype() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
+        String table_name = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + table_name + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
                 + "date VARCHAR(3), \"value\" VARCHAR(3))";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (1, 8, '1', '3')");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (2, 8, '2', '7')");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (3, 8, '3', '9')");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (5, 8, '4', '2')");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (4, 8, '5', '4')");
+        conn.createStatement().execute(
+            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (1, 8, '1', '3')");
+        conn.createStatement().execute(
+            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (2, 8, '2', '7')");
+        conn.createStatement().execute(
+            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (3, 8, '3', '9')");
+        conn.createStatement().execute(
+            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (5, 8, '4', '2')");
+        conn.createStatement().execute(
+            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (4, 8, '5', '4')");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM first_value_table GROUP BY page_id");
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + table_name
+                + " GROUP BY page_id");
 
         assertTrue(rs.next());
         assertEquals(rs.getString(1), "3");
@@ -153,20 +188,27 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
     public void floatDataType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date FLOAT, \"value\" FLOAT)";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (1, 8, 1, 300)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id, date, \"value\") VALUES (4, 8, 5, 400)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (1, 8, 1, 300)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (4, 8, 5, 400)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM first_value_table GROUP BY page_id");
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+                + " GROUP BY page_id");
 
         assertTrue(rs.next());
         assertEquals(rs.getFloat(1), 300.0, 0.000001);
@@ -178,20 +220,22 @@ public class FirstValueFunctionIT extends BaseHBaseManagedTimeIT {
     public void allColumnsNull() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String ddl = "CREATE TABLE IF NOT EXISTS first_value_table "
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date FLOAT, \"value\" FLOAT)";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id) VALUES (1, 8)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id) VALUES (2, 8)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id) VALUES (3, 8)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id) VALUES (5, 8)");
-        conn.createStatement().execute("UPSERT INTO first_value_table (id, page_id) VALUES (4, 8)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (id, page_id) VALUES (1, 8)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (id, page_id) VALUES (2, 8)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (id, page_id) VALUES (3, 8)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (id, page_id) VALUES (5, 8)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (id, page_id) VALUES (4, 8)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM first_value_table GROUP BY page_id");
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+                + " GROUP BY page_id");
 
         assertTrue(rs.next());
         byte[] nothing = rs.getBytes(1);

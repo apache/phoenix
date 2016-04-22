@@ -118,6 +118,7 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
+import org.apache.commons.lang.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -143,6 +144,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -750,7 +752,7 @@ public abstract class BaseTest {
         conf.setClass(HConstants.HBASE_MASTER_LOADBALANCER_CLASS, IndexLoadBalancer.class,
             LoadBalancer.class);
         conf.setClass("hbase.coprocessor.regionserver.classes", LocalIndexMerger.class,
-            RegionServerObserver.class);
+            RegionServerObserver.class) ;
         conf.setInt("dfs.namenode.handler.count", 2);
         conf.setInt("dfs.namenode.service.handler.count", 2);
         conf.setInt("dfs.datanode.handler.count", 2);
@@ -825,7 +827,12 @@ public abstract class BaseTest {
 
     protected static void ensureTableCreated(String url, String tableName, byte[][] splits, Long ts) throws SQLException {
         String ddl = tableDDLMap.get(tableName);
+        createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
+    }
+
+    protected static String generateRandomString() {
+      return RandomStringUtils.randomAlphabetic(20).toUpperCase();
     }
 
     protected static void createTestTable(String url, String ddl) throws SQLException {
@@ -835,7 +842,23 @@ public abstract class BaseTest {
     protected static void createTestTable(String url, String ddl, byte[][] splits, Long ts) throws SQLException {
         createTestTable(url, ddl, splits, ts, true);
     }
-    
+
+    public static void createSchema(String url, String tableName, Long ts) throws SQLException {
+        String schema = SchemaUtil.getSchemaNameFromFullName(tableName);
+        if (!schema.equals("")) {
+            Properties props = new Properties();
+            if (ts != null) {
+                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+            }
+            try (Connection conn = DriverManager.getConnection(url, props);) {
+                if (SchemaUtil.isNamespaceMappingEnabled(null,
+                        conn.unwrap(PhoenixConnection.class).getQueryServices().getProps())) {
+                    conn.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + schema);
+                }
+            }
+        }
+    }
+
     protected static void createTestTable(String url, String ddl, byte[][] splits, Long ts, boolean swallowTableAlreadyExistsException) throws SQLException {
         assertNotNull(ddl);
         StringBuilder buf = new StringBuilder(ddl);
@@ -1483,7 +1506,7 @@ public abstract class BaseTest {
         if (ts != null) {
             props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
         }
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute("CREATE SEQUENCE my.seq");
             // Insert into customer table

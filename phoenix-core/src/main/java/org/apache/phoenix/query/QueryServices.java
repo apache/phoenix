@@ -50,6 +50,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
     // consistency configuration setting
     public static final String CONSISTENCY_ATTRIB = "phoenix.connection.consistency";
+    public static final String SCHEMA_ATTRIB = "phoenix.connection.schema";
+    public static final String IS_NAMESPACE_MAPPING_ENABLED  = "phoenix.connection.isNamespaceMappingEnabled";
+    public static final String IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE  = "phoenix.connection.mapSystemTablesToNamespace";
     // joni byte regex engine setting
     public static final String USE_BYTE_BASED_REGEX_ATTRIB = "phoenix.regex.byteBased";
     public static final String DRIVER_SHUTDOWN_TIMEOUT_MS = "phoenix.shutdown.timeoutMs";
@@ -212,6 +215,7 @@ public interface QueryServices extends SQLCloseable {
 
     // time to wait before running second index population upsert select (so that any pending batches of rows on region server are also written to index)
     public static final String INDEX_POPULATION_SLEEP_TIME = "phoenix.index.population.wait.time";
+
     /**
      * Get executor service used for parallel scans
      */

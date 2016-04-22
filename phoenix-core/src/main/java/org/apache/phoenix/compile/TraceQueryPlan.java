@@ -115,6 +115,11 @@ public class TraceQueryPlan implements QueryPlan {
     }
 
     @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        return iterator(scanGrouper);
+    }
+        
+    @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
         final PhoenixConnection conn = stmt.getConnection();
         if (conn.getTraceScope() == null && !traceStatement.isTraceOn()) {
@@ -202,6 +207,11 @@ public class TraceQueryPlan implements QueryPlan {
 
     @Override
     public Integer getLimit() {
+        return null;
+    }
+
+    @Override
+    public Integer getOffset() {
         return null;
     }
 

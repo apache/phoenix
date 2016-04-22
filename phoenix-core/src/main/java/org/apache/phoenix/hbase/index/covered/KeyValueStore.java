@@ -18,7 +18,7 @@
 package org.apache.phoenix.hbase.index.covered;
 
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
+import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
 
 /**
  * Store a collection of KeyValues in memory.
@@ -27,7 +27,7 @@ public interface KeyValueStore {
 
   public void add(KeyValue kv, boolean overwrite);
 
-  public KeyValueScanner getScanner();
+  public ReseekableScanner getScanner();
 
   public void rollback(KeyValue kv);
 }

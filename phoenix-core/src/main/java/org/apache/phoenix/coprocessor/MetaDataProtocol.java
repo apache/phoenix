@@ -28,11 +28,16 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.ByteUtil;
 
+import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
 
@@ -74,8 +79,9 @@ public abstract class MetaDataProtocol extends MetaDataService {
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_5_0 = MIN_TABLE_TIMESTAMP + 8;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_6_0 = MIN_TABLE_TIMESTAMP + 9;
     public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0 = MIN_TABLE_TIMESTAMP + 15;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 = MIN_TABLE_TIMESTAMP + 16;
     // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_* constants
-    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0;
+    public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0;
     // TODO: pare this down to minimum, as we don't need duplicates for both table and column errors, nor should we need
     // a different code for every type of error.
     // ENTITY_ALREADY_EXISTS, ENTITY_NOT_FOUND, NEWER_ENTITY_FOUND, ENTITY_NOT_IN_REGION, CONCURRENT_MODIFICATION
@@ -95,17 +101,91 @@ public abstract class MetaDataProtocol extends MetaDataService {
         FUNCTION_NOT_FOUND,
         NEWER_FUNCTION_FOUND,
         FUNCTION_NOT_IN_REGION,
+        SCHEMA_ALREADY_EXISTS, 
+        NEWER_SCHEMA_FOUND,
+        SCHEMA_NOT_FOUND,
+        SCHEMA_NOT_IN_REGION,
+        TABLES_EXIST_ON_SCHEMA,
+        UNALLOWED_SCHEMA_MUTATION,
         NO_OP
     };
 
+  public static class SharedTableState {
+        private PName tenantId;
+        private PName schemaName;
+        private PName tableName;
+        private List<PColumn> columns;
+        private List<PName> physicalNames;
+        private Short viewIndexId;
+        
+        public SharedTableState(PTable table) {
+            this.tenantId = table.getTenantId();
+            this.schemaName = table.getSchemaName();
+            this.tableName = table.getTableName();
+            this.columns = table.getColumns();
+            this.physicalNames = table.getPhysicalNames();
+            this.viewIndexId = table.getViewIndexId();
+        }
+        
+        public SharedTableState(
+                org.apache.phoenix.coprocessor.generated.MetaDataProtos.SharedTableState sharedTable) {
+            this.tenantId = sharedTable.hasTenantId() ? PNameFactory.newName(sharedTable.getTenantId().toByteArray()) : null;
+            this.schemaName = PNameFactory.newName(sharedTable.getSchemaName().toByteArray());
+            this.tableName = PNameFactory.newName(sharedTable.getTableName().toByteArray());
+            this.columns = Lists.transform(sharedTable.getColumnsList(),
+                new Function<org.apache.phoenix.coprocessor.generated.PTableProtos.PColumn, PColumn>() {
+                @Override
+                public PColumn apply(org.apache.phoenix.coprocessor.generated.PTableProtos.PColumn column) {
+                    return PColumnImpl.createFromProto(column);
+                }
+            });
+            this.physicalNames = Lists.transform(sharedTable.getPhysicalNamesList(),
+                new Function<ByteString, PName>() {
+                @Override
+                public PName apply(ByteString physicalName) {
+                    return PNameFactory.newName(physicalName.toByteArray());
+                }
+            });
+            this.viewIndexId = (short)sharedTable.getViewIndexId();
+        }
+
+        public PName getTenantId() {
+            return tenantId;
+        }
+
+        public PName getSchemaName() {
+            return schemaName;
+        }
+
+        public PName getTableName() {
+            return tableName;
+        }
+
+        public List<PColumn> getColumns() {
+            return columns;
+        }
+
+        public List<PName> getPhysicalNames() {
+            return physicalNames;
+        }
+
+        public Short getViewIndexId() {
+            return viewIndexId;
+        }
+        
+  }
+    
   public static class MetaDataMutationResult {
         private MutationCode returnCode;
         private long mutationTime;
         private PTable table;
         private List<byte[]> tableNamesToDelete;
+        private List<SharedTableState> sharedTablesToDelete;
         private byte[] columnName;
         private byte[] familyName;
         private boolean wasUpdated;
+        private PSchema schema;
+
         private List<PFunction> functions = new ArrayList<PFunction>(1);
 
         public MetaDataMutationResult() {
@@ -130,6 +210,12 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.wasUpdated = wasUpdated;
          }
 
+        public MetaDataMutationResult(MutationCode returnCode, PSchema schema, long currentTime) {
+            this.returnCode = returnCode;
+            this.mutationTime = currentTime;
+            this.schema = schema;
+        }
+
         // For testing, so that connectionless can set wasUpdated so ColumnResolver doesn't complain
         public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, boolean wasUpdated) {
             this(returnCode, currentTime, table, Collections.<byte[]> emptyList());
@@ -141,6 +227,11 @@ public abstract class MetaDataProtocol extends MetaDataService {
             this.mutationTime = currentTime;
             this.table = table;
             this.tableNamesToDelete = tableNamesToDelete;
+        }
+        
+        public MetaDataMutationResult(MutationCode returnCode, long currentTime, PTable table, List<byte[]> tableNamesToDelete, List<SharedTableState> sharedTablesToDelete) {
+            this(returnCode, currentTime, table, tableNamesToDelete);
+            this.sharedTablesToDelete = sharedTablesToDelete;
         }
 
         public MutationCode getMutationCode() {
@@ -182,6 +273,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
         public List<PFunction> getFunctions() {
             return functions;
         }
+        
+        public List<SharedTableState> getSharedTablesToDelete() {
+            return sharedTablesToDelete;
+        }
 
         public static MetaDataMutationResult constructFromProto(MetaDataResponse proto) {
           MetaDataMutationResult result = new MetaDataMutationResult();
@@ -210,6 +305,17 @@ public abstract class MetaDataProtocol extends MetaDataService {
           if(proto.hasFamilyName()){
             result.familyName = proto.getFamilyName().toByteArray();
           }
+          if(proto.getSharedTablesToDeleteCount() > 0) {
+              result.sharedTablesToDelete = 
+                 Lists.newArrayListWithExpectedSize(proto.getSharedTablesToDeleteCount());
+              for (org.apache.phoenix.coprocessor.generated.MetaDataProtos.SharedTableState sharedTable : 
+                  proto.getSharedTablesToDeleteList()) {
+                result.sharedTablesToDelete.add(new SharedTableState(sharedTable));
+                }
+          }
+          if (proto.hasSchema()) {
+            result.schema = PSchema.createFromProto(proto.getSchema());
+          }
           return result;
         }
 
@@ -234,8 +340,34 @@ public abstract class MetaDataProtocol extends MetaDataService {
             if(result.getFamilyName() != null){
               builder.setFamilyName(ByteStringer.wrap(result.getFamilyName()));
             }
+            if (result.getSharedTablesToDelete() !=null){
+              for (SharedTableState sharedTableState : result.sharedTablesToDelete) {
+                org.apache.phoenix.coprocessor.generated.MetaDataProtos.SharedTableState.Builder sharedTableStateBuilder =
+                        org.apache.phoenix.coprocessor.generated.MetaDataProtos.SharedTableState.newBuilder();
+                for (PColumn col : sharedTableState.getColumns()) {
+                    sharedTableStateBuilder.addColumns(PColumnImpl.toProto(col));
+                }
+                for (PName physicalName : sharedTableState.getPhysicalNames()) {
+                    sharedTableStateBuilder.addPhysicalNames(ByteStringer.wrap(physicalName.getBytes()));
+                }
+                if (sharedTableState.getTenantId()!=null) {
+                    sharedTableStateBuilder.setTenantId(ByteStringer.wrap(sharedTableState.getTenantId().getBytes()));
+                }
+                sharedTableStateBuilder.setSchemaName(ByteStringer.wrap(sharedTableState.getSchemaName().getBytes()));
+                sharedTableStateBuilder.setTableName(ByteStringer.wrap(sharedTableState.getTableName().getBytes()));
+                sharedTableStateBuilder.setViewIndexId(sharedTableState.getViewIndexId());
+                builder.addSharedTablesToDelete(sharedTableStateBuilder.build());
+              }
+            }
+            if (result.getSchema() != null) {
+              builder.setSchema(PSchema.toProto(result.schema));
+            }
           }
           return builder.build();
+        }
+
+        public PSchema getSchema() {
+            return schema;
         }
     }
 }

@@ -32,8 +32,8 @@ import java.lang.annotation.Target;
  * 
  * Tests using a mini cluster need to be classified either 
  * as {@link HBaseManagedTimeTest} or {@link ClientManagedTimeTest} 
- * or {@link NeedsOwnMiniClusterTest} otherwise they won't be run 
- * when one runs mvn verify or mvn install.
+ * or {@link NeedsOwnMiniClusterTest} or {@link HBaseManagedTimeTableReuseTest}
+ * otherwise they won't be run when one runs mvn verify or mvn install.
  * 
  * @since 4.1
  */

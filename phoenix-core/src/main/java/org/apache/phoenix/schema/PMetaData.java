@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.MetaDataMutated;
 
 public interface PMetaData extends MetaDataMutated, Iterable<PTable>, Cloneable {
@@ -33,4 +34,5 @@ public interface PMetaData extends MetaDataMutated, Iterable<PTable>, Cloneable 
     public PFunction getFunction(PTableKey key) throws FunctionNotFoundException;
     public PMetaData pruneFunctions(Pruner pruner);
     public long getAge(PTableRef ref);
+    public PSchema getSchema(PTableKey key) throws SchemaNotFoundException;
 }

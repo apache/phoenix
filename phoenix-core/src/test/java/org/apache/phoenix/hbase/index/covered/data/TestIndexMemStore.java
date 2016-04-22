@@ -22,8 +22,8 @@ import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.scanner.ReseekableScanner;
 import org.junit.Test;
 
 public class TestIndexMemStore {
@@ -45,7 +45,7 @@ public class TestIndexMemStore {
     store.add(kv, true);
     // adding the exact same kv shouldn't change anything stored if not overwritting
     store.add(kv2, false);
-    KeyValueScanner scanner = store.getScanner();
+    ReseekableScanner scanner = store.getScanner();
     KeyValue first = KeyValue.createFirstOnRow(row);
     scanner.seek(first);
     assertTrue("Overwrote kv when specifically not!", kv == scanner.next());
@@ -79,7 +79,7 @@ public class TestIndexMemStore {
     store.add(d, true);
 
     // null qualifiers should always sort before the non-null cases
-    KeyValueScanner scanner = store.getScanner();
+    ReseekableScanner scanner = store.getScanner();
     KeyValue first = KeyValue.createFirstOnRow(row);
     assertTrue("Didn't have any data in the scanner", scanner.seek(first));
     assertTrue("Didn't get delete family first (no qualifier == sort first)", df == scanner.next());

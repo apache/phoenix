@@ -20,7 +20,12 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.AmbiguousTableException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.TableRef;
 
@@ -77,4 +82,9 @@ public interface ColumnResolver {
     public PFunction resolveFunction(String functionName) throws SQLException;
 
     public boolean hasUDFs();
+
+    public PSchema resolveSchema(String schemaName) throws SQLException;
+
+    public List<PSchema> getSchemas();
+
 }

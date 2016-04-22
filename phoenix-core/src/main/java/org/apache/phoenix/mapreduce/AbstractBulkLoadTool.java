@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
@@ -231,7 +232,8 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         }
 
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
-        tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName));
+        PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
+        tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName, table.getPhysicalName().getString()));
         // using conn after it's been closed... o.O
         tablesToBeLoaded.addAll(getIndexTables(conn, schemaName, qualifiedTableName));
 
@@ -310,7 +312,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             tableNames.add(table.getPhysicalName());
             LoadIncrementalHFiles loader = new LoadIncrementalHFiles(conf);
             String tableName = table.getPhysicalName();
-            Path tableOutputPath = new Path(outputPath,tableName);
+            Path tableOutputPath = CsvBulkImportUtil.getOutputPath(outputPath, tableName);
             HTable htable = new HTable(conf,tableName);
             LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
             loader.doBulkLoad(tableOutputPath, htable);
@@ -394,12 +396,11 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
         for(PTable indexTable : table.getIndexes()){
             if (indexTable.getIndexType() == PTable.IndexType.LOCAL) {
-                indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName, indexTable
-                        .getTableName().getString()), MetaDataUtil
-                        .getLocalIndexTableName(qualifiedTableName)));
+                indexTables.add(new TargetTableRef(indexTable.getName().getString(),
+                        Bytes.toString(MetaDataUtil.getLocalIndexPhysicalName(table.getPhysicalName().getBytes()))));
             } else {
-                indexTables.add(new TargetTableRef(getQualifiedTableName(schemaName,
-                        indexTable.getTableName().getString())));
+                indexTables.add(
+                        new TargetTableRef(indexTable.getName().getString(), indexTable.getPhysicalName().getString()));
             }
         }
         return indexTables;

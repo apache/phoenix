@@ -50,7 +50,7 @@ public class LimitingResultIterator extends DelegateResultIterator {
     @Override
     public void explain(List<String> planSteps) {
         super.explain(planSteps);
-        planSteps.add("CLIENT " + limit + " ROW LIMIT");
+            planSteps.add("CLIENT " + limit + " ROW LIMIT");
     }
 
 	@Override

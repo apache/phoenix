@@ -62,8 +62,8 @@ import org.junit.Test;
         value="RV_RETURN_VALUE_IGNORED", 
         justification="Designed to ignore.")
 
-public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
-    private static final String WEB_STATS = "WEB_STATS";
+public class DynamicFamilyIT extends BaseHBaseManagedTimeTableReuseIT {
+    private static final String WEB_STATS = generateRandomString();
     private static final String WEB_STATS_SCHEMA_NAME = "";
     private static final byte[] A_CF = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));
     private static final byte[] B_CF = Bytes.toBytes(SchemaUtil.normalizeIdentifier("B"));
@@ -176,7 +176,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
      */
     // FIXME @Test
     public void testGetAllDynColsInFamily() throws Exception {
-        String query = "SELECT A.* FROM WEB_STATS WHERE entry='entry1'";
+        String query = "SELECT A.* FROM " + WEB_STATS + " WHERE entry='entry1'";
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -204,7 +204,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
      */
     // FIXME @Test
     public void testGetAllDynCols() throws Exception {
-        String query = "SELECT * FROM WEB_STATS WHERE entry='entry1'";
+        String query = "SELECT * FROM " + WEB_STATS + "WHERE entry='entry1'";
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -229,7 +229,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
      */
     @Test
     public void testGetCaseInsensitiveDynCol() throws Exception {
-        String query = "SELECT B.* FROM WEB_STATS(" + 
+        String query = "SELECT B.* FROM "+ WEB_STATS+ "(" +
                 "B." + LAST_LOGIN_TIME_PREFIX + USER_ID2 + " TIME," + 
                 "B." + LAST_LOGIN_TIME_PREFIX + USER_ID3 + " TIME) WHERE entry='entry2'";
         String url = getUrl() + ";";
@@ -254,7 +254,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
      */
     // FIXME @Test
     public void testGetCaseSensitiveDynCol() throws Exception {
-        String query = "SELECT B.* FROM WEB_STATS(" + 
+        String query = "SELECT B.* FROM "+WEB_STATS +"(" +
                 "B.\"" + LAST_LOGIN_TIME_PREFIX + USER_ID2 + "\"" + " TIME," + 
                 "B.\"" + LAST_LOGIN_TIME_PREFIX + USER_ID3 + "\"" + " TIME) WHERE entry='entry2'";
         String url = getUrl() + ";";
@@ -281,7 +281,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
      */
     // FIXME @Test
     public void testProjectStaticAndDynamic() throws Exception {
-        String query = "SELECT ENTRY, A.DUMMY, B.DUMMY, A.*,B.* FROM WEB_STATS WHERE entry='entry3'";
+        String query = "SELECT ENTRY, A.DUMMY, B.DUMMY, A.*,B.* FROM "+ WEB_STATS +" WHERE entry='entry3'";
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -308,7 +308,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
 
     @Test(expected = ColumnFamilyNotFoundException.class)
     public void testDynamicFamilyException() throws Exception {
-        String query = "SELECT C.* FROM WEB_STATS";
+        String query = "SELECT C.* FROM " + WEB_STATS;
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -322,7 +322,7 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
 
     @Test(expected = PhoenixParserException.class)
     public void testDynamicFamilyFunctionException() throws Exception {
-        String query = "SELECT count(C.*) FROM WEB_STATS";
+        String query = "SELECT count(C.*) FROM " + WEB_STATS;
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -339,21 +339,24 @@ public class DynamicFamilyIT extends BaseHBaseManagedTimeIT {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        conn.createStatement().execute("CREATE TABLE TESTTABLE (Id VARCHAR NOT NULL PRIMARY KEY, COLFAM1.A VARCHAR, COLFAM1.B VARCHAR, COLFAM2.A VARCHAR )");
-        conn.createStatement().execute("UPSERT INTO TESTTABLE (Id, COLFAM1.A, COLFAM1.B, COLFAM2.A) values ('row-2', '100', '200', '300')");
-        rs = conn.createStatement().executeQuery("SELECT COLFAM1.A,COLFAM1.B FROM TESTTABLE");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName
+            + " (Id VARCHAR NOT NULL PRIMARY KEY, COLFAM1.A VARCHAR, COLFAM1.B VARCHAR, COLFAM2.A VARCHAR )");
+        conn.createStatement().execute("UPSERT INTO " + tableName
+            + " (Id, COLFAM1.A, COLFAM1.B, COLFAM2.A) values ('row-2', '100', '200', '300')");
+        rs = conn.createStatement().executeQuery("SELECT COLFAM1.A,COLFAM1.B FROM " + tableName);
         assertTrue(rs.next());
         assertEquals("100",rs.getString(1));
         assertEquals("200",rs.getString(2));
         assertFalse(rs.next());
 
-        rs = conn.createStatement().executeQuery("SELECT COLFAM1.* FROM TESTTABLE");
+        rs = conn.createStatement().executeQuery("SELECT COLFAM1.* FROM " + tableName);
         assertTrue(rs.next());
         assertEquals("100",rs.getString(1));
         assertEquals("200",rs.getString(2));
         assertFalse(rs.next());
 
-        rs = conn.createStatement().executeQuery("SELECT COLFAM1.*,COLFAM1.A FROM TESTTABLE");
+        rs = conn.createStatement().executeQuery("SELECT COLFAM1.*,COLFAM1.A FROM " + tableName);
         assertTrue(rs.next());
         assertEquals("100",rs.getString(1));
         assertEquals("200",rs.getString(2));

@@ -155,10 +155,10 @@ public class PLong extends PWholeNumber<Long> {
         return (l >= Short.MIN_VALUE && l <= Short.MAX_VALUE);
       } else if (targetType.equals(PTinyint.INSTANCE)) {
         l = (Long) value;
-        return (l >= Byte.MIN_VALUE && l < Byte.MAX_VALUE);
+        return (l >= Byte.MIN_VALUE && l <= Byte.MAX_VALUE);
       } else if (targetType.equals(PUnsignedTinyint.INSTANCE)) {
         l = (Long) value;
-        return (l >= 0 && l < Byte.MAX_VALUE);
+        return (l >= 0 && l <= Byte.MAX_VALUE);
       }
     }
     return super.isCoercibleTo(targetType, value);

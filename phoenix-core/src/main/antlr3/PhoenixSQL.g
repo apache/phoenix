@@ -72,6 +72,7 @@ tokens
     COLUMN='column';
     SESSION='session';
     TABLE='table';
+    SCHEMA='schema';
     ADD='add';
     SPLIT='split';
     EXPLAIN='explain';
@@ -126,6 +127,12 @@ tokens
     LIST = 'list';
     JARS='jars';
     ROW_TIMESTAMP='row_timestamp';
+    USE='use';
+    OFFSET ='offset';
+    FETCH = 'fetch';
+    ROW = 'row';
+    ROWS = 'rows';
+    ONLY = 'only';
 }
 
 
@@ -393,6 +400,7 @@ oneStatement returns [BindableStatement ret]
     |	s=upsert_node
     |   s=delete_node
     |   s=create_table_node
+    |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
     |   s=drop_table_node
@@ -408,6 +416,8 @@ oneStatement returns [BindableStatement ret]
     |   s=alter_session_node
     |	s=create_sequence_node
     |	s=drop_sequence_node
+    |	s=drop_schema_node
+    |	s=use_schema_node
     |   s=update_statistics_node
     |   s=explain_node) { $ret = s; }
     ;
@@ -424,6 +434,12 @@ create_table_node returns [CreateTableStatement ret]
         (p=fam_properties)?
         (SPLIT ON s=value_expression_list)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount()); }
+    ;
+   
+// Parse a create schema statement.
+create_schema_node returns [CreateSchemaStatement ret]
+    :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
+        {ret = factory.createSchema(s, ex!=null); }
     ;
 
 // Parse a create view statement.
@@ -529,6 +545,12 @@ drop_table_node returns [DropTableStatement ret]
     :   DROP (v=VIEW | TABLE) (IF ex=EXISTS)? t=from_table_name (c=CASCADE)?
         {ret = factory.dropTable(t, v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW, ex!=null, c!=null); }
     ;
+
+drop_schema_node returns [DropSchemaStatement ret]
+    :   DROP SCHEMA (IF ex=EXISTS)? s=identifier (c=CASCADE)?
+        {ret = factory.dropSchema(s, ex!=null, c!=null); }
+    ;
+
 
 // Parse a drop index statement
 drop_index_node returns [DropIndexStatement ret]
@@ -658,7 +680,7 @@ single_select returns [SelectStatement ret]
         (WHERE where=expression)?
         (GROUP BY group=group_by)?
         (HAVING having=expression)?
-        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null, getBindCount(), context.isAggregate(), context.hasSequences(), null, new HashMap<String,UDFParseNode>(udfParseNodes)); }
+        { ParseContext context = contextStack.peek(); $ret = factory.select(from, h, d!=null, sel, where, group, having, null, null,null, getBindCount(), context.isAggregate(), context.hasSequences(), null, new HashMap<String,UDFParseNode>(udfParseNodes)); }
     ;
 finally{ contextStack.pop(); }
 
@@ -673,7 +695,9 @@ select_node returns [SelectStatement ret]
     :   u=unioned_selects
         (ORDER BY order=order_by)?
         (LIMIT l=limit)?
-        { ParseContext context = contextStack.peek(); $ret = factory.select(u, order, l, getBindCount(), context.isAggregate()); }
+        (OFFSET o=offset (ROW | ROWS)?)?
+        (FETCH (FIRST | NEXT) (l=limit)? (ROW | ROWS) ONLY)?
+        { ParseContext context = contextStack.peek(); $ret = factory.select(u, order, l, o, getBindCount(), context.isAggregate()); }
     ;
 finally{ contextStack.pop(); }
 
@@ -705,6 +729,11 @@ limit returns [LimitNode ret]
     | l=int_or_long_literal { $ret = factory.limit(l); }
     ;
     
+offset returns [OffsetNode ret]
+	: b=bind_expression { $ret = factory.offset(b); }
+    | l=int_or_long_literal { $ret = factory.offset(l); }
+    ;
+
 sampling_rate returns [LiteralParseNode ret]
     : l=literal { $ret = l; }
     ;
@@ -863,6 +892,11 @@ multiply_divide_modulo_expression returns [ParseNode ret]
             }
         )*
         { $ret = lhs; }
+    ;
+
+use_schema_node returns [UseSchemaStatement ret]
+	:   USE s=identifier
+        {ret = factory.useSchema(s); }
     ;
 
 negate_expression returns [ParseNode ret]

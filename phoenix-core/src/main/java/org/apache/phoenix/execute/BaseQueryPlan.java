@@ -99,6 +99,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final RowProjector projection;
     protected final ParameterMetaData paramMetaData;
     protected final Integer limit;
+    protected final Integer offset;
     protected final OrderBy orderBy;
     protected final GroupBy groupBy;
     protected final ParallelIteratorFactory parallelIteratorFactory;    
@@ -114,7 +115,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
     protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projection, ParameterMetaData paramMetaData, Integer limit, OrderBy orderBy,
+            RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
             Expression dynamicFilter) {
         this.context = context;
@@ -124,6 +125,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.projection = projection;
         this.paramMetaData = paramMetaData;
         this.limit = limit;
+        this.offset = offset;
         this.orderBy = orderBy;
         this.groupBy = groupBy;
         this.parallelIteratorFactory = parallelIteratorFactory;
@@ -175,6 +177,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
     public Integer getLimit() {
         return limit;
     }
+    
+    @Override
+    public Integer getOffset() {
+        return offset;
+    }
 
     @Override
     public RowProjector getProjector() {
@@ -196,26 +203,30 @@ public abstract class BaseQueryPlan implements QueryPlan {
     
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper);
-    }
-    
-    @Override
-    public final ResultIterator iterator() throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance());
+        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, this.context.getScan());
     }
 
-    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper) throws SQLException {
+    @Override
+    public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, scan);
+    }
+
+    @Override
+    public final ResultIterator iterator() throws SQLException {
+        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance(), this.context.getScan());
+    }
+
+    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         if (context.getScanRanges() == ScanRanges.NOTHING) {
             return ResultIterator.EMPTY_ITERATOR;
         }
         
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
-            return newIterator(scanGrouper);
+            return newIterator(scanGrouper, scan);
         }
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
-        Scan scan = context.getScan();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
         
@@ -312,7 +323,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
         }
         
-        ResultIterator iterator = newIterator(scanGrouper);
+        ResultIterator iterator = newIterator(scanGrouper, scan);
         iterator = dependencies.isEmpty() ?
                 iterator : new DelegateResultIterator(iterator) {
             @Override
@@ -441,7 +452,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException;
+    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException;
     
     @Override
     public long getEstimatedSize() {

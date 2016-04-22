@@ -20,6 +20,7 @@ package org.apache.phoenix.execute;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -28,6 +29,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
+import org.apache.phoenix.iterate.OffsetResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -41,17 +43,19 @@ import com.google.common.collect.Lists;
 
 public class ClientScanPlan extends ClientProcessingPlan {
 
-    public ClientScanPlan(StatementContext context,
-            FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Expression where,
-            OrderBy orderBy, QueryPlan delegate) {
-        super(context, statement, table, projector, limit, where, orderBy,
-                delegate);
+    public ClientScanPlan(StatementContext context, FilterableStatement statement, TableRef table,
+            RowProjector projector, Integer limit, Integer offset, Expression where, OrderBy orderBy,
+            QueryPlan delegate) {
+        super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
     }
 
     @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        ResultIterator iterator = delegate.iterator(scanGrouper);
+        return iterator(scanGrouper, delegate.getContext().getScan());
+    }
+    @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        ResultIterator iterator = delegate.iterator(scanGrouper, scan);
         if (where != null) {
             iterator = new FilterResultIterator(iterator, where);
         }
@@ -59,9 +63,15 @@ public class ClientScanPlan extends ClientProcessingPlan {
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), thresholdBytes, limit, projector.getEstimatedRowByteSize());
-        } else if (limit != null) {
-            iterator = new LimitingResultIterator(iterator, limit);
+            iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), thresholdBytes, limit,
+                    offset, projector.getEstimatedRowByteSize());
+        } else {
+            if (offset != null) {
+                iterator = new OffsetResultIterator(iterator, offset);
+            }
+            if (limit != null) {
+                iterator = new LimitingResultIterator(iterator, limit);
+            }
         }
         
         if (context.getSequenceManager().getSequenceCount() > 0) {
@@ -78,9 +88,18 @@ public class ClientScanPlan extends ClientProcessingPlan {
             planSteps.add("CLIENT FILTER BY " + where.toString());
         }
         if (!orderBy.getOrderByExpressions().isEmpty()) {
-            planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW"  + (limit == 1 ? "" : "S"))  + " SORTED BY " + orderBy.getOrderByExpressions().toString());
-        } else if (limit != null) {
-            planSteps.add("CLIENT " + limit + " ROW LIMIT");
+            if (offset != null) {
+                planSteps.add("CLIENT OFFSET " + offset);
+            }
+            planSteps.add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+                    + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+        } else {
+            if (offset != null) {
+                planSteps.add("CLIENT OFFSET " + offset);
+            }
+            if (limit != null) {
+                planSteps.add("CLIENT " + limit + " ROW LIMIT");
+            }
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             int nSequences = context.getSequenceManager().getSequenceCount();

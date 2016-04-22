@@ -26,20 +26,26 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -110,6 +116,86 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             ColumnDiff.LESS);
         testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", "TABLEWITHVIEW5", "SAMESCHEMA", "VIEW5",
             ColumnDiff.LESS);
+    }
+
+    @Test
+    public void testMapTableToNamespaceDuringUpgrade()
+            throws SQLException, IOException, IllegalArgumentException, InterruptedException {
+        String[] strings = new String[] { "a", "b", "c", "d" };
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String schemaName = "TEST";
+            String phoenixFullTableName = schemaName + ".S_NEW";
+            String indexName = "IDX";
+            String localIndexName = "LIDX";
+            String[] tableNames = new String[] { phoenixFullTableName, schemaName + "." + indexName,
+                    schemaName + "." + localIndexName, "diff.v", "test.v" };
+            conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
+                    + "(k VARCHAR PRIMARY KEY, v INTEGER, f INTEGER, g INTEGER NULL, h INTEGER NULL)");
+            PreparedStatement upsertStmt = conn
+                    .prepareStatement("UPSERT INTO " + phoenixFullTableName + " VALUES(?, ?, 0, 0, 0)");
+            int i = 1;
+            for (String str : strings) {
+                upsertStmt.setString(1, str);
+                upsertStmt.setInt(2, i++);
+                upsertStmt.execute();
+            }
+            conn.commit();
+            // creating local index
+            conn.createStatement()
+                    .execute("create local index " + localIndexName + " on " + phoenixFullTableName + "(K)");
+            // creating global index
+            conn.createStatement().execute("create index " + indexName + " on " + phoenixFullTableName + "(k)");
+            // creating view in schema 'diff'
+            conn.createStatement().execute("CREATE VIEW diff.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            // creating view in schema 'test'
+            conn.createStatement().execute("CREATE VIEW test.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            // Creating index on views
+            conn.createStatement().execute("create index v_idx on diff.v(col)");
+            conn.createStatement().execute("create index v_idx on test.v(col)");
+
+            // validate data
+            for (String tableName : tableNames) {
+                ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName);
+                for (String str : strings) {
+                    assertTrue(rs.next());
+                    assertEquals(str, rs.getString(1));
+                }
+            }
+
+            HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            assertTrue(admin.tableExists(phoenixFullTableName));
+            assertTrue(admin.tableExists(MetaDataUtil.getLocalIndexPhysicalName(Bytes.toBytes(phoenixFullTableName))));
+            assertTrue(admin.tableExists(schemaName + QueryConstants.NAME_SEPARATOR + indexName));
+            assertTrue(admin.tableExists(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(phoenixFullTableName))));
+            Properties props = new Properties();
+            props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+            admin.close();
+            PhoenixConnection phxConn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
+            UpgradeUtil.upgradeTable(phxConn, phoenixFullTableName);
+            Set<String> viewNames = MetaDataUtil.getViewNames(phxConn, phoenixFullTableName);
+            for (String viewName : viewNames) {
+                UpgradeUtil.upgradeTable(phxConn, viewName);
+            }
+            admin = phxConn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
+                    .getNameAsString();
+            assertTrue(admin.tableExists(hbaseTableName));
+            assertTrue(admin.tableExists(MetaDataUtil.getLocalIndexPhysicalName(Bytes.toBytes(hbaseTableName))));
+            assertTrue(admin.tableExists(schemaName + QueryConstants.NAMESPACE_SEPARATOR + indexName));
+            assertTrue(admin.tableExists(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName))));
+            i = 0;
+            // validate data
+            for (String tableName : tableNames) {
+                ResultSet rs = phxConn.createStatement().executeQuery("select * from " + tableName);
+                for (String str : strings) {
+                    assertTrue(rs.next());
+                    assertEquals(str, rs.getString(1));
+                }
+            }
+            phxConn.close();
+            admin.close();
+        }
     }
     
     @Test
@@ -329,4 +415,5 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
         }
         return DriverManager.getConnection(getUrl());
     }
+    
 }
