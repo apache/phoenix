@@ -20,6 +20,8 @@ package org.apache.hadoop.hbase.regionserver.wal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.util.List;
@@ -192,15 +194,16 @@ public class WALReplayWithIndexWritesAndCompressedWALIT {
     WAL wal = createWAL(this.conf, walFactory);
     RegionServerServices mockRS = Mockito.mock(RegionServerServices.class);
     // mock out some of the internals of the RSS, so we can run CPs
-    Mockito.when(mockRS.getWAL(null)).thenReturn(wal);
+    when(mockRS.getWAL(null)).thenReturn(wal);
     RegionServerAccounting rsa = Mockito.mock(RegionServerAccounting.class);
-    Mockito.when(mockRS.getRegionServerAccounting()).thenReturn(rsa);
+    when(mockRS.getRegionServerAccounting()).thenReturn(rsa);
     ServerName mockServerName = Mockito.mock(ServerName.class);
-    Mockito.when(mockServerName.getServerName()).thenReturn(tableNameStr + ",1234");
-    Mockito.when(mockRS.getServerName()).thenReturn(mockServerName);
-    HRegion region = new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS);
+    when(mockServerName.getServerName()).thenReturn(tableNameStr + ",1234");
+    when(mockRS.getServerName()).thenReturn(mockServerName);
+    HRegion region = spy(new HRegion(basedir, wal, this.fs, this.conf, hri, htd, mockRS));
     region.initialize();
-    region.getSequenceId().set(0);
+    when(region.getSequenceId()).thenReturn(0l);
+
 
     //make an attempted write to the primary that should also be indexed
     byte[] rowkey = Bytes.toBytes("indexed_row_key");
@@ -304,4 +307,3 @@ private int getKeyValueCount(HTable table) throws IOException {
     return count;
   }
 }
-
