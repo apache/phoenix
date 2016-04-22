@@ -17,8 +17,12 @@
  */
 package org.apache.phoenix.hive.mapreduce;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
+import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
+
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.List;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -37,7 +41,6 @@ import org.apache.phoenix.hive.PhoenixRowKey;
 import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LookAheadResultIterator;
-import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.RoundRobinResultIterator;
@@ -46,11 +49,8 @@ import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.List;
-
-import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
+import com.google.common.base.Throwables;
+import com.google.common.collect.Lists;
 
 /**
  * @RecordReader implementation that iterates over the the records.
@@ -115,9 +115,8 @@ public class PhoenixRecordReader<T extends DBWritable> implements
                 scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes
                         .toBytes(true));
                 final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan
-                        .getContext().getConnection().getMutationState(), scan,
-                        readMetrics.allotMetric(SCAN_BYTES, tableName), renewScannerLeaseThreshold,
-                        queryPlan, MapReduceParallelScanGrouper.getInstance());
+                        .getContext().getConnection().getMutationState(), queryPlan.getTableRef(), scan,
+                        readMetrics.allotMetric(SCAN_BYTES, tableName), renewScannerLeaseThreshold);
 
                 PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap
                         (tableResultIterator);

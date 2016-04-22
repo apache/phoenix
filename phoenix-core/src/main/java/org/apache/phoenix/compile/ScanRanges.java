@@ -18,8 +18,7 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -205,7 +204,7 @@ public class ScanRanges {
         scan.setStopRow(scanRange.getUpperRange());
     }
     
-    public static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
+    private static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
         if (key.length > 0) {
             byte[] newKey = new byte[key.length + prefixKeyOffset];
             int totalKeyOffset = keyOffset + prefixKeyOffset;
@@ -214,7 +213,7 @@ public class ScanRanges {
             }
             System.arraycopy(key, keyOffset, newKey, totalKeyOffset, key.length - keyOffset);
             return newKey;
-        } 
+        }
         return key;
     }
     
@@ -230,7 +229,7 @@ public class ScanRanges {
         return temp;
     }
     
-    public static byte[] stripPrefix(byte[] key, int keyOffset) {
+    private static byte[] stripPrefix(byte[] key, int keyOffset) {
         if (key.length == 0) {
             return key;
         }
@@ -389,6 +388,10 @@ public class ScanRanges {
         newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
         newScan.setStartRow(scanStartKey);
         newScan.setStopRow(scanStopKey);
+        if(keyOffset > 0) {
+            newScan.setAttribute(STARTKEY_OFFSET, Bytes.toBytes(keyOffset));
+        }
+
         return newScan;
     }
 
