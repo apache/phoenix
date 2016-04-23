@@ -58,6 +58,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import co.cask.tephra.TransactionContext;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.htrace.Sampler;
@@ -77,6 +79,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.MetaDataMutated;
 import org.apache.phoenix.query.QueryConstants;
@@ -119,7 +122,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
 
-import co.cask.tephra.TransactionContext;
 
 /**
  * 
@@ -1043,8 +1045,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.parallelIteratorFactory = parallelIteratorFactory;
     }
     
-    public void addIterator(@Nonnull TableResultIterator itr) {
-        if (services.supportsFeature(ConnectionQueryServices.Feature.RENEW_LEASE)) {
+    public void addIteratorForLeaseRenewal(@Nonnull TableResultIterator itr) {
+        if (services.supportsFeature(Feature.RENEW_LEASE)) {
             checkNotNull(itr);
             scannerQueue.add(new WeakReference<TableResultIterator>(itr));
         }

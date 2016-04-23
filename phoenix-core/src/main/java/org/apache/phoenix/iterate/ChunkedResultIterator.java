@@ -44,7 +44,13 @@ import com.google.common.base.Preconditions;
 /**
  * {@code PeekingResultIterator} implementation that loads data in chunks. This is intended for
  * basic scan plans, to avoid loading large quantities of data from HBase in one go.
+ * 
+ * <p>
+ * Chunking is deprecated and shouldn't be used while implementing new features. As of HBase 0.98.17, 
+ * we rely on pacing the server side scanners instead of pulling rows from the server in chunks.
+ * </p>
  */
+@Deprecated
 public class ChunkedResultIterator implements PeekingResultIterator {
     private static final Logger logger = LoggerFactory.getLogger(ChunkedResultIterator.class);
 
@@ -56,7 +62,12 @@ public class ChunkedResultIterator implements PeekingResultIterator {
     private final MutationState mutationState;
     private Scan scan;
     private PeekingResultIterator resultIterator;
-
+    
+    /**
+     * Chunking is deprecated and shouldn't be used while implementing new features. As of HBase 0.98.17, 
+     * we rely on pacing the server side scanners instead of pulling rows from the server in chunks.
+     */
+    @Deprecated
     public static class ChunkedResultIteratorFactory implements ParallelIteratorFactory {
 
         private final ParallelIteratorFactory delegateFactory;

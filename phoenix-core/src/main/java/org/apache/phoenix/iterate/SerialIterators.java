@@ -30,13 +30,16 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -53,11 +56,13 @@ import com.google.common.collect.Lists;
 public class SerialIterators extends BaseResultIterators {
 	private static final String NAME = "SERIAL";
     private final ParallelIteratorFactory iteratorFactory;
+    private final Integer offset;
     
     public SerialIterators(QueryPlan plan, Integer perScanLimit, Integer offset,
             ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
             throws SQLException {
         super(plan, perScanLimit, offset, scanGrouper);
+        this.offset = offset;
         // must be a offset or a limit specified or a SERIAL hint
         Preconditions.checkArgument(
                 offset != null || perScanLimit != null || plan.getStatement().getHint().hasHint(HintNode.Hint.SERIAL));
@@ -65,40 +70,28 @@ public class SerialIterators extends BaseResultIterators {
     }
 
     @Override
-    protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize) {
-        // Pre-populate nestedFutures lists so that we can shuffle the scans
-        // and add the future to the right nested list. By shuffling the scans
-        // we get better utilization of the cluster since our thread executor
-        // will spray the scans across machines as opposed to targeting a
-        // single one since the scans are in row key order.
+    protected void submitWork(final List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
+            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, boolean isReverse) {
         ExecutorService executor = context.getConnection().getQueryServices().getExecutor();
-        
-        for (final List<Scan> scans : nestedScans) {
-            Scan firstScan = scans.get(0);
-            Scan lastScan = scans.get(scans.size()-1);
-            final Scan overallScan = ScanUtil.newScan(firstScan);
-            overallScan.setStopRow(lastScan.getStopRow());
-            final String tableName = tableRef.getTable().getPhysicalName().getString();
-            final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(context.getReadMetricsQueue(), tableName);
-            final PhoenixConnection conn = context.getConnection();
-            final long renewLeaseThreshold = conn.getQueryServices().getRenewLeaseThresholdMilliSeconds();
-            lastScan.setAttribute(QueryConstants.LAST_SCAN, Bytes.toBytes(Boolean.TRUE));
+        final String tableName = tableRef.getTable().getPhysicalName().getString();
+        final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(context.getReadMetricsQueue(), tableName);
+        final PhoenixConnection conn = context.getConnection();
+        final long renewLeaseThreshold = conn.getQueryServices().getRenewLeaseThresholdMilliSeconds();
+        int expectedListSize = nestedScans.size() * 10;
+        List<Scan> flattenedScans = Lists.newArrayListWithExpectedSize(expectedListSize);
+        for (List<Scan> list : nestedScans) {
+            flattenedScans.addAll(list);
+        }
+        if (!flattenedScans.isEmpty()) { 
+            if (isReverse) {
+                flattenedScans = Lists.reverse(flattenedScans);
+            }
+            final List<Scan> finalScans = flattenedScans;
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 @Override
                 public PeekingResultIterator call() throws Exception {
-                    PeekingResultIterator previousIterator = null;
-                	List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(scans.size());
-                	for (final Scan scan : scans) {
-                	    TableResultIterator scanner = new TableResultIterator(mutationState, tableRef, scan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, previousIterator);
-                	    conn.addIterator(scanner);
-                	    PeekingResultIterator iterator = iteratorFactory.newIterator(context, scanner, scan, tableName);
-                	    concatIterators.add(iterator);
-                	    previousIterator = iterator;
-                	}
-                	PeekingResultIterator concatIterator = ConcatResultIterator.newIterator(concatIterators);
-                    allIterators.add(concatIterator);
-                    return concatIterator;
+                    PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset);
+                    return itr;
                 }
 
                 /**
@@ -117,12 +110,97 @@ public class SerialIterators extends BaseResultIterators {
                 }
             }, "Serial scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
             // Add our singleton Future which will execute serially
-            nestedFutures.add(Collections.singletonList(new Pair<Scan,Future<PeekingResultIterator>>(overallScan,future)));
+            nestedFutures.add(Collections.singletonList(new Pair<Scan, Future<PeekingResultIterator>>(flattenedScans.get(0), future)));
         }
     }
 
     @Override
     protected String getName() {
         return NAME;
+    }
+    
+    /**
+     * 
+     * Iterator that creates iterators for scans only when needed.
+     * This helps reduce the cost of pre-constructing all the iterators
+     * which we may not even use.
+     */
+    private class SerialIterator implements PeekingResultIterator {
+        private final List<Scan> scans;
+        private final String tableName;
+        private final long renewLeaseThreshold;
+        private int index;
+        private PeekingResultIterator currentIterator;
+        private Integer remainingOffset;
+        
+        private SerialIterator(List<Scan> flattenedScans, String tableName, long renewLeaseThreshold, Integer offset) throws SQLException {
+            this.scans = Lists.newArrayListWithExpectedSize(flattenedScans.size());
+            this.tableName = tableName;
+            this.renewLeaseThreshold = renewLeaseThreshold;
+            this.scans.addAll(flattenedScans);
+            this.remainingOffset = offset;
+            if (this.remainingOffset != null) {
+                // mark the last scan for offset purposes
+                this.scans.get(this.scans.size() - 1).setAttribute(QueryConstants.LAST_SCAN, Bytes.toBytes(Boolean.TRUE));
+            }
+        }
+        
+        private PeekingResultIterator currentIterator() throws SQLException {
+            if (currentIterator == null) {
+                return currentIterator = nextIterator();
+            }
+            if (currentIterator.peek() == null) {
+                currentIterator.close();
+                currentIterator = nextIterator();
+            }
+            return currentIterator;
+        }
+        
+        private PeekingResultIterator nextIterator() throws SQLException {
+            if (index >= scans.size()) {
+                return EMPTY_ITERATOR;
+            }
+            while (index < scans.size()) {
+                Scan currentScan = scans.get(index++);
+                if (remainingOffset != null) {
+                    currentScan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, PInteger.INSTANCE.toBytes(remainingOffset));
+                }
+                TableResultIterator itr = new TableResultIterator(mutationState, tableRef, currentScan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold);
+                PeekingResultIterator peekingItr = iteratorFactory.newIterator(context, itr, currentScan, tableName);
+                Tuple tuple;
+                if ((tuple = peekingItr.peek()) == null) {
+                    peekingItr.close();
+                    continue;
+                } else if ((remainingOffset = QueryUtil.getRemainingOffset(tuple)) != null) {
+                    peekingItr.next();
+                    peekingItr.close();
+                    continue;
+                }
+                context.getConnection().addIteratorForLeaseRenewal(itr);
+                return peekingItr;
+            }
+            return EMPTY_ITERATOR;
+        }
+        
+        @Override
+        public Tuple next() throws SQLException {
+            return currentIterator().next();
+        }
+
+        @Override
+        public void explain(List<String> planSteps) {}
+
+        @Override
+        public void close() throws SQLException {
+            if (currentIterator != null) {
+                currentIterator.close();
+            }
+        }
+
+        @Override
+        public Tuple peek() throws SQLException {
+            return currentIterator().peek();
+        }
+        
     }
 }
