@@ -135,7 +135,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                         long cellTimestamp = cq.getTimestamp();
                         // Workaround HBASE-15698 by using the lowest of the timestamps found
                         // on the Increment or any of its Cells.
-                        if (cellTimestamp < maxTimestamp) {
+                        if (cellTimestamp > 0 && cellTimestamp < maxTimestamp) {
                             maxTimestamp = cellTimestamp;
                             get.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, maxTimestamp);
                         }
