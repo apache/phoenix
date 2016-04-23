@@ -350,9 +350,10 @@ public class Sequence {
     }
 
 
-    @SuppressWarnings("deprecation")
     public Increment newIncrement(long timestamp, Sequence.ValueOp action, long numToAllocate) {
-        Increment inc = new Increment(key.getKey());
+        byte[] incKey = key.getKey();
+        byte[] incValue = Bytes.toBytes((long)action.ordinal());
+        Increment inc = new Increment(incKey);
         // It doesn't matter what we set the amount too - we always use the values we get
         // from the Get we do to prevent any race conditions. All columns that get added
         // are returned with their current value
@@ -363,8 +364,19 @@ public class Sequence {
             throw new RuntimeException(e); // Impossible
         }
         for (KeyValue kv : SEQUENCE_KV_COLUMNS) {
-            // We don't care about the amount, as we'll add what gets looked up on the server-side
-            inc.addColumn(kv.getFamily(), kv.getQualifier(), action.ordinal());
+            try {
+                // Store the timestamp on the cell as well as HBase 1.2 seems to not
+                // be serializing over the time range (see HBASE-15698).
+                Cell cell = new KeyValue(incKey, 0, incKey.length, 
+                        kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(),
+                        kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
+                        timestamp,
+                        KeyValue.Type.Put,
+                        incValue, 0, incValue.length);
+                inc.add(cell);
+            } catch (IOException e) {
+                throw new RuntimeException(e); // Impossible
+            }
         }
         return inc;
     }
