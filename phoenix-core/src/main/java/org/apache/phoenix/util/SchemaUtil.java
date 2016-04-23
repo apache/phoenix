@@ -67,6 +67,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.StorageScheme;
 import org.apache.phoenix.schema.RowKeySchema;
@@ -1015,75 +1016,10 @@ public class SchemaUtil {
         }
         return getStrippedName(physicalTableName, indexPrefix);
     }
-
+    
     private static String getStrippedName(String physicalTableName, String indexPrefix) {
         return physicalTableName.indexOf(indexPrefix) == 0 ? physicalTableName.substring(indexPrefix.length())
                 : physicalTableName;
     }      
-    
-    /**
-     * Return a map of column family -> next column qualifier number to use.
-     */
-//    public static Map<String, Integer> getNextEncodedColumnQualifiers(PTable table) {
-//        if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
-//            Map<String, Integer> map = Maps.newHashMapWithExpectedSize(table.getColumns().size());
-//            int max = 0; 
-//            for (PColumnFamily f : table.getColumnFamilies()) {
-//                for (PColumn column : f.getColumns()) {
-//                    if (column.getEncodedColumnQualifier() > max) {
-//                        max = column.getEncodedColumnQualifier();
-//                    }
-//                }
-//                // column qualifiers start with 1.
-//                map.put(f.getName().getString(), max + 1);
-//            }
-//            // When a table has only primary key columns table.getColumnFamilies() will be empty.
-//            // In that case, populate the map with the next column qualifier (1) for the default column
-//            // family of the table.
-//            if (map.isEmpty()) {
-//                map.put(SchemaUtil.getEmptyColumnFamilyAsString(table), 1);
-//            }
-//            return map;
-//        }
-//        return null;
-//    }
-    
-    public static boolean usesEncodedColumnNames(PTable table) {
-        return table.getStorageScheme() != null && table.getStorageScheme() == StorageScheme.ENCODED_COLUMN_NAMES;
-    }
-    
-    public static byte[] getColumnQualifier(PColumn column, PTable table) {
-      checkArgument(!SchemaUtil.isPKColumn(column), "No column qualifiers for PK columns");
-      return usesEncodedColumnNames(table) ? PInteger.INSTANCE.toBytes(column.getEncodedColumnQualifier()) : column.getName().getBytes();
-    }
-    
-    public static byte[] getColumnQualifier(PColumn column, boolean encodedColumnName) {
-        checkArgument(!SchemaUtil.isPKColumn(column), "No column qualifiers for PK columns");
-        return encodedColumnName ? PInteger.INSTANCE.toBytes(column.getEncodedColumnQualifier()) : column.getName().getBytes(); 
-    }
-    
-    /**
-     * @return pair of byte arrays. The first part of the pair is the empty key value's column qualifier, and the second
-     *         part is the value to use for it.
-     */
-    public static Pair<byte[], byte[]> getEmptyKeyValueInfo(PTable table) {
-        return usesEncodedColumnNames(table) ? new Pair<>(QueryConstants.ENCODED_EMPTY_COLUMN_BYTES,
-                QueryConstants.ENCODED_EMPTY_COLUMN_VALUE_BYTES) : new Pair<>(QueryConstants.EMPTY_COLUMN_BYTES,
-                QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-    }
-    
-    /**
-     * @return pair of byte arrays. The first part of the pair is the empty key value's column qualifier, and the second
-     *         part is the value to use for it.
-     */
-    public static Pair<byte[], byte[]> getEmptyKeyValueInfo(boolean usesEncodedColumnNames) {
-        return usesEncodedColumnNames ? new Pair<>(QueryConstants.ENCODED_EMPTY_COLUMN_BYTES,
-                QueryConstants.ENCODED_EMPTY_COLUMN_VALUE_BYTES) : new Pair<>(QueryConstants.EMPTY_COLUMN_BYTES,
-                        QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
-    }
-    
-    public static boolean hasEncodedColumnName(PColumn column){
-        return !SchemaUtil.isPKColumn(column) && column.getEncodedColumnQualifier() != null;
-    }
     
 }

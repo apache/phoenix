@@ -610,4 +610,9 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
         }
     }
+    
+    @Test
+    public void testCreateTableIfNotExistsForEncodedColumnNames() throws Exception {
+        
+    }
 }

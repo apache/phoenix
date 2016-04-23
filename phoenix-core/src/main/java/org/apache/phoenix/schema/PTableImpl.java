@@ -85,8 +85,6 @@ import com.google.common.collect.Maps;
 import com.google.protobuf.HBaseZeroCopyByteString;
 import com.sun.istack.NotNull;
 
-import co.cask.tephra.TxConstants;
-
 /**
  *
  * Base class for PTable implementors.  Provides abstraction for
@@ -179,8 +177,9 @@ public class PTableImpl implements PTable {
         this.physicalNames = Collections.emptyList();
     }
     
+    // For indexes stored in shared physical tables
     public PTableImpl(PName tenantId, PName schemaName, PName tableName, long timestamp, List<PColumnFamily> families, 
-            List<PColumn> columns, List<PName> physicalNames, Short viewIndexId, boolean multiTenant, boolean isNamespaceMpped, StorageScheme storageScheme, Map<String, Integer> encodedColumnQualifierCounters) throws SQLException { // For indexes stored in shared physical tables
+            List<PColumn> columns, List<PName> physicalNames, Short viewIndexId, boolean multiTenant, boolean isNamespaceMpped, StorageScheme storageScheme, Map<String, Integer> encodedColumnQualifierCounters) throws SQLException {
         this.pkColumns = this.allColumns = Collections.emptyList();
         this.rowKeySchema = RowKeySchema.EMPTY_SCHEMA;
         this.indexes = Collections.emptyList();

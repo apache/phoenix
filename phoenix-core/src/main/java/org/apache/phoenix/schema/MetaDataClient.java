@@ -291,11 +291,12 @@ public class MetaDataClient {
             ") VALUES (?, ?, ?, ?, ?, ?)";
     private static final String UPDATE_ENCODED_COLUMN_COUNT = 
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+            TENANT_ID + ", " + 
             TABLE_SCHEM + "," +
             TABLE_NAME + "," +
             COLUMN_FAMILY + "," +
             COLUMN_QUALIFIER_COUNTER + 
-            ") VALUES (?, ?, ?, ?)";
+            ") VALUES (?, ?, ?, ?, ?)";
     private static final String INCREMENT_SEQ_NUM =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
@@ -2060,13 +2061,18 @@ public class MetaDataClient {
                     PreparedStatement linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNT);
                     String schemaNameToUse = tableType == VIEW ? viewPhysicalTable.getSchemaName().getString() : schemaName;
                     String tableNameToUse = tableType == VIEW ? viewPhysicalTable.getTableName().getString() : tableName;
+                    // For local indexes and indexes on views, pass on the the tenant id i.e. all their meta-data rows have
+                    // tenant ids in there.
+                    boolean sharedIndex = tableType == PTableType.INDEX && (indexType == IndexType.LOCAL || parent.getType() == PTableType.VIEW);
+                    String tenantIdToUse = connection.getTenantId() != null && sharedIndex ? connection.getTenantId().getString() : null;
                     for (Entry<String, Integer> entry : mapToUse.entrySet()) {
                         String familyName = entry.getKey();
                         Integer nextQualifier = entry.getValue();
-                        linkStatement.setString(1, schemaNameToUse);
-                        linkStatement.setString(2, tableNameToUse);
-                        linkStatement.setString(3, familyName);
-                        linkStatement.setInt(4, nextQualifier);
+                        linkStatement.setString(1, tenantIdToUse);
+                        linkStatement.setString(2, schemaNameToUse);
+                        linkStatement.setString(3, tableNameToUse);
+                        linkStatement.setString(4, familyName);
+                        linkStatement.setInt(5, nextQualifier);
                         linkStatement.execute();
                     }
 
@@ -2904,6 +2910,7 @@ public class MetaDataClient {
                 Map<String, Integer> cfWithUpdatedCQCounters = null; 
                 if (columnDefs.size() > 0 ) {
                     //FIXME: samarth change this to fetch table from server if client cache doesn't have it. What about local indexes?
+                    //FIXME: samarth fix this mess of getting table names from connection
                     //TODO: samarth should these be guarded by storage scheme check. Better to have the map always available. immutable empty for views and non encoded.
                     tableForCQCounters = tableType == PTableType.VIEW ? connection.getTable(new PTableKey(null, table.getPhysicalName().getString())) : table;
                      cqCountersToUse = tableForCQCounters.getEncodedCQCounters();
@@ -2949,7 +2956,7 @@ public class MetaDataClient {
                         }
                         
                         // Add any new PK columns to end of index PK
-                        if (numPkColumnsAdded>0) {
+                        if (numPkColumnsAdded > 0) {
                             // create PK column list that includes the newly created columns
                             List<PColumn> pkColumns = Lists.newArrayListWithExpectedSize(table.getPKColumns().size()+numPkColumnsAdded);
                             pkColumns.addAll(table.getPKColumns());
@@ -3017,17 +3024,23 @@ public class MetaDataClient {
                 Collections.reverse(tableMetaData);
                 // Add column metadata afterwards, maintaining the order so columns have more predictable ordinal position
                 tableMetaData.addAll(columnMetaData);
+                boolean sharedIndex = tableType == PTableType.INDEX && (table.getIndexType() == IndexType.LOCAL || table.getViewIndexId() != null);
+                String tenantIdToUse = connection.getTenantId() != null && sharedIndex ? connection.getTenantId().getString() : null;
                 //TODO: samarth I am not sure this is going to work on server side. But for now lets add these mutations here.
                 if (cfWithUpdatedCQCounters != null && !cfWithUpdatedCQCounters.isEmpty()) {
-                    PreparedStatement linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNT);
-                    for (Entry<String, Integer> entry : cfWithUpdatedCQCounters.entrySet()) {
-                        String familyName = entry.getKey();
-                        Integer nextQualifier = entry.getValue();
-                        linkStatement.setString(1, tableForCQCounters.getSchemaName().getString());
-                        linkStatement.setString(2, tableForCQCounters.getTableName().getString());
-                        linkStatement.setString(3, familyName);
-                        linkStatement.setInt(4, nextQualifier);
-                        linkStatement.execute();
+                    PreparedStatement linkStatement;
+                    if (!sharedIndex) {
+                        linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNT);
+                        for (Entry<String, Integer> entry : cfWithUpdatedCQCounters.entrySet()) {
+                            String familyName = entry.getKey();
+                            Integer nextQualifier = entry.getValue();
+                            linkStatement.setString(1, tenantIdToUse);
+                            linkStatement.setString(2, tableForCQCounters.getSchemaName().getString());
+                            linkStatement.setString(3, tableForCQCounters.getTableName().getString());
+                            linkStatement.setString(4, familyName);
+                            linkStatement.setInt(5, nextQualifier);
+                            linkStatement.execute();
+                        }
                     }
                     // When a view adds its own columns, then we need to increase the sequence number of the base table
                     // too since we want clients to get the latest PTable of the base table.
@@ -3357,7 +3370,7 @@ public class MetaDataClient {
                         // so we need to issue deletes markers for all the rows of the index 
                         final List<TableRef> tableRefsToDrop = Lists.newArrayList();
                         Map<String, List<TableRef>> tenantIdTableRefMap = Maps.newHashMap();
-                        if (result.getSharedTablesToDelete()!=null) {
+                        if (result.getSharedTablesToDelete() != null) {
                             for (SharedTableState sharedTableState : result.getSharedTablesToDelete()) {
                                 PTableImpl viewIndexTable = new PTableImpl(sharedTableState.getTenantId(),
                                         sharedTableState.getSchemaName(), sharedTableState.getTableName(), ts,

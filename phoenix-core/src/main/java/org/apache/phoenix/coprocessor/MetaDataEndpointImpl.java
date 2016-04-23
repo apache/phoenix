@@ -3053,10 +3053,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] indexKey =
                     SchemaUtil.getTableKey(tenantId, index.getSchemaName().getBytes(), index
                             .getTableName().getBytes());
-            byte[] cq = SchemaUtil.getColumnQualifier(columnToDelete, index);
+            byte[] cq = EncodedColumnsUtil.getColumnQualifier(columnToDelete, index);
+            ColumnReference colRef = new ColumnReference(columnToDelete.getFamilyName().getBytes(), cq);
             // If index requires this column for its pk, then drop it
-            if (indexMaintainer.getIndexedColumns().contains(
-                new ColumnReference(columnToDelete.getFamilyName().getBytes(), cq))) {
+            if (indexMaintainer.getIndexedColumns().contains(colRef)) {
                 // Since we're dropping the index, lock it to ensure
                 // that a change in index state doesn't
                 // occur while we're dropping it.
@@ -3077,9 +3077,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
             // If the dropped column is a covered index column, invalidate the index
-            else if (indexMaintainer.getCoverededColumns().contains(
-                new ColumnReference(columnToDelete.getFamilyName().getBytes(), columnToDelete
-                        .getName().getBytes()))) {
+            else if (indexMaintainer.getCoverededColumns().contains(colRef)){
                 invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
         }
