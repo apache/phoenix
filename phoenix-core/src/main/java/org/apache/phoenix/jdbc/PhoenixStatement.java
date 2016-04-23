@@ -491,11 +491,6 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 }
 
                 @Override
-                public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-                    return iterator;
-                }
-
-                @Override
                 public long getEstimatedSize() {
                     return 0;
                 }
