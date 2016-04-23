@@ -1033,7 +1033,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.parallelIteratorFactory = parallelIteratorFactory;
     }
     
-    public void addIterator(@Nonnull TableResultIterator itr) {
+    public void addIteratorForLeaseRenewal(@Nonnull TableResultIterator itr) {
         if (services.supportsFeature(Feature.RENEW_LEASE)) {
             checkNotNull(itr);
             scannerQueue.add(new WeakReference<TableResultIterator>(itr));

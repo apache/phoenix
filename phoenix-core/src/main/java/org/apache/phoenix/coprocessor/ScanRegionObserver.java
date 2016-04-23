@@ -60,6 +60,7 @@ import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -192,7 +193,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         byte[] scanOffsetBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET);
         Integer scanOffset = null;
         if (scanOffsetBytes != null) {
-            scanOffset = Bytes.toInt(scanOffsetBytes);
+            scanOffset = (Integer) PInteger.INSTANCE.toObject(scanOffsetBytes);
         }
         RegionScanner innerScanner = s;
 
@@ -246,15 +247,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         final HRegion region = c.getEnvironment().getRegion();
         region.startRegionOperation();
         try {
-            // Once we return from the first call to next, we've run through and
-            // cached
-            // the topN rows, so we no longer need to start/stop a region
-            // operation.
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
                 List<KeyValue> kvList = new ArrayList<KeyValue>(1);
                 KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
-                        QueryConstants.OFFSET_COLUMN, Bytes.toBytes(iterator.getUnusedOffset()));
+                        QueryConstants.OFFSET_COLUMN, PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
                 kvList.add(kv);
                 Result r = new Result(kvList);
                 firstTuple = new ResultTuple(r);

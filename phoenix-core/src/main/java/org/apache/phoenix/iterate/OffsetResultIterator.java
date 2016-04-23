@@ -56,7 +56,7 @@ public class OffsetResultIterator extends DelegateResultIterator {
         return "OffsetResultIterator [rowCount=" + rowCount + ", offset=" + offset + "]";
     }
 
-    public Integer getUnusedOffset() {
+    public Integer getRemainingOffset() {
         return (offset - rowCount) > 0 ? (offset - rowCount) : 0;
     }
 }

@@ -57,16 +57,28 @@ import org.apache.phoenix.util.TupleUtil;
  *
  * Result iterator that spools the results of a scan to disk once an in-memory threshold has been reached.
  * If the in-memory threshold is not reached, the results are held in memory with no disk writing perfomed.
- *
- *
+ * 
+ * <p>
+ * Spooling is deprecated and shouldn't be used while implementing new features. As of HBase 0.98.17, 
+ * we rely on pacing the server side scanners instead of pulling rows from the server and  potentially 
+ * spooling to a temporary file created on clients.
+ * </p>
+ *  
  * @since 0.1
  */
+@Deprecated
 public class SpoolingResultIterator implements PeekingResultIterator {
     
     private final PeekingResultIterator spoolFrom;
     private final SpoolingMetricsHolder spoolMetrics;
     private final MemoryMetricsHolder memoryMetrics;
-
+    
+    /**
+     * Spooling is deprecated and shouldn't be used while implementing new features. As of HBase
+     * 0.98.17, we rely on pacing the server side scanners instead of pulling rows from the server
+     * and potentially spooling to a temporary file created on clients.
+     */
+    @Deprecated
     public static class SpoolingResultIteratorFactory implements ParallelIteratorFactory {
         private final QueryServices services;
 

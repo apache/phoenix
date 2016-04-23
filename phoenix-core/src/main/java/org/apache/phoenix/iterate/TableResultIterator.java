@@ -32,14 +32,12 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Closeables;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -70,8 +68,7 @@ public class TableResultIterator implements ResultIterator {
 
     @GuardedBy("this")
     private long renewLeaseTime = 0;
-    private PeekingResultIterator previousIterator;
-
+    
     @VisibleForTesting // Exposed for testing. DON'T USE ANYWHERE ELSE!
     TableResultIterator() {
         this.scanMetrics = null;
@@ -85,19 +82,13 @@ public class TableResultIterator implements ResultIterator {
     };
 
     public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics,
-			long renewLeaseThreshold) throws SQLException {
-    	this(mutationState,tableRef,scan,scanMetrics,renewLeaseThreshold,null);
-    }
-    
-    public TableResultIterator(MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics,
-            long renewLeaseThreshold, PeekingResultIterator previousIterator) throws SQLException {
+            long renewLeaseThreshold) throws SQLException {
         this.scan = scan;
         this.scanMetrics = scanMetrics;
         PTable table = tableRef.getTable();
         htable = mutationState.getHTable(table);
         this.scanIterator = UNINITIALIZED_SCANNER;
         this.renewLeaseThreshold = renewLeaseThreshold;
-        this.previousIterator = previousIterator;
     }
 
     @Override
@@ -129,15 +120,6 @@ public class TableResultIterator implements ResultIterator {
         ResultIterator delegate = this.scanIterator;
         if (delegate == UNINITIALIZED_SCANNER) {
             try {
-                if (previousIterator != null && scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET) != null) {
-                    byte[] unusedOffset = QueryUtil.getUnusedOffset(previousIterator.peek());
-                    if (unusedOffset != null) {
-                        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, unusedOffset);
-                        previousIterator.next();
-                    } else {
-                        scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, null);
-                    }
-                }
                 this.scanIterator =
                         new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
             } catch (IOException e) {

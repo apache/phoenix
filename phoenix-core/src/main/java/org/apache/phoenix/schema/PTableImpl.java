@@ -1226,6 +1226,7 @@ public class PTableImpl implements PTable {
         return isTransactional;
     }
 
+    @Override
     public int getBaseColumnCount() {
         return baseColumnCount;
     }

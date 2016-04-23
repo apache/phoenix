@@ -48,7 +48,9 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PInteger;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -370,13 +372,13 @@ public final class QueryUtil {
 
     }
 
-    public static byte[] getUnusedOffset(Tuple offsetTuple) {
+    public static Integer getRemainingOffset(Tuple offsetTuple) {
         if (offsetTuple != null) {
             ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr();
             offsetTuple.getKey(rowKeyPtr);
-            if (QueryConstants.offsetRowKeyPtr.compareTo(rowKeyPtr) == 0) {
-                Cell value = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN);
-                return value.getValue();
+            if (QueryConstants.OFFSET_ROW_KEY_PTR.compareTo(rowKeyPtr) == 0) {
+                Cell cell = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN);
+                return PInteger.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(), PInteger.INSTANCE, SortOrder.ASC, null, null);
             }
         }
         return null;
