@@ -89,9 +89,10 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         rs = conn.createStatement()
                 .executeQuery("SELECT t_id from " + tableName + " order by t_id limit " + limit + " offset " + offset);
         int i = 0;
-        while (i++ < limit) {
+        while (i < limit) {
             assertTrue(rs.next());
-            assertEquals(strings[offset + i - 1], rs.getString(1));
+            assertEquals("Expected string didn't match for i = " + i, strings[offset + i], rs.getString(1));
+            i++;
         }
 
         limit = 35;
@@ -176,20 +177,6 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.close();
     }
 
-    private void initTableValues(Connection conn) throws SQLException {
-        for (int i = 0; i < 26; i++) {
-            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
-                    + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
-        }
-        conn.commit();
-    }
-
-    private void updateStatistics(Connection conn) throws SQLException {
-        String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
-                + "\"=" + Long.toString(500);
-        conn.createStatement().execute(query);
-    }
-
     @Test
     public void testMetaDataWithOffset() throws SQLException {
         Connection conn;
@@ -206,6 +193,20 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         ResultSet rs = stmt.executeQuery();
         ResultSetMetaData md = rs.getMetaData();
         assertEquals(5, md.getColumnCount());
+    }
+    
+    private void initTableValues(Connection conn) throws SQLException {
+        for (int i = 0; i < 26; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
+                    + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+        }
+        conn.commit();
+    }
+
+    private void updateStatistics(Connection conn) throws SQLException {
+        String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
+                + "\"=" + Long.toString(500);
+        conn.createStatement().execute(query);
     }
 
 }

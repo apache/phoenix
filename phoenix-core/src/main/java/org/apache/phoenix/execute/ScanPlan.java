@@ -18,6 +18,9 @@
 package org.apache.phoenix.execute;
 
 
+import static org.apache.phoenix.util.ScanUtil.isPacingScannersPossible;
+import static org.apache.phoenix.util.ScanUtil.isRoundRobinPossible;
+
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -113,6 +116,15 @@ public class ScanPlan extends BaseQueryPlan {
             return false;
         }
         PTable table = tableRef.getTable();
+        /*
+         * For salted or local index tables, if rows are requested in a row key order, then we
+         * cannot execute a query serially. We need to be able to do a merge sort across all scans
+         * which isn't possible with SerialIterators. For other kinds of tables though we are ok
+         * since SerialIterators execute scans in the correct order.
+         */
+        if ((table.getBucketNum() != null || table.getIndexType() == IndexType.LOCAL) && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)) {
+            return false;
+        }
         GuidePostsInfo gpsInfo = table.getTableStats().getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(table));
         long estRowSize = SchemaUtil.estimateRowSize(table);
         long estRegionSize;
@@ -147,8 +159,9 @@ public class ScanPlan extends BaseQueryPlan {
             TableRef table, OrderBy orderBy, Integer limit,Integer offset, boolean allowPageFilter) throws SQLException {
 
         if ((isSerial(context, statement, table, orderBy, limit, offset, allowPageFilter)
-                || ScanUtil.isRoundRobinPossible(orderBy, context) || ScanUtil.isPacingScannersPossible(context))
-                && offset == null) { return ParallelIteratorFactory.NOOP_FACTORY; }
+                || isRoundRobinPossible(orderBy, context) || isPacingScannersPossible(context))) {
+            return ParallelIteratorFactory.NOOP_FACTORY;
+        }
         ParallelIteratorFactory spoolingResultIteratorFactory =
                 new SpoolingResultIterator.SpoolingResultIteratorFactory(
                         context.getConnection().getQueryServices());
