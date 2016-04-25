@@ -262,7 +262,7 @@ public class SchemaUtil {
     }
 
     private static String getName(String optionalQualifier, String name, boolean caseSensitive) {
-        String cq = caseSensitive ? "\"" + name + "\"" : name;
+        String cq = caseSensitive || (name!=null && name.contains(":")) ? "\"" + name + "\"" : name;
         if (optionalQualifier == null || optionalQualifier.isEmpty()) {
             return cq;
         }
