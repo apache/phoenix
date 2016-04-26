@@ -32,6 +32,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.DatabaseMetaData;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -864,5 +865,33 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         int upsertCount = conn.createStatement().executeUpdate("UPSERT INTO T2 SELECT pk, val FROM SALTEDT1");
         assertEquals(100,upsertCount);
         conn.close();
+    }
+
+    @Test
+    public void testTransactionalTableMetadata() throws SQLException {
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String transactTableName = "TR";
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + transactTableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " +
+                "TRANSACTIONAL=true");
+            conn.commit();
+
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs = dbmd.getTables(null, null, transactTableName, null);
+            assertTrue(rs.next());
+            assertEquals("Transactional table was not marked as transactional in JDBC API.",
+                "true", rs.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
+
+            String nonTransactTableName = "NOTR";
+            Statement stmt2 = conn.createStatement();
+            stmt2.execute("CREATE TABLE " + nonTransactTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) ");
+            conn.commit();
+
+            ResultSet rs2 = dbmd.getTables(null, null, nonTransactTableName, null);
+            assertTrue(rs2.next());
+            assertEquals("Non-transactional table was marked as transactional in JDBC API.",
+                "false", rs2.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
+        }
     }
 }
