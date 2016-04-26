@@ -1040,7 +1040,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 MULTI_TENANT + "," +
                 VIEW_STATEMENT + "," +
                 SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
-                SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE +
+                SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE + "," +
+                TRANSACTIONAL +
                 " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                 " where " + COLUMN_NAME + " is null" +
                 " and " + COLUMN_FAMILY + " is null" +
