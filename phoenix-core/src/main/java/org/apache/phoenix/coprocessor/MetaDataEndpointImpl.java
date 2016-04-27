@@ -2377,7 +2377,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             new SQLParser(view.getViewStatement()).parseQuery().getWhere();
                     PhoenixConnection conn=null;
                     try {
-                        conn = QueryUtil.getConnection(env.getConfiguration()).unwrap(
+                        conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(
                             PhoenixConnection.class);
                     } catch (ClassNotFoundException e) {
                     }
@@ -3003,7 +3003,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Covered columns are deleted from the index by the client
         PhoenixConnection connection = null;
         try {
-            connection = table.getIndexes().isEmpty() ? null : QueryUtil.getConnection(
+            connection = table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
                 env.getConfiguration()).unwrap(PhoenixConnection.class);
         } catch (ClassNotFoundException e) {
         }

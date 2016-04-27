@@ -146,7 +146,7 @@ public class LocalIndexSplitter extends BaseRegionObserver {
         RegionCoprocessorEnvironment environment = ctx.getEnvironment();
         PhoenixConnection conn = null;
         try {
-            conn = QueryUtil.getConnection(ctx.getEnvironment().getConfiguration()).unwrap(
+            conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
                 PhoenixConnection.class);
             MetaDataClient client = new MetaDataClient(conn);
             String userTableName = ctx.getEnvironment().getRegion().getTableDesc().getNameAsString();

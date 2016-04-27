@@ -222,7 +222,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         Set<String> indexTableNames = new HashSet<String>(1);
         PhoenixConnection conn = null;
         try {
-            conn = QueryUtil.getConnection(this.env.getConfiguration()).unwrap(
+            conn = QueryUtil.getConnectionOnServer(this.env.getConfiguration()).unwrap(
                     PhoenixConnection.class);
             String userTableName = MetaDataUtil.getUserTableName(ref.getTableName());
             PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
