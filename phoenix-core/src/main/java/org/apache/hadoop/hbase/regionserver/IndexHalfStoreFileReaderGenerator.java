@@ -135,7 +135,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 if (metaTable != null) metaTable.close();
             }
             try {
-                conn = QueryUtil.getConnection(ctx.getEnvironment().getConfiguration()).unwrap(
+                conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
                             PhoenixConnection.class);
                 String userTableName = MetaDataUtil.getUserTableName(tableName.getNameAsString());
                 PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
@@ -197,7 +197,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         if(compactedFilesCount == storeFilesCount) {
             PhoenixConnection conn = null;
             try {
-                conn = QueryUtil.getConnection(e.getEnvironment().getConfiguration()).unwrap(
+                conn = QueryUtil.getConnectionOnServer(e.getEnvironment().getConfiguration()).unwrap(
                     PhoenixConnection.class);
                 MetaDataClient client = new MetaDataClient(conn);
                 String userTableName = MetaDataUtil.getUserTableName(e.getEnvironment().getRegion().getTableDesc().getNameAsString());

@@ -78,7 +78,7 @@ public class FormatToKeyValueReducer
         }
 
         try {
-            PhoenixConnection conn = (PhoenixConnection) QueryUtil.getConnection(clientInfos, conf);
+            PhoenixConnection conn = (PhoenixConnection) QueryUtil.getConnectionOnServer(clientInfos, conf);
             builder = conn.getKeyValueBuilder();
             final String tableNamesConf = conf.get(FormatToBytesWritableMapper.TABLE_NAMES_CONFKEY);
             final String logicalNamesConf = conf.get(FormatToBytesWritableMapper.LOGICAL_NAMES_CONFKEY);

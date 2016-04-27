@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -294,14 +295,31 @@ public final class QueryUtil {
         return buf.toString();
     }
 
+    /**
+     * @return {@link PhoenixConnection} with NO_UPGRADE_ATTRIB set so that we don't initiate server upgrade
+     */
+    public static Connection getConnectionOnServer(Configuration conf) throws ClassNotFoundException,
+            SQLException {
+        return getConnectionOnServer(new Properties(), conf);
+    }
+
+    /**
+     * @return {@link PhoenixConnection} with NO_UPGRADE_ATTRIB set so that we don't initiate server upgrade
+     */
+    public static Connection getConnectionOnServer(Properties props, Configuration conf)
+            throws ClassNotFoundException,
+            SQLException {
+        props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
+        return getConnection(props, conf);
+    }
+
     public static Connection getConnection(Configuration conf) throws ClassNotFoundException,
             SQLException {
         return getConnection(new Properties(), conf);
     }
-
-    public static Connection getConnection(Properties props, Configuration conf)
-            throws ClassNotFoundException,
-            SQLException {
+    
+    private static Connection getConnection(Properties props, Configuration conf)
+            throws ClassNotFoundException, SQLException {
         String url = getConnectionUrl(props, conf);
         LOG.info("Creating connection with the jdbc url: " + url);
         PropertiesUtil.extractProperties(props, conf);
