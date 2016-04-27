@@ -119,7 +119,7 @@ public class PhoenixMetricsSink implements MetricsSink {
                 props.setProperty(QueryServices.TRACING_FREQ_ATTRIB,
                         Tracing.Frequency.NEVER.getKey());
                 org.apache.hadoop.conf.Configuration conf = HBaseConfiguration.create();
-                Connection conn = QueryUtil.getConnection(props, conf);
+                Connection conn = QueryUtil.getConnectionOnServer(props, conf);
                 // enable bulk loading when we have enough data
                 conn.setAutoCommit(true);
 

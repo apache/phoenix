@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -75,6 +74,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
@@ -121,17 +121,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         	QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
     }
     
-    private static String getJdbcUrl(RegionCoprocessorEnvironment env) {
-        String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
-        String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
-        String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
-            HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
-            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
-            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
-    }
-
     @Override
     public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
         final RegionCoprocessorEnvironment env = e.getEnvironment();
@@ -282,13 +271,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     if (conn == null) {
                     	final Properties props = new Properties();
-                    	props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
                     	// Set SCN so that we don't ping server and have the upper bound set back to
                     	// the timestamp when the failure occurred.
                     	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
                     	// don't run a second index populations upsert select 
                         props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0"); 
-                        conn = DriverManager.getConnection(getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
+                        conn = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
                         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
                         dataPTable = PhoenixRuntime.getTable(conn, dataTableFullName);
                         indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(dataPTable.getIndexes().size());
