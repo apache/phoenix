@@ -102,9 +102,18 @@ public class ScanPlan extends BaseQueryPlan {
 
     private static boolean isSerial(StatementContext context, FilterableStatement statement,
             TableRef tableRef, OrderBy orderBy, Integer limit, Integer offset, boolean allowPageFilter) throws SQLException {
-        if (statement.getHint().hasHint(HintNode.Hint.SERIAL)) {
+        PTable table = tableRef.getTable();
+        boolean hasSerialHint = statement.getHint().hasHint(HintNode.Hint.SERIAL);
+        boolean canBeExecutedSerially = ScanUtil.canQueryBeExecutedSerially(table, orderBy, context); 
+        if (!canBeExecutedSerially) { 
+            if (hasSerialHint) {
+                logger.warn("This query cannot be executed serially. Ignoring the hint");
+            }
+            return false;
+        } else if (hasSerialHint) {
             return true;
         }
+        
         Scan scan = context.getScan();
         /*
          * If a limit is provided and we have no filter, run the scan serially when we estimate that
@@ -113,16 +122,6 @@ public class ScanPlan extends BaseQueryPlan {
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         if (perScanLimit == null || scan.getFilter() != null) {
-            return false;
-        }
-        PTable table = tableRef.getTable();
-        /*
-         * For salted or local index tables, if rows are requested in a row key order, then we
-         * cannot execute a query serially. We need to be able to do a merge sort across all scans
-         * which isn't possible with SerialIterators. For other kinds of tables though we are ok
-         * since SerialIterators execute scans in the correct order.
-         */
-        if ((table.getBucketNum() != null || table.getIndexType() == IndexType.LOCAL) && ScanUtil.shouldRowsBeInRowKeyOrder(orderBy, context)) {
             return false;
         }
         GuidePostsInfo gpsInfo = table.getTableStats().getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(table));
