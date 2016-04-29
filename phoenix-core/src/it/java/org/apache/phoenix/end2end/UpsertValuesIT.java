@@ -40,6 +40,7 @@ import java.util.Properties;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -470,9 +471,10 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = null;
         PreparedStatement pstmt = null;
+        String tableName = BaseTest.generateRandomString();
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            pstmt = conn.prepareStatement("create table t (k varchar primary key, v integer)");
+            pstmt = conn.prepareStatement("create table " + tableName + " (k varchar primary key, v integer)");
             pstmt.execute();
         } finally {
             closeStmtAndConn(pstmt, conn);
@@ -481,7 +483,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            pstmt = conn.prepareStatement("upsert into t values (?, ?)");
+            pstmt = conn.prepareStatement("upsert into " + tableName + " values (?, ?)");
             pstmt.setString(1, "a");
             pstmt.setInt(2, 1);
             pstmt.addBatch();
@@ -497,7 +499,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            pstmt = conn.prepareStatement("select * from t");
+            pstmt = conn.prepareStatement("select * from " + tableName);
             ResultSet rs = pstmt.executeQuery();
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
@@ -514,10 +516,10 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
         try {
-            stmt.addBatch("upsert into t values ('c', 3)");
-            stmt.addBatch("select count(*) from t");
-            stmt.addBatch("upsert into t values ('a', 4)");
-            ResultSet rs = stmt.executeQuery("select count(*) from t");
+            stmt.addBatch("upsert into " + tableName + " values ('c', 3)");
+            stmt.addBatch("select count(*) from " + tableName);
+            stmt.addBatch("upsert into " + tableName + " values ('a', 4)");
+            ResultSet rs = stmt.executeQuery("select count(*) from " + tableName);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             int[] result = stmt.executeBatch();
@@ -533,7 +535,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 8));
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            pstmt = conn.prepareStatement("select * from t");
+            pstmt = conn.prepareStatement("select * from " + tableName);
             ResultSet rs = pstmt.executeQuery();
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
