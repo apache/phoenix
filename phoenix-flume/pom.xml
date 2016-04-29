@@ -46,10 +46,6 @@
       <classifier>tests</classifier>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.flume</groupId>
-      <artifactId>flume-ng-core</artifactId>
-    </dependency>
 
     <!-- Test Dependencies -->
     <dependency>
@@ -169,6 +165,12 @@
       <artifactId>tephra-core</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+
+    <!-- Main dependency on flume. The last to avoid using old commons-io in IT -->
+    <dependency>
+      <groupId>org.apache.flume</groupId>
+      <artifactId>flume-ng-core</artifactId>
     </dependency>
   </dependencies>
 
