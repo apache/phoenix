@@ -162,6 +162,7 @@ public class MemoryManagerTest {
         assertTrue(rmm2.getAvailableMemory() == rmm2.getMaxMemory());
     }
 
+    @Ignore("See PHOENIX-2840")
     @Test
     public void testWaitUntilResize() throws Exception {
         final GlobalMemoryManager gmm = spy(new GlobalMemoryManager(100, 80));
