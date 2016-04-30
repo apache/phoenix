@@ -1,4 +1,3 @@
--- Average CPU and DB usage by Domain
 SELECT DOMAIN, AVG(CORE) Average_CPU_Usage, AVG(DB) Average_DB_Usage 
 FROM WEB_STAT 
 GROUP BY DOMAIN 
