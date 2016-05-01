@@ -17,6 +17,27 @@
  */
 package org.apache.phoenix.end2end;
 
+import static java.lang.String.format;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CATALOG;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.hamcrest.CoreMatchers.is;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.Statement;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -25,23 +46,6 @@ import org.apache.phoenix.queryserver.client.ThinClientUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.Statement;
-import java.util.concurrent.TimeUnit;
-
-import static java.lang.String.format;
-
-import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CATALOG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.*;
 
 /**
  * Smoke test for query server.
@@ -96,7 +100,10 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
 
   @Test
   public void testSchemas() throws Exception {
-    try (final Connection connection = DriverManager.getConnection(CONN_STRING)) {
+      Properties props=new Properties();
+      props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+      try (final Connection connection = DriverManager.getConnection(CONN_STRING, props)) {
+      connection.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS " + SYSTEM_SCHEMA_NAME);
       assertThat(connection.isClosed(), is(false));
       try (final ResultSet resultSet = connection.getMetaData().getSchemas()) {
         final ResultSetMetaData metaData = resultSet.getMetaData();
