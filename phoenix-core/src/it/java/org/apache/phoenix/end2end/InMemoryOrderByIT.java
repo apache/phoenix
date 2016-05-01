@@ -23,6 +23,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 
+import com.google.common.collect.Maps;
+
 
 public class InMemoryOrderByIT extends OrderByIT {
 
@@ -30,9 +32,9 @@ public class InMemoryOrderByIT extends OrderByIT {
     }
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
     public static void doSetup() throws Exception {
-        Map<String,String> props = getDefaultProps();
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1024*1024));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

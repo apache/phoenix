@@ -85,7 +85,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -914,6 +914,17 @@ public abstract class BaseTest {
         try {
             deletePriorTables(ts, conn, url);
             deletePriorSequences(ts, conn);
+            
+            // Make sure all tables and views have been dropped
+            props.remove(CURRENT_SCN_ATTRIB);
+            try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
+            	DatabaseMetaData dbmd = seeLatestConn.getMetaData();
+    	        ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
+    	        boolean hasTables = rs.next();
+    	        if (hasTables) {
+    	        	fail("The following tables are not deleted that should be:" + getTableNames(rs));
+    	        }
+            }
         }
         finally {
             conn.close();
@@ -940,7 +951,7 @@ public abstract class BaseTest {
                         conn.close();
                     }
                     // Open tenant-specific connection when we find a new one
-                    Properties props = new Properties(globalConn.getClientInfo());
+                    Properties props = PropertiesUtil.deepCopy(globalConn.getClientInfo());
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                     conn = DriverManager.getConnection(url, props);
                     lastTenantId = tenantId;
@@ -958,6 +969,15 @@ public abstract class BaseTest {
                 conn.close();
             }
         }
+    }
+    
+    private static String getTableNames(ResultSet rs) throws SQLException {
+    	StringBuilder buf = new StringBuilder();
+    	do {
+    		buf.append(" ");
+    		buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
+    	} while (rs.next());
+    	return buf.toString();
     }
     
     private static void deletePriorSequences(long ts, Connection globalConn) throws Exception {

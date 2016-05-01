@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -34,12 +33,9 @@ import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
-import java.util.Properties;
 import java.util.TimeZone;
 
 import org.apache.phoenix.expression.function.ToCharFunction;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -51,9 +47,9 @@ import org.junit.Test;
  * @since 0.1
  */
 
-public class ToCharFunctionIT extends BaseClientManagedTimeIT {
+public class ToCharFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     
-    public static final String TO_CHAR_TABLE_NAME = "TO_CHAR_TABLE";
+    private static String TO_CHAR_TABLE_NAME;
     
     private Date row1Date;
     private Time row1Time;
@@ -80,11 +76,17 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
             value="DMI_BIGDECIMAL_CONSTRUCTED_FROM_DOUBLE", 
             justification="Test code.")
     public void initTable() throws Exception {
-        long ts = nextTimestamp();
-        createTestTable(getUrl(), TO_CHAR_TABLE_DDL, null, ts-2);
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(url, props);
+        TO_CHAR_TABLE_NAME = generateRandomString();
+        String ddl = "create table " + TO_CHAR_TABLE_NAME +
+                "(pk integer not null, \n" + 
+                "col_date date, \n" +
+                "col_time date, \n" +
+                "col_timestamp timestamp, \n" +
+                "col_integer integer, \n" + 
+                "col_decimal decimal\n" + 
+                "CONSTRAINT my_pk PRIMARY KEY (pk))";
+        createTestTable(getUrl(), ddl);
+        Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(false);
         
         PreparedStatement stmt = conn.prepareStatement(
@@ -218,9 +220,7 @@ public class ToCharFunctionIT extends BaseClientManagedTimeIT {
     }
     
     private void runOneRowQueryTest(String oneRowQuery, Integer pkValue, String projectedValue) throws Exception {
-        long ts = nextTimestamp();
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
-        Connection conn = DriverManager.getConnection(url);
+        Connection conn = DriverManager.getConnection(getUrl());
         try {
             PreparedStatement statement = conn.prepareStatement(oneRowQuery);
             ResultSet rs = statement.executeQuery();
