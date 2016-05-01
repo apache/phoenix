@@ -31,9 +31,11 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -45,13 +47,12 @@ import org.junit.Test;
  */
 
 
-public class DynamicUpsertIT extends BaseClientManagedTimeIT {
-
-    private static final String TABLE = "DynamicUpserts";
-    //private static final byte[] TABLE_BYTES = Bytes.toBytes(TABLE);
+public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
+    private static String TABLE;
 
     @BeforeClass
     public static void doBeforeTestSetup() throws Exception {
+    	TABLE = BaseTest.generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "create table if not exists  " + TABLE + "   (entry varchar not null primary key,"
@@ -59,7 +60,7 @@ public class DynamicUpsertIT extends BaseClientManagedTimeIT {
         conn.createStatement().execute(ddl);
         conn.close();
     }
-
+    
     /**
      * Test a simple upsert with a dynamic Column
      */

@@ -1,16 +1,13 @@
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.conf.Configuration;
+import javax.annotation.concurrent.NotThreadSafe;
+
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
-
-import javax.annotation.concurrent.NotThreadSafe;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Base class for tests that let HBase set timestamps.
@@ -33,26 +30,21 @@ import java.util.concurrent.locks.ReentrantLock;
 @Category(HBaseManagedTimeTableReuseTest.class)
 public class BaseHBaseManagedTimeTableReuseIT extends BaseTest {
 
-  protected static Configuration getTestClusterConfig() {
-    // don't want callers to modify config.
-    return new Configuration(config);
-  }
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+    }
 
-  @BeforeClass
-  public static void doSetup() throws Exception {
-    setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
-  }
+    @AfterClass
+    public static void doTeardown() throws Exception {
+        // no teardown since we are creating unique table names
+        // just destroy our test driver
+        destroyDriver();
+    }
 
-  @AfterClass
-  public static void doTeardown() throws Exception {
-    // no teardown since we are creating unique table names
-    // just destroy our test driver
-    destroyDriver();
-  }
-
-  @After
-  public void cleanUpAfterTest() throws Exception {
-    // no cleanup since we are using unique table names
-  }
+    @After
+    public void cleanUpAfterTest() throws Exception {
+        // no cleanup since we are using unique table names
+    }
 
 }
