@@ -21,29 +21,35 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.schema.types.PInteger;
 
+/**
+ * Tuple that uses the 
+ */
+public class PositionBasedMultiKeyValueTuple extends BaseTuple {
+    private BoundedSkipNullCellsList values;
 
-public class MultiKeyValueTuple extends BaseTuple {
-    private List<Cell> values;
+    public PositionBasedMultiKeyValueTuple() {}
     
-    public MultiKeyValueTuple(List<Cell> values) {
-        setKeyValues(values);
-    }
+//    public PositionBasedMultiKeyValueTuple(List<Cell> values, int minQualifier, int maxQualifier) {
+//        this.values = new BoundedSkipNullCellsList(minQualifier, maxQualifier);
+//        setKeyValues(values);
+//    }
     
-    public MultiKeyValueTuple() {
-    }
-
+//    public PositionBasedMultiKeyValueTuple(int minQualifier, int maxQualifier){
+//        this.values = new BoundedSkipNullCellsList(minQualifier, maxQualifier);
+//    }
+    
     /** Caller must not modify the list that is passed here */
     @Override
     public void setKeyValues(List<Cell> values) {
-        this.values = values;
+        assert values instanceof BoundedSkipNullCellsList;
+        this.values = (BoundedSkipNullCellsList)values;
     }
-    
+
     @Override
     public void getKey(ImmutableBytesWritable ptr) {
-        Cell value = values.get(0);
+        Cell value = values.getFirstCell();
         ptr.set(value.getRowArray(), value.getRowOffset(), value.getRowLength());
     }
 
@@ -54,7 +60,7 @@ public class MultiKeyValueTuple extends BaseTuple {
 
     @Override
     public Cell getValue(byte[] family, byte[] qualifier) {
-        return KeyValueUtil.getColumnLatest(GenericKeyValueBuilder.INSTANCE, values, family, qualifier);
+        return values.getCellForColumnQualifier((int)PInteger.INSTANCE.toObject(qualifier));
     }
 
     @Override
@@ -80,5 +86,4 @@ public class MultiKeyValueTuple extends BaseTuple {
             return false;
         ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
-    }
-}
+    }}

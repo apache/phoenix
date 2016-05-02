@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
@@ -70,7 +71,6 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -82,6 +82,7 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -224,13 +225,64 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if(offset!=null){
                 ScanUtil.addOffsetAttribute(scan, offset);
             }
-
+            if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+                Pair<Integer, Integer> minMaxQualifiers = getMinMaxQualifiers(scan, context);
+                if (minMaxQualifiers != null) {
+                    scan.setAttribute(BaseScannerRegionObserver.MIN_QUALIFIER, PInteger.INSTANCE.toBytes(minMaxQualifiers.getFirst()));
+                    scan.setAttribute(BaseScannerRegionObserver.MAX_QUALIFIER, PInteger.INSTANCE.toBytes(minMaxQualifiers.getSecond()));
+                }
+            }
             if (optimizeProjection) {
                 optimizeProjection(context, scan, table, statement);
             }
         }
     }
-
+    
+    private static Pair<Integer, Integer> getMinMaxQualifiers(Scan scan, StatementContext context) {
+        PTable table = context.getCurrentTable().getTable();
+        checkArgument(EncodedColumnsUtil.usesEncodedColumnNames(table), "Method should only be used for tables using encoded column names");
+        Integer minQualifier = null;
+        Integer maxQualifier = null;
+        for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
+            byte[] cq = whereCol.getSecond();
+            if (cq != null) {
+                int qualifier = (Integer)PInteger.INSTANCE.toObject(cq);
+                if (minQualifier == null && maxQualifier == null) {
+                    minQualifier = maxQualifier = qualifier;
+                } else {
+                    if (qualifier < minQualifier) {
+                        minQualifier = qualifier;
+                    } else if (qualifier > maxQualifier) {
+                        maxQualifier = qualifier;
+                    }
+                }
+            }
+        }
+        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
+        for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+            if (entry.getValue() != null) {
+                for (byte[] cq : entry.getValue()) {
+                    if (cq != null) {
+                        int qualifier = (Integer)PInteger.INSTANCE.toObject(cq);
+                        if (minQualifier == null && maxQualifier == null) {
+                            minQualifier = maxQualifier = qualifier;
+                        } else {
+                            if (qualifier < minQualifier) {
+                                minQualifier = qualifier;
+                            } else if (qualifier > maxQualifier) {
+                                maxQualifier = qualifier;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (minQualifier == null) {
+            return null;
+        }
+        return new Pair<>(minQualifier, maxQualifier);
+    }
+    
     private static void optimizeProjection(StatementContext context, Scan scan, PTable table, FilterableStatement statement) {
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         // columnsTracker contain cf -> qualifiers which should get returned.

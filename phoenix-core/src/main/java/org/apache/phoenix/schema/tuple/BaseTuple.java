@@ -17,11 +17,20 @@
  */
 package org.apache.phoenix.schema.tuple;
 
+import java.util.List;
+
+import org.apache.hadoop.hbase.Cell;
+
 
 public abstract class BaseTuple implements Tuple {
 
     @Override
     public long getSequenceValue(int index) {
+        throw new UnsupportedOperationException();
+    }
+    
+    @Override
+    public void setKeyValues(List<Cell> values) {
         throw new UnsupportedOperationException();
     }
 }

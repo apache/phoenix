@@ -918,9 +918,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isNamespaceMappedKv.getValueArray(),
                         isNamespaceMappedKv.getValueOffset(), isNamespaceMappedKv.getValueLength()));
         Cell storageSchemeKv = tableKeyValues[STORAGE_SCHEME_INDEX];
-        byte v = (byte)PTinyint.INSTANCE.toObject(storageSchemeKv.getValueArray(), storageSchemeKv.getValueOffset(), storageSchemeKv.getValueLength());
         //TODO: change this once we start having other values for storage schemes
-        StorageScheme storageScheme = storageSchemeKv == null ? StorageScheme.NON_ENCODED_COLUMN_NAMES : StorageScheme.fromSerializedValue(v);
+        StorageScheme storageScheme = storageSchemeKv == null ? StorageScheme.NON_ENCODED_COLUMN_NAMES : StorageScheme
+                .fromSerializedValue((byte)PTinyint.INSTANCE.toObject(storageSchemeKv.getValueArray(),
+                        storageSchemeKv.getValueOffset(), storageSchemeKv.getValueLength()));
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = new ArrayList<PTable>();
         List<PName> physicalTables = new ArrayList<PName>();

@@ -100,6 +100,8 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
     public static final String IGNORE_NEWER_MUTATIONS = "_IGNORE_NEWER_MUTATIONS";
     public final static String SCAN_OFFSET = "_RowOffset";
+    public final static String MIN_QUALIFIER = "_MinQualifier";
+    public final static String MAX_QUALIFIER = "_MaxQualifier";
     
     /**
      * Attribute name used to pass custom annotations in Scans and Mutations (later). Custom annotations

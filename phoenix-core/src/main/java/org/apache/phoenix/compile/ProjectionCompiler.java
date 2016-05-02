@@ -624,8 +624,7 @@ public class ProjectionCompiler {
          */
         private void compile() throws SQLException {
             final Set<SingleAggregateFunction> aggFuncSet = Sets.newHashSetWithExpectedSize(context.getExpressionManager().getExpressionCount());
-    
-            Iterator<Expression> expressions = context.getExpressionManager().getExpressions();
+        Iterator<Expression> expressions = context.getExpressionManager().getExpressions();
             while (expressions.hasNext()) {
                 Expression expression = expressions.next();
                 expression.accept(new SingleAggregateFunctionVisitor() {
