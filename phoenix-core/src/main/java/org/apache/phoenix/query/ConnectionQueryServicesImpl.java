@@ -160,7 +160,6 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SaltingUtil;
-import org.apache.phoenix.schema.SchemaAlreadyExistsException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
@@ -976,9 +975,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HBaseAdmin admin = getAdmin()) {
             NamespaceDescriptor namespaceDescriptor = null;
             try {
+                namespaceDescriptor = admin.getNamespaceDescriptor(schemaName);
+            } catch (org.apache.hadoop.hbase.NamespaceNotFoundException e) {
+
+            }
+            if (namespaceDescriptor == null) {
                 namespaceDescriptor = NamespaceDescriptor.create(schemaName).build();
                 admin.createNamespace(namespaceDescriptor);
-            } catch (org.apache.hadoop.hbase.NamespaceExistException e) {}
+            }
             return namespaceDescriptor;
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
@@ -1045,7 +1049,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return null;
                 }
                 if (isMetaTable) {
-                    checkClientServerCompatibility();
+                    checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                     /*
                      * Now we modify the table to add the split policy, since we know that the client and
                      * server and compatible. This works around HBASE-12570 which causes the cluster to be
@@ -1064,7 +1068,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return null;
             } else {
                 if (isMetaTable) {
-                    checkClientServerCompatibility();
+                    checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
                 }
 
                 if (!modifyExistingMetaData) {
@@ -1139,13 +1143,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return MetaDataUtil.areClientAndServerCompatible(serverVersion);
     }
 
-    private void checkClientServerCompatibility() throws SQLException {
+    private void checkClientServerCompatibility(byte[] metaTable) throws SQLException {
         StringBuilder buf = new StringBuilder("The following servers require an updated " + QueryConstants.DEFAULT_COPROCESS_PATH + " to be put in the classpath of HBase: ");
         boolean isIncompatible = false;
         int minHBaseVersion = Integer.MAX_VALUE;
+        boolean isSystemNamespaceMappingEnabled = false;
         try {
             List<HRegionLocation> locations = this
-                    .getAllTableRegions(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                    .getAllTableRegions(metaTable);
             Set<HRegionLocation> serverMap = Sets.newHashSetWithExpectedSize(locations.size());
             TreeMap<byte[], HRegionLocation> regionMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
             List<byte[]> regionKeys = Lists.newArrayListWithExpectedSize(locations.size());
@@ -1158,7 +1163,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
 
             HTableInterface ht = this
-                    .getTable(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
+                    .getTable(metaTable);
             final Map<byte[], Long> results =
                     ht.coprocessorService(MetaDataService.class, null, null, new Batch.Call<MetaDataService,Long>() {
                         @Override
@@ -1177,6 +1182,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     });
             for (Map.Entry<byte[],Long> result : results.entrySet()) {
                 // This is the "phoenix.jar" is in-place, but server is out-of-sync with client case.
+                long version = result.getValue();
+                isSystemNamespaceMappingEnabled |= MetaDataUtil.decodeSystemNamespaceMappingEnabled(version);
+
                 if (!isCompatible(result.getValue())) {
                     isIncompatible = true;
                     HRegionLocation name = regionMap.get(result.getKey());
@@ -1188,6 +1196,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     minHBaseVersion = MetaDataUtil.decodeHBaseVersion(result.getValue());
                 }
             }
+            if (isSystemNamespaceMappingEnabled != SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+                    getProps())) { throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
+                                    .setMessage(
+                                            "Ensure that config " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
+                                                    + " is consitent on client and server . Remember you should not be using client with version"
+                                                    + " less than v4.8 after you have upgraded your system table to map with namespace!!")
+                                    .build().buildException(); }
             lowestClusterHBaseVersion = minHBaseVersion;
         } catch (SQLException e) {
             throw e;
@@ -2336,11 +2352,40 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             metaConnection = new PhoenixConnection(
                                     ConnectionQueryServicesImpl.this, globalUrl, scnProps, newEmptyMetaData());
-                            
-                            if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
-                                    ConnectionQueryServicesImpl.this.getProps())) {
-                                ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps());
+                            validateProperties();
+                            try (HBaseAdmin admin = getAdmin()) {
+                                boolean unMappedSystemCatalogExists = admin.tableExists(SYSTEM_CATALOG_NAME_BYTES);
+                                boolean mappedSystemCatalogExists = admin
+                                        .tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true));
+                                if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+                                        ConnectionQueryServicesImpl.this.getProps())) {
+                                    if (unMappedSystemCatalogExists
+                                            && mappedSystemCatalogExists) { throw new SQLException(
+                                                    "Cannot initiate connection as table "
+                                                            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " and "
+                                                            + SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
+                                                                    true)
+                                                            + " both exists!! This could happen if upgrade killed in "
+                                                            + "between or you connected with old client "
+                                                            + "even after upgrading system tables. So delete one table which "
+                                                            + "you think is not appropiate(Be cautious in doing this)"); }
+                                    if (admin.tableExists(SYSTEM_CATALOG_NAME_BYTES)) {
+                                        //check if the server is already updated and have namespace config properly set. 
+                                        checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
+                                    }
+                                    metaConnection.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS "
+                                            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
+                                    ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps());
+                                } else if (mappedSystemCatalogExists) { throw new SQLExceptionInfo.Builder(
+                                                SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
+                                                        .setMessage("Cannot initiate connection as "
+                                                                + SchemaUtil.getPhysicalTableName(
+                                                                        SYSTEM_CATALOG_NAME_BYTES, true)
+                                                                + " is found but client does not have "
+                                                                + IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE + " enabled")
+                                                        .build().buildException(); }
                             }
+ 
                             try {
                                 metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_TABLE_METADATA);
 
@@ -2465,11 +2510,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
                                     clearCache();
                                 }
-                                try {
-                                    metaConnection.createStatement().executeUpdate(QueryConstants.CREATE_SYSTEM_SCHEMA);
-                                } catch (SchemaAlreadyExistsException sa) {
-
-                                }
                             }
 
                             int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
@@ -2565,6 +2605,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                     return null;
+                }
+
+                private void validateProperties() throws SQLException {
+                    ReadOnlyProps props = getProps();
+                    if (props.getBoolean(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
+                            QueryServicesOptions.DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
+                            && !props.getBoolean(IS_NAMESPACE_MAPPING_ENABLED,
+                                    QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED)) { throw new SQLExceptionInfo.Builder(
+                                            SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
+                                                    .setMessage("Cannot initiate connection as "
+                                                            + IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE + " is enabled but "
+                                                            + IS_NAMESPACE_MAPPING_ENABLED
+                                                            + " is found to be disabled at client!!")
+                                                    .build().buildException(); }
+
                 }
 
                 private void ensureSystemTablesUpgraded(ReadOnlyProps props)

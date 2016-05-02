@@ -1315,9 +1315,17 @@ public class UpgradeUtil {
                         ? "For system table " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
                                 + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                         : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
+        boolean srcTableExists=admin.tableExists(srcTableName);
         // we need to move physical table in actual namespace for TABLE and Index
-        if (admin.tableExists(srcTableName) && (PTableType.TABLE.equals(pTableType)
+        if (srcTableExists && (PTableType.TABLE.equals(pTableType)
                 || PTableType.INDEX.equals(pTableType) || PTableType.SYSTEM.equals(pTableType))) {
+            boolean destTableExists=admin.tableExists(destTableName);
+            if (destTableExists) {
+                String errorMsg = "Upgrade: Source: " + srcTableName + " and detination: " + destTableName
+                        + " table both exists!! drop one which is irrevalant(Be cautious)";
+                logger.error(errorMsg);
+                throw new IllegalArgumentException(errorMsg);
+            }
             String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
             logger.info("Disabling table " + srcTableName + " ..");
             admin.disableTable(srcTableName);
@@ -1365,15 +1373,17 @@ public class UpgradeUtil {
                                 .getName());) {
             String tableName = SchemaUtil.normalizeIdentifier(srcTable);
             String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
-
-            // Upgrade is not required if schemaName is not present.
-            if (schemaName.equals("")) { throw new IllegalArgumentException("Table doesn't have schema name"); }
-
             // Confirm table is not already upgraded
             PTable table = PhoenixRuntime.getTable(conn, tableName);
+            // Upgrade is not required if schemaName is not present.
+            if (schemaName.equals("") && !PTableType.VIEW
+                    .equals(table.getType())) { throw new IllegalArgumentException("Table doesn't have schema name"); }
+
             if (table.isNamespaceMapped()) { throw new IllegalArgumentException("Table is already upgraded"); }
-            logger.info(String.format("Creating schema %s..", schemaName));
-            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+            if (!schemaName.equals("")) {
+                logger.info(String.format("Creating schema %s..", schemaName));
+                conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+            }
             String newPhysicalTablename = SchemaUtil.normalizeIdentifier(SchemaUtil
                     .getPhysicalTableName(table.getPhysicalName().getString(), readOnlyProps).getNameAsString());
             logger.info(String.format("Upgrading %s %s..", table.getType(), tableName));

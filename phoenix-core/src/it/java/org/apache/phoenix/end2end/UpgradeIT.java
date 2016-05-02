@@ -129,7 +129,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             String indexName = "IDX";
             String localIndexName = "LIDX";
             String[] tableNames = new String[] { phoenixFullTableName, schemaName + "." + indexName,
-                    schemaName + "." + localIndexName, "diff.v", "test.v" };
+                    schemaName + "." + localIndexName, "diff.v", "test.v","v"};
             conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
                     + "(k VARCHAR PRIMARY KEY, v INTEGER, f INTEGER, g INTEGER NULL, h INTEGER NULL)");
             PreparedStatement upsertStmt = conn
@@ -150,6 +150,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             conn.createStatement().execute("CREATE VIEW diff.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // creating view in schema 'test'
             conn.createStatement().execute("CREATE VIEW test.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // Creating index on views
             conn.createStatement().execute("create index v_idx on diff.v(col)");
             conn.createStatement().execute("create index v_idx on test.v(col)");
