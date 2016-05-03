@@ -23,7 +23,10 @@ public class CalciteDMLIT extends BaseCalciteIT {
                        "  PhoenixTableModify(table=[[phoenix, ATABLE]], operation=[INSERT], updateColumnList=[[]], flattened=[false])\n" +
                        "    PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[null], B_STRING=[null], A_INTEGER=[null], A_DATE=[null], A_TIME=[null], A_TIMESTAMP=[null], X_DECIMAL=[null], X_LONG=[null], X_INTEGER=[null], Y_INTEGER=[null], A_BYTE=[null], A_SHORT=[null], A_FLOAT=[null], A_DOUBLE=[null], A_UNSIGNED_FLOAT=[null], A_UNSIGNED_DOUBLE=[null])\n" +
                        "      PhoenixValues(tuples=[[{ '1              ', '1              ' }]])\n")
-            //.executeUpdate()
+            .executeUpdate()
             .close();
+//        start(false, 1L).sql("select organization_id, entity_id from aTable")
+//            .resultIs(new Object[][] {{"1              ", "1              "}})
+//            .close();
     }
 }

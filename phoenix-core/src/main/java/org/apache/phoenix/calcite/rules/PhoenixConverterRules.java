@@ -75,6 +75,7 @@ public class PhoenixConverterRules {
         PhoenixToEnumerableConverterRule.SERVER,
         PhoenixToEnumerableConverterRule.SERVERJOIN,
         PhoenixToEnumerableConverterRule.CLIENT,
+        PhoenixToEnumerableConverterRule.MUTATION,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
@@ -100,6 +101,7 @@ public class PhoenixConverterRules {
         PhoenixToEnumerableConverterRule.SERVER,
         PhoenixToEnumerableConverterRule.SERVERJOIN,
         PhoenixToEnumerableConverterRule.CLIENT,
+        PhoenixToEnumerableConverterRule.MUTATION,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
@@ -842,7 +844,7 @@ public class PhoenixConverterRules {
             
             return new PhoenixTableModify(
                     modify.getCluster(),
-                    modify.getTraitSet().replace(PhoenixConvention.CLIENT),
+                    modify.getTraitSet().replace(PhoenixConvention.MUTATION),
                     modify.getTable(),
                     modify.getCatalogReader(),
                     convert(
@@ -866,6 +868,8 @@ public class PhoenixConverterRules {
                 new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERJOIN);
         public static final ConverterRule CLIENT =
                 new PhoenixToEnumerableConverterRule(PhoenixConvention.CLIENT);
+        public static final ConverterRule MUTATION =
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.MUTATION);
 
         private PhoenixToEnumerableConverterRule(Convention inputConvention) {
             super(RelNode.class, inputConvention, EnumerableConvention.INSTANCE,

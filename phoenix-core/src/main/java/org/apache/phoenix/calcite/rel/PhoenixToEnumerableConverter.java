@@ -74,7 +74,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
         //   return CalciteRuntime.toEnumerable(iterator);
         final BlockBuilder list = new BlockBuilder();
         StatementPlan plan = makePlan((PhoenixRel)getInput());
-        Expression var = stash(implementor, plan, QueryPlan.class);
+        Expression var = stash(implementor, plan, StatementPlan.class);
         final RelDataType rowType = getRowType();
         final PhysType physType =
             PhysTypeImpl.of(

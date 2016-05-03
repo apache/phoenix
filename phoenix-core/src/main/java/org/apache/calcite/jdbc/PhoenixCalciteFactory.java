@@ -97,6 +97,17 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                     CalciteSchema.createRootSchema(true, false), typeFactory);
         }
         
+        public void commit() throws SQLException {
+            for (String subSchemaName : getRootSchema().getSubSchemaNames()) {               
+                try {
+                    PhoenixSchema phoenixSchema = getRootSchema()
+                            .getSubSchema(subSchemaName).unwrap(PhoenixSchema.class);
+                    phoenixSchema.pc.commit();
+                } catch (ClassCastException e) {
+                }
+            }
+        }
+        
         public void close() throws SQLException {
             for (String subSchemaName : getRootSchema().getSubSchemaNames()) {               
                 try {
