@@ -161,7 +161,6 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             return this;
         }
 
-
         public boolean execute() throws SQLException {
             final Statement statement = start.getConnection().createStatement();
             final boolean execute = statement.execute(sql);
@@ -177,6 +176,13 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             resultSet.close();
             statement.close();
             return list;
+        }
+        
+        public Sql executeUpdate() throws SQLException {
+            final Statement statement = start.getConnection().createStatement();
+            statement.executeUpdate(sql);
+            statement.close();
+            return this;
         }
 
         public void close() {

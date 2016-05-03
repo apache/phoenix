@@ -7,7 +7,6 @@ import java.util.Stack;
 
 import org.apache.phoenix.calcite.PhoenixSequence;
 import org.apache.phoenix.calcite.TableMapping;
-import org.apache.phoenix.calcite.rel.PhoenixRel.ImplementorContext;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
@@ -31,7 +30,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDataType;
 import com.google.common.collect.Lists;
 
-public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
+public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
     private final RuntimeContext runtimeContext;
 	private Stack<ImplementorContext> contextStack;
 	private SequenceManager sequenceManager;
@@ -43,7 +42,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRel.Implementor {
 	}
 	
     @Override
-    public QueryPlan visitInput(int i, PhoenixRel input) {
+    public QueryPlan visitInput(int i, PhoenixQueryRel input) {
         return input.implement(this);
     }
 

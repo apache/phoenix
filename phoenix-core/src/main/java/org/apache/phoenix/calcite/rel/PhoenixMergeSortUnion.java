@@ -23,7 +23,7 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
-public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
+public class PhoenixMergeSortUnion extends Union implements PhoenixQueryRel {
 	public final RelCollation collation;
     
     public static PhoenixMergeSortUnion create(final List<RelNode> inputs,
@@ -65,10 +65,10 @@ public class PhoenixMergeSortUnion extends Union implements PhoenixRel {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         List<QueryPlan> subPlans = Lists.newArrayListWithExpectedSize(inputs.size());
         for (Ord<RelNode> input : Ord.zip(inputs)) {
-            subPlans.add(implementor.visitInput(input.i, (PhoenixRel) input.e));
+            subPlans.add(implementor.visitInput(input.i, (PhoenixQueryRel) input.e));
         }
         
         final OrderBy orderBy = PhoenixAbstractSort.getOrderBy(collation, implementor, null);

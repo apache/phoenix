@@ -26,7 +26,7 @@ import com.google.common.collect.Lists;
  * Implementation of {@link org.apache.calcite.rel.core.Project}
  * relational expression in Phoenix.
  */
-abstract public class PhoenixAbstractProject extends Project implements PhoenixRel {
+abstract public class PhoenixAbstractProject extends Project implements PhoenixQueryRel {
     protected PhoenixAbstractProject(RelOptCluster cluster, RelTraitSet traits, RelNode input, List<? extends RexNode> projects, RelDataType rowType) {
         super(cluster, traits, input, projects, rowType);
     }
@@ -49,7 +49,7 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixR
         return ImmutableIntList.copyOf(bitSet.asList());
     }
     
-    protected TupleProjector project(Implementor implementor) {        
+    protected TupleProjector project(PhoenixRelImplementor implementor) {        
         List<Expression> exprs = Lists.newArrayList();
         for (RexNode project : getProjects()) {
             exprs.add(CalciteUtils.toExpression(project, implementor));

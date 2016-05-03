@@ -20,6 +20,7 @@ import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.CorrelateVariableImpl;
 import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementor.ImplementorContext;
 import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.CorrelatePlan;
@@ -28,7 +29,7 @@ import org.apache.phoenix.schema.PTable;
 
 import com.google.common.base.Supplier;
 
-public class PhoenixCorrelate extends Correlate implements PhoenixRel {
+public class PhoenixCorrelate extends Correlate implements PhoenixQueryRel {
     
     public static PhoenixCorrelate create(final RelNode left, final RelNode right, 
             CorrelationId correlationId, ImmutableBitSet requiredColumns, 
@@ -71,16 +72,16 @@ public class PhoenixCorrelate extends Correlate implements PhoenixRel {
     }
     
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, true, ImmutableIntList.identity(getLeft().getRowType().getFieldCount())));
-        QueryPlan leftPlan = implementor.visitInput(0, (PhoenixRel) getLeft());
+        QueryPlan leftPlan = implementor.visitInput(0, (PhoenixQueryRel) getLeft());
         PTable leftTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
 
         implementor.getRuntimeContext().defineCorrelateVariable(getCorrelVariable(), new CorrelateVariableImpl(implementor.getTableMapping()));
 
         implementor.pushContext(new ImplementorContext(false, true, ImmutableIntList.identity(getRight().getRowType().getFieldCount())));
-        QueryPlan rightPlan = implementor.visitInput(1, (PhoenixRel) getRight());
+        QueryPlan rightPlan = implementor.visitInput(1, (PhoenixQueryRel) getRight());
         PTable rightTable = implementor.getTableMapping().getPTable();
         implementor.popContext();
                 

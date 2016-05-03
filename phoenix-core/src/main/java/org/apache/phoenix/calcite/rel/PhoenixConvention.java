@@ -18,7 +18,10 @@ public enum PhoenixConvention implements Convention {
     SERVERJOIN,
     
     /** Client convention*/
-    CLIENT;
+    CLIENT,
+    
+    /** Mutation convention*/
+    MUTATION;
 
     @Override
     public RelTraitDef<?> getTraitDef() {
@@ -27,7 +30,7 @@ public enum PhoenixConvention implements Convention {
 
     @Override
     public boolean satisfies(RelTrait trait) {
-        return this == trait || trait == GENERIC;
+        return this == trait || (this != MUTATION && trait == GENERIC);
     }
 
     @Override

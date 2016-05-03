@@ -32,10 +32,12 @@ import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalSort;
+import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.PhoenixTable;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
@@ -51,6 +53,7 @@ import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
 import org.apache.phoenix.calcite.rel.PhoenixServerSemiJoin;
 import org.apache.phoenix.calcite.rel.PhoenixServerSort;
+import org.apache.phoenix.calcite.rel.PhoenixTableModify;
 import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
 import org.apache.phoenix.calcite.rel.PhoenixUncollect;
 import org.apache.phoenix.calcite.rel.PhoenixUnion;
@@ -90,6 +93,7 @@ public class PhoenixConverterRules {
         PhoenixValuesRule.INSTANCE,
         PhoenixUncollectRule.INSTANCE,
         PhoenixCorrelateRule.INSTANCE,
+        PhoenixTableModifyRule.INSTANCE,
     };
 
     public static final RelOptRule[] CONVERTIBLE_RULES = {
@@ -114,6 +118,7 @@ public class PhoenixConverterRules {
         PhoenixValuesRule.INSTANCE,
         PhoenixUncollectRule.INSTANCE,
         PhoenixCorrelateRule.INSTANCE,
+        PhoenixTableModifyRule.INSTANCE,
     };
 
     /** Base class for planner rules that convert a relational expression to
@@ -814,6 +819,40 @@ public class PhoenixConverterRules {
      }
      */
     
+
+    /**
+     * Rule to convert a {@link org.apache.calcite.rel.logical.LogicalTableModify} to a
+     * {@link PhoenixTableModify}.
+     */
+    public static class PhoenixTableModifyRule extends PhoenixConverterRule {
+        
+        private static final PhoenixTableModifyRule INSTANCE = new PhoenixTableModifyRule();
+
+        private PhoenixTableModifyRule() {
+            super(LogicalTableModify.class, Convention.NONE, 
+                    PhoenixConvention.CLIENT, "PhoenixTableModifyRule");
+        }
+
+        public RelNode convert(RelNode rel) {
+            final LogicalTableModify modify = (LogicalTableModify) rel;
+            final PhoenixTable phoenixTable = modify.getTable().unwrap(PhoenixTable.class);
+            if (phoenixTable == null) {
+                return null;
+            }
+            
+            return new PhoenixTableModify(
+                    modify.getCluster(),
+                    modify.getTraitSet().replace(PhoenixConvention.CLIENT),
+                    modify.getTable(),
+                    modify.getCatalogReader(),
+                    convert(
+                            modify.getInput(),
+                            modify.getTraitSet().replace(PhoenixConvention.GENERIC)),
+                    modify.getOperation(),
+                    modify.getUpdateColumnList(),
+                    modify.isFlattened());
+        }
+    }
 
     /**
      * Rule to convert a relational expression from

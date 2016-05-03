@@ -38,7 +38,7 @@ public class PhoenixTemporarySort extends PhoenixAbstractSort {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         throw new UnsupportedOperationException();
     }
 }

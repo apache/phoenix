@@ -13,7 +13,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 
-abstract public class PhoenixAbstractSemiJoin extends SemiJoin implements PhoenixRel {
+abstract public class PhoenixAbstractSemiJoin extends SemiJoin implements PhoenixQueryRel {
 
     protected PhoenixAbstractSemiJoin(RelOptCluster cluster, RelTraitSet traitSet,
             RelNode left, RelNode right, RexNode condition,
@@ -29,10 +29,10 @@ abstract public class PhoenixAbstractSemiJoin extends SemiJoin implements Phoeni
               : rightKeys;
     }
     
-    protected QueryPlan implementInput(Implementor implementor, int index, List<Expression> conditionExprs) {
+    protected QueryPlan implementInput(PhoenixRelImplementor implementor, int index, List<Expression> conditionExprs) {
         assert index <= 1;
         
-        PhoenixRel input = index == 0 ? (PhoenixRel) left : (PhoenixRel) right;
+        PhoenixQueryRel input = index == 0 ? (PhoenixQueryRel) left : (PhoenixQueryRel) right;
         ImmutableIntList keys = index == 0 ? leftKeys : rightKeys;
         QueryPlan plan = implementor.visitInput(0, input);
         for (Iterator<Integer> iter = keys.iterator(); iter.hasNext();) {

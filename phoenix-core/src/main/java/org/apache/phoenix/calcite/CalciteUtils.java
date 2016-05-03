@@ -34,7 +34,7 @@ import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Util;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.calcite.rel.PhoenixRel.Implementor;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -208,7 +208,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.AND, new ExpressionFactory() {
 
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 try {
                     return AndExpression.create(convertChildren((RexCall) node, implementor));
                 } catch (SQLException e) {
@@ -220,7 +220,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.OR, new ExpressionFactory() {
 
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return new OrExpression(convertChildren((RexCall) node, implementor));
             }
             
@@ -228,7 +228,7 @@ public class CalciteUtils {
 		EXPRESSION_MAP.put(SqlKind.EQUALS, new ExpressionFactory() {
 
 			@Override
-			public Expression newExpression(RexNode node, Implementor implementor) {
+			public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 				try {
 					return ComparisonExpression.create(CompareOp.EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
@@ -241,7 +241,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.NOT_EQUALS, new ExpressionFactory() {
 
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
                     return ComparisonExpression.create(CompareOp.NOT_EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
@@ -254,7 +254,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.GREATER_THAN, new ExpressionFactory() {
 
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
                     return ComparisonExpression.create(CompareOp.GREATER, convertChildren((RexCall) node, implementor), ptr, implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
@@ -267,7 +267,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.GREATER_THAN_OR_EQUAL, new ExpressionFactory() {
 
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
                     return ComparisonExpression.create(CompareOp.GREATER_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
@@ -280,7 +280,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.LESS_THAN, new ExpressionFactory() {
 
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
                     return ComparisonExpression.create(CompareOp.LESS, convertChildren((RexCall) node, implementor), ptr, implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
@@ -293,7 +293,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.LESS_THAN_OR_EQUAL, new ExpressionFactory() {
 
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 try {
                     return ComparisonExpression.create(CompareOp.LESS_OR_EQUAL, convertChildren((RexCall) node, implementor), ptr, implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
@@ -307,7 +307,7 @@ public class CalciteUtils {
 
             @SuppressWarnings("rawtypes")
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 try {
                     List<Expression> children = convertChildren((RexCall) node, implementor);
                     Expression expr = null;
@@ -372,7 +372,7 @@ public class CalciteUtils {
 
             @SuppressWarnings("rawtypes")
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 try {
                     List<Expression> children = convertChildren((RexCall) node, implementor);
                     Expression expr = null;
@@ -485,7 +485,7 @@ public class CalciteUtils {
 
             @SuppressWarnings("rawtypes")
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 try {
                     List<Expression> children = convertChildren((RexCall) node, implementor);
                     Expression expr = null;
@@ -532,7 +532,7 @@ public class CalciteUtils {
 
             @SuppressWarnings("rawtypes")
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 try {
                     List<Expression> children = convertChildren((RexCall) node, implementor);
                     Expression expr = null;
@@ -579,7 +579,7 @@ public class CalciteUtils {
 
 			@SuppressWarnings("rawtypes")
             @Override
-			public Expression newExpression(RexNode node, Implementor implementor) {
+			public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
 				RexLiteral lit = (RexLiteral) node;
                 PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
 				Object o = lit.getValue();
@@ -599,7 +599,7 @@ public class CalciteUtils {
 		EXPRESSION_MAP.put(SqlKind.INPUT_REF, new ExpressionFactory() {
 
 			@Override
-			public Expression newExpression(RexNode node, Implementor implementor) {
+			public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
 				RexInputRef ref = (RexInputRef) node;
 				int index = ref.getIndex();
 				return implementor.newColumnExpression(index);
@@ -609,7 +609,7 @@ public class CalciteUtils {
 		EXPRESSION_MAP.put(SqlKind.FIELD_ACCESS, new ExpressionFactory() {
             @SuppressWarnings("rawtypes")
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 RexFieldAccess fieldAccess = (RexFieldAccess) node;
                 RexNode refExpr = fieldAccess.getReferenceExpr();
                 if (refExpr.getKind() != SqlKind.CORREL_VARIABLE) {
@@ -626,7 +626,7 @@ public class CalciteUtils {
             @SuppressWarnings("rawtypes")
             @Override
             public Expression newExpression(RexNode node,
-                    Implementor implementor) {                
+                    PhoenixRelImplementor implementor) {                
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
                 try {
@@ -639,7 +639,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.OTHER_FUNCTION, new ExpressionFactory() {
             @Override
             public Expression newExpression(RexNode node,
-                    Implementor implementor) {
+                    PhoenixRelImplementor implementor) {
                 RexCall call = (RexCall) node;
                 List<Expression> children = convertChildren(call, implementor);
                 SqlOperator op = call.getOperator();
@@ -675,32 +675,32 @@ public class CalciteUtils {
 		});
         EXPRESSION_MAP.put(SqlKind.NOT, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return new NotExpression(convertChildren((RexCall) node, implementor));
             }
         });
         EXPRESSION_MAP.put(SqlKind.IS_TRUE, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 return children.get(0);
             }
         });
         EXPRESSION_MAP.put(SqlKind.IS_NOT_TRUE, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return new NotExpression(convertChildren((RexCall) node, implementor));
             }
         });
         EXPRESSION_MAP.put(SqlKind.IS_FALSE, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return new NotExpression(convertChildren((RexCall) node, implementor));
             }
         });
         EXPRESSION_MAP.put(SqlKind.IS_NOT_FALSE, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 return children.get(0);
             }
@@ -708,26 +708,26 @@ public class CalciteUtils {
         //TODO different kind of LikeExpression based on configuration
         EXPRESSION_MAP.put(SqlKind.LIKE, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 return new StringBasedLikeExpression(children);
             }
         });
         EXPRESSION_MAP.put(SqlKind.IS_NULL, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return new IsNullExpression(convertChildren((RexCall) node, implementor), false);
             }
         });
         EXPRESSION_MAP.put(SqlKind.IS_NOT_NULL, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return new IsNullExpression(convertChildren((RexCall) node, implementor), true);
             }
         });
         EXPRESSION_MAP.put(SqlKind.TRIM, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 //TODO Phoenix only support separate arguments.
                 try {
                     return new TrimFunction(convertChildren((RexCall) node, implementor));
@@ -739,7 +739,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.CEIL, new ExpressionFactory() {
             @SuppressWarnings("rawtypes")
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 //TODO Phoenix only support separate arguments.
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 final Expression firstChild = children.get(0);
@@ -763,7 +763,7 @@ public class CalciteUtils {
         EXPRESSION_MAP.put(SqlKind.FLOOR, new ExpressionFactory() {
             @SuppressWarnings("rawtypes")
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 // TODO Phoenix only support separate arguments.
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 final Expression firstChild = children.get(0);
@@ -783,7 +783,7 @@ public class CalciteUtils {
         });
         EXPRESSION_MAP.put(SqlKind.CURRENT_VALUE, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 RexCall call = (RexCall) node;
                 RexLiteral operand = (RexLiteral) call.getOperands().get(0);
                 List<String> name = Util.stringToList((String) operand.getValue2());
@@ -794,7 +794,7 @@ public class CalciteUtils {
         });
         EXPRESSION_MAP.put(SqlKind.NEXT_VALUE, new ExpressionFactory() {
             @Override
-            public Expression newExpression(RexNode node, Implementor implementor) {
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 RexCall call = (RexCall) node;
                 RexLiteral operand = (RexLiteral) call.getOperands().get(0);
                 List<String> name = Util.stringToList((String) operand.getValue2());
@@ -857,7 +857,7 @@ public class CalciteUtils {
         });
     }
     
-    private static List<Expression> convertChildren(RexCall call, Implementor implementor) {
+    private static List<Expression> convertChildren(RexCall call, PhoenixRelImplementor implementor) {
         List<Expression> children = Lists.newArrayListWithExpectedSize(call.getOperands().size());
         for (RexNode op : call.getOperands()) {
             Expression child = getFactory(op).newExpression(op, implementor);
@@ -867,7 +867,7 @@ public class CalciteUtils {
     }
     
     @SuppressWarnings("rawtypes")
-    private static Expression cast(PDataType targetDataType, Expression childExpr, Implementor implementor) throws SQLException {
+    private static Expression cast(PDataType targetDataType, Expression childExpr, PhoenixRelImplementor implementor) throws SQLException {
         PDataType fromDataType = childExpr.getDataType();
         
         Expression expr = childExpr;
@@ -921,13 +921,13 @@ public class CalciteUtils {
         return true;
     }
 
-	public static Expression toExpression(RexNode node, Implementor implementor) {
+	public static Expression toExpression(RexNode node, PhoenixRelImplementor implementor) {
 		ExpressionFactory eFactory = getFactory(node);
 		Expression expression = eFactory.newExpression(node, implementor);
 		return expression;
 	}
 	
-	public static AggregateFunction toAggregateFunction(SqlAggFunction aggFunc, List<Integer> args, Implementor implementor) {
+	public static AggregateFunction toAggregateFunction(SqlAggFunction aggFunc, List<Integer> args, PhoenixRelImplementor implementor) {
 	    FunctionFactory fFactory = getFactory(aggFunc);
 	    List<Expression> exprs = Lists.newArrayListWithExpectedSize(args.size());
 	    for (Integer index : args) {
@@ -938,7 +938,7 @@ public class CalciteUtils {
 	}
 	
 	public static interface ExpressionFactory {
-		public Expression newExpression(RexNode node, Implementor implementor);
+		public Expression newExpression(RexNode node, PhoenixRelImplementor implementor);
 	}
 	
 	public static interface FunctionFactory {

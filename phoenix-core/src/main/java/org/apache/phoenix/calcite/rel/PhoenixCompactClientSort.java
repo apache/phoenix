@@ -48,11 +48,11 @@ public class PhoenixCompactClientSort extends PhoenixAbstractSort {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         if (this.offset != null)
             throw new UnsupportedOperationException();
             
-        QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
+        QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
         assert plan instanceof TupleProjectionPlan;
         
         // PhoenixServerAggregate wraps the AggregatePlan with a TupleProjectionPlan,

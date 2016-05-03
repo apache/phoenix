@@ -55,7 +55,7 @@ import com.google.common.collect.Lists;
  * Implementation of {@link org.apache.calcite.rel.core.Values}
  * relational expression in Phoenix.
  */
-public class PhoenixValues extends Values implements PhoenixRel {
+public class PhoenixValues extends Values implements PhoenixQueryRel {
     
     private static final PhoenixConnection phoenixConnection;
     static {
@@ -107,7 +107,7 @@ public class PhoenixValues extends Values implements PhoenixRel {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         List<Tuple> literalResult = Lists.newArrayList();
         Iterator<ImmutableList<RexLiteral>> iter = getTuples().iterator();
         Tuple baseTuple = new SingleKeyValueTuple(KeyValue.LOWESTKEY);

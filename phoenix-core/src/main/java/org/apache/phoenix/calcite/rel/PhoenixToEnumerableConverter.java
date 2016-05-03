@@ -25,10 +25,11 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.BuiltInMethod;
-import org.apache.phoenix.calcite.rel.PhoenixRel.ImplementorContext;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementor.ImplementorContext;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.execute.DelegateQueryPlan;
 import org.apache.phoenix.execute.RuntimeContextImpl;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
@@ -72,7 +73,7 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
         //   ResultIterator iterator = root.get("x");
         //   return CalciteRuntime.toEnumerable(iterator);
         final BlockBuilder list = new BlockBuilder();
-        QueryPlan plan = makePlan((PhoenixRel)getInput());
+        StatementPlan plan = makePlan((PhoenixRel)getInput());
         Expression var = stash(implementor, plan, QueryPlan.class);
         final RelDataType rowType = getRowType();
         final PhysType physType =
@@ -89,11 +90,15 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
         return implementor.result(physType, list.toBlock());
     }
     
-    static QueryPlan makePlan(PhoenixRel rel) {
-        final PhoenixRel.Implementor phoenixImplementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
+    static StatementPlan makePlan(PhoenixRel rel) {
+        final PhoenixRelImplementor phoenixImplementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
         phoenixImplementor.pushContext(new ImplementorContext(true, false, ImmutableIntList.identity(rel.getRowType().getFieldCount())));
-        final QueryPlan plan = phoenixImplementor.visitInput(0, rel);
-        return new DelegateQueryPlan(plan) {
+        final StatementPlan plan = rel.implement(phoenixImplementor);
+        if (!(plan instanceof QueryPlan)) {
+            return plan;
+        }
+            
+        return new DelegateQueryPlan((QueryPlan) plan) {
             @Override
             public ResultIterator iterator() throws SQLException {
                 return iterator(DefaultParallelScanGrouper.getInstance());

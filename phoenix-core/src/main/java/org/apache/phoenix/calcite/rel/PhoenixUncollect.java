@@ -21,7 +21,7 @@ import org.apache.phoenix.schema.types.PInteger;
 
 import com.google.common.collect.Lists;
 
-public class PhoenixUncollect extends Uncollect implements PhoenixRel {
+public class PhoenixUncollect extends Uncollect implements PhoenixQueryRel {
     
     public static PhoenixUncollect create(RelNode input, boolean withOrdinality) {
         RelOptCluster cluster = input.getCluster();
@@ -49,8 +49,8 @@ public class PhoenixUncollect extends Uncollect implements PhoenixRel {
     }
     
     @Override
-    public QueryPlan implement(Implementor implementor) {
-        QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
+        QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
         Expression arrayExpression = implementor.newColumnExpression(0);
         @SuppressWarnings("rawtypes")
         PDataType baseType = PDataType.fromTypeId(arrayExpression.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE);

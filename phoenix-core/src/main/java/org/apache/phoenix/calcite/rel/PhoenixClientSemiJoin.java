@@ -18,6 +18,7 @@ import org.apache.calcite.util.ImmutableIntList;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementor.ImplementorContext;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
@@ -31,8 +32,7 @@ import org.apache.phoenix.schema.TableRef;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
 
-public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
-        PhoenixRel {
+public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin {
     
     public static PhoenixClientSemiJoin create(
             final RelNode left, final RelNode right, RexNode condition) {
@@ -94,7 +94,7 @@ public class PhoenixClientSemiJoin extends PhoenixAbstractSemiJoin implements
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         List<Expression> leftExprs = Lists.<Expression> newArrayList();
         List<Expression> rightExprs = Lists.<Expression> newArrayList();
 

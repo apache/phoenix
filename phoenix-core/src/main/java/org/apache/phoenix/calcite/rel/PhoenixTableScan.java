@@ -54,7 +54,7 @@ import com.google.common.collect.ImmutableList.Builder;
 /**
  * Scan of a Phoenix table.
  */
-public class PhoenixTableScan extends TableScan implements PhoenixRel {
+public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
     public enum ScanOrder {
         NONE,
         FORWARD,
@@ -123,7 +123,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
                 //    time when the correlate variable has not been defined yet.
                 // 2) get a guess of ScanRange even if the runtime value is absent.
                 // 3) test whether this dynamic filter is worth a recompile at runtime.
-                Implementor tmpImplementor = new PhoenixRelImplementorImpl(null) {                    
+                PhoenixRelImplementor tmpImplementor = new PhoenixRelImplementorImpl(null) {                    
                     @SuppressWarnings("rawtypes")
                     @Override
                     public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {
@@ -244,7 +244,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixRel {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         final PhoenixTable phoenixTable = table.unwrap(PhoenixTable.class);
         TableMapping tableMapping = phoenixTable.tableMapping;
         implementor.setTableMapping(tableMapping);

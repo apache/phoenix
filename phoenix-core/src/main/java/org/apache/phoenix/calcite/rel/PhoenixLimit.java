@@ -22,7 +22,7 @@ import org.apache.phoenix.execute.ClientScanPlan;
 
 import com.google.common.base.Supplier;
 
-public class PhoenixLimit extends SingleRel implements PhoenixRel {
+public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
     public final RexNode offset;
     public final RexNode fetch;
     
@@ -81,8 +81,8 @@ public class PhoenixLimit extends SingleRel implements PhoenixRel {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
-        QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
+        QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
         int fetchValue = RexLiteral.intValue(fetch);
         if (plan.getLimit() == null) {
             return plan.limit(fetchValue);

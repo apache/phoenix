@@ -28,7 +28,7 @@ import com.google.common.collect.Lists;
  *
  * <p>Like {@code Sort}, it also supports LIMIT and OFFSET.
  */
-abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
+abstract public class PhoenixAbstractSort extends Sort implements PhoenixQueryRel {
     
     protected PhoenixAbstractSort(RelOptCluster cluster, RelTraitSet traits, RelNode child, RelCollation collation) {
         super(cluster, traits, child, collation, null, null);
@@ -44,7 +44,7 @@ abstract public class PhoenixAbstractSort extends Sort implements PhoenixRel {
                 Util.nLogN(rowCount) * bytesPerRow, rowCount, 0);
     }
 
-    protected static OrderBy getOrderBy(RelCollation collation, Implementor implementor, TupleProjector tupleProjector) {
+    protected static OrderBy getOrderBy(RelCollation collation, PhoenixRelImplementor implementor, TupleProjector tupleProjector) {
         List<OrderByExpression> orderByExpressions = Lists.newArrayList();
         for (RelFieldCollation fieldCollation : collation.getFieldCollations()) {
             Expression expr = tupleProjector == null ? 

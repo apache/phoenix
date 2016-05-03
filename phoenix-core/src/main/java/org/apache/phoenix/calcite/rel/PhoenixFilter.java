@@ -28,7 +28,7 @@ import com.google.common.base.Supplier;
  * Implementation of {@link org.apache.calcite.rel.core.Filter}
  * relational expression in Phoenix.
  */
-public class PhoenixFilter extends Filter implements PhoenixRel {
+public class PhoenixFilter extends Filter implements PhoenixQueryRel {
     
     public static PhoenixFilter create(final RelNode input, final RexNode condition) {
         final RelOptCluster cluster = input.getCluster();
@@ -60,12 +60,12 @@ public class PhoenixFilter extends Filter implements PhoenixRel {
         return super.computeSelfCost(planner, mq).multiplyBy(PHOENIX_FACTOR);
     }
 
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         ImmutableIntList columnRefList = implementor.getCurrentContext().columnRefList;
         ImmutableBitSet bitSet = InputFinder.analyze(condition).inputBitSet.addAll(columnRefList).build();
         columnRefList = ImmutableIntList.copyOf(bitSet.asList());
         implementor.pushContext(implementor.getCurrentContext().withColumnRefList(columnRefList));
-        QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
+        QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
         implementor.popContext();
         Expression expr = CalciteUtils.toExpression(condition, implementor);
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(),

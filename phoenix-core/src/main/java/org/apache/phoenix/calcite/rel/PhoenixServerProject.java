@@ -13,6 +13,7 @@ import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementor.ImplementorContext;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.execute.TupleProjector;
@@ -58,9 +59,9 @@ public class PhoenixServerProject extends PhoenixAbstractProject {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         implementor.pushContext(new ImplementorContext(implementor.getCurrentContext().retainPKColumns, false, getColumnRefList()));
-        QueryPlan plan = implementor.visitInput(0, (PhoenixRel) getInput());
+        QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
         implementor.popContext();
         
         assert (plan instanceof ScanPlan);

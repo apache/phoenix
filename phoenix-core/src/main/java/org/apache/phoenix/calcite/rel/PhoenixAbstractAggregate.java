@@ -41,7 +41,7 @@ import com.google.common.collect.Sets;
  * Implementation of {@link org.apache.calcite.rel.core.Aggregate}
  * relational expression in Phoenix.
  */
-abstract public class PhoenixAbstractAggregate extends Aggregate implements PhoenixRel {
+abstract public class PhoenixAbstractAggregate extends Aggregate implements PhoenixQueryRel {
     
     public static boolean isSingleValueCheckAggregate(Aggregate aggregate) {
         List<AggregateCall> aggCalls = aggregate.getAggCallList();
@@ -139,7 +139,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         return ImmutableIntList.copyOf(columnRefList);
     }
     
-    protected GroupBy getGroupBy(Implementor implementor) {
+    protected GroupBy getGroupBy(PhoenixRelImplementor implementor) {
         if (groupSets.size() > 1) {
             throw new UnsupportedOperationException();
         }
@@ -161,7 +161,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         return new GroupBy.GroupByBuilder().setIsOrderPreserving(isOrderedGroupBy).setExpressions(keyExprs).setKeyExpressions(keyExprs).build();        
     }
     
-    protected void serializeAggregators(Implementor implementor, StatementContext context, boolean isEmptyGroupBy) {
+    protected void serializeAggregators(PhoenixRelImplementor implementor, StatementContext context, boolean isEmptyGroupBy) {
         // TODO sort aggFuncs. same problem with group by key sorting.
         List<SingleAggregateFunction> aggFuncs = Lists.newArrayList();
         for (AggregateCall call : aggCalls) {
@@ -177,7 +177,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         context.getAggregationManager().setAggregators(clientAggregators);
     }
     
-    protected static QueryPlan wrapWithProject(Implementor implementor, QueryPlan plan, List<Expression> keyExpressions, List<SingleAggregateFunction> aggFuncs) {
+    protected static QueryPlan wrapWithProject(PhoenixRelImplementor implementor, QueryPlan plan, List<Expression> keyExpressions, List<SingleAggregateFunction> aggFuncs) {
         List<Expression> exprs = Lists.newArrayList();
         for (int i = 0; i < keyExpressions.size(); i++) {
             Expression keyExpr = keyExpressions.get(i);

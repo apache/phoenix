@@ -22,7 +22,7 @@ import org.apache.phoenix.expression.LiteralExpression;
  * Implementation of {@link org.apache.calcite.rel.core.Join}
  * relational expression in Phoenix.
  */
-abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
+abstract public class PhoenixAbstractJoin extends Join implements PhoenixQueryRel {
     public final JoinInfo joinInfo;
     public final boolean isSingleValueRhs;
 
@@ -49,10 +49,10 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixRel {
               : ImmutableIntList.identity(getRight().getRowType().getFieldCount());
     }
     
-    protected QueryPlan implementInput(Implementor implementor, int index, List<Expression> conditionExprs) {
+    protected QueryPlan implementInput(PhoenixRelImplementor implementor, int index, List<Expression> conditionExprs) {
         assert index <= 1;
         
-        PhoenixRel input = index == 0 ? (PhoenixRel) left : (PhoenixRel) right;
+        PhoenixQueryRel input = index == 0 ? (PhoenixQueryRel) left : (PhoenixQueryRel) right;
         QueryPlan plan = implementor.visitInput(0, input);
         
         if (conditionExprs != null) {

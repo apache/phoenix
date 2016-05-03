@@ -22,7 +22,7 @@ import com.google.common.collect.Lists;
  * Implementation of {@link org.apache.calcite.rel.core.Union}
  * relational expression in Phoenix.
  */
-public class PhoenixUnion extends Union implements PhoenixRel {
+public class PhoenixUnion extends Union implements PhoenixQueryRel {
     
     public static PhoenixUnion create(List<RelNode> inputs, boolean all) {
         RelOptCluster cluster = inputs.get(0).getCluster();
@@ -52,10 +52,10 @@ public class PhoenixUnion extends Union implements PhoenixRel {
     }
 
     @Override
-    public QueryPlan implement(Implementor implementor) {
+    public QueryPlan implement(PhoenixRelImplementor implementor) {
         List<QueryPlan> subPlans = Lists.newArrayListWithExpectedSize(inputs.size());
         for (Ord<RelNode> input : Ord.zip(inputs)) {
-            subPlans.add(implementor.visitInput(input.i, (PhoenixRel) input.e));
+            subPlans.add(implementor.visitInput(input.i, (PhoenixQueryRel) input.e));
         }
         
         return new UnionPlan(subPlans.get(0).getContext(), SelectStatement.SELECT_ONE, subPlans.get(0).getTableRef(), RowProjector.EMPTY_PROJECTOR,

@@ -23,8 +23,8 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.tools.FrameworkConfig;
 import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.Planner;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementorImpl;
-import org.apache.phoenix.calcite.rel.PhoenixRel.Implementor;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
@@ -81,7 +81,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 	    }
 
 	    public ExpressionChecker checkExpressionEquality() {        
-	        Implementor implementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
+	        PhoenixRelImplementor implementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
 	        implementor.setTableMapping(new TableMapping(table));
 	        Expression e = CalciteUtils.toExpression(this.calciteExpr, implementor);
 	        assertEquals(this.phoenixExpr,e);
