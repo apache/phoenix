@@ -25,6 +25,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -126,7 +127,7 @@ public class AggregatePlan extends BaseQueryPlan {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName, QueryPlan plan) throws SQLException {
             Expression expression = RowKeyExpression.INSTANCE;
             OrderByExpression orderByExpression = new OrderByExpression(expression, false, true);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
@@ -143,9 +144,9 @@ public class AggregatePlan extends BaseQueryPlan {
             this.outerFactory = outerFactory;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName) throws SQLException {
-            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner, scan, tableName);
-            return outerFactory.newIterator(context, iterator, scan, tableName);
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName, QueryPlan plan) throws SQLException {
+            PeekingResultIterator iterator = innerFactory.newIterator(context, scanner, scan, tableName, plan);
+            return outerFactory.newIterator(context, iterator, scan, tableName, plan);
         }
     }
 
@@ -169,12 +170,12 @@ public class AggregatePlan extends BaseQueryPlan {
     }
     
     @Override
-    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException {
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         if (groupBy.isEmpty()) {
-            UngroupedAggregateRegionObserver.serializeIntoScan(context.getScan());
+            UngroupedAggregateRegionObserver.serializeIntoScan(scan);
         } else {
             // Set attribute with serialized expressions for coprocessor
-            GroupedAggregateRegionObserver.serializeIntoScan(context.getScan(), groupBy.getScanAttribName(), groupBy.getKeyExpressions());
+            GroupedAggregateRegionObserver.serializeIntoScan(scan, groupBy.getScanAttribName(), groupBy.getKeyExpressions());
             if (limit != null && orderBy.getOrderByExpressions().isEmpty() && having == null
                     && (  (   statement.isDistinct() && ! statement.isAggregate() )
                             || ( ! statement.isDistinct() && (   context.getAggregationManager().isEmpty()
@@ -200,7 +201,7 @@ public class AggregatePlan extends BaseQueryPlan {
                  *    order, so we can early exit, even when aggregate functions are used, as
                  *    the rows in the group are contiguous.
                  */
-                context.getScan().setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT,
+                scan.setAttribute(BaseScannerRegionObserver.GROUP_BY_LIMIT,
                         PInteger.INSTANCE.toBytes(limit + (offset == null ? 0 : offset)));
             }
         }
@@ -211,8 +212,8 @@ public class AggregatePlan extends BaseQueryPlan {
             logger.warn("This query cannot be executed serially. Ignoring the hint");
         }
         BaseResultIterators iterators = hasSerialHint && canBeExecutedSerially
-                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper)
-                : new ParallelIterators(this, null, wrapParallelIteratorFactory());
+                ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan)
+                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan);
 
         splits = iterators.getSplits();
         scans = iterators.getScans();

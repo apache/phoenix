@@ -71,7 +71,7 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
     }
 
     @Override
-    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper)
+    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan)
             throws SQLException {
         ResultIterator scanner = new ResultIterator() {
             private final Iterator<Tuple> tupleIterator = tuples.iterator();

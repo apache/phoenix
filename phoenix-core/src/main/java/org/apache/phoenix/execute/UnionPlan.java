@@ -139,7 +139,11 @@ public class UnionPlan implements QueryPlan {
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
         return iterator(Collections.<SQLCloseable>emptyList());
     }
-    
+
+    @Override
+    public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        return iterator(Collections.<SQLCloseable>emptyList());
+    }
     @Override
     public final ResultIterator iterator() throws SQLException {
         return iterator(Collections.<SQLCloseable>emptyList());
