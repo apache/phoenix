@@ -26,6 +26,7 @@ import org.apache.calcite.jdbc.CalciteConnectionImpl;
 import org.apache.calcite.jdbc.CalciteFactory;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 
 public class PhoenixCalciteFactory extends CalciteFactory {
     
@@ -97,26 +98,43 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                     CalciteSchema.createRootSchema(true, false), typeFactory);
         }
         
+        public void setAutoCommit(final boolean isAutoCommit) throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.setAutoCommit(isAutoCommit);;
+                }});
+        }
+        
         public void commit() throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.commit();
+                }});
+        }
+        
+        public void close() throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.close();
+                }});
+        }
+        
+        private void call(PhoenixConnectionCallable callable) throws SQLException {
             for (String subSchemaName : getRootSchema().getSubSchemaNames()) {               
                 try {
                     PhoenixSchema phoenixSchema = getRootSchema()
                             .getSubSchema(subSchemaName).unwrap(PhoenixSchema.class);
-                    phoenixSchema.pc.commit();
+                    callable.call(phoenixSchema.pc);
                 } catch (ClassCastException e) {
                 }
             }
         }
         
-        public void close() throws SQLException {
-            for (String subSchemaName : getRootSchema().getSubSchemaNames()) {               
-                try {
-                    PhoenixSchema phoenixSchema = getRootSchema()
-                            .getSubSchema(subSchemaName).unwrap(PhoenixSchema.class);
-                    phoenixSchema.pc.close();
-                } catch (ClassCastException e) {
-                }
-            }
+        private static interface PhoenixConnectionCallable {
+            void call(PhoenixConnection conn) throws SQLException;
         }
     }
 
