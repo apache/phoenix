@@ -15,7 +15,6 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.PhoenixTable;
-import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
@@ -31,7 +30,6 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -75,9 +73,10 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         
         final QueryPlan queryPlan = implementor.visitInput(0, (PhoenixQueryRel) input);
         final RowProjector projector = implementor.getTableMapping().createRowProjector();
-        final TableMapping tableMapping = getTable().unwrap(PhoenixTable.class).tableMapping;
-        final TableRef targetTableRef = tableMapping.getTableRef();
-        final List<PColumn> mappedColumns = tableMapping.getMappedColumns();
+        final PhoenixTable targetTable = getTable().unwrap(PhoenixTable.class);
+        final PhoenixConnection connection = targetTable.pc;
+        final TableRef targetTableRef = targetTable.tableMapping.getTableRef();
+        final List<PColumn> mappedColumns = targetTable.tableMapping.getMappedColumns();
         final int[] columnIndexes = new int[mappedColumns.size()];
         final int[] pkSlotIndexes = new int[mappedColumns.size()];
         for (int i = 0; i < columnIndexes.length; i++) {
@@ -122,8 +121,6 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
                 ResultIterator iterator = queryPlan.iterator();
                 // simplest version, no run-on-server, no pipelined update
                 StatementContext childContext = queryPlan.getContext();
-                PhoenixStatement statement = childContext.getStatement();
-                PhoenixConnection connection = statement.getConnection();
                 ConnectionQueryServices services = connection.getQueryServices();
                 int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                         QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
@@ -158,7 +155,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
                                     table.rowKeyOrderOptimizable());
                             values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                         }
-                        setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp);
+                        setValues(values, pkSlotIndexes, columnIndexes, table, mutation, connection, useServerTimestamp);
                         rowCount++;
                         // Commit a batch if auto commit is true and we're at our batch size
                         if (isAutoCommit && rowCount % batchSize == 0) {
@@ -185,7 +182,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         };
     }
     
-    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes, PTable table, Map<ImmutableBytesPtr,RowMutationState> mutation, PhoenixStatement statement, boolean useServerTimestamp) {
+    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes, PTable table, Map<ImmutableBytesPtr,RowMutationState> mutation, PhoenixConnection connection, boolean useServerTimestamp) {
         Map<PColumn,byte[]> columnValues = Maps.newHashMapWithExpectedSize(columnIndexes.length);
         byte[][] pkValues = new byte[table.getPKColumns().size()][];
         // If the table uses salting, the first byte is the salting byte, set to an empty array
@@ -216,7 +213,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         }
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         table.newKey(ptr, pkValues);
-        mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo));
+        mutation.put(ptr, new RowMutationState(columnValues, connection.getStatementExecutionCounter(), rowTsColInfo));
     }
 
 }

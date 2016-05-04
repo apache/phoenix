@@ -9,6 +9,7 @@ import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementPlan;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -178,7 +179,9 @@ public class CalciteRuntime {
                 }
 
                 try {
-                    updateCount = plan.execute().getUpdateCount();
+                    MutationState state = plan.execute();
+                    updateCount = state.getUpdateCount();
+                    state.commit();
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }

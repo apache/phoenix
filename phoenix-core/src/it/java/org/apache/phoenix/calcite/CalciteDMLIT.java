@@ -25,8 +25,8 @@ public class CalciteDMLIT extends BaseCalciteIT {
                        "      PhoenixValues(tuples=[[{ '1              ', '1              ' }]])\n")
             .executeUpdate()
             .close();
-//        start(false, 1L).sql("select organization_id, entity_id from aTable")
-//            .resultIs(new Object[][] {{"1              ", "1              "}})
-//            .close();
+        start(false, 1L).sql("select organization_id, entity_id from aTable")
+            .resultIs(new Object[][] {{"1              ", "1              "}})
+            .close();
     }
 }
