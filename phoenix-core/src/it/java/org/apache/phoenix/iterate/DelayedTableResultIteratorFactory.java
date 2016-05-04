@@ -22,6 +22,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -39,13 +40,13 @@ public class DelayedTableResultIteratorFactory implements TableResultIteratorFac
     
     @Override
     public TableResultIterator newIterator(MutationState mutationState, TableRef tableRef, Scan scan,
-            CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
-        return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold);
+            CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+        return new DelayedTableResultIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold, plan, scanGrouper);
     }
     
     private class DelayedTableResultIterator extends TableResultIterator {
-        public DelayedTableResultIterator (MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold) throws SQLException {
-            super(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold);
+        public DelayedTableResultIterator (MutationState mutationState, TableRef tableRef, Scan scan, CombinableMetric scanMetrics, long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+            super(mutationState, scan, scanMetrics, renewLeaseThreshold, plan, scanGrouper);
         }
         
         @Override

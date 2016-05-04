@@ -790,15 +790,27 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                             admin.getConnection(), indexTable, false);
                 }
                 assertEquals(4 + i, regionsOfIndexTable.size());
+                String[] tIdColumnValues = new String[26]; 
+                String[] v1ColumnValues = new String[26];
+                int[] k1ColumnValue = new int[26];
                 String query = "SELECT t_id,k1,v1 FROM " + tableName;
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
                 for (int j = 0; j < 26; j++) {
                     assertTrue(rs.next());
-                    assertEquals(strings[25-j], rs.getString("t_id"));
-                    assertEquals(25-j, rs.getInt("k1"));
-                    assertEquals(strings[j], rs.getString("V1"));
+                    tIdColumnValues[j] = rs.getString("t_id");
+                    k1ColumnValue[j] = rs.getInt("k1");
+                    v1ColumnValues[j] = rs.getString("V1");
                 }
+                Arrays.sort(tIdColumnValues);
+                Arrays.sort(v1ColumnValues);
+                Arrays.sort(k1ColumnValue);
+                assertTrue(Arrays.equals(strings, tIdColumnValues));
+                assertTrue(Arrays.equals(strings, v1ColumnValues));
+                for(int m=0;m<26;m++) {
+                    assertEquals(m, k1ColumnValue[m]);
+                }
+
                 rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
                 assertEquals(
                         "CLIENT PARALLEL " + (4 + i) + "-WAY RANGE SCAN OVER "
@@ -817,11 +829,20 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                             + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
+                int[] k3ColumnValue = new int[26];
                 for (int j = 0; j < 26; j++) {
                     assertTrue(rs.next());
-                    assertEquals(strings[j], rs.getString("t_id"));
-                    assertEquals(j, rs.getInt("k1"));
-                    assertEquals(j+2, rs.getInt("k3"));
+                    tIdColumnValues[j] = rs.getString("t_id");
+                    k1ColumnValue[j] = rs.getInt("k1");
+                    k3ColumnValue[j] = rs.getInt("k3");
+                }
+                Arrays.sort(tIdColumnValues);
+                Arrays.sort(k1ColumnValue);
+                Arrays.sort(k3ColumnValue);
+                assertTrue(Arrays.equals(strings, tIdColumnValues));
+                for(int m=0;m<26;m++) {
+                    assertEquals(m, k1ColumnValue[m]);
+                    assertEquals(m+2, k3ColumnValue[m]);
                 }
             }
        } finally {
@@ -1013,24 +1034,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(5, regionsOfIndexTable.size());
             boolean success = latch1.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
             assertTrue("Timed out waiting for MockedLocalIndexSplitter.preSplitAfterPONR to complete", success);
-            // Verify the metadata for index is correct.
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(schemaName), indexName,
-                    new String[] { PTableType.INDEX.toString() });
-            assertTrue(rs.next());
-            assertEquals(indexName, rs.getString(3));
-            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-            rs = conn1.getMetaData().getTables(null, StringUtil.escapeLike(schemaName), indexName+"_2",
-                new String[] { PTableType.INDEX.toString() });
-            assertTrue(rs.next());
-            assertEquals(indexName+"_2", rs.getString(3));
-            assertEquals(PIndexState.INACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
-
-            String query = "SELECT t_id,k1,v1 FROM " + tableName+"2";
-            rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT PARALLEL " + 1 + "-WAY FULL SCAN OVER " + tableName+"2",
-                QueryUtil.getExplainPlan(rs));
             latch2.countDown();
        } finally {
             conn1.close();

@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -31,14 +32,25 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import jline.internal.Log;
+
+import org.apache.hadoop.hbase.HRegionInfo;
+import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -86,8 +98,8 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
 	
 	@Parameters(name="localIndex = {0} , transactional = {1}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 { false, false }, { false, true }, { true, false }, { true, true }
+        return Arrays.asList(new Boolean[][] {
+                { false, false }, { false, true }, { true, false }, { true, true }
            });
     }
     
@@ -594,4 +606,227 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
         }
     }
 
+    @Test
+    public void testSplitDuringIndexScan() throws Exception {
+        testSplitDuringIndexScan(false);
+    }
+    
+    @Test
+    public void testSplitDuringIndexReverseScan() throws Exception {
+        testSplitDuringIndexScan(true);
+    }
+
+    private void testSplitDuringIndexScan(boolean isReverse) throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(2));
+        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        try(Connection conn1 = DriverManager.getConnection(getUrl(), props)){
+            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
+            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+            dropTable(admin, conn1);
+            createTableAndLoadData(conn1, strings, isReverse);
+
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
+            assertTrue(rs.next());
+            splitDuringScan(conn1, strings, admin, isReverse);
+            dropTable(admin, conn1);
+       } 
+    }
+
+    private void dropTable(HBaseAdmin admin, Connection conn) throws SQLException, IOException {
+        conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
+        if(admin.tableExists(tableName)) {
+            admin.disableTable(TableName.valueOf(tableName));
+            admin.deleteTable(TableName.valueOf(tableName));
+        } 
+        if(admin.tableExists(localIndex? MetaDataUtil.getLocalIndexTableName(tableName): indexName)) {
+            admin.disableTable(localIndex? MetaDataUtil.getLocalIndexTableName(tableName): indexName);
+            admin.deleteTable(localIndex? MetaDataUtil.getLocalIndexTableName(tableName): indexName);
+        }
+    }
+
+    private void createTableAndLoadData(Connection conn1, String[] strings, boolean isReverse) throws SQLException {
+        createBaseTable(conn1, tableName, null);
+        for (int i = 0; i < 26; i++) {
+            conn1.createStatement().execute(
+                "UPSERT INTO " + tableName + " values('"+strings[i]+"'," + i + ","
+                        + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+        }
+        conn1.commit();
+        conn1.createStatement().execute(
+            "CREATE " + (localIndex ? "LOCAL" : "")+" INDEX " + indexName + " ON " + tableName + "(v1"+(isReverse?" DESC":"")+") include (k3)");
+    }
+
+    @Test
+    public void testIndexHalfStoreFileReader() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        try {
+            dropTable(admin, conn1);
+            createBaseTable(conn1, tableName, "('e')");
+            conn1.createStatement().execute("CREATE "+(localIndex?"LOCAL":"")+" INDEX " + indexName + " ON " + tableName + "(v1)" + (localIndex?"":" SPLIT ON ('e')"));
+            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('f',1,2,3,'z')");
+            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
+            conn1.commit();
+
+            String query = "SELECT count(*) FROM " + tableName +" where v1<='z'";
+            ResultSet rs = conn1.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+
+            TableName table = TableName.valueOf(localIndex?tableName: indexName);
+            TableName indexTable = TableName.valueOf(localIndex?MetaDataUtil.getLocalIndexTableName(tableName): indexName);
+            admin.flush(indexTable);
+            boolean merged = false;
+            // merge regions until 1 left
+            end: while (true) {
+              long numRegions = 0;
+              while (true) {
+                rs = conn1.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+                System.out.println("Number of rows returned:" + rs.getInt(1));
+                assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
+                try {
+                  List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);
+                  numRegions = indexRegions.size();
+                  if (numRegions==1) {
+                    break end;
+                  }
+                  if(!merged) {
+                            List<HRegionInfo> regions =
+                                    admin.getTableRegions(localIndex ? table : indexTable);
+                      System.out.println("Merging: " + regions.size());
+                      admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
+                          regions.get(1).getEncodedNameAsBytes(), false);
+                      merged = true;
+                      Threads.sleep(10000);
+                  }
+                  break;
+                } catch (Exception ex) {
+                  Log.info(ex);
+                }
+
+                long waitStartTime = System.currentTimeMillis();
+                // wait until merge happened
+                while (System.currentTimeMillis() - waitStartTime < 10000) {
+                  List<HRegionInfo> regions = admin.getTableRegions(indexTable);
+                  System.out.println("Waiting:" + regions.size());
+                  if (regions.size() < numRegions) {
+                    break;
+                  }
+                  Threads.sleep(1000);
+                }
+              }
+            }
+        } finally {
+            dropTable(admin, conn1);
+        }
+    }
+
+    private List<HRegionInfo> mergeRegions(HBaseAdmin admin, List<HRegionInfo> regionsOfUserTable)
+            throws IOException, InterruptedException {
+        for (int i = 2; i > 0; i--) {
+            Threads.sleep(10000);
+            admin.mergeRegions(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
+                regionsOfUserTable.get(1).getEncodedNameAsBytes(), false);
+            regionsOfUserTable =
+                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
+                        TableName.valueOf(localIndex? tableName:indexName), false);
+
+            while (regionsOfUserTable.size() != i) {
+                Thread.sleep(100);
+                regionsOfUserTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                    admin.getConnection(), TableName.valueOf(localIndex? tableName:indexName), false);
+            }
+            assertEquals(i, regionsOfUserTable.size());
+            if(localIndex) {
+                List<HRegionInfo> regionsOfIndexTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                    admin.getConnection(), TableName.valueOf(MetaDataUtil.getLocalIndexTableName(tableName)), false);
+               while (regionsOfIndexTable.size() != i) {
+                   Thread.sleep(100);
+                   regionsOfIndexTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                       admin.getConnection(), TableName.valueOf(MetaDataUtil.getLocalIndexTableName(tableName)), false);
+               }
+               assertEquals(i, regionsOfIndexTable.size());
+            }
+        }
+        return regionsOfUserTable;
+    }
+
+    private List<HRegionInfo> splitDuringScan(Connection conn1, String[] strings, HBaseAdmin admin, boolean isReverse)
+            throws SQLException, IOException, InterruptedException {
+        ResultSet rs;
+        String query = "SELECT t_id,k1,v1 FROM " + tableName;
+        rs = conn1.createStatement().executeQuery(query);
+        String[] tIdColumnValues = new String[26]; 
+        String[] v1ColumnValues = new String[26];
+        int[] k1ColumnValue = new int[26];
+        for (int j = 0; j < 5; j++) {
+            assertTrue(rs.next());
+            tIdColumnValues[j] = rs.getString("t_id");
+            k1ColumnValue[j] = rs.getInt("k1");
+            v1ColumnValues[j] = rs.getString("V1");
+        }
+
+        String[] splitKeys = new String[2];
+        splitKeys[0] = strings[4];
+        splitKeys[1] = strings[12];
+
+        int[] splitInts = new int[2];
+        splitInts[0] = 22;
+        splitInts[1] = 4;
+        List<HRegionInfo> regionsOfUserTable = null;
+        for(int i = 0; i <=1; i++) {
+            Threads.sleep(10000);
+            if(localIndex) {
+                admin.split(Bytes.toBytes(tableName),
+                    ByteUtil.concat(Bytes.toBytes(splitKeys[i])));
+            } else {
+                admin.split(Bytes.toBytes(indexName), ByteUtil.concat(Bytes.toBytes(splitInts[i])));
+            }
+            Thread.sleep(100);
+            regionsOfUserTable =
+                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                        admin.getConnection(), TableName.valueOf(localIndex?tableName:indexName),
+                        false);
+
+            while (regionsOfUserTable.size() != (i+2)) {
+                Thread.sleep(100);
+                regionsOfUserTable =
+                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
+                            admin.getConnection(),
+                            TableName.valueOf(localIndex?tableName:indexName), false);
+            }
+            assertEquals(i+2, regionsOfUserTable.size());
+        }
+        for (int j = 5; j < 26; j++) {
+            assertTrue(rs.next());
+            tIdColumnValues[j] = rs.getString("t_id");
+            k1ColumnValue[j] = rs.getInt("k1");
+            v1ColumnValues[j] = rs.getString("V1");
+        }
+        Arrays.sort(tIdColumnValues);
+        Arrays.sort(v1ColumnValues);
+        Arrays.sort(k1ColumnValue);
+        assertTrue(Arrays.equals(strings, tIdColumnValues));
+        assertTrue(Arrays.equals(strings, v1ColumnValues));
+        for(int i=0;i<26;i++) {
+            assertEquals(i, k1ColumnValue[i]);
+        }
+        assertFalse(rs.next());
+        return regionsOfUserTable;
+    }
+
+    private void createBaseTable(Connection conn, String tableName, String splits) throws SQLException {
+        String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
+                "k1 INTEGER NOT NULL,\n" +
+                "k2 INTEGER NOT NULL,\n" +
+                "k3 INTEGER,\n" +
+                "v1 VARCHAR,\n" +
+                "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
+                        + (tableDDLOptions!=null?tableDDLOptions:"") + (splits != null ? (" split on " + splits) : "");
+        conn.createStatement().execute(ddl);
+    }
 }
