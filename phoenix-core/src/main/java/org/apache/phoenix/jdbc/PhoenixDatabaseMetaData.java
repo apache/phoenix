@@ -295,6 +295,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String AUTO_PARTITION_SEQ = "AUTO_PARTITION_SEQ";
     public static final byte[] AUTO_PARTITION_SEQ_BYTES = Bytes.toBytes(AUTO_PARTITION_SEQ);
     
+    public static final String APPEND_ONLY_SCHEMA = "APPEND_ONLY_SCHEMA";
+    public static final byte[] APPEND_ONLY_SCHEMA_BYTES = Bytes.toBytes(APPEND_ONLY_SCHEMA);
+    
     public static final String ASYNC_CREATED_DATE = "ASYNC_CREATED_DATE";
 
     private final PhoenixConnection connection;

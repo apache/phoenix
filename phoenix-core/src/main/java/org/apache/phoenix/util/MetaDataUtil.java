@@ -36,6 +36,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
@@ -69,6 +70,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
@@ -533,7 +535,7 @@ public class MetaDataUtil {
     }
 
     public static String getAutoPartitionColumnName(PTable parentTable) {
-        List<PColumn> parentTableColumns = parentTable.getColumns();
+        List<PColumn> parentTableColumns = parentTable.getPKColumns();
         PColumn column = parentTableColumns.get(getAutoPartitionColIndex(parentTable));
         return column.getName().getString();
     }
@@ -554,5 +556,13 @@ public class MetaDataUtil {
         return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
             + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
             + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
+    }
+
+    public static boolean isHColumnProperty(String propName) {
+        return HColumnDescriptor.getDefaultValues().containsKey(propName);
+    }
+
+    public static boolean isHTableProperty(String propName) {
+        return !isHColumnProperty(propName) && !TableProperty.isPhoenixTableProperty(propName);
     }
 }
