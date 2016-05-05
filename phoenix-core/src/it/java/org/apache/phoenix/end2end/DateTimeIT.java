@@ -715,4 +715,21 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         assertEquals(111111113, rs.getTimestamp(2).getNanos());
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testCurrentTimeWithProjectedTable () throws Exception {
+        String ddl = "CREATE TABLE T1 ( ID integer primary key)";
+        conn.createStatement().execute(ddl);
+        ddl = "CREATE TABLE T2 ( ID integer primary key)";
+        conn.createStatement().execute(ddl);
+        String ups = "UPSERT INTO T1 VALUES (1)";
+        conn.createStatement().execute(ups);
+        ups = "UPSERT INTO T2 VALUES (1)";
+        conn.createStatement().execute(ups);
+        conn.commit();
+        ResultSet rs = conn.createStatement().executeQuery("select /*+ USE_SORT_MERGE_JOIN */ op" +
+                ".id, current_time() from t1 op where op.id in (select id from t2)");
+        assertTrue(rs.next());
+        assertEquals(new java.util.Date().getYear(),rs.getTimestamp(2).getYear());
+    }
 }
