@@ -37,7 +37,6 @@ import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -49,9 +48,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
-
 import co.cask.tephra.Transaction.VisibilityLevel;
+
+import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
@@ -110,14 +109,25 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testRollbackOfUncommittedDelete() throws Exception {
+    public void testRollbackOfUncommittedDeleteSingleCol() throws Exception {
+        String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)";
+        testRollbackOfUncommittedDelete(indexDDL);
+    }
+
+    @Test
+    public void testRollbackOfUncommittedDeleteMultiCol() throws Exception {
+        String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1, v2)";
+        testRollbackOfUncommittedDelete(indexDDL);
+    }
+    
+    private void testRollbackOfUncommittedDelete(String indexDDL) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
-            stmt.execute("CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)");
+            stmt.execute(indexDDL);
             
             stmt.executeUpdate("upsert into " + fullTableName + " values('x1', 'y1', 'a1')");
             stmt.executeUpdate("upsert into " + fullTableName + " values('x2', 'y2', 'a2')");
@@ -182,7 +192,7 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
             //assert two rows in index table
             rs = stmt.executeQuery("select k, v1, v2 from " + fullTableName + " ORDER BY v1");
             assertTrue(rs.next());
-            assertEquals("x1", rs.getString(1));
+            assertEquals("x1", rs.getString(1)); // fails here
             assertEquals("y1", rs.getString(2));
             assertEquals("a1", rs.getString(3));
             assertTrue(rs.next());
