@@ -56,7 +56,7 @@ public abstract class BaseClientManagedTimeIT extends BaseTest {
     @After
     public void cleanUpAfterTest() throws Exception {
         long ts = nextTimestamp();
-        deletePriorTables(ts - 1, getUrl());    
+        deletePriorMetaData(ts - 1, getUrl());
     }
     
     public static Map<String,String> getDefaultProps() {

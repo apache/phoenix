@@ -64,6 +64,6 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     
     @After
     public void cleanUpAfterTest() throws Exception {
-        deletePriorTables(HConstants.LATEST_TIMESTAMP, getUrl());    
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
     }
 }
