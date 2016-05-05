@@ -1,10 +1,16 @@
 package org.apache.phoenix.calcite;
 
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.Properties;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class CalciteDMLIT extends BaseCalciteIT {
@@ -28,6 +34,14 @@ public class CalciteDMLIT extends BaseCalciteIT {
         start(false, 1L).sql("select organization_id, entity_id from aTable")
             .resultIs(0, new Object[][] {{"1              ", "1              "}})
             .close();
+        final Sql sql = start(PROPS).sql("select * from atable where organization_id = ?");
+        PreparedStatement stmt = sql.prepareStatement();
+        stmt.setString(1, "1");
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("1              ", rs.getString(2));
+        assertFalse(rs.next());
+        sql.close();
     }
 
     @Test
@@ -55,5 +69,15 @@ public class CalciteDMLIT extends BaseCalciteIT {
                 {1, 10, "00100", null, "01000"},
                 {3, 30, "00300", null, "03000"}})
             .close();
+    }
+    
+    @Ignore
+    @Test public void testUpsertWithPreparedStatement() throws Exception {
+        final Sql sql = start(PROPS).sql("upsert into atable(organization_id, entity_id) values(?, ?)");
+        PreparedStatement stmt = sql.prepareStatement();
+        stmt.setString(1, "x");
+        stmt.setString(2, "x");
+        stmt.execute();
+        sql.close();
     }
 }

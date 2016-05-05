@@ -185,6 +185,10 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             statement.close();
             return this;
         }
+        
+        public PreparedStatement prepareStatement() throws SQLException {
+            return start.getConnection().prepareStatement(sql);
+        }
 
         public void close() {
             start.close();
