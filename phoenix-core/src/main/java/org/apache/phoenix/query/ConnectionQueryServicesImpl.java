@@ -195,6 +195,12 @@ import org.apache.twill.zookeeper.ZKClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import co.cask.tephra.TransactionSystemClient;
+import co.cask.tephra.TxConstants;
+import co.cask.tephra.distributed.PooledClientProvider;
+import co.cask.tephra.distributed.TransactionServiceClient;
+import co.cask.tephra.zookeeper.TephraZKClientService;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Throwables;
@@ -207,12 +213,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.distributed.PooledClientProvider;
-import co.cask.tephra.distributed.TransactionServiceClient;
-import co.cask.tephra.zookeeper.TephraZKClientService;
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
@@ -1937,13 +1937,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 for (Pair<String, Object> prop : propsList) {
                     String propName = prop.getFirst();
                     Object propValue = prop.getSecond();
-                    if ((isHTableProperty(propName) ||  TableProperty.isPhoenixTableProperty(propName)) && addingColumns) {
+                    if ((MetaDataUtil.isHTableProperty(propName) ||  TableProperty.isPhoenixTableProperty(propName)) && addingColumns) {
                         // setting HTable and PhoenixTable properties while adding a column is not allowed.
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_TABLE_PROPERTY_ADD_COLUMN)
                         .setMessage("Property: " + propName).build()
                         .buildException();
                     }
-                    if (isHTableProperty(propName)) {
+                    if (MetaDataUtil.isHTableProperty(propName)) {
                         // Can't have a column family name for a property that's an HTableProperty
                         if (!family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
                             throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY)
@@ -1964,7 +1964,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 tableProps.put(TxConstants.READ_NON_TX_DATA, propValue);
                             }
                         } else {
-                            if (isHColumnProperty(propName)) {
+                            if (MetaDataUtil.isHColumnProperty(propName)) {
                                 if (family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
                                     commonFamilyProps.put(propName, propValue);
                                 } else {
@@ -2169,14 +2169,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             .build().buildException();
         }
     }
-    
-    private boolean isHColumnProperty(String propName) {
-        return HColumnDescriptor.getDefaultValues().containsKey(propName);
-    }
-
-    private boolean isHTableProperty(String propName) {
-        return !isHColumnProperty(propName) && !TableProperty.isPhoenixTableProperty(propName);
-    } 
     
     private HashSet<String> existingColumnFamiliesForBaseTable(PName baseTableName) throws TableNotFoundException {
         synchronized (latestMetaDataLock) {

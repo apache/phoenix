@@ -351,6 +351,10 @@ public enum SQLExceptionCode {
     CANNOT_SALT_LOCAL_INDEX(1110,"XCL10", "Local index may not be salted."),
 
     INDEX_FAILURE_BLOCK_WRITE(1120, "XCL20", "Writes to table blocked until index can be updated."),
+    
+    UPDATE_CACHE_FREQUENCY_INVALID(1130, "XCL30", "UPDATE_CACHE_FREQUENCY cannot be set to ALWAYS if APPEND_ONLY_SCHEMA is true."),
+    CANNOT_DROP_COL_APPEND_ONLY_SCHEMA(1131, "XCL31", "Cannot drop column from table that with append only schema."),
+    VIEW_APPEND_ONLY_SCHEMA(1132, "XCL32", "APPEND_ONLY_SCHEMA property of view must match the base table"),
 
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
