@@ -85,7 +85,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -899,12 +899,59 @@ public abstract class BaseTest {
             Bytes.toBytes(tenantId + "00C"),
             };
     }
-    
-    protected static void deletePriorTables(long ts, String url) throws Exception {
+
+    private static void deletePriorSchemas(long ts, String url) throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
+        if (ts != HConstants.LATEST_TIMESTAMP) {
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
+        }
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs = dbmd.getSchemas();
+            while (rs.next()) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
+                    continue;
+                }
+                schemaName = SchemaUtil.getEscapedArgument(schemaName);
+
+                String ddl = "DROP SCHEMA " + schemaName;
+                conn.createStatement().executeUpdate(ddl);
+            }
+            rs.close();
+        }
+        // Make sure all schemas have been dropped
+        props.remove(CURRENT_SCN_ATTRIB);
+        try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
+            DatabaseMetaData dbmd = seeLatestConn.getMetaData();
+            ResultSet rs = dbmd.getSchemas();
+            boolean hasSchemas = rs.next();
+            if (hasSchemas) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
+                    hasSchemas = rs.next();
+                }
+            }
+            if (hasSchemas) {
+                fail("The following schemas are not dropped that should be:" + getSchemaNames(rs));
+            }
+        }
+    }
+
+    protected static void deletePriorMetaData(long ts, String url) throws Exception {
+        deletePriorTables(ts, url);
+        if (ts != HConstants.LATEST_TIMESTAMP) {
+            ts = nextTimestamp() - 1;
+        }
+        deletePriorSchemas(ts, url);
+    }
+
+    private static void deletePriorTables(long ts, String url) throws Exception {
         deletePriorTables(ts, (String)null, url);
     }
     
-    protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
+    private static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
         Properties props = new Properties();
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         if (ts != HConstants.LATEST_TIMESTAMP) {
@@ -979,7 +1026,16 @@ public abstract class BaseTest {
     	} while (rs.next());
     	return buf.toString();
     }
-    
+
+    private static String getSchemaNames(ResultSet rs) throws SQLException {
+        StringBuilder buf = new StringBuilder();
+        do {
+            buf.append(" ");
+            buf.append(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM));
+        } while (rs.next());
+        return buf.toString();
+    }
+
     private static void deletePriorSequences(long ts, Connection globalConn) throws Exception {
         // TODO: drop tenant-specific sequences too
         ResultSet rs = globalConn.createStatement().executeQuery("SELECT " 
