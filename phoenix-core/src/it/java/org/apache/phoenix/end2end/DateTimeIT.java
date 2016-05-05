@@ -693,4 +693,26 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         long actualTime = rs.getDate(1).getTime();
         assertTrue(Math.abs(actualTime - expectedTime) < MILLIS_IN_DAY);
     }
+    @Test
+    public void testSelectBetweenNanos() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS N1 (k1 INTEGER NOT NULL PRIMARY KEY, ts " +
+                        "TIMESTAMP(3))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO N1 VALUES (1, TIMESTAMP'2015-01-01 00:00:00.111111111')";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO N1 VALUES (2, TIMESTAMP'2015-01-01 00:00:00.111111115')";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO N1 VALUES (3, TIMESTAMP'2015-01-01 00:00:00.111111113')";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1,ts from N1 where ts between" +
+                " TIMESTAMP'2015-01-01 00:00:00.111111112' AND TIMESTAMP'2015-01-01 00:00:00" +
+                ".111111114'");
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+        assertEquals(111111113, rs.getTimestamp(2).getNanos());
+        assertFalse(rs.next());
+    }
 }

@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.TimeZone;
 
 import org.apache.commons.lang.time.FastDateFormat;
+import org.apache.hadoop.hbase.exceptions.IllegalArgumentIOException;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.joda.time.DateTimeZone;
@@ -172,7 +173,21 @@ public class DateUtil {
     }
 
     public static Timestamp parseTimestamp(String timestampValue) {
-        return new Timestamp(parseDateTime(timestampValue));
+        Timestamp timestamp = new Timestamp(parseDateTime(timestampValue));
+        int period = timestampValue.indexOf('.');
+        if (period > 0) {
+            String nanosStr = timestampValue.substring(period + 1);
+            if (nanosStr.length() > 9)
+                throw new IllegalDataException("nanos > 999999999 or < 0");
+            if(nanosStr.length() > 3 ) {
+                int nanos = Integer.parseInt(nanosStr);
+                for (int i = 0; i < 9 - nanosStr.length(); i++) {
+                    nanos *= 10;
+                }
+                timestamp.setNanos(nanos);
+            }
+        }
+        return timestamp;
     }
 
     /**
