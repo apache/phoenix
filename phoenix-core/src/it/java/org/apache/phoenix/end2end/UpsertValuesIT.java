@@ -632,6 +632,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
 
         Date date = toDate(dateStr);
         Timestamp timeStamp = new Timestamp(toDate(timeStampStr).getTime());
+        timeStamp.setNanos(Timestamp.valueOf(timeStampStr).getNanos());
         Time time = new Time(toDate(timeStr).getTime());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 4));
         try {
