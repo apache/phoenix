@@ -64,7 +64,7 @@ public class CreateSchemaIT extends BaseClientManagedTimeIT {
         } catch (NewerSchemaAlreadyExistsException e) {
             // expected
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 100));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().execute("CREATE SCHEMA " + SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE);

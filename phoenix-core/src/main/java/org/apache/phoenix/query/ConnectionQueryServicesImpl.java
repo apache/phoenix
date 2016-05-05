@@ -3669,7 +3669,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         final MutationCode code = result.getMutationCode();
         switch (code) {
         case SCHEMA_ALREADY_EXISTS:
-            ensureNamespaceDropped(schemaName, result.getMutationTime());
+            ReadOnlyProps props = this.getProps();
+            boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
+            if (dropMetadata) {
+                ensureNamespaceDropped(schemaName, result.getMutationTime());
+            }
             break;
         default:
             break;

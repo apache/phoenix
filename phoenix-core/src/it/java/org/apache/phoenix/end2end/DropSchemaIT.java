@@ -26,27 +26,41 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Maps;
+
 @RunWith(Parameterized.class)
 public class DropSchemaIT extends BaseClientManagedTimeIT {
     private String schema;
-
+    
+    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
+    @BeforeClass 
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
+        // Drop the HBase table metadata for this test
+        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        // Must update config before starting server
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+    
     public DropSchemaIT(String schema) {
         this.schema = schema;
     }
@@ -98,9 +112,6 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute("DROP TABLE " + schema + "." + tableName);
-            // Dropping table manually because Drop_meta_attrib is not working
-            admin.disableTable(TableName.valueOf(normalizeSchemaIdentifier, tableName));
-            admin.deleteTable(TableName.valueOf(normalizeSchemaIdentifier, tableName));
         }
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 50));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
