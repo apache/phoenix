@@ -277,7 +277,13 @@ public class DelegateTable implements PTable {
         return delegate.isNamespaceMapped();
     }
 
+    @Override
     public String getAutoPartitionSeqName() {
         return delegate.getAutoPartitionSeqName();
+    }
+    
+    @Override
+    public boolean isAppendOnlySchema() {
+        return delegate.isAppendOnlySchema();
     }
 }

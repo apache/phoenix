@@ -349,9 +349,14 @@ public interface PTable extends PMetaDataEntity {
     boolean isNamespaceMapped();
     
     /**
-     * 
      * @return The sequence name used to get the unique identifier for views
      * that are automatically partitioned.
      */
-    String getAutoPartitionSeqName(); 
+    String getAutoPartitionSeqName();
+    
+    /**
+     * @return true if the you can only add (and never delete) columns to the table,
+     * you are also not allowed to delete the table  
+     */
+    boolean isAppendOnlySchema();
 }

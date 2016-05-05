@@ -167,11 +167,11 @@ public class AutoPartitionViewsIT extends BaseHBaseManagedTimeIT {
             assertTrue("Partition column view referenced attribute should be true ",
                 partitionCol3.isViewReferenced());
             // verify viewConstant was set correctly
-            byte[] expectedPartition1 = new byte[Bytes.SIZEOF_LONG + 1];
+            byte[] expectedPartition1 = new byte[Bytes.SIZEOF_INT + 1];
             PInteger.INSTANCE.toBytes(Integer.MAX_VALUE - 2, expectedPartition1, 0);
-            byte[] expectedPartition2 = new byte[Bytes.SIZEOF_LONG + 1];
+            byte[] expectedPartition2 = new byte[Bytes.SIZEOF_INT + 1];
             PInteger.INSTANCE.toBytes(Integer.MAX_VALUE - 1, expectedPartition2, 0);
-            byte[] expectedPartition3 = new byte[Bytes.SIZEOF_LONG + 1];
+            byte[] expectedPartition3 = new byte[Bytes.SIZEOF_INT + 1];
             PInteger.INSTANCE.toBytes(Integer.MAX_VALUE, expectedPartition3, 0);
             assertArrayEquals("Unexpected Partition column view constant attribute",
                 expectedPartition1, partitionCol1.getViewConstant());

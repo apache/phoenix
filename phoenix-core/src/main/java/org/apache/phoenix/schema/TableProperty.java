@@ -69,8 +69,9 @@ public enum TableProperty {
 	},
 	
 	AUTO_PARTITION_SEQ(PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, false),
+	
+	APPEND_ONLY_SCHEMA(PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, true),
     ;
-
 
 	private final String propertyName;
 	private final SQLExceptionCode colFamSpecifiedException;
