@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -72,15 +73,15 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.primitives.Longs;
-
 import co.cask.tephra.Transaction;
 import co.cask.tephra.Transaction.VisibilityLevel;
 import co.cask.tephra.TxConstants;
 import co.cask.tephra.hbase11.TransactionAwareHTable;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.common.primitives.Longs;
 
 /**
  * Do all the work of managing index updates for a transactional table from a single coprocessor. Since the transaction
@@ -318,17 +319,20 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     boolean hasPuts = false;
                     LinkedList<Cell> singleTimeCells = Lists.newLinkedList();
                     long writePtr;
+                    Cell cell = cells.get(i);
                     do {
-                        Cell cell = cells.get(i);
                         hasPuts |= cell.getTypeByte() == KeyValue.Type.Put.getCode();
                         writePtr = cell.getTimestamp();
+                        ListIterator<Cell> it = singleTimeCells.listIterator();
                         do {
                             // Add at the beginning of the list to match the expected HBase
                             // newest to oldest sort order (which TxTableState relies on
-                            // with the Result.getLatestColumnValue() calls).
-                            singleTimeCells.addFirst(cell);
-                        } while (++i < nCells && cells.get(i).getTimestamp() == writePtr);
-                    } while (i < nCells && cells.get(i).getTimestamp() <= readPtr);
+                            // with the Result.getLatestColumnValue() calls). However, we
+                            // still want to add Cells in the expected order for each time
+                            // bound as otherwise we won't find it in our old state.
+                            it.add(cell);
+                        } while (++i < nCells && (cell=cells.get(i)).getTimestamp() == writePtr);
+                    } while (i < nCells && cell.getTimestamp() <= readPtr);
                     
                     // Generate point delete markers for the prior row deletion of the old index value.
                     // The write timestamp is the next timestamp, not the current timestamp,
