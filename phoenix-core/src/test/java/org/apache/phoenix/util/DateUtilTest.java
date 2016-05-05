@@ -167,6 +167,31 @@ public class DateUtilTest {
         assertEquals(10123L, DateUtil.parseTimestamp("1970-01-01 00:00:10.123").getTime());
     }
 
+    @Test
+    public void testParseTimestamp_WithNanos() {
+        assertEquals(123000000, DateUtil.parseTimestamp("1970-01-01 00:00:10.123").getNanos());
+
+        assertEquals(123456780, DateUtil.parseTimestamp("1970-01-01 00:00:10.12345678").getNanos
+                ());
+        assertEquals(999999999, DateUtil.parseTimestamp("1970-01-01 00:00:10.999999999").getNanos
+                ());
+
+    }
+
+    @Test(expected=IllegalDataException.class)
+    public void testParseTimestamp_tooLargeNanos() {
+        DateUtil.parseTimestamp("1970-01-01 00:00:10.9999999999");
+    }
+
+    @Test(expected=IllegalDataException.class)
+    public void testParseTimestamp_missingNanos() {
+        DateUtil.parseTimestamp("1970-01-01 00:00:10.");
+    }
+    @Test(expected=IllegalDataException.class)
+    public void testParseTimestamp_negativeNanos() {
+        DateUtil.parseTimestamp("1970-01-01 00:00:10.-1");
+    }
+
     @Test(expected=IllegalDataException.class)
     public void testParseTimestamp_InvalidTimestamp() {
         DateUtil.parseTimestamp("not-a-timestamp");
