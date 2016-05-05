@@ -13,12 +13,16 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableModify;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -30,6 +34,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -73,113 +78,120 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         
         final QueryPlan queryPlan = implementor.visitInput(0, (PhoenixQueryRel) input);
         final RowProjector projector = implementor.getTableMapping().createRowProjector();
+
         final PhoenixTable targetTable = getTable().unwrap(PhoenixTable.class);
         final PhoenixConnection connection = targetTable.pc;
         final TableRef targetTableRef = targetTable.tableMapping.getTableRef();
-        final List<PColumn> mappedColumns = targetTable.tableMapping.getMappedColumns();
-        final int[] columnIndexes = new int[mappedColumns.size()];
-        final int[] pkSlotIndexes = new int[mappedColumns.size()];
-        for (int i = 0; i < columnIndexes.length; i++) {
-            PColumn column = mappedColumns.get(i);
-            if (SchemaUtil.isPKColumn(column)) {
-                pkSlotIndexes[i] = column.getPosition();
-            }
-            columnIndexes[i] = column.getPosition();
-        }
-        // TODO
-        final boolean useServerTimestamp = false;
-        
-        return new MutationPlan() {
-            @Override
-            public ParameterMetaData getParameterMetaData() {
-                return queryPlan.getContext().getBindManager().getParameterMetaData();
-            }
+        try (PhoenixStatement stmt = new PhoenixStatement(connection)) {
+            final ColumnResolver resolver = FromCompiler.getResolver(targetTableRef);
+            final StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
 
-            @Override
-            public StatementContext getContext() {
-                return queryPlan.getContext();
-            }
-
-            @Override
-            public TableRef getTargetRef() {
-                return targetTableRef;
-            }
-
-            @Override
-            public Set<TableRef> getSourceRefs() {
-                // TODO return originalQueryPlan.getSourceRefs();
-                return queryPlan.getSourceRefs();
-            }
-
-            @Override
-            public org.apache.phoenix.jdbc.PhoenixStatement.Operation getOperation() {
-                return org.apache.phoenix.jdbc.PhoenixStatement.Operation.UPSERT;
-            }
-
-            @Override
-            public MutationState execute() throws SQLException {
-                ResultIterator iterator = queryPlan.iterator();
-                // simplest version, no run-on-server, no pipelined update
-                StatementContext childContext = queryPlan.getContext();
-                ConnectionQueryServices services = connection.getQueryServices();
-                int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
-                        QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
-                int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
-                boolean isAutoCommit = connection.getAutoCommit();
-                byte[][] values = new byte[columnIndexes.length][];
-                int rowCount = 0;
-                Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(batchSize);
-                PTable table = targetTableRef.getTable();
-                try (ResultSet rs = new PhoenixResultSet(iterator, projector, childContext)) {
-                    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                    while (rs.next()) {
-                        for (int i = 0; i < values.length; i++) {
-                            PColumn column = table.getColumns().get(columnIndexes[i]);
-                            byte[] bytes = rs.getBytes(i + 1);
-                            ptr.set(bytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : bytes);
-                            Object value = rs.getObject(i + 1);
-                            int rsPrecision = rs.getMetaData().getPrecision(i + 1);
-                            Integer precision = rsPrecision == 0 ? null : rsPrecision;
-                            int rsScale = rs.getMetaData().getScale(i + 1);
-                            Integer scale = rsScale == 0 ? null : rsScale;
-                            // We are guaranteed that the two column will have compatible types,
-                            // as we checked that before.
-                            if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(), precision, scale,
-                                    column.getMaxLength(), column.getScale())) { throw new SQLExceptionInfo.Builder(
-                                    SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
-                                    .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build()
-                                    .buildException(); }
-                            column.getDataType().coerceBytes(ptr, value, column.getDataType(), 
-                                    precision, scale, SortOrder.getDefault(), 
-                                    column.getMaxLength(), column.getScale(), column.getSortOrder(),
-                                    table.rowKeyOrderOptimizable());
-                            values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                        }
-                        setValues(values, pkSlotIndexes, columnIndexes, table, mutation, connection, useServerTimestamp);
-                        rowCount++;
-                        // Commit a batch if auto commit is true and we're at our batch size
-                        if (isAutoCommit && rowCount % batchSize == 0) {
-                            MutationState state = new MutationState(targetTableRef, mutation, 0, maxSize, connection);
-                            connection.getMutationState().join(state);
-                            connection.getMutationState().send();
-                            mutation.clear();
-                        }
-                    }
-                    // If auto commit is true, this last batch will be committed upon return
-                    return new MutationState(targetTableRef, mutation, rowCount / batchSize * batchSize, maxSize, connection);
+            final List<PColumn> mappedColumns = targetTable.tableMapping.getMappedColumns();
+            final int[] columnIndexes = new int[mappedColumns.size()];
+            final int[] pkSlotIndexes = new int[mappedColumns.size()];
+            for (int i = 0; i < columnIndexes.length; i++) {
+                PColumn column = mappedColumns.get(i);
+                if (SchemaUtil.isPKColumn(column)) {
+                    pkSlotIndexes[i] = column.getPosition();
                 }
+                columnIndexes[i] = column.getPosition();
             }
-
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                List<String> queryPlanSteps =  queryPlan.getExplainPlan().getPlanSteps();
-                List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
-                planSteps.add("UPSERT SELECT");
-                planSteps.addAll(queryPlanSteps);
-                return new ExplainPlan(planSteps);
-            }
+            // TODO
+            final boolean useServerTimestamp = false;
             
-        };
+            return new MutationPlan() {
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return queryPlan.getContext().getBindManager().getParameterMetaData();
+                }
+
+                @Override
+                public StatementContext getContext() {
+                    return context;
+                }
+
+                @Override
+                public TableRef getTargetRef() {
+                    return targetTableRef;
+                }
+
+                @Override
+                public Set<TableRef> getSourceRefs() {
+                    // TODO return originalQueryPlan.getSourceRefs();
+                    return queryPlan.getSourceRefs();
+                }
+
+                @Override
+                public org.apache.phoenix.jdbc.PhoenixStatement.Operation getOperation() {
+                    return org.apache.phoenix.jdbc.PhoenixStatement.Operation.UPSERT;
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    ResultIterator iterator = queryPlan.iterator();
+                    // simplest version, no run-on-server, no pipelined update
+                    StatementContext childContext = queryPlan.getContext();
+                    ConnectionQueryServices services = connection.getQueryServices();
+                    int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
+                            QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+                    int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
+                    boolean isAutoCommit = connection.getAutoCommit();
+                    byte[][] values = new byte[columnIndexes.length][];
+                    int rowCount = 0;
+                    Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(batchSize);
+                    PTable table = targetTableRef.getTable();
+                    try (ResultSet rs = new PhoenixResultSet(iterator, projector, childContext)) {
+                        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                        while (rs.next()) {
+                            for (int i = 0; i < values.length; i++) {
+                                PColumn column = table.getColumns().get(columnIndexes[i]);
+                                byte[] bytes = rs.getBytes(i + 1);
+                                ptr.set(bytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : bytes);
+                                Object value = rs.getObject(i + 1);
+                                int rsPrecision = rs.getMetaData().getPrecision(i + 1);
+                                Integer precision = rsPrecision == 0 ? null : rsPrecision;
+                                int rsScale = rs.getMetaData().getScale(i + 1);
+                                Integer scale = rsScale == 0 ? null : rsScale;
+                                // We are guaranteed that the two column will have compatible types,
+                                // as we checked that before.
+                                if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(), precision, scale,
+                                        column.getMaxLength(), column.getScale())) { throw new SQLExceptionInfo.Builder(
+                                        SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
+                                        .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build()
+                                        .buildException(); }
+                                column.getDataType().coerceBytes(ptr, value, column.getDataType(), 
+                                        precision, scale, SortOrder.getDefault(), 
+                                        column.getMaxLength(), column.getScale(), column.getSortOrder(),
+                                        table.rowKeyOrderOptimizable());
+                                values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                            }
+                            setValues(values, pkSlotIndexes, columnIndexes, table, mutation, connection, useServerTimestamp);
+                            rowCount++;
+                            // Commit a batch if auto commit is true and we're at our batch size
+                            if (isAutoCommit && rowCount % batchSize == 0) {
+                                MutationState state = new MutationState(targetTableRef, mutation, 0, maxSize, connection);
+                                connection.getMutationState().join(state);
+                                connection.getMutationState().send();
+                                mutation.clear();
+                            }
+                        }
+                        // If auto commit is true, this last batch will be committed upon return
+                        return new MutationState(targetTableRef, mutation, rowCount / batchSize * batchSize, maxSize, connection);
+                    }
+                }
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    List<String> queryPlanSteps =  queryPlan.getExplainPlan().getPlanSteps();
+                    List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size()+1);
+                    planSteps.add("UPSERT SELECT");
+                    planSteps.addAll(queryPlanSteps);
+                    return new ExplainPlan(planSteps);
+                }                
+            };
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
     
     private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes, PTable table, Map<ImmutableBytesPtr,RowMutationState> mutation, PhoenixConnection connection, boolean useServerTimestamp) {

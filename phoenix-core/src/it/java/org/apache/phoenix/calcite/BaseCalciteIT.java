@@ -122,6 +122,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         public void close() {
             if (connection != null) {
                 try {
+                    connection.commit();
                     connection.close();
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
