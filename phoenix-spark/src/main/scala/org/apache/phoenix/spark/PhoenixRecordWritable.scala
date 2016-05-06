@@ -40,7 +40,7 @@ class PhoenixRecordWritable(columnMetaDataList: List[ColumnInfo]) extends DBWrit
     // Correlate each value (v) to a column type (c) and an index (i)
     upsertValues.zip(columnMetaDataList).zipWithIndex.foreach {
       case ((v, c), i) => {
-        if (v != null) {
+        if (v != null && !isNaN(v)) {
 
           // Both Java and Joda dates used to work in 4.2.3, but now they must be java.sql.Date
           // Can override any other types here as needed
@@ -101,6 +101,17 @@ class PhoenixRecordWritable(columnMetaDataList: List[ColumnInfo]) extends DBWrit
       // Put a (ColumnLabel -> value) entry in the result map
       resultMap(metadata.getColumnLabel(i)) = value
     }
+  }
+
+  /**
+    * only Float and Double have NaN, DataFrame has solved this problem as SQL standard
+    * @param v the value
+    * @return if v is NaN, return true
+    */
+  private def isNaN(v: Any): Boolean = v match {
+    case d: Double => d.isNaN
+    case f: Float => f.isNaN
+    case _ => false
   }
 
   def add(value: Any): Unit = {

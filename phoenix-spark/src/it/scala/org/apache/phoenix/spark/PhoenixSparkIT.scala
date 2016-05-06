@@ -640,4 +640,31 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     // gymnastics, just make sure we're within 24H of the epoch generated just now
     assert(Math.abs(epoch - dt) < 86400000)
   }
+
+  test("Upsert with Double.NaN should be Alright (PHOENIX-2454)") {
+    val dataset = Seq((1, 123.0, "String1"), (2, Double.NaN, "String2"), (3, Float.NaN, "String3"), (4, 456, null))
+    sc.parallelize(dataset)
+      .saveToPhoenix("DOUBLE_TEST_TABLE",
+        Seq("ID", "DVALUE", "STRVALUE"),
+        zkUrl = Some(quorumAddress))
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT ID, DVALUE, STRVALUE FROM DOUBLE_TEST_TABLE")
+
+    // 1. check the first line result
+    rs.next()
+    rs.getDouble("DVALUE") shouldEqual dataset.head._2
+
+    // 2. second line
+    rs.next()
+    rs.getDouble("DVALUE") shouldEqual 0.0
+
+    // 3. third
+    rs.next()
+    rs.getDouble("DVALUE") shouldEqual 0.0
+
+    // 4. forth
+    rs.next()
+    rs.getDouble("DVALUE") shouldEqual dataset.last._2
+  }
+
 }
