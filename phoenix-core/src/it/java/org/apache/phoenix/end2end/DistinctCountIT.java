@@ -226,8 +226,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
         String query = "SELECT count(DISTINCT A_STRING), count(DISTINCT B_STRING) FROM aTable";
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -273,8 +272,7 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
         String query = "SELECT count(DISTINCT 1) FROM aTable";
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at
-                                                                                     // timestamp 2
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -461,45 +459,47 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
 
     @Test
     public void testDistinctCountOnIndexTab() throws Exception {
+        long ts = nextTimestamp();
         String ddl = "create table personal_details (id integer not null, first_name char(15),\n"
                 + "    last_name char(15), CONSTRAINT pk PRIMARY KEY (id))";
         Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute(ddl);
-            conn.createStatement().execute("CREATE INDEX personal_details_idx ON personal_details(first_name)");
-        } catch (TableAlreadyExistsException e) {
-
-        } finally {
-            conn.close();
-        }
-
+        PreparedStatement stmt = conn.prepareStatement(ddl);
+        stmt.execute(ddl);
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         conn = DriverManager.getConnection(getUrl(), props);
-        try {
-            PreparedStatement stmt = conn.prepareStatement("upsert into personal_details(id, first_name, "
-                    + "last_name) VALUES (?, ?, ?)");
-            stmt.setInt(1, 1);
-            stmt.setString(2, "NAME1");
-            stmt.setString(3, "LN");
-            stmt.execute();
-            stmt.setInt(1, 2);
-            stmt.setString(2, "NAME1");
-            stmt.setString(3, "LN2");
-            stmt.execute();
-            stmt.setInt(1, 3);
-            stmt.setString(2, "NAME2");
-            stmt.setString(3, "LN3");
-            stmt.execute();
-            conn.commit();
+        conn.createStatement().execute("CREATE INDEX personal_details_idx ON personal_details(first_name)");
+        conn.close();
 
-            String query = "SELECT COUNT (DISTINCT first_name) FROM personal_details";
-            PreparedStatement statement = conn.prepareStatement(query);
-            ResultSet rs = statement.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(2, rs.getInt(1));
-        } finally {
-            conn.close();
-        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        conn = DriverManager.getConnection(getUrl(), props);
+        stmt = conn.prepareStatement("upsert into personal_details(id, first_name, "
+                + "last_name) VALUES (?, ?, ?)");
+        stmt.setInt(1, 1);
+        stmt.setString(2, "NAME1");
+        stmt.setString(3, "LN");
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "NAME1");
+        stmt.setString(3, "LN2");
+        stmt.execute();
+        stmt.setInt(1, 3);
+        stmt.setString(2, "NAME2");
+        stmt.setString(3, "LN3");
+        stmt.execute();
+        conn.commit();
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
+        conn = DriverManager.getConnection(getUrl(), props);
+        String query = "SELECT COUNT (DISTINCT first_name) FROM personal_details";
+        PreparedStatement statement = conn.prepareStatement(query);
+        ResultSet rs = statement.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        conn.close();
     }
 }

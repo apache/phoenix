@@ -899,12 +899,59 @@ public abstract class BaseTest {
             Bytes.toBytes(tenantId + "00C"),
             };
     }
-    
-    protected static void deletePriorTables(long ts, String url) throws Exception {
+
+    private static void deletePriorSchemas(long ts, String url) throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
+        if (ts != HConstants.LATEST_TIMESTAMP) {
+            props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts));
+        }
+        try (Connection conn = DriverManager.getConnection(url, props)) {
+            DatabaseMetaData dbmd = conn.getMetaData();
+            ResultSet rs = dbmd.getSchemas();
+            while (rs.next()) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
+                    continue;
+                }
+                schemaName = SchemaUtil.getEscapedArgument(schemaName);
+
+                String ddl = "DROP SCHEMA " + schemaName;
+                conn.createStatement().executeUpdate(ddl);
+            }
+            rs.close();
+        }
+        // Make sure all schemas have been dropped
+        props.remove(CURRENT_SCN_ATTRIB);
+        try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
+            DatabaseMetaData dbmd = seeLatestConn.getMetaData();
+            ResultSet rs = dbmd.getSchemas();
+            boolean hasSchemas = rs.next();
+            if (hasSchemas) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
+                    hasSchemas = rs.next();
+                }
+            }
+            if (hasSchemas) {
+                fail("The following schemas are not dropped that should be:" + getSchemaNames(rs));
+            }
+        }
+    }
+
+    protected static void deletePriorMetaData(long ts, String url) throws Exception {
+        deletePriorTables(ts, url);
+        if (ts != HConstants.LATEST_TIMESTAMP) {
+            ts = nextTimestamp() - 1;
+        }
+        deletePriorSchemas(ts, url);
+    }
+
+    private static void deletePriorTables(long ts, String url) throws Exception {
         deletePriorTables(ts, (String)null, url);
     }
     
-    protected static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
+    private static void deletePriorTables(long ts, String tenantId, String url) throws Exception {
         Properties props = new Properties();
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         if (ts != HConstants.LATEST_TIMESTAMP) {
@@ -914,6 +961,17 @@ public abstract class BaseTest {
         try {
             deletePriorTables(ts, conn, url);
             deletePriorSequences(ts, conn);
+            
+            // Make sure all tables and views have been dropped
+            props.remove(CURRENT_SCN_ATTRIB);
+            try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
+            	DatabaseMetaData dbmd = seeLatestConn.getMetaData();
+    	        ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
+    	        boolean hasTables = rs.next();
+    	        if (hasTables) {
+    	        	fail("The following tables are not deleted that should be:" + getTableNames(rs));
+    	        }
+            }
         }
         finally {
             conn.close();
@@ -940,7 +998,7 @@ public abstract class BaseTest {
                         conn.close();
                     }
                     // Open tenant-specific connection when we find a new one
-                    Properties props = new Properties(globalConn.getClientInfo());
+                    Properties props = PropertiesUtil.deepCopy(globalConn.getClientInfo());
                     props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                     conn = DriverManager.getConnection(url, props);
                     lastTenantId = tenantId;
@@ -960,6 +1018,24 @@ public abstract class BaseTest {
         }
     }
     
+    private static String getTableNames(ResultSet rs) throws SQLException {
+    	StringBuilder buf = new StringBuilder();
+    	do {
+    		buf.append(" ");
+    		buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
+    	} while (rs.next());
+    	return buf.toString();
+    }
+
+    private static String getSchemaNames(ResultSet rs) throws SQLException {
+        StringBuilder buf = new StringBuilder();
+        do {
+            buf.append(" ");
+            buf.append(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM));
+        } while (rs.next());
+        return buf.toString();
+    }
+
     private static void deletePriorSequences(long ts, Connection globalConn) throws Exception {
         // TODO: drop tenant-specific sequences too
         ResultSet rs = globalConn.createStatement().executeQuery("SELECT " 
