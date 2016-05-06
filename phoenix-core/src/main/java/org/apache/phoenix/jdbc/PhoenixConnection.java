@@ -58,8 +58,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import co.cask.tephra.TransactionContext;
-
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.htrace.Sampler;
@@ -114,6 +112,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
+
+import co.cask.tephra.TransactionContext;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -670,7 +670,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         boolean transactionsEnabled = getQueryServices().getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, 
                 QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
         return  transactionsEnabled ?
-                Connection.TRANSACTION_SERIALIZABLE : Connection.TRANSACTION_READ_COMMITTED;
+                Connection.TRANSACTION_REPEATABLE_READ : Connection.TRANSACTION_READ_COMMITTED;
     }
 
     @Override
@@ -836,7 +836,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     public void setTransactionIsolation(int level) throws SQLException {
         boolean transactionsEnabled = getQueryServices().getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, 
                 QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
-        if (!transactionsEnabled && (level == Connection.TRANSACTION_REPEATABLE_READ || level == Connection.TRANSACTION_SERIALIZABLE)) {
+        if (level == Connection.TRANSACTION_SERIALIZABLE) {
+            throw new SQLFeatureNotSupportedException();
+        }
+        if (!transactionsEnabled && level == Connection.TRANSACTION_REPEATABLE_READ) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_ISOLATION_LEVEL)
             .build().buildException();
         }
