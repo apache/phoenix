@@ -40,7 +40,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-
+import org.apache.phoenix.schema.TableRef;
 import org.junit.Test;
 
 
@@ -167,7 +167,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
             
             PTable table = rootTables.get(name);
             try {
-                return new PhoenixTable(pc, table);
+                return new PhoenixTable(pc, new TableRef(table));
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }

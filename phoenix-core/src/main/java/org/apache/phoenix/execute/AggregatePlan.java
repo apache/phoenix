@@ -79,21 +79,21 @@ public class AggregatePlan extends BaseQueryPlan {
     private List<List<Scan>> scans;
     
     public static AggregatePlan create(AggregatePlan plan, OrderBy newOrderBy) {
-        return new AggregatePlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), null, null, newOrderBy, plan.parallelIteratorFactory, plan.getGroupBy(), plan.getHaving(), plan.dynamicFilter);
+        return new AggregatePlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getSourceRefs().iterator().next(), plan.getProjector(), null, null, newOrderBy, plan.parallelIteratorFactory, plan.getGroupBy(), plan.getHaving(), plan.dynamicFilter);
     }
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
             RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having) {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
+        this(context, statement, table, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
                 null);
     }
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
+            TableRef srcRef, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having,
             Expression dynamicFilter) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, offset,
+        super(context, statement, table, srcRef, projector, context.getBindManager().getParameterMetaData(), limit, offset,
                 orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
@@ -260,7 +260,7 @@ public class AggregatePlan extends BaseQueryPlan {
         if (limit == this.limit || (limit != null && limit.equals(this.limit)))
             return this;
         
-        return new AggregatePlan(this.context, this.statement, this.tableRef, this.projection,
+        return new AggregatePlan(this.context, this.statement, this.tableRef, this.tableRefs.iterator().next(), this.projection,
             limit, this.offset, this.orderBy, this.parallelIteratorFactory, this.groupBy, this.having, this.dynamicFilter);
     }
 }

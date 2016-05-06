@@ -20,7 +20,6 @@ import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -42,6 +41,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
@@ -61,10 +61,11 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
   public final long rowCount;
   public final PhoenixConnection pc;
 
-  public PhoenixTable(PhoenixConnection pc, PTable pTable) throws SQLException {
+  public PhoenixTable(PhoenixConnection pc, TableRef tableRef) throws SQLException {
       this.pc = Preconditions.checkNotNull(pc);
-      PTable extendedTable = null;
-      if (pTable.getIndexType() == IndexType.LOCAL) {
+      PTable pTable = tableRef.getTable();
+      TableRef dataTable = null;
+      if (pTable.getType() == PTableType.INDEX) {
           ColumnResolver x = FromCompiler.getResolver(
                   NamedTableNode.create(null,
                           TableName.create(pTable.getParentSchemaName().getString(),
@@ -72,9 +73,9 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
                           ImmutableList.<ColumnDef>of()), pc);
           final List<TableRef> tables = x.getTables();
           assert tables.size() == 1;
-          extendedTable = tables.get(0).getTable();          
+          dataTable = tables.get(0);          
       }
-      this.tableMapping = extendedTable == null ? new TableMapping(pTable) : new TableMapping(pTable, extendedTable);
+      this.tableMapping = new TableMapping(tableRef, dataTable, pTable.getIndexType() == IndexType.LOCAL);
       List<Integer> pkPositions = Lists.<Integer> newArrayList();
       List<RelFieldCollation> fieldCollations = Lists.<RelFieldCollation> newArrayList();
       final List<PColumn> columns = tableMapping.getMappedColumns();
@@ -90,7 +91,6 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
       this.collation = RelCollationTraitDef.INSTANCE.canonize(RelCollations.of(fieldCollations));
       try {
           PhoenixStatement stmt = new PhoenixStatement(pc);
-          TableRef tableRef = new TableRef(CalciteUtils.createTempAlias(), pTable, HConstants.LATEST_TIMESTAMP, false);
           ColumnResolver resolver = FromCompiler.getResolver(tableRef);
           StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
           Pair<Long, Long> estimatedCount = BaseResultIterators.getEstimatedCount(context, pTable);

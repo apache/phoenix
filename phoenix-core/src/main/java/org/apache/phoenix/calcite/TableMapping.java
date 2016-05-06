@@ -50,53 +50,62 @@ import com.google.common.collect.Sets;
 
 public class TableMapping {
     private final TableRef tableRef;
+    private final TableRef dataTableRef;
     private final List<PColumn> mappedColumns;
     private final int extendedColumnsOffset;
     private final TableRef extendedTableRef;
 
     public TableMapping(PTable table) {
         this.tableRef = new TableRef(table);
+        this.dataTableRef = null;
         this.mappedColumns = getMappedColumns(table);
         this.extendedColumnsOffset = mappedColumns.size();
         this.extendedTableRef = null;
     }
 
-    public TableMapping(PTable table, PTable dataTable) throws SQLException {
-        this.tableRef = new TableRef(table);
-        this.mappedColumns = Lists.newArrayList();
-        this.mappedColumns.addAll(getMappedColumns(table));
-        this.extendedColumnsOffset = mappedColumns.size();
-        Set<String> names = Sets.newHashSet();
-        for (PColumn column : this.mappedColumns) {
-            names.add(column.getName().getString());
+    public TableMapping(TableRef tableRef, TableRef dataTableRef, boolean extend) throws SQLException {
+        this.tableRef = tableRef;
+        this.dataTableRef = dataTableRef;
+        if (!extend) {
+            this.mappedColumns = getMappedColumns(tableRef.getTable());
+            this.extendedColumnsOffset = mappedColumns.size();
+            this.extendedTableRef = null;            
+        } else {
+            this.mappedColumns = Lists.newArrayList();
+            this.mappedColumns.addAll(getMappedColumns(tableRef.getTable()));
+            this.extendedColumnsOffset = mappedColumns.size();
+            Set<String> names = Sets.newHashSet();
+            for (PColumn column : this.mappedColumns) {
+                names.add(column.getName().getString());
+            }
+            PTable dataTable = dataTableRef.getTable();
+            List<PColumn> projectedColumns = new ArrayList<PColumn>();
+            for (PColumn sourceColumn : dataTable.getColumns()) {
+                if (!SchemaUtil.isPKColumn(sourceColumn)) {
+                    String colName = IndexUtil.getIndexColumnName(sourceColumn);
+                    if (!names.contains(colName)) {
+                        ColumnRef sourceColumnRef =
+                                new ColumnRef(dataTableRef, sourceColumn.getPosition());
+                        PColumn column = new ProjectedColumn(PNameFactory.newName(colName),
+                                sourceColumn.getFamilyName(), projectedColumns.size(),
+                                sourceColumn.isNullable(), sourceColumnRef);
+                        projectedColumns.add(column);
+                    }
+                }            
+            }
+            this.mappedColumns.addAll(projectedColumns);
+            PTable extendedTable = PTableImpl.makePTable(dataTable.getTenantId(),
+                    TupleProjectionCompiler.PROJECTED_TABLE_SCHEMA, dataTable.getName(),
+                    PTableType.PROJECTED, null, dataTable.getTimeStamp(),
+                    dataTable.getSequenceNumber(), dataTable.getPKName(), null,
+                    projectedColumns, null, null, Collections.<PTable>emptyList(),
+                    dataTable.isImmutableRows(), Collections.<PName>emptyList(), null, null,
+                    dataTable.isWALDisabled(), false, dataTable.getStoreNulls(),
+                    dataTable.getViewType(), null, null, dataTable.rowKeyOrderOptimizable(),
+                    dataTable.isTransactional(), dataTable.getUpdateCacheFrequency(),
+                    dataTable.getIndexDisableTimestamp());
+            this.extendedTableRef = new TableRef(extendedTable);
         }
-        TableRef dataTableRef = new TableRef(dataTable);
-        List<PColumn> projectedColumns = new ArrayList<PColumn>();
-        for (PColumn sourceColumn : dataTable.getColumns()) {
-            if (!SchemaUtil.isPKColumn(sourceColumn)) {
-                String colName = IndexUtil.getIndexColumnName(sourceColumn);
-                if (!names.contains(colName)) {
-                    ColumnRef sourceColumnRef =
-                            new ColumnRef(dataTableRef, sourceColumn.getPosition());
-                    PColumn column = new ProjectedColumn(PNameFactory.newName(colName),
-                            sourceColumn.getFamilyName(), projectedColumns.size(),
-                            sourceColumn.isNullable(), sourceColumnRef);
-                    projectedColumns.add(column);
-                }
-            }            
-        }
-        this.mappedColumns.addAll(projectedColumns);
-        PTable extendedTable = PTableImpl.makePTable(dataTable.getTenantId(),
-                TupleProjectionCompiler.PROJECTED_TABLE_SCHEMA, dataTable.getName(),
-                PTableType.PROJECTED, null, dataTable.getTimeStamp(),
-                dataTable.getSequenceNumber(), dataTable.getPKName(), null,
-                projectedColumns, null, null, Collections.<PTable>emptyList(),
-                dataTable.isImmutableRows(), Collections.<PName>emptyList(), null, null,
-                dataTable.isWALDisabled(), false, dataTable.getStoreNulls(),
-                dataTable.getViewType(), null, null, dataTable.rowKeyOrderOptimizable(),
-                dataTable.isTransactional(), dataTable.getUpdateCacheFrequency(),
-                dataTable.getIndexDisableTimestamp());
-        this.extendedTableRef = new TableRef(extendedTable);
     }
     
     public TableRef getTableRef() {
@@ -105,6 +114,10 @@ public class TableMapping {
     
     public PTable getPTable() {
         return tableRef.getTable();
+    }
+    
+    public TableRef getDataTableRef() {
+        return dataTableRef;
     }
     
     public List<PColumn> getMappedColumns() {

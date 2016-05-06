@@ -83,15 +83,15 @@ public class ScanPlan extends BaseQueryPlan {
     private boolean allowPageFilter;
 
     public static ScanPlan create(ScanPlan plan, OrderBy newOrderBy) throws SQLException {
-        return new ScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getProjector(), null, null, newOrderBy, plan.parallelIteratorFactory, plan.allowPageFilter, plan.dynamicFilter);
+        return new ScanPlan(plan.getContext(), plan.getStatement(), plan.getTableRef(), plan.getSourceRefs().iterator().next(), plan.getProjector(), null, null, newOrderBy, plan.parallelIteratorFactory, plan.allowPageFilter, plan.dynamicFilter);
     }
     
     public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null);
+        this(context, statement, table, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null);
     }
     
-    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
+    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, TableRef srcRef, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
+        super(context, statement, table, srcRef, projector, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
                         buildResultIteratorFactory(context, statement, table, orderBy, limit, offset, allowPageFilter), dynamicFilter);
         this.allowPageFilter = allowPageFilter;
@@ -271,7 +271,7 @@ public class ScanPlan extends BaseQueryPlan {
             return this;
         
         try {
-            return new ScanPlan(this.context, this.statement, this.tableRef, this.projection, 
+            return new ScanPlan(this.context, this.statement, this.tableRef, this.tableRefs.iterator().next(), this.projection, 
                     limit, this.offset, this.orderBy, this.parallelIteratorFactory, this.allowPageFilter, this.dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);

@@ -112,14 +112,14 @@ public abstract class BaseQueryPlan implements QueryPlan {
     
 
     protected BaseQueryPlan(
-            StatementContext context, FilterableStatement statement, TableRef table,
+            StatementContext context, FilterableStatement statement, TableRef table, TableRef srcRef,
             RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
             Expression dynamicFilter) {
         this.context = context;
         this.statement = statement;
         this.tableRef = table;
-        this.tableRefs = ImmutableSet.of(table);
+        this.tableRefs = ImmutableSet.of(srcRef);
         this.projection = projection;
         this.paramMetaData = paramMetaData;
         this.limit = limit;

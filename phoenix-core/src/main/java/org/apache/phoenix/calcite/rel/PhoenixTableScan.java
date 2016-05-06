@@ -46,6 +46,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
@@ -285,7 +286,10 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
                               OrderBy.FWD_ROW_KEY_ORDER_BY
                             : OrderBy.REV_ROW_KEY_ORDER_BY);
             ParallelIteratorFactory iteratorFactory = null;
-            return new ScanPlan(context, select, tableMapping.getTableRef(), RowProjector.EMPTY_PROJECTOR, null, null, orderBy, iteratorFactory, true, dynamicFilter);
+            TableRef tableRef = tableMapping.getTableRef();
+            TableRef srcRef = tableMapping.getDataTableRef() == null ?
+                    tableRef : tableMapping.getDataTableRef();
+            return new ScanPlan(context, select, tableRef, srcRef, RowProjector.EMPTY_PROJECTOR, null, null, orderBy, iteratorFactory, true, dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

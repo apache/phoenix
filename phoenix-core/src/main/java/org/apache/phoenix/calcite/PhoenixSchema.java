@@ -60,7 +60,7 @@ public class PhoenixSchema implements Schema {
     protected final Map<String, Schema> subSchemas;
     protected final Map<String, Table> tables;
     protected final Map<String, Function> views;
-    protected final Set<PTable> viewTables;
+    protected final Set<TableRef> viewTables;
     
     protected PhoenixSchema(String name, String schemaName,
             SchemaPlus parentSchema, PhoenixConnection pc) {
@@ -111,10 +111,10 @@ public class PhoenixSchema implements Schema {
                             ImmutableList.<ColumnDef>of()), pc);
             final List<TableRef> tables = x.getTables();
             assert tables.size() == 1;
-            PTable pTable = tables.get(0).getTable();
-            if (!isView(pTable)) {
-                pTable = fixTableMultiTenancy(pTable);
-                table = new PhoenixTable(pc, pTable);
+            TableRef tableRef = tables.get(0);
+            if (!isView(tableRef.getTable())) {
+                tableRef = fixTableMultiTenancy(tableRef);
+                table = new PhoenixTable(pc, tableRef);
             }
         } catch (TableNotFoundException e) {
         } catch (SQLException e) {
@@ -151,7 +151,8 @@ public class PhoenixSchema implements Schema {
                             ImmutableList.<ColumnDef>of()), pc);
             final List<TableRef> tables = x.getTables();
             assert tables.size() == 1;
-            PTable pTable = tables.get(0).getTable();
+            final TableRef tableRef = tables.get(0);
+            final PTable pTable = tableRef.getTable();
             if (isView(pTable)) {
                 String viewSql = pTable.getViewStatement();
                 if (viewSql == null) {
@@ -166,7 +167,7 @@ public class PhoenixSchema implements Schema {
                         CalciteSchema.from(viewSqlSchema).path(null),
                         pTable.getViewType() == ViewType.UPDATABLE);
                 views.put(name, func);
-                viewTables.add(pTable);
+                viewTables.add(tableRef);
             }
         } catch (TableNotFoundException e) {
         } catch (SQLException e) {
@@ -226,16 +227,23 @@ public class PhoenixSchema implements Schema {
         try {
             for (Table table : tables.values()) {
                 if (table instanceof PhoenixTable) {
-                    PTable pTable = ((PhoenixTable) table).tableMapping.getPTable();
-                    for (PTable index : pTable.getIndexes()) {
-                        addMaterialization(index, path, calciteSchema);
+                    TableRef tableRef = ((PhoenixTable) table).tableMapping.getTableRef();
+                    for (PTable index : tableRef.getTable().getIndexes()) {
+                        TableRef indexTableRef = new TableRef(null, index,
+                                tableRef.getTimeStamp(), tableRef.getLowerBoundTimeStamp(),
+                                false);
+                        addMaterialization(indexTableRef, path, calciteSchema);
                     }
                 }
             }
-            for (PTable pTable : viewTables) {
+            for (TableRef tableRef : viewTables) {
+                final PTable pTable = tableRef.getTable();
                 for (PTable index : pTable.getIndexes()) {
                     if (index.getParentName().equals(pTable.getName())) {
-                        addMaterialization(index, path, calciteSchema);
+                        TableRef indexTableRef = new TableRef(null, index,
+                                tableRef.getTimeStamp(), tableRef.getLowerBoundTimeStamp(),
+                                false);
+                        addMaterialization(indexTableRef, path, calciteSchema);
                     }
                 }                
             }
@@ -244,10 +252,11 @@ public class PhoenixSchema implements Schema {
         }
     }
     
-    private void addMaterialization(PTable index, List<String> path,
+    private void addMaterialization(TableRef indexTableRef, List<String> path,
             CalciteSchema calciteSchema) throws SQLException {
-        index = fixTableMultiTenancy(index);
-        PhoenixTable table = new PhoenixTable(pc, index);
+        indexTableRef = fixTableMultiTenancy(indexTableRef);
+        final PhoenixTable table = new PhoenixTable(pc, indexTableRef);
+        final PTable index = indexTableRef.getTable();
         tables.put(index.getTableName().getString(), table);
         StringBuffer sb = new StringBuffer();
         sb.append("SELECT");
@@ -268,16 +277,19 @@ public class PhoenixSchema implements Schema {
                 && table.getViewType() != ViewType.MAPPED;
     }
     
-    private PTable fixTableMultiTenancy(PTable table) throws SQLException {
-        if (pc.getTenantId() != null || !table.isMultiTenant()) {
-            return table;
+    private TableRef fixTableMultiTenancy(TableRef tableRef) throws SQLException {
+        if (pc.getTenantId() != null || !tableRef.getTable().isMultiTenant()) {
+            return tableRef;
         }
-        return PTableImpl.makePTable(
+        PTable table = tableRef.getTable();
+        table = PTableImpl.makePTable(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
                 table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), PTableImpl.getColumnsToClone(table), table.getParentSchemaName(), table.getParentTableName(),
                 table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
                 table.isWALDisabled(), false, table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
                 table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(), table.getTableStats(), table.getBaseColumnCount(), table.getIndexDisableTimestamp());
+        return new TableRef(null, table, tableRef.getTimeStamp(),
+                tableRef.getLowerBoundTimeStamp(), tableRef.hasDynamicCols());
     }
     
     private PhoenixSequence resolveSequence(String name) {
