@@ -25,6 +25,7 @@ import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -105,14 +106,17 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
             conn = DriverManager.getConnection(getUrl());
             conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
             fail();
-        } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_ISOLATION_LEVEL.getErrorCode(), e.getErrorCode());
+        } catch(SQLFeatureNotSupportedException e) {
         }
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
-        conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+        try {
+            conn.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+            fail();
+        } catch(SQLFeatureNotSupportedException e) {
+        }
     }
 
     @Test
