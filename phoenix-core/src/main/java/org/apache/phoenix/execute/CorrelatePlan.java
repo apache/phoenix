@@ -27,6 +27,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.RuntimeContext.CorrelateVariable;
 import org.apache.phoenix.execute.TupleProjector.ProjectedValueTuple;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
@@ -107,6 +108,7 @@ public class CorrelatePlan extends DelegateQueryPlan {
     public ResultIterator iterator(ParallelScanGrouper scanGrouper)
             throws SQLException {
         return new ResultIterator() {
+            private final CorrelateVariable variable = runtimeContext.getCorrelateVariable(variableId);
             private final ValueBitSet destBitSet = ValueBitSet.newInstance(joinedSchema);
             private final ValueBitSet lhsBitSet = ValueBitSet.newInstance(lhsSchema);
             private final ValueBitSet rhsBitSet = 
@@ -150,7 +152,7 @@ public class CorrelatePlan extends DelegateQueryPlan {
                         close();
                         return null;
                     }
-                    runtimeContext.getCorrelateVariable(variableId).setValue(current);
+                    variable.setValue(current);
                     rhsIter = rhs.iterator();
                     rhsCurrent = rhsIter.next();
                     if ((rhsCurrent == null && (joinType == JoinType.Inner || joinType == JoinType.Semi))

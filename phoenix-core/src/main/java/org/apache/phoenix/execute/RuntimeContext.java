@@ -17,10 +17,20 @@
  */
 package org.apache.phoenix.execute;
 
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 public interface RuntimeContext {
+    ThreadLocal<List<RuntimeContext>> THREAD_LOCAL =
+            new ThreadLocal<List<RuntimeContext>>() {
+        @Override protected List<RuntimeContext> initialValue() {
+            return new LinkedList<RuntimeContext>();
+        }
+    };
     
     public interface CorrelateVariable {
         public Expression newExpression(int index);        
@@ -30,4 +40,7 @@ public interface RuntimeContext {
 
     public void defineCorrelateVariable(String variableId, CorrelateVariable def);
     public CorrelateVariable getCorrelateVariable(String variableId);
+    
+    public void setBindParameterValues(Map<String, Object> values);
+    public Object getBindParameterValue(String name);
 }

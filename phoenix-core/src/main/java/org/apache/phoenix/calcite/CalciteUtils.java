@@ -18,6 +18,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
+import org.apache.calcite.rex.RexDynamicParam;
 import org.apache.calcite.rex.RexFieldAccess;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
@@ -621,6 +622,16 @@ public class CalciteUtils {
                 return implementor.newFieldAccessExpression(varId, index, type);
             }		    
 		});
+        EXPRESSION_MAP.put(SqlKind.DYNAMIC_PARAM, new ExpressionFactory() {
+            @SuppressWarnings("rawtypes")
+            @Override
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
+                RexDynamicParam param = (RexDynamicParam) node;
+                int index = param.getIndex();
+                PDataType type = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                return implementor.newBindParameterExpression(index, type);
+            }            
+        });
 		EXPRESSION_MAP.put(SqlKind.CAST, new ExpressionFactory() {
 
             @SuppressWarnings("rawtypes")

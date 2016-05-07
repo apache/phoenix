@@ -31,6 +31,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.execute.DelegateQueryPlan;
+import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.RuntimeContextImpl;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
@@ -91,7 +92,9 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     }
     
     static StatementPlan makePlan(PhoenixRel rel) {
-        final PhoenixRelImplementor phoenixImplementor = new PhoenixRelImplementorImpl(new RuntimeContextImpl());
+        RuntimeContext runtimeContext = new RuntimeContextImpl();
+        RuntimeContext.THREAD_LOCAL.get().add(runtimeContext);
+        final PhoenixRelImplementor phoenixImplementor = new PhoenixRelImplementorImpl(runtimeContext);
         phoenixImplementor.pushContext(new ImplementorContext(true, false, ImmutableIntList.identity(rel.getRowType().getFieldCount())));
         final StatementPlan plan = rel.implement(phoenixImplementor);
         if (!(plan instanceof QueryPlan)) {

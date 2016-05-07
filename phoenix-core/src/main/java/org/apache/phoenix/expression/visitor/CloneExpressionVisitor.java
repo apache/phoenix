@@ -23,6 +23,7 @@ import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.expression.AddExpression;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
+import org.apache.phoenix.expression.BindParameterExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -64,6 +65,11 @@ public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisito
     @Override
     public Expression visit(CorrelateVariableFieldAccessExpression node) {
         return node;
+    }
+
+    @Override
+    public Expression visit(BindParameterExpression node) {
+        return null;
     }
 
     @Override

@@ -21,6 +21,8 @@ public interface PhoenixRelImplementor {
     QueryPlan visitInput(int i, PhoenixQueryRel input);
     ColumnExpression newColumnExpression(int index);
     @SuppressWarnings("rawtypes")
+    Expression newBindParameterExpression(int index, PDataType type);
+    @SuppressWarnings("rawtypes")
     Expression newFieldAccessExpression(String variableId, int index, PDataType type);
     SequenceValueExpression newSequenceExpression(PhoenixSequence seq, SequenceValueParseNode.Op op);
     RuntimeContext getRuntimeContext();

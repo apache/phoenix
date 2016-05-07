@@ -318,10 +318,10 @@ public enum ExpressionType {
      */
     public static ExpressionType valueOfOrNull(Expression expression) {
         Class <? extends Expression> clazz = expression.getClass();
-        // We will not have CorrelateVariableFieldAccessExpression on the server side,
+        // We will not have instances of VariableExpression on the server side,
         // it will be evaluated at client side and will be serialized as 
         // LiteralExpression instead.
-        if (clazz == CorrelateVariableFieldAccessExpression.class) {
+        if (VariableExpression.class.isAssignableFrom(clazz)) {
             clazz = LiteralExpression.class;
         }
         return classToEnumMap.get(clazz);

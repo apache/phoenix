@@ -17,33 +17,25 @@
  */
 package org.apache.phoenix.expression;
 
-import java.io.DataOutput;
-import java.io.IOException;
-import java.sql.SQLException;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
-public class CorrelateVariableFieldAccessExpression extends BaseTerminalExpression {
-    private final RuntimeContext runtimeContext;
-    private final String variableId;
+public class CorrelateVariableFieldAccessExpression extends VariableExpression {
     private final Expression fieldAccessExpression;
     
     public CorrelateVariableFieldAccessExpression(RuntimeContext context, String variableId, Expression fieldAccessExpression) {
-        super();
-        this.runtimeContext = context;
-        this.variableId = variableId;
+        super(variableId, context);
         this.fieldAccessExpression = fieldAccessExpression;
     }
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Tuple variable = runtimeContext.getCorrelateVariable(variableId).getValue();
+        Tuple variable = runtimeContext.getCorrelateVariable(name).getValue();
         if (variable == null)
-            throw new RuntimeException("Variable '" + variableId + "' not set.");
+            throw new RuntimeException("Variable '" + name + "' not set.");
         
         return fieldAccessExpression.evaluate(variable, ptr);
     }
@@ -51,19 +43,6 @@ public class CorrelateVariableFieldAccessExpression extends BaseTerminalExpressi
     @Override
     public <T> T accept(ExpressionVisitor<T> visitor) {
         return visitor.visit(this);
-    }
-
-    @Override
-    public void write(DataOutput output) throws IOException {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        boolean success = evaluate(null, ptr);
-        Object value = success ? getDataType().toObject(ptr) : null;
-        try {
-            LiteralExpression expr = LiteralExpression.newConstant(value, getDataType());
-            expr.write(output);
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
     }
     
     @SuppressWarnings("rawtypes")

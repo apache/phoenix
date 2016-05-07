@@ -24,6 +24,7 @@ import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.expression.AddExpression;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
+import org.apache.phoenix.expression.BindParameterExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -110,6 +111,7 @@ public interface ExpressionVisitor<E> {
     public E visitLeave(ArrayConstructorExpression node, List<E> l);
     
     public E visit(CorrelateVariableFieldAccessExpression node);
+    public E visit(BindParameterExpression node);
     public E visit(LiteralExpression node);
     public E visit(RowKeyColumnExpression node);
     public E visit(KeyValueColumnExpression node);

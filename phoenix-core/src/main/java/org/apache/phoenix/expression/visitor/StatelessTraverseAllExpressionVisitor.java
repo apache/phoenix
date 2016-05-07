@@ -23,12 +23,12 @@ import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.expression.AddExpression;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
+import org.apache.phoenix.expression.BindParameterExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.DivideExpression;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -102,6 +102,11 @@ public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpress
 
     @Override
     public E visit(CorrelateVariableFieldAccessExpression node) {
+        return null;
+    }
+
+    @Override
+    public E visit(BindParameterExpression node) {
         return null;
     }
 

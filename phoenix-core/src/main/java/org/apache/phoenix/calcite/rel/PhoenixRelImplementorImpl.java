@@ -13,6 +13,7 @@ import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.expression.BindParameterExpression;
 import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.Expression;
@@ -50,6 +51,12 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
 	public ColumnExpression newColumnExpression(int index) {
 		return tableMapping.newColumnExpression(index);
 	}
+    
+    @SuppressWarnings("rawtypes")
+    @Override
+    public Expression newBindParameterExpression(int index, PDataType type) {
+        return new BindParameterExpression(index, type, runtimeContext);
+    }
     
     @SuppressWarnings("rawtypes")
     @Override

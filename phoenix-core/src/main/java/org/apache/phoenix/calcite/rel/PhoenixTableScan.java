@@ -117,14 +117,26 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
             } else {
                 this.extendedColumnRef = extendedColumnRef.union(
                         tableMapping.getExtendedColumnRef(ImmutableList.of(filter)));
-                // We use a implementor with a special implementation for field access
-                // here, which translates RexFieldAccess into a LiteralExpression
+                // We use a implementor with a special implementation for correlate variables
+                // or bind parameters here, which translates them into a LiteralExpression
                 // with a sample value. This will achieve 3 goals at a time:
-                // 1) avoid getting exception when translating RexFieldAccess at this 
-                //    time when the correlate variable has not been defined yet.
+                // 1) avoid getting exception when translating RexFieldAccess at this time when
+                //    the correlate variable has not been defined yet.
                 // 2) get a guess of ScanRange even if the runtime value is absent.
+                //    TODO instead of getting a random sample value, we'd better get it from
+                //    existing guidepost bytes.
                 // 3) test whether this dynamic filter is worth a recompile at runtime.
                 PhoenixRelImplementor tmpImplementor = new PhoenixRelImplementorImpl(null) {                    
+                    @SuppressWarnings("rawtypes")
+                    @Override
+                    public Expression newBindParameterExpression(int index, PDataType type) {
+                        try {
+                            return LiteralExpression.newConstant(type.getSampleValue(), type);
+                        } catch (SQLException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    
                     @SuppressWarnings("rawtypes")
                     @Override
                     public Expression newFieldAccessExpression(String variableId, int index, PDataType type) {

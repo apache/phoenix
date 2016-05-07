@@ -19,12 +19,15 @@ package org.apache.phoenix.execute;
 
 import java.util.Map;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 
 public class RuntimeContextImpl implements RuntimeContext {
+    Map<String, Object> parameters;
     Map<String, CorrelateVariable> correlateVariables;
 
     public RuntimeContextImpl() {
+        this.parameters = null;
         this.correlateVariables = Maps.newHashMap();
     }
     
@@ -40,5 +43,18 @@ public class RuntimeContextImpl implements RuntimeContext {
             throw new RuntimeException("Variable '" + variableId + "' undefined.");
         
         return entry;
+    }
+
+    @Override
+    public void setBindParameterValues(Map<String, Object> values) {
+        this.parameters = ImmutableMap.copyOf(values);
+    }
+
+    @Override
+    public Object getBindParameterValue(String name) {
+        if (this.parameters == null)
+            throw new RuntimeException("Bind parameters not set.");
+        
+        return this.parameters.get(name);
     }
 }

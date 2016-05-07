@@ -7,6 +7,8 @@ import java.sql.ResultSetMetaData;
 import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLXML;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.TimeZone;
 
@@ -20,13 +22,19 @@ import org.apache.calcite.avatica.AvaticaStatement;
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.Meta.Signature;
 import org.apache.calcite.avatica.Meta.StatementHandle;
+import org.apache.calcite.avatica.remote.TypedValue;
 import org.apache.calcite.avatica.QueryState;
 import org.apache.calcite.avatica.UnregisteredDriver;
 import org.apache.calcite.jdbc.CalciteConnectionImpl;
 import org.apache.calcite.jdbc.CalciteFactory;
 import org.apache.calcite.jdbc.Driver;
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.Ord;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+
+import com.google.common.collect.Maps;
 
 public class PhoenixCalciteFactory extends CalciteFactory {
     
@@ -97,7 +105,26 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             super(driver, factory, url, info,
                     CalciteSchema.createRootSchema(true, false), typeFactory);
         }
-        
+
+        public <T> Enumerable<T> enumerable(Meta.StatementHandle handle,
+                CalcitePrepare.CalciteSignature<T> signature) throws SQLException {
+            Map<String, Object> map = Maps.newLinkedHashMap();
+            AvaticaStatement statement = lookupStatement(handle);
+            final List<TypedValue> parameterValues =
+                    TROJAN.getParameterValues(statement);
+            for (Ord<TypedValue> o : Ord.zip(parameterValues)) {
+                map.put("?" + o.i, o.e.toLocal());
+            }
+            try {
+                for (RuntimeContext runtimeContext : RuntimeContext.THREAD_LOCAL.get()) {
+                    runtimeContext.setBindParameterValues(map);
+                }
+                return super.enumerable(handle, signature);
+            } finally {
+                RuntimeContext.THREAD_LOCAL.get().clear();
+            }
+        }
+
         public void setAutoCommit(final boolean isAutoCommit) throws SQLException {
             call(new PhoenixConnectionCallable() {
                 @Override
