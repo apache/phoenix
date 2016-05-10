@@ -523,7 +523,7 @@ public class ViewIT extends BaseViewIT {
         String queryPlan = QueryUtil.getExplainPlan(rs);
         // Assert that in either case (local & global) that index from physical table used for query on view.
         if (localIndex) {
-            assertEquals("CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER _LOCAL_IDX_" + fullTableName + " [-32768,1,100] - [-32768,2,109]\n" + 
+            assertEquals("CLIENT PARALLEL 1-WAY SKIP SCAN ON 4 KEYS OVER " + fullTableName + " [1,1,100] - [1,2,109]\n" + 
                     "    SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')\n" + 
                     "CLIENT MERGE SORT", queryPlan);
         } else {

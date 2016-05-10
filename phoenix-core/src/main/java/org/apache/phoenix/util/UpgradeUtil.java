@@ -70,6 +70,8 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -290,6 +292,119 @@ public class UpgradeUtil {
                     logger.warn("Exception while closing admin during pre-split", e);
                 }
             }
+        }
+    }
+
+    public static void upgradeLocalIndexes(PhoenixConnection metaConnection) throws SQLException,
+            IOException, org.apache.hadoop.hbase.TableNotFoundException {
+        HBaseAdmin admin = null;
+        try {
+            admin = metaConnection.getQueryServices().getAdmin();
+            ResultSet rs = metaConnection.createStatement().executeQuery("SELECT TABLE_SCHEM, TABLE_NAME, DATA_TABLE_NAME FROM SYSTEM.CATALOG  "
+                    + "      WHERE COLUMN_NAME IS NULL"
+                    + "           AND COLUMN_FAMILY IS NULL"
+                    + "           AND INDEX_TYPE=2");
+            boolean droppedLocalIndexes = false;
+            while (rs.next()) {
+                if(!droppedLocalIndexes) {
+                    HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    String localIndexSplitter = LocalIndexSplitter.class.getName();
+                    for (HTableDescriptor table : localIndexTables) {
+                        HTableDescriptor dataTableDesc = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getUserTableName(table.getNameAsString())));
+                        HColumnDescriptor[] columnFamilies = dataTableDesc.getColumnFamilies();
+                        boolean modifyTable = false;
+                        for(HColumnDescriptor cf : columnFamilies) {
+                            String localIndexCf = QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX+cf.getNameAsString();
+                            if(dataTableDesc.getFamily(Bytes.toBytes(localIndexCf))==null){
+                                HColumnDescriptor colDef =
+                                        new HColumnDescriptor(localIndexCf);
+                                for(Entry<ImmutableBytesWritable, ImmutableBytesWritable>keyValue: cf.getValues().entrySet()){
+                                    colDef.setValue(keyValue.getKey().copyBytes(), keyValue.getValue().copyBytes());
+                                }
+                                dataTableDesc.addFamily(colDef);
+                                modifyTable = true;
+                            }
+                        }
+                        List<String> coprocessors = dataTableDesc.getCoprocessors();
+                        for(String coprocessor:  coprocessors) {
+                            if(coprocessor.equals(localIndexSplitter)) {
+                                dataTableDesc.removeCoprocessor(localIndexSplitter);
+                                modifyTable = true;
+                            }
+                        }
+                        if(modifyTable) {
+                            admin.modifyTable(dataTableDesc.getName(), dataTableDesc);
+                        }
+                    }
+                    admin.disableTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    admin.deleteTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
+                    droppedLocalIndexes = true;
+                }
+                String getColumns =
+                        "SELECT COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG  WHERE TABLE_SCHEM "
+                                + (rs.getString(1) == null ? "IS NULL " : "='" + rs.getString(1)
+                                + "'") + " and TABLE_NAME='" + rs.getString(2)
+                                + "' AND COLUMN_NAME IS NOT NULL";
+                ResultSet getColumnsRs = metaConnection.createStatement().executeQuery(getColumns);
+                List<String> indexedColumns = new ArrayList<String>(1);
+                List<String> coveredColumns = new ArrayList<String>(1);
+                
+                while (getColumnsRs.next()) {
+                    String column = getColumnsRs.getString(1);
+                    String columnName = IndexUtil.getDataColumnName(column);
+                    if (columnName.equals(MetaDataUtil.getViewIndexIdColumnName())) {
+                        continue;
+                    }
+                    String columnFamily = IndexUtil.getDataColumnFamilyName(column);
+                    if (getColumnsRs.getString(2) == null) {
+                        if (columnFamily != null && !columnFamily.isEmpty()) {
+                            if (columnFamily.equals(QueryConstants.DEFAULT_COLUMN_FAMILY)) {
+                                indexedColumns.add(columnName);
+                            } else {
+                                indexedColumns.add(SchemaUtil.getColumnName(columnFamily,
+                                    columnName));
+                            }
+                        }
+                    } else {
+                        coveredColumns.add(SchemaUtil.getColumnName(columnFamily, columnName));
+                    }
+                }
+                StringBuilder createIndex = new StringBuilder("CREATE LOCAL INDEX ");
+                createIndex.append(rs.getString(2));
+                createIndex.append(" ON ");
+                createIndex.append(SchemaUtil.getTableName(rs.getString(1), rs.getString(3)));
+                createIndex.append("(");
+                for (int i = 0; i < indexedColumns.size(); i++) {
+                    createIndex.append(indexedColumns.get(i));
+                    if (i < indexedColumns.size() - 1) {
+                        createIndex.append(",");
+                    }
+                }
+                createIndex.append(")");
+               
+                if (!coveredColumns.isEmpty()) {
+                    createIndex.append(" INCLUDE(");
+                    for (int i = 0; i < coveredColumns.size(); i++) {
+                        createIndex.append(coveredColumns.get(i));
+                        if (i < coveredColumns.size() - 1) {
+                            createIndex.append(",");
+                        }
+                    }
+                    createIndex.append(")");
+                }
+                logger.info("Index creation query is : " + createIndex.toString());
+                logger.info("Dropping the index " + rs.getString(2)
+                    + " to clean up the index details from SYSTEM.CATALOG.");
+                metaConnection.createStatement().execute(
+                    "DROP INDEX IF EXISTS " + rs.getString(2) + " ON "
+                            + SchemaUtil.getTableName(rs.getString(1), rs.getString(3)));
+                logger.info("Recreating the index " + rs.getString(2));
+                metaConnection.createStatement().execute(createIndex.toString());
+                logger.info("Created the index " + rs.getString(2));
+            }
+            metaConnection.createStatement().execute("DELETE FROM SYSTEM.CATALOG WHERE SUBSTR(TABLE_NAME,0,11)='"+MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+"'");
+        } finally {
+            if (admin != null) admin.close();
         }
     }
     

@@ -83,7 +83,7 @@ import org.mockito.Mockito;
 @Category(NeedsOwnMiniClusterTest.class)
 public class WALReplayWithIndexWritesAndCompressedWALIT {
 
-  public static final Log LOG = LogFactory.getLog(TestWALReplay.class);
+  public static final Log LOG = LogFactory.getLog(WALReplayWithIndexWritesAndCompressedWALIT.class);
   @Rule
   public TableName table = new TableName();
   private String INDEX_TABLE_NAME = table.getTableNameString() + "_INDEX";

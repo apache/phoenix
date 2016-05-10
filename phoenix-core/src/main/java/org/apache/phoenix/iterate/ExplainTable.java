@@ -176,7 +176,7 @@ public abstract class ExplainTable {
         }
     }
 
-    private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex) {
+    private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex, boolean changeViewIndexId) {
         if (Boolean.TRUE.equals(isNull)) {
             buf.append("null");
             return;
@@ -198,8 +198,14 @@ public abstract class ExplainTable {
             type.coerceBytes(ptr, type, sortOrder, SortOrder.getDefault());
             range = ptr.get();
         }
-        Format formatter = context.getConnection().getFormatter(type);
-        buf.append(type.toStringLiteral(range, formatter));
+        if (changeViewIndexId) {
+            Short s = (Short) type.toObject(range);
+            s = (short) (s + (-Short.MAX_VALUE));
+            buf.append(s.toString());
+        } else {
+            Format formatter = context.getConnection().getFormatter(type);
+            buf.append(type.toStringLiteral(range, formatter));
+        }
     }
     
     private static class RowKeyValueIterator implements Iterator<byte[]> {
@@ -257,6 +263,7 @@ public abstract class ExplainTable {
                 minMaxIterator = new RowKeyValueIterator(schema, minMaxRange.getRange(bound));
             }
         }
+        boolean isLocalIndex = ScanUtil.isLocalIndex(context.getScan());
         boolean forceSkipScan = this.hint.hasHint(Hint.SKIP_SCAN);
         int nRanges = forceSkipScan ? scanRanges.getRanges().size() : scanRanges.getBoundSlotCount();
         for (int i = 0, minPos = 0; minPos < nRanges || minMaxIterator.hasNext(); i++) {
@@ -275,7 +282,13 @@ public abstract class ExplainTable {
                     minMaxIterator = Iterators.emptyIterator();
                 }
             }
-            appendPKColumnValue(buf, b, isNull, i);
+            if (isLocalIndex
+                    && ((context.getConnection().getTenantId() != null && i == 1) || (context
+                            .getConnection().getTenantId() == null && i == 0))) {
+                appendPKColumnValue(buf, b, isNull, i, true);
+            } else {
+                appendPKColumnValue(buf, b, isNull, i, false);
+            }
             buf.append(',');
         }
     }
