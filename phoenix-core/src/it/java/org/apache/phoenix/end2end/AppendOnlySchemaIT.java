@@ -160,7 +160,7 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             // create sequence for auto partition
             conn1.createStatement().execute("CREATE SEQUENCE metric_id_seq CACHE 1");
             // create base table
-            conn1.createStatement().execute("CREATE TABLE metric_table (metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))" 
+            conn1.createStatement().execute("CREATE TABLE metric_table (metricId INTEGER NOT NULL, metricVal1 DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))" 
                     + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=metric_id_seq");
             // create view
             String ddl =
@@ -171,23 +171,25 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
                             + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
             conn1.createStatement().execute(ddl);
             
-            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal) VALUES('host1', 1.0)");
+            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal1) VALUES('host1', 1.0)");
             conn1.commit();
 
-            // execute ddl adding a pk column and regular column
+            // execute ddl that creates that same view with an additional pk column and regular column
+            // and also changes the order of the pk columns (which is not respected since we only 
+            // allow appending columns)
             ddl =
                     "CREATE VIEW IF NOT EXISTS"
-                            + " view1( hostName varchar NOT NULL, instanceName varchar, metricVal2 double"
-                            + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName, instancename))"
+                            + " view1( instanceName varchar, hostName varchar, metricVal2 double, metricVal1 double"
+                            + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (instancename, hostName))"
                             + " AS SELECT * FROM metric_table"
                             + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
             conn2.createStatement().execute(ddl);
 
             conn2.createStatement().execute(
-                "UPSERT INTO view1(hostName, instanceName, metricVal, metricval2) VALUES('host2', 'instance2', 21.0, 22.0)");
+                "UPSERT INTO view1(hostName, instanceName, metricVal1, metricval2) VALUES('host2', 'instance2', 21.0, 22.0)");
             conn2.commit();
             
-            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal) VALUES('host3', 3.0)");
+            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal1) VALUES('host3', 3.0)");
             conn1.commit();
             
             // verify data exists
@@ -198,12 +200,21 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
                     conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "VIEW1"));
             List<PColumn> pkColumns = table.getPKColumns();
             assertEquals(3,table.getPKColumns().size());
-            assertEquals("METRICID", pkColumns.get(0).getName().getString());
-            assertEquals("HOSTNAME", pkColumns.get(1).getName().getString());
-            assertEquals("INSTANCENAME", pkColumns.get(2).getName().getString());
+            // even though the second create view statement changed the order of the pk, the original order is maintained
+            PColumn metricId = pkColumns.get(0);
+            assertEquals("METRICID", metricId.getName().getString());
+            assertFalse(metricId.isNullable());
+            PColumn hostName = pkColumns.get(1);
+            assertEquals("HOSTNAME", hostName.getName().getString());
+            // hostname name is not nullable even though the second create statement changed it to nullable
+            // since we only allow appending columns
+            assertFalse(hostName.isNullable());
+            PColumn instanceName = pkColumns.get(2);
+            assertEquals("INSTANCENAME", instanceName.getName().getString());
+            assertTrue(instanceName.isNullable());
             List<PColumn> columns = table.getColumns();
             assertEquals("METRICID", columns.get(0).getName().getString());
-            assertEquals("METRICVAL", columns.get(1).getName().getString());
+            assertEquals("METRICVAL1", columns.get(1).getName().getString());
             assertEquals("HOSTNAME", columns.get(2).getName().getString());
             assertEquals("INSTANCENAME", columns.get(3).getName().getString());
             assertEquals("METRICVAL2", columns.get(4).getName().getString());
