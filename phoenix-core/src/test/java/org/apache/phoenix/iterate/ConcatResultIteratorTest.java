@@ -56,36 +56,7 @@ public class ConcatResultIteratorTest {
                 new SingleKeyValueTuple(new KeyValue(B, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(4))),
             };
         final List<PeekingResultIterator>results = Arrays.asList(new PeekingResultIterator[] {new MaterializedResultIterator(Arrays.asList(results1)), new MaterializedResultIterator(Arrays.asList(results2)), new MaterializedResultIterator(Arrays.asList(results3))});
-        ResultIterators iterators = new ResultIterators() {
-
-            @Override
-            public List<PeekingResultIterator> getIterators() throws SQLException {
-                return results;
-            }
-
-            @Override
-            public int size() {
-                return results.size();
-            }
-
-            @Override
-            public void explain(List<String> planSteps) {
-            }
-            
-			@Override
-			public List<KeyRange> getSplits() {
-				return Collections.emptyList();
-			}
-
-			@Override
-			public List<List<Scan>> getScans() {
-				return Collections.emptyList();
-			}
-
-            @Override
-            public void close() throws SQLException {
-            }
-        };
+        ResultIterators iterators = new MaterializedResultIterators(results);
 
         Tuple[] expectedResults = new Tuple[] {
                 new SingleKeyValueTuple(new KeyValue(A, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(1))),

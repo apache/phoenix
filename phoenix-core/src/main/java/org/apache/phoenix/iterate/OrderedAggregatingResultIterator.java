@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -55,7 +56,7 @@ public class OrderedAggregatingResultIterator extends OrderedResultIterator impl
     }
     
     @Override
-    public void aggregate(Tuple result) {
-        getDelegate().aggregate(result);
+    public Aggregator[] aggregate(Tuple result) {
+        return getDelegate().aggregate(result);
     }
 }
