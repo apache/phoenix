@@ -119,22 +119,21 @@ public class MetaDataUtilTest {
         int hbaseVersion = MetaDataUtil.decodeHBaseVersion(version);
         int expectedHBaseVersion = VersionUtil.encodeVersion(0, 98, 14);
         assertEquals(expectedHBaseVersion, hbaseVersion);
-        boolean isSystemNamespaceMappingEnabled = MetaDataUtil.decodeSystemNamespaceMappingEnabled(version);
-        assertFalse(isSystemNamespaceMappingEnabled);
+        boolean isTableNamespaceMappingEnabled = MetaDataUtil.decodeTableNamespaceMappingEnabled(version);
+        assertFalse(isTableNamespaceMappingEnabled);
         int phoenixVersion = MetaDataUtil.decodePhoenixVersion(version);
         int expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
                 MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
         assertEquals(expectedPhoenixVersion, phoenixVersion);
 
-        config.setBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, true);
         config.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true);
 
         version = MetaDataUtil.encodeVersion(hbaseVersionStr, config);
         hbaseVersion = MetaDataUtil.decodeHBaseVersion(version);
         expectedHBaseVersion = VersionUtil.encodeVersion(0, 98, 14);
         assertEquals(expectedHBaseVersion, hbaseVersion);
-        isSystemNamespaceMappingEnabled = MetaDataUtil.decodeSystemNamespaceMappingEnabled(version);
-        assertTrue(isSystemNamespaceMappingEnabled);
+        isTableNamespaceMappingEnabled = MetaDataUtil.decodeTableNamespaceMappingEnabled(version);
+        assertTrue(isTableNamespaceMappingEnabled);
         phoenixVersion = MetaDataUtil.decodePhoenixVersion(version);
         expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
                 MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);

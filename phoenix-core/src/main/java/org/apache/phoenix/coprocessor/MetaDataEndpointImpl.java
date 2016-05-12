@@ -160,7 +160,6 @@ import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisit
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -3150,15 +3149,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
         GetVersionResponse.Builder builder = GetVersionResponse.newBuilder();
         Configuration config = env.getConfiguration();
-        boolean isSystemTablesMapped = SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+        boolean isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
                 new ReadOnlyProps(config.iterator()));
-        if (isSystemTablesMapped
+        if (isTablesMappingEnabled
                 && PhoenixDatabaseMetaData.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
             logger.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
             ProtobufUtil.setControllerException(controller,
                     ServerUtil.createIOException(
                             SchemaUtil.getPhysicalHBaseTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
-                                    isSystemTablesMapped, PTableType.SYSTEM).getString(),
+                                    isTablesMappingEnabled, PTableType.SYSTEM).getString(),
                     new DoNotRetryIOException(
                             "Old client is not compatible when" + " system tables are upgraded to map to namespace")));
         }

@@ -147,7 +147,7 @@ public class MetaDataUtil {
     // Given the encoded integer representing the phoenix version in the encoded version value.
     // The second byte in int would be the major version, 3rd byte minor version, and 4th byte
     // patch version.
-    public static boolean decodeSystemNamespaceMappingEnabled(long version) {
+    public static boolean decodeTableNamespaceMappingEnabled(long version) {
         return ((int)((version << Byte.SIZE * 3) >>> Byte.SIZE * 7) & 0x1) != 0;
     }
 
@@ -163,7 +163,7 @@ public class MetaDataUtil {
      */
     public static long encodeVersion(String hbaseVersionStr, Configuration config) {
         long hbaseVersion = VersionUtil.encodeVersion(hbaseVersionStr);
-        long isSystemNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+        long isTableNamespaceMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
                 new ReadOnlyProps(config.iterator())) ? 1 : 0;
         long phoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
                 MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
@@ -172,7 +172,7 @@ public class MetaDataUtil {
         // Encode HBase major, minor, patch version
         (hbaseVersion << (Byte.SIZE * 5))
                 // Encode if systemMappingEnabled are enabled on the server side
-                | (isSystemNamespaceMapped << (Byte.SIZE * 4))
+                | (isTableNamespaceMappingEnabled << (Byte.SIZE * 4))
                 // Encode Phoenix major, minor, patch version
                 | (phoenixVersion << (Byte.SIZE * 1))
                 // Encode whether or not non transactional, mutable secondary indexing was configured properly.

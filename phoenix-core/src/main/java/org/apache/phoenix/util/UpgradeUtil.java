@@ -1320,23 +1320,20 @@ public class UpgradeUtil {
         if (srcTableExists && (PTableType.TABLE.equals(pTableType)
                 || PTableType.INDEX.equals(pTableType) || PTableType.SYSTEM.equals(pTableType))) {
             boolean destTableExists=admin.tableExists(destTableName);
-            if (destTableExists) {
-                String errorMsg = "Upgrade: Source: " + srcTableName + " and detination: " + destTableName
-                        + " table both exists!! drop one which is irrevalant(Be cautious)";
-                logger.error(errorMsg);
-                throw new IllegalArgumentException(errorMsg);
+            if (!destTableExists) {
+                String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
+                logger.info("Disabling table " + srcTableName + " ..");
+                admin.disableTable(srcTableName);
+                logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
+                admin.snapshot(snapshotName, srcTableName);
+                logger.info(
+                        String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
+                admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
+                logger.info(String.format("deleting old table %s..", srcTableName));
+                admin.deleteTable(srcTableName);
+                logger.info(String.format("deleting snapshot %s..", snapshotName));
+                admin.deleteSnapshot(snapshotName);
             }
-            String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
-            logger.info("Disabling table " + srcTableName + " ..");
-            admin.disableTable(srcTableName);
-            logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
-            admin.snapshot(snapshotName, srcTableName);
-            logger.info(String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
-            logger.info(String.format("deleting old table %s..", srcTableName));
-            admin.deleteTable(srcTableName);
-            logger.info(String.format("deleting snapshot %s..", snapshotName));
-            admin.deleteSnapshot(snapshotName);
         }
         // Update flag to represent table is mapped to namespace
         logger.info(String.format("Updating meta information of phoenix table '%s' to map to namespace..", phoenixTableName));

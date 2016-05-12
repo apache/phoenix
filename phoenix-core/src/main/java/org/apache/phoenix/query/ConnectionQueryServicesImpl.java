@@ -148,6 +148,7 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.EmptySequenceCacheException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
+import org.apache.phoenix.schema.NewerSchemaAlreadyExistsException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -1147,7 +1148,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         StringBuilder buf = new StringBuilder("The following servers require an updated " + QueryConstants.DEFAULT_COPROCESS_PATH + " to be put in the classpath of HBase: ");
         boolean isIncompatible = false;
         int minHBaseVersion = Integer.MAX_VALUE;
-        boolean isSystemNamespaceMappingEnabled = false;
+        boolean isTableNamespaceMappingEnabled = false;
         try {
             List<HRegionLocation> locations = this
                     .getAllTableRegions(metaTable);
@@ -1183,7 +1184,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             for (Map.Entry<byte[],Long> result : results.entrySet()) {
                 // This is the "phoenix.jar" is in-place, but server is out-of-sync with client case.
                 long version = result.getValue();
-                isSystemNamespaceMappingEnabled |= MetaDataUtil.decodeSystemNamespaceMappingEnabled(version);
+                isTableNamespaceMappingEnabled |= MetaDataUtil.decodeTableNamespaceMappingEnabled(version);
 
                 if (!isCompatible(result.getValue())) {
                     isIncompatible = true;
@@ -1196,13 +1197,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     minHBaseVersion = MetaDataUtil.decodeHBaseVersion(result.getValue());
                 }
             }
-            if (isSystemNamespaceMappingEnabled != SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+            if (isTableNamespaceMappingEnabled != SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
                     getProps())) { throw new SQLExceptionInfo.Builder(
                             SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
                                     .setMessage(
-                                            "Ensure that config " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
-                                                    + " is consitent on client and server . Remember you should not be using client with version"
-                                                    + " less than v4.8 after you have upgraded your system table to map with namespace!!")
+                                            "Ensure that config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
+                                                    + " is consitent on client and server.")
                                     .build().buildException(); }
             lowestClusterHBaseVersion = minHBaseVersion;
         } catch (SQLException e) {
@@ -2352,29 +2352,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             String globalUrl = JDBCUtil.removeProperty(url, PhoenixRuntime.TENANT_ID_ATTRIB);
                             metaConnection = new PhoenixConnection(
                                     ConnectionQueryServicesImpl.this, globalUrl, scnProps, newEmptyMetaData());
-                            validateProperties();
                             try (HBaseAdmin admin = getAdmin()) {
-                                boolean unMappedSystemCatalogExists = admin.tableExists(SYSTEM_CATALOG_NAME_BYTES);
                                 boolean mappedSystemCatalogExists = admin
                                         .tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true));
                                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
                                         ConnectionQueryServicesImpl.this.getProps())) {
-                                    if (unMappedSystemCatalogExists
-                                            && mappedSystemCatalogExists) { throw new SQLException(
-                                                    "Cannot initiate connection as table "
-                                                            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " and "
-                                                            + SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
-                                                                    true)
-                                                            + " both exists!! This could happen if upgrade killed in "
-                                                            + "between or you connected with old client "
-                                                            + "even after upgrading system tables. So delete one table which "
-                                                            + "you think is not appropiate(Be cautious in doing this)"); }
                                     if (admin.tableExists(SYSTEM_CATALOG_NAME_BYTES)) {
                                         //check if the server is already updated and have namespace config properly set. 
                                         checkClientServerCompatibility(SYSTEM_CATALOG_NAME_BYTES);
                                     }
-                                    metaConnection.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS "
-                                            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
                                     ensureSystemTablesUpgraded(ConnectionQueryServicesImpl.this.getProps());
                                 } else if (mappedSystemCatalogExists) { throw new SQLExceptionInfo.Builder(
                                                 SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
@@ -2382,7 +2368,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                                 + SchemaUtil.getPhysicalTableName(
                                                                         SYSTEM_CATALOG_NAME_BYTES, true)
                                                                 + " is found but client does not have "
-                                                                + IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE + " enabled")
+                                                                + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                                                         .build().buildException(); }
                             }
  
@@ -2576,6 +2562,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             } catch (NewerTableAlreadyExistsException e) {
                             } catch (TableAlreadyExistsException e) {
                             }
+                            if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
+                                    ConnectionQueryServicesImpl.this.getProps())) {
+                                try {
+                                    metaConnection.createStatement().executeUpdate("CREATE SCHEMA IF NOT EXISTS "
+                                            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
+                                } catch (NewerSchemaAlreadyExistsException e) {}
+                            }
                             scheduleRenewLeaseTasks(); 
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
@@ -2607,21 +2600,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return null;
                 }
 
-                private void validateProperties() throws SQLException {
-                    ReadOnlyProps props = getProps();
-                    if (props.getBoolean(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
-                            QueryServicesOptions.DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
-                            && !props.getBoolean(IS_NAMESPACE_MAPPING_ENABLED,
-                                    QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED)) { throw new SQLExceptionInfo.Builder(
-                                            SQLExceptionCode.INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES)
-                                                    .setMessage("Cannot initiate connection as "
-                                                            + IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE + " is enabled but "
-                                                            + IS_NAMESPACE_MAPPING_ENABLED
-                                                            + " is found to be disabled at client!!")
-                                                    .build().buildException(); }
-
-                }
-
                 private void ensureSystemTablesUpgraded(ReadOnlyProps props)
                         throws SQLException, IOException, IllegalArgumentException, InterruptedException {
                     if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, props)) { return; }
@@ -2634,22 +2612,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (tableNames.size() == 0) { return; }
                         if (tableNames.size() > 4) { throw new IllegalArgumentException(
                                 "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
-                        metatable = getTable(SchemaUtil
-                                .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName());
+                        byte[] mappedSystemTable = SchemaUtil
+                                .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName();
+                        metatable = getTable(mappedSystemTable);
                         if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)) {
-                            UpgradeUtil.mapTableToNamespace(admin, metatable,
-                                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props,
-                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
+                            if (!admin.tableExists(mappedSystemTable)) {
+                                UpgradeUtil.mapTableToNamespace(admin, metatable,
+                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props,
+                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
+                                ConnectionQueryServicesImpl.this.removeTable(null,
+                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
+                                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
+                            }
                             tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-                            ConnectionQueryServicesImpl.this.removeTable(null,
-                                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
-                                    MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
                         }
                         for (String table : tableNames) {
                             UpgradeUtil.mapTableToNamespace(admin, metatable, table, props,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0, PTableType.SYSTEM);
                             ConnectionQueryServicesImpl.this.removeTable(null, table, null,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
+                        }
+                        if (!tableNames.isEmpty()) {
                             clearCache();
                         }
                     } finally {
