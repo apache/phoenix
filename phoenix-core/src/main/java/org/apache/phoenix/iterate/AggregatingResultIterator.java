@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -33,6 +34,7 @@ public interface AggregatingResultIterator extends ResultIterator {
      * Provides a means of re-aggregating a result row. For
      * scanners that need to look ahead (i.e. {@link org.apache.phoenix.iterate.OrderedAggregatingResultIterator}
      * @param result the row to re-aggregate
+     * @return Aggregator[] results
      */
-    void aggregate(Tuple result);
+    Aggregator[] aggregate(Tuple result);
 }

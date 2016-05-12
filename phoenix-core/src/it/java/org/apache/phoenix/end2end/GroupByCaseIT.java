@@ -32,6 +32,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -343,4 +346,93 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
                 "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]", QueryUtil.getExplainPlan(rs));
     }
     
+    @Test
+    public void testSumGroupByOrderPreservingDesc() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE GROUP_BY_DESC (k1 char(1) not null, k2 integer not null, constraint pk primary key (k1,k2)) split on (?,?,?)");
+        stmt.setBytes(1, ByteUtil.concat(PChar.INSTANCE.toBytes("a"), PInteger.INSTANCE.toBytes(3)));
+        stmt.setBytes(2, ByteUtil.concat(PChar.INSTANCE.toBytes("j"), PInteger.INSTANCE.toBytes(3)));
+        stmt.setBytes(3, ByteUtil.concat(PChar.INSTANCE.toBytes("n"), PInteger.INSTANCE.toBytes(3)));
+        stmt.execute();
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 1)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 2)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 3)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 4)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('b', 5)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 1)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 2)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 3)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 4)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 1)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 2)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 3)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 4)");
+        conn.commit();
+        String query = "SELECT k1,sum(k2) FROM GROUP_BY_DESC GROUP BY k1 ORDER BY k1 DESC";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("n", rs.getString(1));
+        assertEquals(10, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("j", rs.getString(1));
+        assertEquals(10, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("b", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals(10, rs.getInt(2));
+        assertFalse(rs.next());
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY REVERSE FULL SCAN OVER GROUP_BY_DESC\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]", QueryUtil.getExplainPlan(rs));
+    }
+
+    @Test
+    public void testAvgGroupByOrderPreserving() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE GROUP_BY_DESC (k1 char(1) not null, k2 integer not null, constraint pk primary key (k1,k2)) split on (?,?,?)");
+        stmt.setBytes(1, ByteUtil.concat(PChar.INSTANCE.toBytes("a"), PInteger.INSTANCE.toBytes(3)));
+        stmt.setBytes(2, ByteUtil.concat(PChar.INSTANCE.toBytes("j"), PInteger.INSTANCE.toBytes(3)));
+        stmt.setBytes(3, ByteUtil.concat(PChar.INSTANCE.toBytes("n"), PInteger.INSTANCE.toBytes(3)));
+        stmt.execute();
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 1)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 2)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 3)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('a', 6)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('b', 5)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 1)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 2)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 3)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('j', 10)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 1)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 2)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 3)");
+        conn.createStatement().execute("UPSERT INTO GROUP_BY_DESC VALUES('n', 2)");
+        conn.commit();
+        String query = "SELECT k1,avg(k2) FROM GROUP_BY_DESC GROUP BY k1";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertEquals(3, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("b", rs.getString(1));
+        assertEquals(5, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("j", rs.getString(1));
+        assertEquals(4, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals("n", rs.getString(1));
+        assertEquals(2, rs.getInt(2));
+        assertFalse(rs.next());
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        assertEquals(
+                "CLIENT PARALLEL 1-WAY FULL SCAN OVER GROUP_BY_DESC\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]", QueryUtil.getExplainPlan(rs));
+    }
 }
