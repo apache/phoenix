@@ -508,6 +508,7 @@ public class DeleteCompiler {
                 // Ignoring ORDER BY, since with auto commit on and no limit makes no difference
                 SelectStatement aggSelect = SelectStatement.create(SelectStatement.COUNT_ONE, delete.getHint());
                 RowProjector projectorToBe = ProjectionCompiler.compile(context, aggSelect, GroupBy.EMPTY_GROUP_BY);
+                context.getAggregationManager().compile(context, GroupBy.EMPTY_GROUP_BY);
                 if (plan.getProjector().projectEveryRow()) {
                     projectorToBe = new RowProjector(projectorToBe,true);
                 }
