@@ -253,6 +253,7 @@ public class PostDDLCompiler {
                             }
                             // Need to project all column families into the scan, since we haven't yet created our empty key value
                             RowProjector projector = ProjectionCompiler.compile(context, SelectStatement.COUNT_ONE, GroupBy.EMPTY_GROUP_BY);
+                            context.getAggregationManager().compile(context, GroupBy.EMPTY_GROUP_BY);
                             // Explicitly project these column families and don't project the empty key value,
                             // since at this point we haven't added the empty key value everywhere.
                             if (columnFamilies != null) {

@@ -2275,5 +2275,19 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
-
+    @Test
+    public void testOrderByWithNoProjection() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("create table x (id integer primary key, A.i1 integer," +
+                    " B.i2 integer)");
+            Scan scan = projectQuery("select A.i1 from X group by i1 order by avg(B.i2) " +
+                    "desc");
+            ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute
+                    (BaseScannerRegionObserver.AGGREGATORS), null);
+            assertEquals(2,aggregators.getAggregatorCount());
+        } finally {
+            conn.close();
+        }
+    }
 }
