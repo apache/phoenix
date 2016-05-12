@@ -636,7 +636,11 @@ public class UpsertCompiler {
                     PTable projectedTable = PTableImpl.makePTable(table, projectedColumns);
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
-                    RowProjector aggProjectorToBe = ProjectionCompiler.compile(queryPlan.getContext(), select, GroupBy.EMPTY_GROUP_BY);
+                    StatementContext statementContext = queryPlan.getContext();
+                    RowProjector aggProjectorToBe = ProjectionCompiler.compile(statementContext, select, GroupBy
+                            .EMPTY_GROUP_BY);
+                    statementContext.getAggregationManager().compile(queryPlan.getContext()
+                            ,GroupBy.EMPTY_GROUP_BY);
                     if (queryPlan.getProjector().projectEveryRow()) {
                         aggProjectorToBe = new RowProjector(aggProjectorToBe,true);
                     }

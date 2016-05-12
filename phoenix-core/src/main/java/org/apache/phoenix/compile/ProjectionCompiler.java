@@ -188,8 +188,8 @@ public class ProjectionCompiler {
         try {
         	dataTable = conn.getTable(new PTableKey(tenantId, tableName));
         } catch (TableNotFoundException e) {
-            if (tenantId != null) { 
-            	// Check with null tenantId 
+            if (tenantId != null) {
+                // Check with null tenantId
             	dataTable = conn.getTable(new PTableKey(null, tableName));
             }
             else {
@@ -483,8 +483,6 @@ public class ProjectionCompiler {
                 }
             }
         }
-        
-        selectVisitor.compile();
         boolean isProjectEmptyKeyValue = false;
         if (isWildcard) {
             projectAllColumnFamilies(table, scan);
@@ -576,18 +574,7 @@ public class ProjectionCompiler {
     }
 
     private static class SelectClauseVisitor extends ExpressionCompiler {
-        private static int getMinNullableIndex(List<SingleAggregateFunction> aggFuncs, boolean isUngroupedAggregation) {
-            int minNullableIndex = aggFuncs.size();
-            for (int i = 0; i < aggFuncs.size(); i++) {
-                SingleAggregateFunction aggFunc = aggFuncs.get(i);
-                if (isUngroupedAggregation ? aggFunc.getAggregator().isNullable() : aggFunc.getAggregatorExpression().isNullable()) {
-                    minNullableIndex = i;
-                    break;
-                }
-            }
-            return minNullableIndex;
-        }
-        
+
         /**
          * Track whether or not the projection expression is case sensitive. We use this
          * information to determine whether or not we normalize the column name passed
@@ -613,40 +600,6 @@ public class ProjectionCompiler {
             reset();
         }
 
-
-        /**
-         * Compiles projection by:
-         * 1) Adding RowCount aggregate function if not present when limiting rows. We need this
-         *    to track how many rows have been scanned.
-         * 2) Reordering aggregation functions (by putting fixed length aggregates first) to
-         *    optimize the positional access of the aggregated value.
-         */
-        private void compile() throws SQLException {
-            final Set<SingleAggregateFunction> aggFuncSet = Sets.newHashSetWithExpectedSize(context.getExpressionManager().getExpressionCount());
-    
-            Iterator<Expression> expressions = context.getExpressionManager().getExpressions();
-            while (expressions.hasNext()) {
-                Expression expression = expressions.next();
-                expression.accept(new SingleAggregateFunctionVisitor() {
-                    @Override
-                    public Iterator<Expression> visitEnter(SingleAggregateFunction function) {
-                        aggFuncSet.add(function);
-                        return Iterators.emptyIterator();
-                    }
-                });
-            }
-            if (aggFuncSet.isEmpty() && groupBy.isEmpty()) {
-                return;
-            }
-            List<SingleAggregateFunction> aggFuncs = new ArrayList<SingleAggregateFunction>(aggFuncSet);
-            Collections.sort(aggFuncs, SingleAggregateFunction.SCHEMA_COMPARATOR);
-    
-            int minNullableIndex = getMinNullableIndex(aggFuncs,groupBy.isEmpty());
-            context.getScan().setAttribute(BaseScannerRegionObserver.AGGREGATORS, ServerAggregators.serialize(aggFuncs, minNullableIndex));
-            ClientAggregators clientAggregators = new ClientAggregators(aggFuncs, minNullableIndex);
-            context.getAggregationManager().setAggregators(clientAggregators);
-        }
-        
         @Override
         public void reset() {
             super.reset();
