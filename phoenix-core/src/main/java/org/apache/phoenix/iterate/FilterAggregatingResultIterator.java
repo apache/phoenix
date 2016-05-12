@@ -21,10 +21,10 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
 
 
 /**
@@ -66,8 +66,8 @@ public class FilterAggregatingResultIterator  implements AggregatingResultIterat
     }
 
     @Override
-    public void aggregate(Tuple result) {
-        delegate.aggregate(result);
+    public Aggregator[] aggregate(Tuple result) {
+        return delegate.aggregate(result);
     }
 
     @Override
