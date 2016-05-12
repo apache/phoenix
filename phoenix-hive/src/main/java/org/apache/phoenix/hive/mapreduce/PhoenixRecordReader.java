@@ -19,6 +19,7 @@ package org.apache.phoenix.hive.mapreduce;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -37,6 +38,7 @@ import org.apache.phoenix.hive.PhoenixRowKey;
 import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.LookAheadResultIterator;
+import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.RoundRobinResultIterator;
@@ -114,9 +116,8 @@ public class PhoenixRecordReader<T extends DBWritable> implements
                 scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes
                         .toBytes(true));
                 final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan
-                        .getContext().getConnection().getMutationState(),
-                        queryPlan.getTableRef(), scan, readMetrics.allotMetric(SCAN_BYTES,
-                        tableName), renewScannerLeaseThreshold);
+                        .getContext().getConnection().getMutationState(),scan, readMetrics.allotMetric(SCAN_BYTES,
+                        tableName), renewScannerLeaseThreshold, queryPlan, MapReduceParallelScanGrouper.getInstance());
 
 
                 PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap

@@ -19,7 +19,6 @@ package org.apache.hadoop.hbase.regionserver;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.commons.logging.Log;
@@ -28,7 +27,6 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.catalog.MetaEditor;
-import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -38,18 +36,10 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class LocalIndexSplitter extends BaseRegionObserver {
@@ -149,34 +139,6 @@ public class LocalIndexSplitter extends BaseRegionObserver {
             throws IOException {
         if (st == null || daughterRegions == null) return;
         RegionCoprocessorEnvironment environment = ctx.getEnvironment();
-        PhoenixConnection conn = null;
-        try {
-            conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
-                PhoenixConnection.class);
-            MetaDataClient client = new MetaDataClient(conn);
-            String userTableName = ctx.getEnvironment().getRegion().getTableDesc().getNameAsString();
-            PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
-            List<PTable> indexes = dataTable.getIndexes();
-            for (PTable index : indexes) {
-                if (index.getIndexType() == IndexType.LOCAL) {
-                    AlterIndexStatement indexStatement = FACTORY.alterIndex(FACTORY.namedTable(null,
-                        org.apache.phoenix.parse.TableName.create(index.getSchemaName().getString(), index.getTableName().getString())),
-                        dataTable.getTableName().getString(), false, PIndexState.INACTIVE);
-                    client.alterIndex(indexStatement);
-                }
-            }
-            conn.commit();
-        } catch (ClassNotFoundException ex) {
-        } catch (SQLException ex) {
-        } finally {
-            if (conn != null) {
-                try {
-                    conn.close();
-                } catch (SQLException ex) {
-                }
-            }
-        }
-
         HRegionServer rs = (HRegionServer) environment.getRegionServerServices();
         st.stepsAfterPONR(rs, rs, daughterRegions);
     }
