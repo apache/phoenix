@@ -91,10 +91,11 @@ public abstract class BaseGroupedAggregatingResultIterator implements
     }
     
     @Override
-    public void aggregate(Tuple result) {
+    public Aggregator[] aggregate(Tuple result) {
         Aggregator[] rowAggregators = aggregators.getAggregators();
         aggregators.reset(rowAggregators);
         aggregators.aggregate(rowAggregators, result);
+        return rowAggregators;
     }
 
     @Override

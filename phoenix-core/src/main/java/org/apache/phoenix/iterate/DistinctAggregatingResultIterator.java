@@ -18,16 +18,19 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
-import java.util.*;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Sets;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Sets;
 
 /**
  * Result scanner that dedups the incoming tuples to make them distinct.
@@ -155,8 +158,8 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
     }
 
     @Override
-    public void aggregate(Tuple result) {
-        delegate.aggregate(result);
+    public Aggregator[] aggregate(Tuple result) {
+        return delegate.aggregate(result);
     }
 
 	@Override
