@@ -33,7 +33,7 @@ import scala.collection.JavaConverters._
 
 class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
                  predicate: Option[String] = None, zkUrl: Option[String] = None,
-                 @transient conf: Configuration)
+                 @transient conf: Configuration, dateAsTimestamp: Boolean = false)
   extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
 
   // Make sure to register the Phoenix driver
@@ -102,23 +102,33 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 
   // Convert our PhoenixRDD to a DataFrame
   def toDataFrame(sqlContext: SQLContext): DataFrame = {
-    val columnList = PhoenixConfigurationUtil
+    val columnInfoList = PhoenixConfigurationUtil
       .getSelectColumnMetadataList(new Configuration(phoenixConf))
       .asScala
 
-    val columnNames: Seq[String] = columnList.map(ci => {
-      ci.getDisplayName
+    // Keep track of the sql type and column names.
+    val columns: Seq[(String, Int)] = columnInfoList.map(ci => {
+      (ci.getDisplayName, ci.getSqlType)
     })
 
+
     // Lookup the Spark catalyst types from the Phoenix schema
-    val structFields = phoenixSchemaToCatalystSchema(columnList).toArray
+    val structFields = phoenixSchemaToCatalystSchema(columnInfoList).toArray
 
     // Create the data frame from the converted Spark schema
     sqlContext.createDataFrame(map(pr => {
 
       // Create a sequence of column data
-      val rowSeq = columnNames.map { name =>
-        pr.resultMap(name)
+      val rowSeq = columns.map { case (name, sqlType) =>
+        val res = pr.resultMap(name)
+
+        // Special handling for data types
+        if(dateAsTimestamp && sqlType == 91) { // 91 is the defined type for Date
+          new java.sql.Timestamp(res.asInstanceOf[java.sql.Date].getTime)
+        }
+        else {
+          res
+        }
       }
 
       // Create a Spark Row from the sequence
@@ -148,7 +158,8 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       if (columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale)
     case t if t.isInstanceOf[PTimestamp] || t.isInstanceOf[PUnsignedTimestamp] => TimestampType
     case t if t.isInstanceOf[PTime] || t.isInstanceOf[PUnsignedTime] => TimestampType
-    case t if t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate] => DateType
+    case t if (t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate]) && !dateAsTimestamp => DateType
+    case t if (t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate]) && dateAsTimestamp => TimestampType
     case t if t.isInstanceOf[PBoolean] => BooleanType
     case t if t.isInstanceOf[PVarbinary] || t.isInstanceOf[PBinary] => BinaryType
     case t if t.isInstanceOf[PIntegerArray] || t.isInstanceOf[PUnsignedIntArray] => ArrayType(IntegerType, containsNull = true)
