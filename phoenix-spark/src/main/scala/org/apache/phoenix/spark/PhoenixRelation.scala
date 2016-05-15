@@ -24,7 +24,7 @@ import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.phoenix.util.StringUtil.escapeStringConstant
 
-case class PhoenixRelation(tableName: String, zkUrl: String)(@transient val sqlContext: SQLContext)
+case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Boolean = false)(@transient val sqlContext: SQLContext)
     extends BaseRelation with PrunedFilteredScan {
 
   /*
@@ -41,7 +41,8 @@ case class PhoenixRelation(tableName: String, zkUrl: String)(@transient val sqlC
       requiredColumns,
       Some(buildFilter(filters)),
       Some(zkUrl),
-      new Configuration()
+      new Configuration(),
+      dateAsTimestamp
     ).toDataFrame(sqlContext).rdd
   }
 
@@ -53,7 +54,8 @@ case class PhoenixRelation(tableName: String, zkUrl: String)(@transient val sqlC
       Seq(),
       None,
       Some(zkUrl),
-      new Configuration()
+      new Configuration(),
+      dateAsTimestamp
     ).toDataFrame(sqlContext).schema
   }
 
