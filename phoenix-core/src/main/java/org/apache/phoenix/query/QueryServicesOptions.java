@@ -136,7 +136,7 @@ public class QueryServicesOptions {
     // latency and less parallelization.
     public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = 2999;
     public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
-    public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = false;
+    public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = true;
 
     //
     // Spillable GroupBy - SPGBY prefix
