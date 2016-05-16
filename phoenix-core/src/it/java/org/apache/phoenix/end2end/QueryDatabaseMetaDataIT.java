@@ -147,6 +147,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(CUSTOM_ENTITY_DATA_NAME, rs.getString("TABLE_NAME"));
         assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
         assertEquals("false", rs.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
+        assertEquals(Boolean.FALSE, rs.getBoolean(PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED));
 
         rs = dbmd.getTables(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME, CUSTOM_ENTITY_DATA_NAME, null);
         assertTrue(rs.next());

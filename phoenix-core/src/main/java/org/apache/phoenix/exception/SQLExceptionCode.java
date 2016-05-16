@@ -402,10 +402,10 @@ public enum SQLExceptionCode {
             return new SchemaNotFoundException(info.getSchemaName());
         }
     }), CANNOT_MUTATE_SCHEMA(723, "43M06", "Cannot mutate schema as schema has existing tables"), SCHEMA_NOT_ALLOWED(
-            724, "43M07",
-            "Schema name not allowed!!"), CREATE_SCHEMA_NOT_ALLOWED(725, "43M08", "Cannot create schema because config "
-                    + QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " for enabling name space mapping isn't enabled.");
-
+            724, "43M07", "Schema name not allowed!!"), CREATE_SCHEMA_NOT_ALLOWED(725, "43M08",
+                    "Cannot create schema because config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
+                            + " for enabling name space mapping isn't enabled."), INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES(
+                                    726, "43M10", " Inconsistent namespace mapping properites..");
 
     private final int errorCode;
     private final String sqlState;

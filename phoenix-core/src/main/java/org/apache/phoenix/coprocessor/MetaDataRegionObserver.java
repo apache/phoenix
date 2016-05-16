@@ -35,7 +35,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -75,6 +74,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
@@ -131,9 +131,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 HTableInterface metaTable = null;
                 HTableInterface statsTable = null;
                 try {
+                    ReadOnlyProps props=new ReadOnlyProps(env.getConfiguration().iterator());
                     Thread.sleep(1000);
-                    metaTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-                    statsTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME));
+                    metaTable = env.getTable(
+                            SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props));
+                    statsTable = env.getTable(
+                            SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, props));
                     if (UpgradeUtil.truncateStats(metaTable, statsTable)) {
                         LOG.info("Stats are successfully truncated for upgrade 4.7!!");
                     }

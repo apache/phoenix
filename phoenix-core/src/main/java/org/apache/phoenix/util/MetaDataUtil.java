@@ -57,6 +57,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -116,7 +117,7 @@ public class MetaDataUtil {
     // The second byte in int would be the major version, 3rd byte minor version, and 4th byte 
     // patch version.
     public static int decodePhoenixVersion(long version) {
-        return (int) ((version << Byte.SIZE * 3) >>> Byte.SIZE * 4);
+        return (int) ((version << Byte.SIZE * 4) >>> Byte.SIZE * 5);
     }
     
     // TODO: generalize this to use two bytes to return a SQL error code instead
@@ -144,18 +145,43 @@ public class MetaDataUtil {
         int patch = version & 0xFF;
         return major + "." + minor + "." + patch;
     }
-
-    public static int encodePhoenixVersion() {
-        return VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
-                MetaDataProtocol.PHOENIX_PATCH_NUMBER);
+    
+    // Given the encoded integer representing the phoenix version in the encoded version value.
+    // The second byte in int would be the major version, 3rd byte minor version, and 4th byte
+    // patch version.
+    public static boolean decodeTableNamespaceMappingEnabled(long version) {
+        return ((int)((version << Byte.SIZE * 3) >>> Byte.SIZE * 7) & 0x1) != 0;
     }
 
-    public static long encodeHBaseAndPhoenixVersions(String hbaseVersion) {
-        return (((long) VersionUtil.encodeVersion(hbaseVersion)) << (Byte.SIZE * 5)) |
-                (((long) VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION, MetaDataProtocol.PHOENIX_MINOR_VERSION,
-                        MetaDataProtocol.PHOENIX_PATCH_NUMBER)) << (Byte.SIZE * 1));
+    // The first 3 bytes of the long is used to encoding the HBase version as major.minor.patch.
+    // The next 4 bytes of the value is used to encode the Phoenix version as major.minor.patch.
+    /**
+     * Encode HBase and Phoenix version along with some server-side config information such as whether WAL codec is
+     * installed (necessary for non transactional, mutable secondar indexing), and whether systemNamespace mapping is enabled.
+     * 
+     * @param env
+     *            RegionCoprocessorEnvironment to access HBase version and Configuration.
+     * @return long value sent back during initialization of a cluster connection.
+     */
+    public static long encodeVersion(String hbaseVersionStr, Configuration config) {
+        long hbaseVersion = VersionUtil.encodeVersion(hbaseVersionStr);
+        long isTableNamespaceMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
+                new ReadOnlyProps(config.iterator())) ? 1 : 0;
+        long phoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
+                MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
+        long walCodec = IndexManagementUtil.isWALEditCodecSet(config) ? 0 : 1;
+        long version =
+        // Encode HBase major, minor, patch version
+        (hbaseVersion << (Byte.SIZE * 5))
+                // Encode if systemMappingEnabled are enabled on the server side
+                | (isTableNamespaceMappingEnabled << (Byte.SIZE * 4))
+                // Encode Phoenix major, minor, patch version
+                | (phoenixVersion << (Byte.SIZE * 1))
+                // Encode whether or not non transactional, mutable secondary indexing was configured properly.
+                | walCodec;
+        return version;
     }
-
+    
     public static void getTenantIdAndSchemaAndTableName(List<Mutation> tableMetadata, byte[][] rowKeyMetaData) {
         Mutation m = getTableHeaderRow(tableMetadata);
         getVarChars(m.getRow(), 3, rowKeyMetaData);
