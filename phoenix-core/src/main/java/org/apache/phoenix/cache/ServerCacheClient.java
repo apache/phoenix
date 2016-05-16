@@ -71,7 +71,6 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.protobuf.HBaseZeroCopyByteString;
 
 /**
  * 
@@ -214,7 +213,7 @@ public class ServerCacheClient {
                                                     ServerCacheFactoryProtos.ServerCacheFactory.Builder svrCacheFactoryBuider = ServerCacheFactoryProtos.ServerCacheFactory.newBuilder();
                                                     svrCacheFactoryBuider.setClassName(cacheFactory.getClass().getName());
                                                     builder.setCacheFactory(svrCacheFactoryBuider.build());
-                                                    builder.setTxState(HBaseZeroCopyByteString.wrap(txState));
+                                                    builder.setTxState(ByteStringer.wrap(txState));
                                                     instance.addServerCache(controller, builder.build(), rpcCallback);
                                                     if(controller.getFailedOn() != null) {
                                                         throw controller.getFailedOn();
