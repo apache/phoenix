@@ -1315,20 +1315,25 @@ public class UpgradeUtil {
                         ? "For system table " + QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE
                                 + " also needs to be enabled along with " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                         : QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled"); }
+        boolean srcTableExists=admin.tableExists(srcTableName);
         // we need to move physical table in actual namespace for TABLE and Index
-        if (admin.tableExists(srcTableName) && (PTableType.TABLE.equals(pTableType)
+        if (srcTableExists && (PTableType.TABLE.equals(pTableType)
                 || PTableType.INDEX.equals(pTableType) || PTableType.SYSTEM.equals(pTableType))) {
-            String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
-            logger.info("Disabling table " + srcTableName + " ..");
-            admin.disableTable(srcTableName);
-            logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
-            admin.snapshot(snapshotName, srcTableName);
-            logger.info(String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
-            admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
-            logger.info(String.format("deleting old table %s..", srcTableName));
-            admin.deleteTable(srcTableName);
-            logger.info(String.format("deleting snapshot %s..", snapshotName));
-            admin.deleteSnapshot(snapshotName);
+            boolean destTableExists=admin.tableExists(destTableName);
+            if (!destTableExists) {
+                String snapshotName = QueryConstants.UPGRADE_TABLE_SNAPSHOT_PREFIX + srcTableName;
+                logger.info("Disabling table " + srcTableName + " ..");
+                admin.disableTable(srcTableName);
+                logger.info(String.format("Taking snapshot %s of table %s..", snapshotName, srcTableName));
+                admin.snapshot(snapshotName, srcTableName);
+                logger.info(
+                        String.format("Restoring snapshot %s in destination table %s..", snapshotName, destTableName));
+                admin.cloneSnapshot(Bytes.toBytes(snapshotName), Bytes.toBytes(destTableName));
+                logger.info(String.format("deleting old table %s..", srcTableName));
+                admin.deleteTable(srcTableName);
+                logger.info(String.format("deleting snapshot %s..", snapshotName));
+                admin.deleteSnapshot(snapshotName);
+            }
         }
         // Update flag to represent table is mapped to namespace
         logger.info(String.format("Updating meta information of phoenix table '%s' to map to namespace..", phoenixTableName));
@@ -1358,6 +1363,9 @@ public class UpgradeUtil {
                 "May not specify the TENANT_ID_ATTRIB property when upgrading"); }
         if (conn.getSchema() != null) { throw new IllegalArgumentException(
                 "Schema should not be set for connection!!"); }
+        if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
+                readOnlyProps)) { throw new IllegalArgumentException(
+                        QueryServices.IS_NAMESPACE_MAPPING_ENABLED + " is not enabled!!"); }
         try (HBaseAdmin admin = conn.getQueryServices().getAdmin();
                 HTableInterface metatable = conn.getQueryServices()
                         .getTable(SchemaUtil
@@ -1365,22 +1373,24 @@ public class UpgradeUtil {
                                 .getName());) {
             String tableName = SchemaUtil.normalizeIdentifier(srcTable);
             String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
-
-            // Upgrade is not required if schemaName is not present.
-            if (schemaName.equals("")) { throw new IllegalArgumentException("Table doesn't have schema name"); }
-
             // Confirm table is not already upgraded
             PTable table = PhoenixRuntime.getTable(conn, tableName);
+            // Upgrade is not required if schemaName is not present.
+            if (schemaName.equals("") && !PTableType.VIEW
+                    .equals(table.getType())) { throw new IllegalArgumentException("Table doesn't have schema name"); }
+
             if (table.isNamespaceMapped()) { throw new IllegalArgumentException("Table is already upgraded"); }
-            logger.info(String.format("Creating schema %s..", schemaName));
-            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+            if (!schemaName.equals("")) {
+                logger.info(String.format("Creating schema %s..", schemaName));
+                conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+            }
             String newPhysicalTablename = SchemaUtil.normalizeIdentifier(SchemaUtil
                     .getPhysicalTableName(table.getPhysicalName().getString(), readOnlyProps).getNameAsString());
             logger.info(String.format("Upgrading %s %s..", table.getType(), tableName));
             // Upgrade the data or main table
             mapTableToNamespace(admin, metatable, tableName, newPhysicalTablename, readOnlyProps,
                     PhoenixRuntime.getCurrentScn(readOnlyProps), tableName, table.getType());
-
+            conn.close();
             // clear the cache and get new table
             conn.getQueryServices().clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, table.getSchemaName().getBytes(),
                     table.getTableName().getBytes(), PhoenixRuntime.getCurrentScn(readOnlyProps));

@@ -21,15 +21,19 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.HBaseFactoryProvider;
+import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
 
 
@@ -103,5 +107,37 @@ public class MetaDataUtilTest {
   private static ImmutableBytesPtr wrap(byte[] bytes) {
     return new ImmutableBytesPtr(bytes);
   }
+
+    @Test
+    public void testEncodeDecode() {
+        String hbaseVersionStr = "0.98.14";
+        Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        config.setBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, false);
+        config.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, false);
+
+        long version = MetaDataUtil.encodeVersion(hbaseVersionStr, config);
+        int hbaseVersion = MetaDataUtil.decodeHBaseVersion(version);
+        int expectedHBaseVersion = VersionUtil.encodeVersion(0, 98, 14);
+        assertEquals(expectedHBaseVersion, hbaseVersion);
+        boolean isTableNamespaceMappingEnabled = MetaDataUtil.decodeTableNamespaceMappingEnabled(version);
+        assertFalse(isTableNamespaceMappingEnabled);
+        int phoenixVersion = MetaDataUtil.decodePhoenixVersion(version);
+        int expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
+                MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
+        assertEquals(expectedPhoenixVersion, phoenixVersion);
+
+        config.setBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, true);
+
+        version = MetaDataUtil.encodeVersion(hbaseVersionStr, config);
+        hbaseVersion = MetaDataUtil.decodeHBaseVersion(version);
+        expectedHBaseVersion = VersionUtil.encodeVersion(0, 98, 14);
+        assertEquals(expectedHBaseVersion, hbaseVersion);
+        isTableNamespaceMappingEnabled = MetaDataUtil.decodeTableNamespaceMappingEnabled(version);
+        assertTrue(isTableNamespaceMappingEnabled);
+        phoenixVersion = MetaDataUtil.decodePhoenixVersion(version);
+        expectedPhoenixVersion = VersionUtil.encodeVersion(MetaDataProtocol.PHOENIX_MAJOR_VERSION,
+                MetaDataProtocol.PHOENIX_MINOR_VERSION, MetaDataProtocol.PHOENIX_PATCH_NUMBER);
+        assertEquals(expectedPhoenixVersion, phoenixVersion);
+    }
 }
 

@@ -92,10 +92,12 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
@@ -159,7 +161,6 @@ import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisit
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -216,6 +217,7 @@ import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -3152,19 +3154,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     @Override
-    public void getVersion(RpcController controller, GetVersionRequest request,
-            RpcCallback<GetVersionResponse> done) {
+    public void getVersion(RpcController controller, GetVersionRequest request, RpcCallback<GetVersionResponse> done) {
 
         GetVersionResponse.Builder builder = GetVersionResponse.newBuilder();
-        // The first 3 bytes of the long is used to encoding the HBase version as major.minor.patch.
-        // The next 4 bytes of the value is used to encode the Phoenix version as major.minor.patch.
-        long version = MetaDataUtil.encodeHBaseAndPhoenixVersions(this.env.getHBaseVersion());
-
-        // The last byte is used to communicate whether or not mutable secondary indexing
-        // was configured properly.
-        version =
-                MetaDataUtil.encodeHasIndexWALCodec(version,
-                    IndexManagementUtil.isWALEditCodecSet(this.env.getConfiguration()));
+        Configuration config = env.getConfiguration();
+        boolean isTablesMappingEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.TABLE,
+                new ReadOnlyProps(config.iterator()));
+        if (isTablesMappingEnabled
+                && PhoenixDatabaseMetaData.MIN_NAMESPACE_MAPPED_PHOENIX_VERSION > request.getClientVersion()) {
+            logger.error("Old client is not compatible when" + " system tables are upgraded to map to namespace");
+            ProtobufUtil.setControllerException(controller,
+                    ServerUtil.createIOException(
+                            SchemaUtil.getPhysicalHBaseTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME,
+                                    isTablesMappingEnabled, PTableType.SYSTEM).getString(),
+                    new DoNotRetryIOException(
+                            "Old client is not compatible when" + " system tables are upgraded to map to namespace")));
+        }
+        long version = MetaDataUtil.encodeVersion(env.getHBaseVersion(), config);
 
         builder.setVersion(version);
         done.run(builder.build());
