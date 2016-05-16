@@ -51,8 +51,8 @@ public interface QueryServices extends SQLCloseable {
     // consistency configuration setting
     public static final String CONSISTENCY_ATTRIB = "phoenix.connection.consistency";
     public static final String SCHEMA_ATTRIB = "phoenix.connection.schema";
-    public static final String IS_NAMESPACE_MAPPING_ENABLED  = "phoenix.connection.isNamespaceMappingEnabled";
-    public static final String IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE  = "phoenix.connection.mapSystemTablesToNamespace";
+    public static final String IS_NAMESPACE_MAPPING_ENABLED  = "phoenix.schema.isNamespaceMappingEnabled";
+    public static final String IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE  = "phoenix.schema.mapSystemTablesToNamespace";
     // joni byte regex engine setting
     public static final String USE_BYTE_BASED_REGEX_ATTRIB = "phoenix.regex.byteBased";
     public static final String DRIVER_SHUTDOWN_TIMEOUT_MS = "phoenix.shutdown.timeoutMs";

@@ -155,6 +155,9 @@ public class FromCompiler {
                 schemaName = statement.getTableName().getSchemaName();
                 if (schemaName != null) {
                     new SchemaResolver(connection, statement.getTableName().getSchemaName(), true);
+                } else if (connection.getSchema() != null) {
+                    // To ensure schema set through properties or connection string exists before creating table
+                    new SchemaResolver(connection, connection.getSchema(), true);
                 }
             }
             return EMPTY_TABLE_RESOLVER;
