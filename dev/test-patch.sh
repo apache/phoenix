@@ -520,6 +520,36 @@ checkAntiPatterns () {
 }
 
 ###############################################################################
+### Check against use of known incompatible classes
+checkUseOfIncompatibleClasses () {
+  echo ""
+  echo ""
+  echo "======================================================================"
+  echo "======================================================================"
+  echo "    Checking against use of known incompatible classes."
+  echo "======================================================================"
+  echo "======================================================================"
+  echo ""
+  echo ""
+  for INCOMPATIBLE_CLASS in $INCOMPATIBLE_CLASSES ; do
+  warning=`$GREP "+import $INCOMPATIBLE_CLASS" $PATCH_DIR/patch`
+  if [[ $warning != "" ]]; then
+        warnings="$warnings
+                $INCOMPATIBLE_CLASS"
+        (( count = count + 1 ))
+  fi
+  done
+  if [[ $warnings != "" ]]; then
+    JIRA_COMMENT="$JIRA_COMMENT
+
+                    {color:red}-1 Known Incompatible class{color}.  The patch appears to have $count incompatible classes:
+             $warnings."
+          return 1
+  fi
+  return 0
+}
+
+###############################################################################
 ### Check that there are no incorrect annotations
 checkInterfaceAudience () {
   echo ""
@@ -1049,6 +1079,8 @@ if [[ $? != 0 ]] ; then
 fi
 
 checkAntiPatterns
+(( RESULT = RESULT + $? ))
+checkUseOfIncompatibleClasses
 (( RESULT = RESULT + $? ))
 # checkBuildWithHadoopVersions
 # (( RESULT = RESULT + $? ))

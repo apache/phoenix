@@ -66,8 +66,6 @@ import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import co.cask.tephra.TxConstants;
-
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
@@ -77,8 +75,9 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.protobuf.HBaseZeroCopyByteString;
 import com.sun.istack.NotNull;
+
+import co.cask.tephra.TxConstants;
 
 /**
  *
@@ -1069,8 +1068,7 @@ public class PTableImpl implements PTable {
           int maxLength = pGuidePosts.getMaxLength();
           int guidePostsCount = pGuidePosts.getEncodedGuidePostsCount();
             GuidePostsInfo info = new GuidePostsInfo(pGuidePosts.getByteCountsList(),
-                    new ImmutableBytesWritable(
-                            HBaseZeroCopyByteString.zeroCopyGetBytes(pGuidePosts.getEncodedGuidePosts())),
+                    new ImmutableBytesWritable(pGuidePosts.getEncodedGuidePosts().toByteArray()),
                     pGuidePosts.getRowCountsList(), maxLength, guidePostsCount);
           tableGuidePosts.put(pTableStatsProto.getKey().toByteArray(), info);
       }
