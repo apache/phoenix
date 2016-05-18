@@ -1434,8 +1434,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
                     try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
                             Statement stmt = connection.createStatement()) {
-                        String seqNextValueSql = String.format("SELECT NEXT VALUE FOR %s FROM %s LIMIT 1",
-                            SchemaUtil.getTableName(parentTable.getSchemaName().getString(), parentTable.getAutoPartitionSeqName()), PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                        String seqNextValueSql = String.format("SELECT NEXT VALUE FOR %s", parentTable.getAutoPartitionSeqName());
                         ResultSet rs = stmt.executeQuery(seqNextValueSql);
                         rs.next();
                         autoPartitionNum = rs.getLong(1);
