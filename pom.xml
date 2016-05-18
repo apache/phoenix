@@ -504,6 +504,10 @@
             <groupId>org.jruby</groupId>
             <artifactId>jruby-complete</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -634,6 +638,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client</artifactId>
+        <version>${hadoop-two.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
         <version>${hadoop-two.version}</version>
       </dependency>
@@ -641,7 +650,8 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-hdfs</artifactId>
         <version>${hadoop-two.version}</version>
-        <type>test-jar</type>
+        <type>test-jar</type> <!-- this does not work which is typical for maven.-->
+        <scope>test</scope>
       </dependency>
 
       <!-- General Dependencies -->
