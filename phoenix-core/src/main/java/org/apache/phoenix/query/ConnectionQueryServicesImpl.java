@@ -175,6 +175,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
@@ -2476,8 +2477,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0) {
                                     metaConnection = addColumnsIfNotExists(metaConnection,
                                             PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 - 2,
                                             PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED + " "
+                                                    + PBoolean.INSTANCE.getSqlTypeName());
+                                    metaConnection = addColumnsIfNotExists(metaConnection,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 - 1,
+                                            PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ + " "
+                                                    + PVarchar.INSTANCE.getSqlTypeName());
+                                    metaConnection = addColumnsIfNotExists(metaConnection,
+                                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0,
+                                            PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA + " "
                                                     + PBoolean.INSTANCE.getSqlTypeName());
                                     ConnectionQueryServicesImpl.this.removeTable(null,
                                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
