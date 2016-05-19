@@ -64,7 +64,7 @@ public class AutoPartitionViewsIT extends BaseHBaseManagedTimeIT {
 
     public AutoPartitionViewsIT(boolean salted, boolean isMultiTenant) {
         this.isMultiTenant = isMultiTenant;
-        StringBuilder optionBuilder = new StringBuilder(" AUTO_PARTITION_SEQ=metric_id_seq");
+        StringBuilder optionBuilder = new StringBuilder(" AUTO_PARTITION_SEQ=\"TSDB.METRIC_ID_SEQ\"");
         if (salted) optionBuilder.append(", SALTED=4 ");
         if (isMultiTenant) optionBuilder.append(", MULTI_TENANT=true ");
         this.tableDDLOptions = optionBuilder.toString();
@@ -111,7 +111,7 @@ public class AutoPartitionViewsIT extends BaseHBaseManagedTimeIT {
             }
 
             conn.createStatement().execute(
-                "CREATE SEQUENCE metric_id_seq start with " + (Integer.MAX_VALUE-2) + " cache 1");
+                "CREATE SEQUENCE TSDB.metric_id_seq start with " + (Integer.MAX_VALUE-2) + " cache 1");
             viewConn1.createStatement().execute(
                 "CREATE VIEW metric1 AS SELECT * FROM metric_table WHERE val2=1.2");
             // create a view without a where clause
@@ -232,7 +232,7 @@ public class AutoPartitionViewsIT extends BaseHBaseManagedTimeIT {
                             isMultiTenant ? "tenantId, ": "", 
                             tableDDLOptions);
             conn.createStatement().execute(ddl);
-            conn.createStatement().execute("CREATE SEQUENCE hbase.metric_id_seq CACHE 1");
+            conn.createStatement().execute("CREATE SEQUENCE TSDB.metric_id_seq CACHE 1");
             // create a view
             viewConn1.createStatement().execute(
                 "CREATE VIEW metric1 AS SELECT * FROM hbase.metric_table WHERE val2=1.2");
@@ -306,7 +306,7 @@ public class AutoPartitionViewsIT extends BaseHBaseManagedTimeIT {
                             isMultiTenant ? "tenantId, ": "", 
                             tableDDLOptions);
             conn.createStatement().execute(ddl);
-            conn.createStatement().execute("CREATE SEQUENCE hbase.metric_id_seq CACHE 1");
+            conn.createStatement().execute("CREATE SEQUENCE TSDB.metric_id_seq CACHE 1");
             // create a view
             viewConn1.createStatement().execute(
                 "CREATE VIEW metric1 AS SELECT * FROM hbase.metric_table");
