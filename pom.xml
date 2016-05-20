@@ -729,11 +729,6 @@
       <!-- Make sure we have all the antlr dependencies -->
       <dependency>
         <groupId>org.antlr</groupId>
-        <artifactId>antlr</artifactId>
-        <version>${antlr.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.antlr</groupId>
         <artifactId>antlr-runtime</artifactId>
         <version>${antlr.version}</version>
       </dependency>
