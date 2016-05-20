@@ -48,7 +48,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import co.cask.tephra.Transaction.VisibilityLevel;
+import org.apache.tephra.Transaction.VisibilityLevel;
 
 import com.google.common.collect.Maps;
 

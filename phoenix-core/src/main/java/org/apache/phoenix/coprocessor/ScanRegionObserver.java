@@ -68,7 +68,7 @@ import org.apache.phoenix.util.ServerUtil;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
-import co.cask.tephra.Transaction;
+import org.apache.tephra.Transaction;
 
 
 /**

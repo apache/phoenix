@@ -214,7 +214,7 @@ import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import co.cask.tephra.TxConstants;
+import org.apache.tephra.TxConstants;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;

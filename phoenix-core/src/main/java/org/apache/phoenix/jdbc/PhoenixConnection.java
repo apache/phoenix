@@ -112,7 +112,7 @@ import org.cloudera.htrace.Sampler;
 import org.cloudera.htrace.TraceScope;
 import org.apache.phoenix.util.SchemaUtil;
 
-import co.cask.tephra.TransactionContext;
+import org.apache.tephra.TransactionContext;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -120,11 +120,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Lists;
-
-import co.cask.tephra.TransactionContext;
-
-import co.cask.tephra.TransactionContext;
-
 
 /**
  * 

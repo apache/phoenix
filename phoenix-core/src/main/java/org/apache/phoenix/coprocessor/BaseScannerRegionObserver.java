@@ -60,7 +60,7 @@ import org.cloudera.htrace.Trace;
 
 import com.google.common.collect.ImmutableList;
 
-import co.cask.tephra.Transaction;
+import org.apache.tephra.Transaction;
 
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {

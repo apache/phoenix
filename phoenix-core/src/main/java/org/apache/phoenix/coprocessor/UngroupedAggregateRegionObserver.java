@@ -115,7 +115,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
-import co.cask.tephra.TxConstants;
+import org.apache.tephra.TxConstants;
 
 
 /**

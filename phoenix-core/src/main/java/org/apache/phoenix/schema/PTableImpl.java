@@ -77,7 +77,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.sun.istack.NotNull;
 
-import co.cask.tephra.TxConstants;
+import org.apache.tephra.TxConstants;
 
 /**
  *
