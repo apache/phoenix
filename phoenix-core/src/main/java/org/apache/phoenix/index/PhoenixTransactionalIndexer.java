@@ -72,11 +72,10 @@ import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
-
-import co.cask.tephra.Transaction;
-import co.cask.tephra.Transaction.VisibilityLevel;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase11.TransactionAwareHTable;
+import org.apache.tephra.Transaction;
+import org.apache.tephra.Transaction.VisibilityLevel;
+import org.apache.tephra.TxConstants;
+import org.apache.tephra.hbase.TransactionAwareHTable;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;

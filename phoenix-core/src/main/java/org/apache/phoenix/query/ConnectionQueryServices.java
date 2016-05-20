@@ -44,7 +44,7 @@ import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.stats.PTableStats;
 
-import co.cask.tephra.TransactionSystemClient;
+import org.apache.tephra.TransactionSystemClient;
 
 
 public interface ConnectionQueryServices extends QueryServices, MetaDataMutated {

@@ -476,7 +476,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-core</artifactId>
         <type>test-jar</type>
         <scope>test</scope>
