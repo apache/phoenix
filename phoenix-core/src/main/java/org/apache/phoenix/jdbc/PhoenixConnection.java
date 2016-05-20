@@ -113,7 +113,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
 
-import co.cask.tephra.TransactionContext;
+import org.apache.tephra.TransactionContext;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;

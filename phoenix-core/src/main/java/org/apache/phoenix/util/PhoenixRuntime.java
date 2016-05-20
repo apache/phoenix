@@ -91,7 +91,7 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
-import co.cask.tephra.util.TxUtils;
+import org.apache.tephra.util.TxUtils;
 
 /**
  *

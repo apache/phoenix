@@ -37,6 +37,10 @@
 
   <repositories>
     <repository>
+      <id>apache tephra staging</id>
+      <url>https://repository.apache.org/content/repositories/orgapachetephra-1001</url>
+    </repository>
+    <repository>
       <id>apache release</id>
       <url>https://repository.apache.org/content/repositories/releases/</url>
     </repository>
@@ -95,7 +99,7 @@
     <joni.version>2.1.2</joni.version>
     <avatica.version>1.7.1</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
-    <tephra.version>0.7.0</tephra.version>
+    <tephra.version>0.8.0-incubating</tephra.version>
     <spark.version>1.5.2</spark.version>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
@@ -641,12 +645,12 @@
 
       <!-- Transaction dependencies -->
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-api</artifactId>
         <version>${tephra.version}</version>
       </dependency>
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-core</artifactId>
         <version>${tephra.version}</version>
         <exclusions>
@@ -661,7 +665,7 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-core</artifactId>
         <type>test-jar</type>
         <version>${tephra.version}</version>
@@ -678,7 +682,7 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-1.0</artifactId>
         <version>${tephra.version}</version>
       </dependency>

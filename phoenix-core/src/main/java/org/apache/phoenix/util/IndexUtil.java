@@ -89,7 +89,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.collect.Lists;
 
-import co.cask.tephra.TxConstants;
+import org.apache.tephra.TxConstants;
 
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
