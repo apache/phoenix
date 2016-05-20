@@ -224,29 +224,25 @@
   <dependencies>
     <!-- Transaction dependencies -->
     <dependency>
-      <groupId>co.cask.tephra</groupId>
+      <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-api</artifactId>
     </dependency>
     <dependency>
-      <groupId>co.cask.tephra</groupId>
+      <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>co.cask.tephra</groupId>
+      <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-core</artifactId>
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>co.cask.tephra</groupId>
+      <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-hbase-compat-1.1</artifactId>
     </dependency>
   
     <!-- Make sure we have all the antlr dependencies -->
-    <dependency>
-      <groupId>org.antlr</groupId>
-      <artifactId>antlr</artifactId>
-    </dependency>
     <dependency>
       <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>

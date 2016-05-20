@@ -23,7 +23,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
-import co.cask.tephra.Transaction;
+import org.apache.tephra.Transaction;
 
 import org.apache.phoenix.index.IndexMaintainer;
 

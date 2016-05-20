@@ -167,7 +167,7 @@ start() {
   echo "`date` Starting $APP service on `hostname`" >> $loglog
   echo "`ulimit -a`" >> $loglog 2>&1
 
-  export MAIN_CLASS="co.cask.tephra.TransactionServiceMain"
+  export MAIN_CLASS="org.apache.tephra.TransactionServiceMain"
   echo "Running class $MAIN_CLASS"
   echo "Command: " "$JAVA" $OPTS -cp $CLASSPATH $JAVA_HEAPMAX $MAIN_CLASS >>$loglog
   nohup nice -n $NICENESS "$JAVA" $OPTS -cp $CLASSPATH $JAVA_HEAPMAX ${MAIN_CLASS} </dev/null >>$loglog 2>&1 &
