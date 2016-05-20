@@ -38,6 +38,7 @@ to install the local jars. This is a side-effect of multi-module maven projects
 	$ mvn package
 and optionally, to just skip all the tests and build the jars:
 	$ mvn package -DskipTests
+resulting jars (phoenix-[version].jar in the generated phoenix-assembly/target/ directories
 
 Note: javadocs are generated in target/apidocs
 
