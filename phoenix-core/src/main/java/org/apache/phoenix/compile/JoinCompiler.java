@@ -77,6 +77,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -500,11 +501,11 @@ public class JoinCompiler {
                 rhsCompiler.reset();
                 Expression right = condition.getRHS().accept(rhsCompiler);
                 PDataType toType = getCommonType(left.getDataType(), right.getDataType());
-                if (left.getDataType() != toType) {
-                    left = CoerceExpression.create(left, toType);
+                if (left.getDataType() != toType || left.getSortOrder() == SortOrder.DESC) {
+                    left = CoerceExpression.create(left, toType, SortOrder.ASC, left.getMaxLength());
                 }
-                if (right.getDataType() != toType) {
-                    right = CoerceExpression.create(right, toType);
+                if (right.getDataType() != toType || right.getSortOrder() == SortOrder.DESC) {
+                    right = CoerceExpression.create(right, toType, SortOrder.ASC, right.getMaxLength());
                 }
                 compiled.add(new Pair<Expression, Expression>(left, right));
             }
