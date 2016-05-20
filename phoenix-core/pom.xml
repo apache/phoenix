@@ -245,10 +245,6 @@
     <!-- Make sure we have all the antlr dependencies -->
     <dependency>
       <groupId>org.antlr</groupId>
-      <artifactId>antlr</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.antlr</groupId>
       <artifactId>antlr-runtime</artifactId>
     </dependency>
     <dependency>
