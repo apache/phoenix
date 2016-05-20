@@ -50,7 +50,7 @@ public class ColumnDef {
     private final String expressionStr;
     private final boolean isRowTimestamp;
 
-    ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
+    public ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
             Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
         try {
             Preconditions.checkNotNull(sortOrder);

@@ -22,17 +22,25 @@
   # List of import statements.
   imports: [
     "org.apache.phoenix.calcite.parse.*",
+    "org.apache.phoenix.schema.SortOrder",
+    "org.apache.phoenix.parse.ColumnName",
+    "org.apache.phoenix.parse.ColumnDef",
+    "org.apache.calcite.sql.SqlColumnDefNode"
     "java.util.*"
   ]
 
   # List of keywords.
   keywords: [
+  	"IF"
+  	"ROW_TIMESTAMP"
+  	"SPLIT"
   ]
 
   # List of methods for parsing custom SQL statements.
   statementParserMethods: [
     "SqlCommit()",
     "SqlCreateView()"
+    "SqlCreateTable()"
   ]
 
   # List of methods for parsing custom literals.

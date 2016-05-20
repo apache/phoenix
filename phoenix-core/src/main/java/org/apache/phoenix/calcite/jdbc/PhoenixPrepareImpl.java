@@ -25,6 +25,7 @@ import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.calcite.parse.SqlCreateTable;
 import org.apache.phoenix.calcite.parse.SqlCreateView;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
@@ -145,6 +146,10 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         case CREATE_VIEW:
             final SqlCreateView cv = (SqlCreateView) node;
             System.out.println("Create view: " + cv.name);
+            break;
+        case CREATE_TABLE:
+            final SqlCreateTable table = (SqlCreateTable) node;
+            System.out.println("Create table: " + table.tableName);
             break;
         default:
             throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());

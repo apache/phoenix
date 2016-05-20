@@ -22,6 +22,13 @@ public class CalciteDMLIT extends BaseCalciteIT {
         ensureTableCreated(url, ATABLE_NAME);
     }
 
+    /** Tests a simple command that is defined in Phoenix's extended SQL parser. 
+     * @throws Exception */
+    @Ignore
+    @Test public void testCommit() throws Exception {
+        start(PROPS).sql("commit").execute();
+    }
+
     @Test
     public void testUpsertValues() throws Exception {
         start(PROPS).sql("upsert into atable(organization_id, entity_id) values('1', '1')")

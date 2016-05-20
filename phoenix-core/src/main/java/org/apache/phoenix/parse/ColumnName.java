@@ -46,12 +46,12 @@ public class ColumnName {
     }
     
 
-    ColumnName(String familyName, String columnName) {
+    public ColumnName(String familyName, String columnName) {
         this.familyNode = familyName == null ? null : new NamedNode(familyName);
         this.columnNode = new NamedNode(columnName);
     }
 
-    ColumnName(String columnName) {
+    public ColumnName(String columnName) {
         this(null, columnName);
     }
 

@@ -64,3 +64,146 @@ SqlNode SqlCreateView() :
         return new SqlCreateView(pos.plus(pos3), name, query, queryString);
     }
 }
+
+SqlNode SqlCreateTable() :
+{
+      SqlParserPos pos;
+      SqlIdentifier tableName;
+	  SqlLiteral ifNotExists = SqlLiteral.createBoolean(false, SqlParserPos.ZERO);
+      SqlNodeList columnDefs;
+      SqlIdentifier pkConstraint = null;
+      SqlNodeList pkConstraintColumnDefs = null;
+      SqlNodeList tableOptionsKeyList = null;
+      SqlNodeList tableOptionsValueList = null;
+      SqlNodeList splitKeyList = null;
+}
+{
+	
+    <CREATE> { pos = getPos(); } <TABLE> tableName = CompoundIdentifier()
+    (
+    	<IF> <NOT> <EXISTS>
+    	{
+    		ifNotExists = SqlLiteral.createBoolean(false, getPos());
+    	}
+    )?
+    {
+    	List<SqlNode> coumnDefList = new ArrayList<SqlNode>();
+    	List<SqlNode> pkConstraintList = new ArrayList<SqlNode>();
+    	List<SqlNode> tableOptionKeys = new ArrayList<SqlNode>();
+    	List<SqlNode> tableOptionValues = new ArrayList<SqlNode>();
+    	List<SqlNode> splitKeys = new ArrayList<SqlNode>();
+    	SqlNode item;
+    }
+    <LPAREN>
+    	{
+    		item = SqlColumnDefNode();
+			coumnDefList.add(item);
+		}
+    	( 	
+    		<COMMA> <CONSTRAINT> {pkConstraint = SimpleIdentifier();} <PRIMARY> <KEY>
+    			<LPAREN>
+    				{	item = CompoundIdentifier();pkConstraintList.add(item);}
+    				( <COMMA> {item = CompoundIdentifier();pkConstraintList.add(item);} ) *
+    			<RPAREN>
+    		|
+    		<COMMA>
+    	  	{
+    			item = SqlColumnDefNode();
+    			coumnDefList.add(item);
+    		}
+    	
+    	) *
+    <RPAREN>
+    (
+		{	item = CompoundIdentifier();tableOptionKeys.add(item);} <EQ> {	item = StringLiteral();tableOptionValues.add(item);} 
+		( <COMMA> {	item = CompoundIdentifier();tableOptionKeys.add(item);} <EQ> {	item = StringLiteral();tableOptionValues.add(item);} ) *
+    )?
+    (
+    	<SPLIT> <ON>
+    	<LPAREN>
+			{item = StringLiteral();splitKeys.add(item);}
+			( <COMMA> {item = StringLiteral();splitKeys.add(item);} ) *
+    	<RPAREN>
+    )?
+    {
+		columnDefs = new SqlNodeList(coumnDefList, pos.plusAll(coumnDefList));
+		if(!pkConstraintList.isEmpty()) {
+		    	pkConstraintColumnDefs =  new SqlNodeList(pkConstraintList, pos.plusAll(pkConstraintList));
+		}
+		if(!tableOptionKeys.isEmpty()) {
+			tableOptionsKeyList = new SqlNodeList(tableOptionKeys, pos.plusAll(tableOptionKeys));
+			tableOptionsValueList = new SqlNodeList(tableOptionValues, pos.plusAll(tableOptionValues));
+		}
+		if(!splitKeys.isEmpty()) {
+			splitKeyList = new SqlNodeList(splitKeys, pos.plusAll(splitKeys));
+		}
+        return new SqlCreateTable(pos, tableName, ifNotExists, columnDefs, pkConstraint, pkConstraintColumnDefs, tableOptionsKeyList, tableOptionsValueList, splitKeyList);
+    }
+}
+
+SqlColumnDefNode SqlColumnDefNode() :
+{
+    SqlIdentifier columnName;
+    SqlIdentifier dataType;
+    Boolean isNull = Boolean.TRUE;
+    Integer maxLength = null;
+    Integer scale = null;
+    boolean isPk = false;
+    SortOrder sortOrder = SortOrder.getDefault();
+    boolean isArray = false;
+    Integer arrSize = null;
+    String expressionStr = null;
+    boolean isRowTimestamp = false;
+    SqlParserPos pos;
+}
+{
+    columnName = CompoundIdentifier()
+    dataType = TypeName()
+    (
+    	<LPAREN>
+    		{maxLength = (Integer)UnsignedNumericLiteral().getValue();}
+	    	<COMMA>
+        	{scale = (Integer)UnsignedNumericLiteral().getValue();}
+    	<RPAREN>
+    )?
+    (
+	    <ARRAY>
+		{isArray = true;}
+    	<LBRACKET> 
+    		{arrSize = (Integer)UnsignedNumericLiteral().getValue();}		
+	    <RBRACKET>
+	)?
+		(
+        <NOT> <NULL>
+        {isNull = false;}
+        |
+        <NULL>
+        {isNull = true;}
+	)?
+	(
+        <PRIMARY> <KEY>
+        {isPk = true;}
+	)?
+	(
+		<ASC>
+        |
+        <DESC>
+        {sortOrder = SortOrder.DESC;}
+	)?
+	(
+		<ROW_TIMESTAMP>
+        {isRowTimestamp = true;}
+		
+	)?
+    {
+    	pos = columnName.getParserPosition().plus(getPos());
+    	ColumnName name;    	
+    	if(columnName.names.size()==2) {
+    		name = new ColumnName(columnName.names.get(0), columnName.names.get(0));
+    	} else{
+    		name = new ColumnName(columnName.names.get(0));
+    	}
+    	ColumnDef cd = new ColumnDef(name, dataType.names.get(0), isArray, arrSize, isNull, maxLength, scale, isPk, sortOrder, null, isRowTimestamp);
+    	return new SqlColumnDefNode(pos,cd);
+    }
+}

@@ -1184,17 +1184,6 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
     }
 
-    /** Tests a simple command that is defined in Phoenix's extended SQL parser. 
-     * @throws Exception */
-    @Ignore
-    @Test public void testCommit() throws Exception {
-        start(false, 1000f).sql("commit").execute();
-    }
-
-    @Test public void testCreateView() throws Exception {
-        start(false, 1000f).sql("create view v as select * from (values (1, 'a'), (2, 'b')) as t(x, y)").execute();
-    }
-
     @Ignore // CALCITE-1045
     @Test public void testConnectJoinHsqldb() throws Exception {
         final Start start = new Start(getConnectionProps(false, 1000f)) {
