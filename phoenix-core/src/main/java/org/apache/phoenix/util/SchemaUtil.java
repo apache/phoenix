@@ -641,7 +641,7 @@ public class SchemaUtil {
         if (tableName == null) {
             return null;
         }
-        if (isExistingTableMappedToPhoenixName(Bytes.toString(tableName))) { return normalizeIdentifier(Bytes.toString(tableName)); }
+        if (isExistingTableMappedToPhoenixName(Bytes.toString(tableName))) { return Bytes.toString(tableName); }
         int index = indexOf(tableName, QueryConstants.NAME_SEPARATOR_BYTE);
         if (index < 0) {
             index = indexOf(tableName, QueryConstants.NAMESPACE_SEPARATOR_BYTE);
@@ -651,7 +651,7 @@ public class SchemaUtil {
     }
 
     public static String getTableNameFromFullName(String tableName) {
-        if (isExistingTableMappedToPhoenixName(tableName)) { return normalizeIdentifier(tableName); }
+        if (isExistingTableMappedToPhoenixName(tableName)) { return tableName; }
         if (tableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) { return getTableNameFromFullName(tableName,
                 QueryConstants.NAMESPACE_SEPARATOR); }
         return getTableNameFromFullName(tableName, QueryConstants.NAME_SEPARATOR);
