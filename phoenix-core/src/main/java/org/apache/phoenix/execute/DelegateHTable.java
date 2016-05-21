@@ -296,29 +296,4 @@ public class DelegateHTable implements HTableInterface {
 			throws IOException {
 		return delegate.checkAndDelete(row, family, qualifier, compareOp, value, delete);
 	}
-
-    @Override
-    public void setOperationTimeout(int operationTimeout) {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public int getOperationTimeout() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
-
-    @Override
-    public void setRpcTimeout(int rpcTimeout) {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public int getRpcTimeout() {
-        // TODO Auto-generated method stub
-        return 0;
-    }
-
 }

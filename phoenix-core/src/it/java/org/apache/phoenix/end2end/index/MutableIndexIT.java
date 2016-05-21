@@ -619,25 +619,38 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(2));
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
-        try(Connection conn1 = DriverManager.getConnection(getUrl(), props)){
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        dropTable(admin, conn1);
+        try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            dropTable(admin, conn1);
             createTableAndLoadData(conn1, strings, isReverse);
 
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
             splitDuringScan(conn1, strings, admin, isReverse);
-            dropTable(admin, conn1);
-       } 
+       } finally {
+           dropTable(admin, conn1);
+           if(conn1 != null) conn1.close();
+           if(admin != null) admin.close();
+       }
     }
 
     private void dropTable(HBaseAdmin admin, Connection conn) throws SQLException, IOException {
-        conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
-        if(admin.tableExists(tableName)) {
-            admin.disableTable(TableName.valueOf(tableName));
-            admin.deleteTable(TableName.valueOf(tableName));
-        } 
+        try {
+            conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
+        } finally {
+            if(admin.tableExists(tableName)) {
+                admin.disableTable(TableName.valueOf(tableName));
+                admin.deleteTable(TableName.valueOf(tableName));
+            }
+            if(!localIndex) {
+                if(admin.tableExists(indexName)) {
+                    admin.disableTable(TableName.valueOf(indexName));
+                    admin.deleteTable(TableName.valueOf(indexName));
+                }
+            }
+        }
     }
 
     private void createTableAndLoadData(Connection conn1, String[] strings, boolean isReverse) throws SQLException {
@@ -690,9 +703,9 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
                     break end;
                   }
                   if(!merged) {
-                            List<HRegionInfo> regions =
-                                    admin.getTableRegions(localIndex ? table : indexTable);
-                      System.out.println("Merging: " + regions.size());
+                      List<HRegionInfo> regions =
+                              admin.getTableRegions(localIndex ? table : indexTable);
+                      Log.info("Merging: " + regions.size());
                       admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
                           regions.get(1).getEncodedNameAsBytes(), false);
                       merged = true;
@@ -707,7 +720,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
                     // wait until merge happened
                     while (System.currentTimeMillis() - waitStartTime < 10000) {
                       List<HRegionInfo> regions = admin.getTableRegions(indexTable);
-                      System.out.println("Waiting:" + regions.size());
+                      Log.info("Waiting:" + regions.size());
                       if (regions.size() < numRegions) {
                         break;
                       }

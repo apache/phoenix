@@ -32,6 +32,6 @@ public interface IndexCommitter extends Stoppable {
 
   void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name);
 
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite)
+  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates)
       throws IndexWriteException;
 }

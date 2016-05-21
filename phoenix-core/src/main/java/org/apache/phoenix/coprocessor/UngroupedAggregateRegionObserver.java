@@ -184,7 +184,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         Region region = env.getRegion();
         long ts = scan.getTimeRange().getMax();
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
-        List<byte[]> nonLocalIndexFamilies = null;
         if (ScanUtil.isAnalyzeTable(scan)) {
             byte[] gp_width_bytes =
                     scan.getAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES);
@@ -207,9 +206,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             ScanUtil.setRowKeyOffset(scan, offsetToBe);
         }
         final int offset = offsetToBe;
-        if(MetaDataUtil.hasLocalIndexColumnFamily(region.getTableDesc())) {
-        	nonLocalIndexFamilies = MetaDataUtil.getNonLocalIndexColumnFamilies(region.getTableDesc());
-        }
         
         PTable projectedTable = null;
         PTable writeToTable = null;
@@ -421,13 +417,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 Cell firstKV = results.get(0);
                                 Delete delete = new Delete(firstKV.getRowArray(),
                                     firstKV.getRowOffset(), firstKV.getRowLength(),ts);
-                            	if(nonLocalIndexFamilies != null) {
-                           		 if(delete.getFamilyCellMap().size() == 0) {
-                           			 for(byte[] family: nonLocalIndexFamilies) {
-                           				 delete.addFamily(family);
-                           			 }
-                           		 }
-                            	}
                                 mutations.add(delete);
                                 // force tephra to ignore this deletes
                                 delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);

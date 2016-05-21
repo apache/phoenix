@@ -180,7 +180,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
                     .getNameAsString();
             assertTrue(admin.tableExists(hbaseTableName));
-            assertTrue(admin.tableExists(MetaDataUtil.getLocalIndexPhysicalName(Bytes.toBytes(hbaseTableName))));
+            assertTrue(admin.tableExists(Bytes.toBytes(hbaseTableName)));
             assertTrue(admin.tableExists(schemaName + QueryConstants.NAMESPACE_SEPARATOR + indexName));
             assertTrue(admin.tableExists(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName))));
             i = 0;

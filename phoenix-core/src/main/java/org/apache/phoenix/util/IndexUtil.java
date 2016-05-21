@@ -651,28 +651,4 @@ public class IndexUtil {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
     }
-
-    public static void addLocalUpdatesToCpOperations(ObserverContext<RegionCoprocessorEnvironment> c,
-            MiniBatchOperationInProgress<Mutation> miniBatchOp,
-            Collection<Pair<Mutation, byte[]>> indexUpdates, boolean writeToWal) {
-        Multimap<HTableInterfaceReference, Mutation> resolveTableReferences = IndexWriter.resolveTableReferences(indexUpdates);
-        Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = resolveTableReferences.asMap().entrySet();
-        for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
-            if(entry.getKey().getTableName().equals(c.getEnvironment().getRegion().getTableDesc().getNameAsString())) {
-                if(writeToWal) {
-                    miniBatchOp.addOperationsFromCP(entry.getValue().toArray(new Mutation[entry.getValue().size()]));
-                } else {
-                    Iterator<Mutation> iterator = entry.getValue().iterator();
-                    Mutation[] mutationsArray = new Mutation[entry.getValue().size()];
-                    for(int i = 0; i< entry.getValue().size(); i++) {
-                        mutationsArray[i] = iterator.next();
-                        mutationsArray[i].setDurability(Durability.SKIP_WAL);
-                    }
-                    miniBatchOp.addOperationsFromCP(mutationsArray);
-                }
-            } 
-            continue;
-        }
-    }
-
 }

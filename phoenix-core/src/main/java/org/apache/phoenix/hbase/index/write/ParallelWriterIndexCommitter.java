@@ -99,7 +99,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite) throws SingleIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws SingleIndexWriteFailureException {
         /*
          * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the writes in
          * parallel to each index table, so each table gets its own task and is submitted to the pool. Where it gets
@@ -117,10 +117,13 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
             // doing a complete copy over of all the index update for each table.
             final List<Mutation> mutations = kvBuilder.cloneIfNecessary((List<Mutation>)entry.getValue());
             final HTableInterfaceReference tableReference = entry.getKey();
-            if (env !=null && tableReference.getTableName().equals(
-                env.getRegion().getTableDesc().getNameAsString())) {
+            if (env != null
+                    && !allowLocalUpdates
+                    && tableReference.getTableName().equals(
+                            env.getRegion().getTableDesc().getNameAsString())) {
                 continue;
             }
+
             /*
              * Write a batch of index updates to an index table. This operation stops (is cancelable) via two
              * mechanisms: (1) setting aborted or stopped on the IndexWriter or, (2) interrupting the running thread.

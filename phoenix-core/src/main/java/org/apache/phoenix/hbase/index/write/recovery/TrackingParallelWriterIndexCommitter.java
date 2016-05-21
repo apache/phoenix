@@ -9,7 +9,6 @@
  */
 package org.apache.phoenix.hbase.index.write.recovery;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -23,12 +22,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.phoenix.hbase.index.CapturingAbortable;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
@@ -110,7 +108,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite) throws MultiIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws MultiIndexWriteFailureException {
         Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
         TaskBatch<Boolean> tasks = new TaskBatch<Boolean>(entries.size());
         List<HTableInterfaceReference> tables = new ArrayList<HTableInterfaceReference>(entries.size());
@@ -121,10 +119,12 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
             // track each reference so we can get at it easily later, when determing failures
             final HTableInterfaceReference tableReference = entry.getKey();
             final RegionCoprocessorEnvironment env = this.env;
-            if (tableReference.getTableName().equals(
-                env.getRegion().getTableDesc().getNameAsString())) {
-                continue;
-            }
+			if (env != null
+					&& !allowLocalUpdates
+					&& tableReference.getTableName().equals(
+							env.getRegion().getTableDesc().getNameAsString())) {
+				continue;
+			}
             tables.add(tableReference);
 
             /*

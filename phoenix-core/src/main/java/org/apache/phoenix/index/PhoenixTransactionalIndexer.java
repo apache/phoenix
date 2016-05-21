@@ -164,15 +164,12 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             // get the index updates for all elements in this batch
             indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp), txRollbackAttribute);
             
-            IndexUtil.addLocalUpdatesToCpOperations(c, miniBatchOp, indexUpdates,
-                m.getDurability() != Durability.SKIP_WAL);
-
             current.addTimelineAnnotation("Built index updates, doing preStep");
             TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
 
             // no index updates, so we are done
             if (!indexUpdates.isEmpty()) {
-                this.writer.write(indexUpdates);
+                this.writer.write(indexUpdates, true);
             }
         } catch (Throwable t) {
             String msg = "Failed to update index with entries:" + indexUpdates;
