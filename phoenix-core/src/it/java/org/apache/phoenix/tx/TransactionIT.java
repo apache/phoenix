@@ -893,4 +893,50 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
                 "false", rs2.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
         }
     }
+
+    @Test
+    public void testInflightPartialEval() throws SQLException {
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String transactTableName = "TR";
+            Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + transactTableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " +
+                "TRANSACTIONAL=true");
+            
+            try (Connection conn1 = DriverManager.getConnection(getUrl()); Connection conn2 = DriverManager.getConnection(getUrl())) {
+                conn1.createStatement().execute("UPSERT INTO tr VALUES ('a','b','x')");
+                // Select to force uncommitted data to be written
+                ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM tr");
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals("b", rs.getString(2));
+                assertFalse(rs.next());
+                
+                conn2.createStatement().execute("UPSERT INTO tr VALUES ('a','c','x')");
+                // Select to force uncommitted data to be written
+                rs = conn2.createStatement().executeQuery("SELECT * FROM tr");
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals("c", rs.getString(2));
+                assertFalse(rs.next());
+                
+                // If the AndExpression were to see the uncommitted row from conn2, the filter would
+                // filter the row out early and no longer continue to evaluate other cells due to
+                // the way partial evaluation holds state.
+                rs = conn1.createStatement().executeQuery("SELECT * FROM tr WHERE v1 != 'c' AND v2 = 'x'");
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals("b", rs.getString(2));
+                assertFalse(rs.next());
+                
+                // Same as above for conn1 data
+                rs = conn2.createStatement().executeQuery("SELECT * FROM tr WHERE v1 != 'b' AND v2 = 'x'");
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertEquals("c", rs.getString(2));
+                assertFalse(rs.next());
+            }
+
+        }
+    }
 }
