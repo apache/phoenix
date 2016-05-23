@@ -44,7 +44,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ColumnInfo;
@@ -108,7 +107,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
     /*
     lookup table for column index. Index in the List matches to the index in tableNames List
      */
-    protected List<Map<byte[], Map<byte[], Integer>>> columnIndexes;
+    protected Map<byte[], Integer> columnIndexes;
 
     protected abstract UpsertExecutor<RECORD,?> buildUpsertExecutor(Configuration conf);
     protected abstract LineParser<RECORD> getLineParser();
@@ -135,7 +134,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
             logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
 
-            columnIndexes = initColumnIndexes();
+            initColumnIndexes();
         } catch (SQLException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
@@ -193,7 +192,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                 int tableIndex = rowEntry.getKey();
                 List<KeyValue> lkv = rowEntry.getValue();
                 // All KV values combines to a single byte array
-                writeAggregatedRow(context, tableIndex, lkv);
+                writeAggregatedRow(context, tableNames.get(tableIndex), lkv);
             }
             conn.rollback();
         } catch (Exception e) {
@@ -201,98 +200,98 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         }
     }
 
-    private List<Map<byte[], Map<byte[], Integer>>> initColumnIndexes() throws SQLException {
-        List<Map<byte[], Map<byte[], Integer>>> tableMap = new ArrayList<>();
-        int tableIndex;
-        for (tableIndex = 0; tableIndex < tableNames.size(); tableIndex++) {
-            PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(tableIndex));
-            Map<byte[], Map<byte[], Integer>> columnMap = new TreeMap<>(Bytes.BYTES_COMPARATOR);
+    /*
+    Map all unique pairs <family, name>  to index. Table name is part of TableRowkey, so we do
+    not care about it
+     */
+    private void initColumnIndexes() throws SQLException {
+        columnIndexes = new TreeMap(Bytes.BYTES_COMPARATOR);
+        int columnIndex = 0;
+        for(int index = 0; index < logicalNames.size(); index++) {
+            PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
             List<PColumn> cls = table.getColumns();
             for (int i = 0; i < cls.size(); i++) {
                 PColumn c = cls.get(i);
-                if (c.getFamilyName() == null) continue; // Skip PK column
-                byte[] family = c.getFamilyName().getBytes();
+                byte[] family = new byte[0];
+                if (c.getFamilyName() != null)  // Skip PK column
+                    family = c.getFamilyName().getBytes();
                 byte[] name = c.getName().getBytes();
-                if (!columnMap.containsKey(family)) {
-                    columnMap.put(family, new TreeMap<byte[], Integer>(Bytes.BYTES_COMPARATOR));
+                byte[] cfn = Bytes.add(family,":".getBytes(), name);
+                if (!columnIndexes.containsKey(cfn)) {
+                    columnIndexes.put(cfn, new Integer(columnIndex));
+                    columnIndex++;
                 }
-                Map<byte[], Integer> qualifier = columnMap.get(family);
-                qualifier.put(name, i);
             }
-            tableMap.add(columnMap);
         }
-        return tableMap;
     }
 
     /**
      * Find the column index which will replace the column name in
      * the aggregated array and will be restored in Reducer
      *
-     * @param tableIndex Table index in tableNames list
      * @param cell       KeyValue for the column
      * @return column index for the specified cell or -1 if was not found
      */
-    private int findIndex(int tableIndex, Cell cell) {
-        Map<byte[], Map<byte[], Integer>> columnMap = columnIndexes.get(tableIndex);
-        Map<byte[], Integer> qualifiers = columnMap.get(Bytes.copy(cell.getFamilyArray(),
-                cell.getFamilyOffset(), cell.getFamilyLength()));
-        if (qualifiers != null) {
-            Integer result = qualifiers.get(Bytes.copy(cell.getQualifierArray(),
-                    cell.getQualifierOffset(), cell.getQualifierLength()));
-            if (result != null) {
-                return result;
-            }
+    private int findIndex(Cell cell) {
+        byte[] familyName = Bytes.copy(cell.getFamilyArray(), cell.getFamilyOffset(),
+                cell.getFamilyLength());
+        byte[] name = Bytes.copy(cell.getQualifierArray(), cell.getQualifierOffset(),
+                cell.getQualifierLength());
+        byte[] cfn = Bytes.add(familyName, ":".getBytes(), name);
+        if(columnIndexes.containsKey(cfn)) {
+            return columnIndexes.get(cfn);
         }
         return -1;
     }
 
     /**
-     * Collect all column values for the same rowKey
+     * Collect all column values for the same Row. RowKey may be different if indexes are involved,
+     * so it writes a separate record for each unique RowKey
      *
      * @param context    Current mapper context
-     * @param tableIndex Table index in tableNames list
+     * @param tableName Table index in tableNames list
      * @param lkv        List of KV values that will be combined in a single ImmutableBytesWritable
      * @throws IOException
      * @throws InterruptedException
      */
 
-    private void writeAggregatedRow(Context context, int tableIndex, List<KeyValue> lkv)
+    private void writeAggregatedRow(Context context, String tableName, List<KeyValue> lkv)
             throws IOException, InterruptedException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream(1024);
         DataOutputStream outputStream = new DataOutputStream(bos);
-        ImmutableBytesWritable outputKey = new ImmutableBytesWritable();
+        ImmutableBytesWritable outputKey =null;
         if (!lkv.isEmpty()) {
-            // All Key Values for the same row are supposed to be the same, so init rowKey only once
-            Cell first = lkv.get(0);
-            outputKey.set(first.getRowArray(), first.getRowOffset(), first.getRowLength());
             for (KeyValue cell : lkv) {
-                if (isEmptyCell(cell)) {
-                    continue;
+                if (outputKey == null || Bytes.compareTo(outputKey.get(), outputKey.getOffset(),
+                        outputKey.getLength(), cell.getRowArray(), cell.getRowOffset(), cell
+                                .getRowLength()) != 0) {
+                    // This a the first RowKey or a different from previous
+                    if (outputKey != null) { //It's a different RowKey, so we need to write it
+                        ImmutableBytesWritable aggregatedArray =
+                                new ImmutableBytesWritable(bos.toByteArray());
+                        outputStream.close();
+                        context.write(new TableRowkeyPair(tableName, outputKey), aggregatedArray);
+                    }
+                    outputKey = new ImmutableBytesWritable(cell.getRowArray(), cell.getRowOffset()
+                            , cell.getRowLength());
+                    bos = new ByteArrayOutputStream(1024);
+                    outputStream = new DataOutputStream(bos);
                 }
-                int i = findIndex(tableIndex, cell);
-                if (i == -1) {
-                    throw new IOException("No column found for KeyValue");
-                }
-                WritableUtils.writeVInt(outputStream, i);
+                /*
+                The order of aggregation: type, index of column, length of value, value itself
+                 */
                 outputStream.writeByte(cell.getTypeByte());
+                int i = findIndex(cell);
+                WritableUtils.writeVInt(outputStream, i);
                 WritableUtils.writeVInt(outputStream, cell.getValueLength());
                 outputStream.write(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+
             }
+            ImmutableBytesWritable aggregatedArray = new ImmutableBytesWritable(bos.toByteArray());
+            outputStream.close();
+            context.write(new TableRowkeyPair(tableName, outputKey), aggregatedArray);
         }
-        ImmutableBytesWritable aggregatedArray = new ImmutableBytesWritable(bos.toByteArray());
-        outputStream.close();
-        context.write(new TableRowkeyPair(tableNames.get(tableIndex), outputKey), aggregatedArray);
     }
-
-    protected boolean isEmptyCell(KeyValue cell) {
-        if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
-                cell.getQualifierLength(), QueryConstants.EMPTY_COLUMN_BYTES, 0,
-                QueryConstants.EMPTY_COLUMN_BYTES.length) != 0)
-            return false;
-        else
-            return true;
-    }
-
 
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
