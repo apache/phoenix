@@ -166,7 +166,6 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
 
             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             assertTrue(admin.tableExists(phoenixFullTableName));
-            assertTrue(admin.tableExists(MetaDataUtil.getLocalIndexPhysicalName(Bytes.toBytes(phoenixFullTableName))));
             assertTrue(admin.tableExists(schemaName + QueryConstants.NAME_SEPARATOR + indexName));
             assertTrue(admin.tableExists(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(phoenixFullTableName))));
             Properties props = new Properties();
@@ -183,7 +182,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
                     .getNameAsString();
             assertTrue(admin.tableExists(hbaseTableName));
-            assertTrue(admin.tableExists(MetaDataUtil.getLocalIndexPhysicalName(Bytes.toBytes(hbaseTableName))));
+            assertTrue(admin.tableExists(Bytes.toBytes(hbaseTableName)));
             assertTrue(admin.tableExists(schemaName + QueryConstants.NAMESPACE_SEPARATOR + indexName));
             assertTrue(admin.tableExists(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(hbaseTableName))));
             i = 0;

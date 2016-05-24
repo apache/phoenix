@@ -21,8 +21,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -98,7 +100,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite) throws SingleIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws SingleIndexWriteFailureException {
         /*
          * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the writes in
          * parallel to each index table, so each table gets its own task and is submitted to the pool. Where it gets
@@ -116,7 +118,12 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
             // doing a complete copy over of all the index update for each table.
             final List<Mutation> mutations = kvBuilder.cloneIfNecessary((List<Mutation>)entry.getValue());
             final HTableInterfaceReference tableReference = entry.getKey();
-            final RegionCoprocessorEnvironment env = this.env;
+			if (env != null
+					&& !allowLocalUpdates
+					&& tableReference.getTableName().equals(
+							env.getRegion().getTableDesc().getNameAsString())) {
+				continue;
+			}
             /*
              * Write a batch of index updates to an index table. This operation stops (is cancelable) via two
              * mechanisms: (1) setting aborted or stopped on the IndexWriter or, (2) interrupting the running thread.
@@ -145,29 +152,14 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
                     }
                     try {
-                        // TODO: Once HBASE-11766 is fixed, reexamine whether this is necessary.
-                        // Also, checking the prefix of the table name to determine if this is a local
-                        // index is pretty hacky. If we're going to keep this, we should revisit that
-                        // as well.
-                        try {
-                            if (MetaDataUtil.isLocalIndex(tableReference.getTableName())) {
-                                Region indexRegion = IndexUtil.getIndexRegion(env);
-                                if (indexRegion != null) {
-                                    throwFailureIfDone();
-                                    indexRegion.batchMutate(mutations.toArray(new Mutation[mutations.size()]),
-                                        HConstants.NO_NONCE, HConstants.NO_NONCE);
-                                    return null;
-                                }
-                            }
-                        } catch (IOException ignord) {
-                            // when it's failed we fall back to the standard & slow way
-                            if (LOG.isDebugEnabled()) {
-                                LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
-                                        + ignord);
-                            }
-                        }
+						if (allowLocalUpdates) {
+							for (Mutation m : mutations) {
+								m.setDurability(Durability.SKIP_WAL);
+							}
+						}
                         HTableInterface table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
+                        int i = 0;
                         table.batch(mutations);
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;

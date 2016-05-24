@@ -24,7 +24,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -35,9 +34,8 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.MetaTableAccessor;
@@ -47,12 +45,6 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
-import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
-import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
@@ -63,19 +55,16 @@ import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -88,9 +77,6 @@ import com.google.common.collect.Maps;
 @RunWith(Parameterized.class)
 public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
-    private static CountDownLatch latch1 = new CountDownLatch(1);
-    private static CountDownLatch latch2 = new CountDownLatch(1);
-    private static final int WAIT_TIME_SECONDS = 60;
     private String schemaName="TEST";
     private boolean isNamespaceMapped;
     private String tableName = schemaName + ".T";
@@ -102,8 +88,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
     public LocalIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
         this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.indexPhysicalTableName = Bytes
-                .toString(MetaDataUtil.getLocalIndexPhysicalName(physicalTableName.getName()));
+        this.indexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
     
     @BeforeClass 
@@ -147,6 +132,15 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         PTable localIndex = conn1.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, indexTableName));
         assertEquals(IndexType.LOCAL, localIndex.getIndexType());
         assertNotNull(localIndex.getViewIndexId());
+    }
+
+    @Test
+    public void testCreationOfTableWithLocalIndexColumnFamilyPrefixShouldFail() throws Exception {
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        try {
+            conn1.createStatement().execute("CREATE TABLE T(L#a varchar primary key, aL# integer)");
+            fail("Column families specified in the table creation should not have local colunm prefix.");
+        } catch (SQLException e) { }
     }
 
     @Test
@@ -215,11 +209,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertTrue("Local index table should be present.", admin.tableExists(indexPhysicalTableName));
         conn1.createStatement().execute("DROP TABLE "+ tableName);
-        admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertFalse("Local index table should be deleted.", admin.tableExists(indexPhysicalTableName));
         ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
@@ -247,6 +237,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         byte[][] endKeys = startEndKeys.getSecond();
         for (int i = 0; i < startKeys.length; i++) {
             Scan s = new Scan();
+            s.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
             s.setStartRow(startKeys[i]);
             s.setStopRow(endKeys[i]);
             ResultScanner scanner = indexTable.getScanner(s);
@@ -280,6 +271,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         byte[][] endKeys = startEndKeys.getSecond();
         for (int i = 0; i < startKeys.length; i++) {
             Scan s = new Scan();
+            s.addFamily(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES);
             s.setStartRow(startKeys[i]);
             s.setStopRow(endKeys[i]);
             ResultScanner scanner = indexTable.getScanner(s);
@@ -318,7 +310,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [-32768,'a'] - [-32768,'b']\n"
+                        + indexPhysicalTableName + " [1,'a'] - [1,'b']\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -342,7 +334,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [-32768,'a']\n"
+                        + indexPhysicalTableName + " [1,'a']\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -361,7 +353,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals("CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + indexPhysicalTableName
-                    + " [-32768,*] - [-32768,'z']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + " [1,*] - [1,'z']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "    SERVER SORTED BY [\"K3\"]\n" + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
  
             rs = conn1.createStatement().executeQuery(query);
@@ -384,7 +376,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName +" [-32768]\n"
+                        + indexPhysicalTableName +" [1]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
@@ -448,7 +440,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [-32768,'a']\n"
+                        + indexPhysicalTableName + " [1,'a']\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -471,7 +463,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName +" [-32768,*] - [-32768,'z']\n"
+                        + indexPhysicalTableName +" [1,*] - [1,'z']\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                          + "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
@@ -507,7 +499,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName +" [-32768,*] - [-32768,'z']\n"
+                        + indexPhysicalTableName +" [1,*] - [1,'z']\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
@@ -535,7 +527,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName +" [-32768,*] - [-32768,'z']\n"
+                        + indexPhysicalTableName +" [1,*] - [1,'z']\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
@@ -591,8 +583,8 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTable indexTable = new HTable(admin.getConfiguration() ,TableName.valueOf(MetaDataUtil.getLocalIndexTableName(tableName)));
-            Pair<byte[][], byte[][]> startEndKeys = indexTable.getStartEndKeys();
+            HTable table = new HTable(admin.getConfiguration() ,TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME));
+            Pair<byte[][], byte[][]> startEndKeys = table.getStartEndKeys();
             byte[][] startKeys = startEndKeys.getFirst();
             byte[][] endKeys = startEndKeys.getSecond();
             // No entry should be present in local index table after drop index.
@@ -600,7 +592,13 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                 Scan s = new Scan();
                 s.setStartRow(startKeys[i]);
                 s.setStopRow(endKeys[i]);
-                ResultScanner scanner = indexTable.getScanner(s);
+                Collection<HColumnDescriptor> families = table.getTableDescriptor().getFamilies();
+                for(HColumnDescriptor cf: families) {
+                    if(cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)){
+                        s.addFamily(cf.getName());
+                    }
+                }
+                ResultScanner scanner = table.getScanner(s);
                 int count = 0;
                 for(Result r:scanner){
                     count++;
@@ -608,7 +606,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                 scanner.close();
                 assertEquals(0, count);
             }
-            indexTable.close();
+            table.close();
         } finally {
             conn1.close();
         }
@@ -720,7 +718,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("j", rs.getString("t_id"));
-            assertTrue(rs.next());
+            assertTrue(rs.next());     
             assertEquals("b", rs.getString("t_id"));
             assertFalse(rs.next());
        } finally {
@@ -778,18 +776,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                             admin.getConnection(), physicalTableName, false);
                 }
                 assertEquals(4+i, regionsOfUserTable.size());
-                TableName indexTable =
-                        TableName.valueOf(indexPhysicalTableName);
-                List<HRegionInfo> regionsOfIndexTable =
-                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                                admin.getConnection(), indexTable, false);
-
-                while (regionsOfIndexTable.size() != (4 + i)) {
-                    Thread.sleep(100);
-                    regionsOfIndexTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                            admin.getConnection(), indexTable, false);
-                }
-                assertEquals(4 + i, regionsOfIndexTable.size());
                 String[] tIdColumnValues = new String[26]; 
                 String[] v1ColumnValues = new String[26];
                 int[] k1ColumnValue = new int[26];
@@ -814,7 +800,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                 rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
                 assertEquals(
                         "CLIENT PARALLEL " + (4 + i) + "-WAY RANGE SCAN OVER "
-                                + indexPhysicalTableName + " [-32768]\n"
+                                + indexPhysicalTableName + " [1]\n"
                                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 
@@ -824,7 +810,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                     "CLIENT PARALLEL "
                             + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1))
                             + "-WAY RANGE SCAN OVER "
-                            + indexPhysicalTableName + " [-32767]\n"
+                            + indexPhysicalTableName + " [2]\n"
                                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn1.createStatement().executeQuery(query);
@@ -927,19 +913,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
                 regionsOfUserTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
                         admin.getConnection(), physicalTableName, false);
             }
-            assertEquals(3, regionsOfUserTable.size());
-            TableName indexTable =
-                    TableName.valueOf(indexPhysicalTableName);
-            List<HRegionInfo> regionsOfIndexTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                            admin.getConnection(), indexTable, false);
-
-            while (regionsOfIndexTable.size() != 3) {
-                Thread.sleep(100);
-                regionsOfIndexTable = MetaTableAccessor.getTableRegions(
-                        getUtility().getZooKeeperWatcher(), admin.getConnection(), indexTable, false);
-            }
-            assertEquals(3, regionsOfIndexTable.size());
             String query = "SELECT t_id,k1,v1 FROM " + tableName;
             rs = conn1.createStatement().executeQuery(query);
             Thread.sleep(1000);
@@ -953,7 +926,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(
                 "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER "
                         + indexPhysicalTableName
-                        + " [-32768]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + " [1]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
 
             query = "SELECT t_id,k1,k3 FROM " + tableName;
@@ -961,7 +934,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(
                 "CLIENT PARALLEL " + 3 + "-WAY RANGE SCAN OVER "
                         + indexPhysicalTableName
-                        + " [-32767]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + " [2]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
 
             rs = conn1.createStatement().executeQuery(query);
@@ -974,95 +947,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             }
        } finally {
             conn1.close();
-        }
-    }
-
-    @Test
-    public void testLocalIndexStateWhenSplittingInProgress() throws Exception {
-        if (isNamespaceMapped) { return; }
-        createBaseTable(tableName+"2", null, "('e','j','o')");
-        Connection conn1 = getConnection();
-        try{
-            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
-            for (int i = 0; i < 26; i++) {
-                conn1.createStatement().execute(
-                    "UPSERT INTO " + tableName+"2" + " values('"+strings[i]+"'," + i + ","
-                            + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
-            }
-            conn1.commit();
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName+"2" + "(v1)");
-            conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + "_2 ON " + tableName+"2" + "(k3)");
-
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName+"2");
-            assertTrue(rs.next());
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTableDescriptor tableDesc = admin.getTableDescriptor(SchemaUtil.getPhysicalTableName((tableName+"2").getBytes(),isNamespaceMapped));
-            tableDesc.removeCoprocessor(LocalIndexSplitter.class.getName());
-            tableDesc.addCoprocessor(MockedLocalIndexSplitter.class.getName(), null,
-                1, null);
-            admin.disableTable(tableDesc.getTableName());
-            admin.modifyTable(tableDesc.getTableName(), tableDesc);
-            admin.enableTable(tableDesc.getTableName());
-            TableName indexTable = TableName.valueOf(MetaDataUtil.getLocalIndexTableName(
-                    SchemaUtil.getPhysicalTableName((tableName + "2").getBytes(), isNamespaceMapped).getNameAsString()));
-            HTableDescriptor indexTableDesc = admin.getTableDescriptor(indexTable);
-            indexTableDesc.removeCoprocessor(IndexHalfStoreFileReaderGenerator.class.getName());
-            indexTableDesc.addCoprocessor(MockedIndexHalfStoreFileReaderGenerator.class.getName(), null,
-                1, null);
-            admin.disableTable(indexTable);
-            admin.modifyTable(indexTable, indexTableDesc);
-            admin.enableTable(indexTable);
-
-            admin.split(SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName + "2"), isNamespaceMapped),
-                    ByteUtil.concat(Bytes.toBytes(strings[3])));
-            List<HRegionInfo> regionsOfUserTable =
-                    admin.getTableRegions(SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName + "2"), isNamespaceMapped));
-
-            while (regionsOfUserTable.size() != 5) {
-                Thread.sleep(100);
-                regionsOfUserTable = admin.getTableRegions(SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName + "2"), isNamespaceMapped));
-            }
-            assertEquals(5, regionsOfUserTable.size());
-
-            List<HRegionInfo> regionsOfIndexTable = admin.getTableRegions(indexTable);
-
-            while (regionsOfIndexTable.size() != 5) {
-                Thread.sleep(100);
-                regionsOfIndexTable = admin.getTableRegions(indexTable);
-            }
-
-            assertEquals(5, regionsOfIndexTable.size());
-            boolean success = latch1.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
-            assertTrue("Timed out waiting for MockedLocalIndexSplitter.preSplitAfterPONR to complete", success);
-            latch2.countDown();
-       } finally {
-            conn1.close();
-            latch1.countDown();
-            latch2.countDown();
-        }
-    }
-
-    public static class MockedIndexHalfStoreFileReaderGenerator extends IndexHalfStoreFileReaderGenerator {
-        @Override
-        public void postCompact(ObserverContext<RegionCoprocessorEnvironment> e, Store store,
-                StoreFile resultFile) throws IOException {
-            try {
-                boolean success = latch2.await(WAIT_TIME_SECONDS, TimeUnit.SECONDS);
-                assertTrue("Timed out waiting for test to complete", success);
-                super.postCompact(e, store, resultFile);
-            } catch (InterruptedException e1) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(e1);
-            }
-        }
-    }
-
-    public static class MockedLocalIndexSplitter extends LocalIndexSplitter {
-        @Override
-        public void preSplitAfterPONR(ObserverContext<RegionCoprocessorEnvironment> ctx)
-                throws IOException {
-            super.preSplitAfterPONR(ctx);
-            latch1.countDown();
         }
     }
 }

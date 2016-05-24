@@ -113,7 +113,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
     public ViewIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
         this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.viewIndexPhysicalTableName = MetaDataUtil.getLocalIndexTableName(physicalTableName.getNameAsString());
+        this.viewIndexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
 
 
@@ -172,7 +172,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         String sql = "SELECT * FROM " + VIEW_NAME + " WHERE v2 = 100";
         ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T ['10',-32768,100]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['10',1,100]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         rs = conn1.prepareStatement(sql).executeQuery();

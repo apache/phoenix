@@ -138,7 +138,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
             }
 
             // its a local index table, so we need to convert it to the index table names we should disable
-            if (MetaDataUtil.isLocalIndex(ref.getTableName())) {
+            if (MetaDataUtil.hasLocalIndexColumnFamily(env.getRegion().getTableDesc())) {
                 for (String tableName : getLocalIndexNames(ref, mutations)) {
                     indexTableNames.put(tableName, minTimeStamp);
                 }
@@ -224,8 +224,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         try {
             conn = QueryUtil.getConnectionOnServer(this.env.getConfiguration()).unwrap(
                     PhoenixConnection.class);
-            String userTableName = MetaDataUtil.getUserTableName(ref.getTableName());
-            PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
+            PTable dataTable = PhoenixRuntime.getTable(conn, ref.getTableName());
             List<PTable> indexes = dataTable.getIndexes();
             // local index used to get view id from index mutation row key.
             PTable localIndex = null;

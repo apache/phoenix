@@ -76,7 +76,7 @@ public class RollbackIT extends BaseHBaseManagedTimeIT {
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
                  { false, false }, { false, true },
-                 { true, false }, { true, true }  
+                 { true, false }, { true, true } 
            });
     }
     

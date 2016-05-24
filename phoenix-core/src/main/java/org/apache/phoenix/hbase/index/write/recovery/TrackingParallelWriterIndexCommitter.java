@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -110,7 +111,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     }
 
     @Override
-    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite) throws MultiIndexWriteFailureException {
+    public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, final boolean allowLocalUpdates) throws MultiIndexWriteFailureException {
         Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
         TaskBatch<Boolean> tasks = new TaskBatch<Boolean>(entries.size());
         List<HTableInterfaceReference> tables = new ArrayList<HTableInterfaceReference>(entries.size());
@@ -121,6 +122,12 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
             // track each reference so we can get at it easily later, when determing failures
             final HTableInterfaceReference tableReference = entry.getKey();
             final RegionCoprocessorEnvironment env = this.env;
+			if (env != null
+					&& !allowLocalUpdates
+					&& tableReference.getTableName().equals(
+							env.getRegion().getTableDesc().getNameAsString())) {
+				continue;
+			}
             tables.add(tableReference);
 
             /*
@@ -144,31 +151,14 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                     try {
                         // this may have been queued, but there was an abort/stop so we try to early exit
                         throwFailureIfDone();
+						if (allowLocalUpdates) {
+							for (Mutation m : mutations) {
+								m.setDurability(Durability.SKIP_WAL);
+							}
+						}
 
                         if (LOG.isDebugEnabled()) {
                             LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
-                        }
-
-                        try {
-                            // TODO: Once HBASE-11766 is fixed, reexamine whether this is necessary.
-                            // Also, checking the prefix of the table name to determine if this is a local
-                            // index is pretty hacky. If we're going to keep this, we should revisit that
-                            // as well.
-                            if (MetaDataUtil.isLocalIndex(tableReference.getTableName())) {
-                                Region indexRegion = IndexUtil.getIndexRegion(env);
-                                if (indexRegion != null) {
-                                    throwFailureIfDone();
-                                    indexRegion.batchMutate(mutations.toArray(new Mutation[mutations.size()]),
-                                        HConstants.NO_NONCE, HConstants.NO_NONCE);
-                                    return Boolean.TRUE;
-                                }
-                            }
-                        } catch (IOException ignord) {
-                            // when it's failed we fall back to the standard & slow way
-                            if (LOG.isDebugEnabled()) {
-                                LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
-                                        + ignord);
-                            }
                         }
 
                         HTableInterface table = factory.getTable(tableReference.get());
