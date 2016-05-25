@@ -2636,14 +2636,14 @@ public class MetaDataClient {
             buf.setCharAt(buf.length() - 1, ')');
             if(tableRefs.get(0).getTable().getIndexType()==IndexType.LOCAL) {
                 buf.append(" AND COLUMN_FAMILY IN(");
-                               if (tableRefs.get(0).getTable().getColumnFamilies().isEmpty()) {
+                if (tableRefs.get(0).getTable().getColumnFamilies().isEmpty()) {
                     buf.append("'" + QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY + "',");
                 } else {
                     for(PColumnFamily cf : tableRefs.get(0).getTable().getColumnFamilies()) {
                         buf.append("'" + cf.getName().getString() + "',");
                     }
                 }
-                   buf.setCharAt(buf.length() - 1, ')');
+                buf.setCharAt(buf.length() - 1, ')');
             }
             conn.createStatement().execute(buf.toString());
             success = true;
