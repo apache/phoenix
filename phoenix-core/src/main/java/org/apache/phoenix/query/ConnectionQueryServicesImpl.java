@@ -1156,6 +1156,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean isIncompatible = false;
         int minHBaseVersion = Integer.MAX_VALUE;
         boolean isTableNamespaceMappingEnabled = false;
+        HTableInterface ht = null;
         try {
             List<HRegionLocation> locations = this
                     .getAllTableRegions(metaTable);
@@ -1170,8 +1171,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
-            HTableInterface ht = this
-                    .getTable(metaTable);
+            ht = this.getTable(metaTable);
             final Map<byte[], Long> results =
                     ht.coprocessorService(MetaDataService.class, null, null, new Batch.Call<MetaDataService,Long>() {
                         @Override
@@ -1219,6 +1219,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR).setRootCause(t)
                 .setMessage("Ensure that " + QueryConstants.DEFAULT_COPROCESS_PATH + " is put on the classpath of HBase in every region server: " + t.getMessage())
                 .build().buildException();
+        } finally {
+            if (ht != null) {
+                try {
+                    ht.close();
+                } catch (IOException e) {
+                    logger.warn("Could not close HTable", e);
+                }
+            }
         }
         if (isIncompatible) {
             buf.setLength(buf.length()-1);
