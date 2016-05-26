@@ -37,10 +37,6 @@
 
   <repositories>
     <repository>
-      <id>apache tephra staging</id>
-      <url>https://repository.apache.org/content/repositories/orgapachetephra-1001</url>
-    </repository>
-    <repository>
       <id>apache release</id>
       <url>https://repository.apache.org/content/repositories/releases/</url>
     </repository>
