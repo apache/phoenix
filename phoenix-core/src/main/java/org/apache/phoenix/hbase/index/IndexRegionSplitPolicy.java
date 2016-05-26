@@ -17,11 +17,16 @@
  */
 package org.apache.phoenix.hbase.index;
 
+import java.util.List;
+
 import org.apache.hadoop.hbase.regionserver.IncreasingToUpperBoundRegionSplitPolicy;
+import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 
 /**
- * Split policy for index regions to avoid split from external requests.
+ * Split policy for local indexed tables to select split key from non local index column families
+ * always.
  */
 public class IndexRegionSplitPolicy extends IncreasingToUpperBoundRegionSplitPolicy {
 
@@ -31,5 +36,39 @@ public class IndexRegionSplitPolicy extends IncreasingToUpperBoundRegionSplitPol
             return true;
         }
         return false;
+    }
+
+    @Override
+    protected byte[] getSplitPoint() {
+        byte[] oldSplitPoint = super.getSplitPoint();
+        if (oldSplitPoint == null) return null;
+        List<Store> stores = region.getStores();
+        byte[] splitPointFromLargestStore = null;
+        long largestStoreSize = 0;
+        boolean isLocalIndexKey = false;
+        for (Store s : stores) {
+            if (s.getFamily().getNameAsString()
+                    .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                byte[] splitPoint = s.getSplitPoint();
+                if (oldSplitPoint != null && splitPoint != null
+                        && Bytes.compareTo(oldSplitPoint, splitPoint) == 0) {
+                    isLocalIndexKey = true;
+                }
+            }
+        }
+        if (!isLocalIndexKey) return oldSplitPoint;
+
+        for (Store s : stores) {
+            if (!s.getFamily().getNameAsString()
+                    .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                byte[] splitPoint = s.getSplitPoint();
+                long storeSize = s.getSize();
+                if (splitPoint != null && largestStoreSize < storeSize) {
+                    splitPointFromLargestStore = splitPoint;
+                    largestStoreSize = storeSize;
+                }
+            }
+        }
+        return splitPointFromLargestStore;
     }
 }
