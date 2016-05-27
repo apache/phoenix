@@ -18,35 +18,39 @@
 package org.apache.phoenix.iterate;
 
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.MinMaxPriorityQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
 import java.util.AbstractQueue;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.MinMaxPriorityQueue;
+public abstract class SpoolingByteBufferQueue<T> extends AbstractQueue<T> {
+    private static final Logger logger = LoggerFactory.getLogger(SpoolingByteBufferQueue.class);
 
-@Deprecated
-public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
-    private final int thresholdBytes;
-    private List<MappedByteBufferSegmentQueue<T>> queues;
+    protected final int thresholdBytes;
+    private List<SpoolingByteBufferSegmentQueue<T>> queues;
     private int currentIndex;
-    private MappedByteBufferSegmentQueue<T> currentQueue;
-    private MinMaxPriorityQueue<MappedByteBufferSegmentQueue<T>> mergedQueue;
+    private SpoolingByteBufferSegmentQueue<T> currentQueue;
+    private MinMaxPriorityQueue<SpoolingByteBufferSegmentQueue<T>> mergedQueue;
 
-    public MappedByteBufferQueue(int thresholdBytes) {
+    public SpoolingByteBufferQueue(int thresholdBytes) {
         this.thresholdBytes = thresholdBytes;
-        this.queues = Lists.<MappedByteBufferSegmentQueue<T>> newArrayList();
+        this.queues = Lists.<SpoolingByteBufferSegmentQueue<T>> newArrayList();
         this.currentIndex = -1;
         this.currentQueue = null;
         this.mergedQueue = null;
     }
     
-    abstract protected MappedByteBufferSegmentQueue<T> createSegmentQueue(int index, int thresholdBytes);
+    abstract protected SpoolingByteBufferSegmentQueue<T> createSegmentQueue(int index);
     
-    abstract protected Comparator<MappedByteBufferSegmentQueue<T>> getSegmentQueueComparator();
+    abstract protected Comparator<SpoolingByteBufferSegmentQueue<T>> getSegmentQueueComparator();
     
-    protected final List<MappedByteBufferSegmentQueue<T>> getSegmentQueues() {
+    protected final List<SpoolingByteBufferSegmentQueue<T>> getSegmentQueues() {
         return queues.subList(0, currentIndex + 1);
     }
 
@@ -58,7 +62,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
             if (currentIndex < queues.size()) {
                 currentQueue = queues.get(currentIndex);
             } else {
-                currentQueue = createSegmentQueue(currentIndex, thresholdBytes);
+                currentQueue = createSegmentQueue(currentIndex);
                 queues.add(currentQueue);
             }
         }
@@ -70,7 +74,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     public T poll() {
         initMergedQueue();
         if (mergedQueue != null && !mergedQueue.isEmpty()) {
-            MappedByteBufferSegmentQueue<T> queue = mergedQueue.poll();
+            SpoolingByteBufferSegmentQueue<T> queue = mergedQueue.poll();
             T re = queue.poll();
             if (queue.peek() != null) {
                 mergedQueue.add(queue);
@@ -91,7 +95,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     
     @Override
     public void clear() {
-        for (MappedByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+        for (SpoolingByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
             queue.clear();
         }
         currentIndex = -1;
@@ -107,7 +111,7 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     @Override
     public int size() {
         int size = 0;
-        for (MappedByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+        for (SpoolingByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
             size += queue.size();
         }
         return size;
@@ -118,17 +122,21 @@ public abstract class MappedByteBufferQueue<T> extends AbstractQueue<T> {
     }
 
     public void close() {
-        for (MappedByteBufferSegmentQueue<T> queue : queues) {
-            queue.close();
+        for (SpoolingByteBufferSegmentQueue<T> queue : queues) {
+            try {
+                queue.close();
+            } catch (IOException e) {
+                logger.error("SpoolingByteBufferSegmentQueue does not close successfully", e);
+            }
         }
         queues.clear();
     }
     
     private void initMergedQueue() {
         if (mergedQueue == null && currentIndex >= 0) {
-            mergedQueue = MinMaxPriorityQueue.<MappedByteBufferSegmentQueue<T>> orderedBy(
+            mergedQueue = MinMaxPriorityQueue.<SpoolingByteBufferSegmentQueue<T>> orderedBy(
                     getSegmentQueueComparator()).maximumSize(currentIndex + 1).create();
-            for (MappedByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+            for (SpoolingByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
                 T re = queue.peek();
                 if (re != null) {
                     mergedQueue.add(queue);
