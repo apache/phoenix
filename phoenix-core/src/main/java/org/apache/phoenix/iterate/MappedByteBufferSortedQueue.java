@@ -46,13 +46,13 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
     }
 
     @Override
-    protected org.apache.phoenix.iterate.MappedByteBufferQueue.MappedByteBufferSegmentQueue<ResultEntry> createSegmentQueue(
+    protected MappedByteBufferSegmentQueue<ResultEntry> createSegmentQueue(
             int index, int thresholdBytes) {
         return new MappedByteBufferResultEntryPriorityQueue(index, thresholdBytes, limit, comparator);
     }
 
     @Override
-    protected Comparator<org.apache.phoenix.iterate.MappedByteBufferQueue.MappedByteBufferSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
+    protected Comparator<MappedByteBufferSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
         return new Comparator<MappedByteBufferSegmentQueue<ResultEntry>>() {
             @Override
             public int compare(MappedByteBufferSegmentQueue<ResultEntry> q1,
