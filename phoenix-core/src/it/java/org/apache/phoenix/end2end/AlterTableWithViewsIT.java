@@ -544,61 +544,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
     
     
     
-    @Test
-    public void testAlteringViewThatHasChildViews() throws Exception {
-        String baseTable = "testAlteringViewThatHasChildViews";
-        String childView = "childView";
-        String grandChildView = "grandChildView";
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-            String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
-                    + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (%s PK2)"
-                    + " ) %s";
-            conn.createStatement().execute(generateDDL(ddlFormat));
-
-            String childViewDDL = "CREATE VIEW " + childView + " AS SELECT * FROM " + baseTable;
-            viewConn.createStatement().execute(childViewDDL);
-
-            String addColumnToChildViewDDL =
-                    "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";
-            viewConn.createStatement().execute(addColumnToChildViewDDL);
-
-            String grandChildViewDDL =
-                    "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
-            viewConn.createStatement().execute(grandChildViewDDL);
-
-            // dropping base table column from child view should succeed
-            String dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN V2";
-            viewConn.createStatement().execute(dropColumnFromChildView);
-
-            // dropping view specific column from child view should succeed
-            dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN CHILD_VIEW_COL";
-            viewConn.createStatement().execute(dropColumnFromChildView);
-            
-            // Adding column to view that has child views is allowed
-            String addColumnToChildView = "ALTER VIEW " + childView + " ADD V5 VARCHAR";
-            viewConn.createStatement().execute(addColumnToChildView);
-            // V5 column should be visible now for childView
-            viewConn.createStatement().execute("SELECT V5 FROM " + childView);    
-            
-            // However, column V5 shouldn't have propagated to grandChildView. Not till PHOENIX-2054 is fixed.
-            try {
-                viewConn.createStatement().execute("SELECT V5 FROM " + grandChildView);
-            } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-            }
-
-            // dropping column from the grand child view, however, should work.
-            String dropColumnFromGrandChildView =
-                    "ALTER VIEW " + grandChildView + " DROP COLUMN CHILD_VIEW_COL";
-            viewConn.createStatement().execute(dropColumnFromGrandChildView);
-
-            // similarly, dropping column inherited from the base table should work.
-            dropColumnFromGrandChildView = "ALTER VIEW " + grandChildView + " DROP COLUMN V2";
-            viewConn.createStatement().execute(dropColumnFromGrandChildView);
-        }
-    }
+    
     
     @Test
     public void testDivergedViewsStayDiverged() throws Exception {
@@ -674,6 +620,62 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeIT {
             assertTrue(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
             assertTrue(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, "VIEWOFTABLE")).isTransactional());
         } 
+    }
+    
+    @Test
+    public void testAlteringViewThatHasChildViews() throws Exception {
+        String baseTable = "testAlteringViewThatHasChildViews";
+        String childView = "childView";
+        String grandChildView = "grandChildView";
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
+            String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
+                    + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (%s PK2)"
+                    + " ) %s";
+            conn.createStatement().execute(generateDDL(ddlFormat));
+
+            String childViewDDL = "CREATE VIEW " + childView + " AS SELECT * FROM " + baseTable;
+            viewConn.createStatement().execute(childViewDDL);
+
+            String addColumnToChildViewDDL =
+                    "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";
+            viewConn.createStatement().execute(addColumnToChildViewDDL);
+
+            String grandChildViewDDL =
+                    "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
+            viewConn.createStatement().execute(grandChildViewDDL);
+
+            // dropping base table column from child view should succeed
+            String dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN V2";
+            viewConn.createStatement().execute(dropColumnFromChildView);
+
+            // dropping view specific column from child view should succeed
+            dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN CHILD_VIEW_COL";
+            viewConn.createStatement().execute(dropColumnFromChildView);
+            
+            // Adding column to view that has child views is allowed
+            String addColumnToChildView = "ALTER VIEW " + childView + " ADD V5 VARCHAR";
+            viewConn.createStatement().execute(addColumnToChildView);
+            // V5 column should be visible now for childView
+            viewConn.createStatement().execute("SELECT V5 FROM " + childView);    
+            
+            // However, column V5 shouldn't have propagated to grandChildView. Not till PHOENIX-2054 is fixed.
+            try {
+                viewConn.createStatement().execute("SELECT V5 FROM " + grandChildView);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            }
+
+            // dropping column from the grand child view, however, should work.
+            String dropColumnFromGrandChildView =
+                    "ALTER VIEW " + grandChildView + " DROP COLUMN CHILD_VIEW_COL";
+            viewConn.createStatement().execute(dropColumnFromGrandChildView);
+
+            // similarly, dropping column inherited from the base table should work.
+            dropColumnFromGrandChildView = "ALTER VIEW " + grandChildView + " DROP COLUMN V2";
+            viewConn.createStatement().execute(dropColumnFromGrandChildView);
+        }
     }
     
 }

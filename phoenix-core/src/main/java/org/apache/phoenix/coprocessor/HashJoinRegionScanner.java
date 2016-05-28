@@ -110,7 +110,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     private void processResults(List<Cell> result, boolean hasBatchLimit) throws IOException {
         if (result.isEmpty())
             return;
-        
+        //TODO: samarth make joins work with position based lookup.
         Tuple tuple = new ResultTuple(Result.create(result));
         // For backward compatibility. In new versions, HashJoinInfo.forceProjection()
         // always returns true.

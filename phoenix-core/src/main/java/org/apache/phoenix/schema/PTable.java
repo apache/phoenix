@@ -20,6 +20,8 @@ package org.apache.phoenix.schema;
 import java.util.List;
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -385,5 +387,51 @@ public interface PTable extends PMetaDataEntity {
     long getUpdateCacheFrequency();
     boolean isNamespaceMapped();
     StorageScheme getStorageScheme();
-    Map<String, Integer> getEncodedCQCounters();
+    EncodedCQCounter getEncodedCQCounter();
+    
+    /**
+     * Wrapper around {@link java.lang.Integer} to help track and update counter values.
+     */
+    public class EncodedCQCounter {
+        
+        @Nullable private Integer counter;
+        public static final EncodedCQCounter NULL_COUNTER = new EncodedCQCounter(null); 
+        
+        public EncodedCQCounter(Integer initialValue) {
+            counter = initialValue;
+        }
+        
+        @Nullable
+        public Integer getValue() {
+            return counter;
+        }
+        
+        public void increment() {
+            if (counter != null) {
+                counter++;
+            }
+        }
+        @Override
+        public int hashCode() {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((counter == null) ? 0 : counter.hashCode());
+            return result;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (obj == null) return false;
+            if (getClass() != obj.getClass()) return false;
+            EncodedCQCounter other = (EncodedCQCounter)obj;
+            if (counter == null) {
+                if (other.counter != null) return false;
+            } else if (!counter.equals(other.counter)) return false;
+            return true;
+        }
+
+
+        
+    }
 }

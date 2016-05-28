@@ -18,7 +18,6 @@
 package org.apache.phoenix.schema;
 
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -289,7 +288,7 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public Map<String, Integer> getEncodedCQCounters() {
-        return delegate.getEncodedCQCounters();
+    public EncodedCQCounter getEncodedCQCounter() {
+        return delegate.getEncodedCQCounter();
     }
 }

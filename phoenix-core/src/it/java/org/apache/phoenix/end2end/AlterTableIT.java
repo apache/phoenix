@@ -26,6 +26,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.closeConnection;
 import static org.apache.phoenix.util.TestUtil.closeStatement;
@@ -63,6 +64,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
@@ -2244,13 +2246,11 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 	        long initBaseTableSeqNumber = baseTable.getSequenceNumber(); 
 
 	        // assert that the client side cache is updated.
-	        Map<String, Integer> cqCounters = baseTable.getEncodedCQCounters();
-	        assertEquals(1, cqCounters.size());
-	        int counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
-	        assertEquals(1, counter);
-
+	        EncodedCQCounter cqCounter = baseTable.getEncodedCQCounter();
+	        assertEquals((Integer)ENCODED_CQ_COUNTER_INITIAL_VALUE, cqCounter.getValue());
+	        
 	        // assert that the server side metadata is updated correctly.
-	        assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 1);
+	        assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE, true);
 	        assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber);
 
 	        // now create a view and validate client and server side metadata
@@ -2260,19 +2260,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 	        PTable view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullViewName));
 
 	        // verify that the client side cache is updated. Base table's cq counters should be updated.
-	        cqCounters = baseTable.getEncodedCQCounters();
-	        counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
-	        assertEquals(2, counter);
-	        counter = cqCounters.get("A");
-	        assertEquals(2, counter);
-	        cqCounters = view.getEncodedCQCounters();
-	        assertTrue("A view should always have the column qualifier counters map empty", cqCounters.isEmpty());
-
+	        assertEquals((Integer)(ENCODED_CQ_COUNTER_INITIAL_VALUE + 2), baseTable.getEncodedCQCounter().getValue());
+	        assertNull("A view should always have the null cq counter", view.getEncodedCQCounter().getValue());
+	        
 	        // assert that the server side metadata for the base table and the view is also updated correctly.
-	        assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 2);
-	        assertEncodedCQCounter("A", schemaName, baseTableName, 2);
-	        assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "VIEW_COL1", schemaName, viewName, 1);
-	        assertEncodedCQValue("A", "VIEW_COL2", schemaName, viewName, 1);
+	        assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 2, true);
+	        assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "VIEW_COL1", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE);
+	        assertEncodedCQValue("A", "VIEW_COL2", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
 	        assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 1);
 	        assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM);
 	    }
@@ -2305,18 +2299,14 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
             // assert that the client side cache is updated.
             baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
-            Map<String, Integer> cqCounters = baseTable.getEncodedCQCounters();
-            int counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
-            assertEquals(3, counter);
-            counter = cqCounters.get("B");
-            assertEquals(2, counter);
-
+            EncodedCQCounter encodedCqCounter = baseTable.getEncodedCQCounter();
+            assertEquals((Integer)(ENCODED_CQ_COUNTER_INITIAL_VALUE + 3), encodedCqCounter.getValue());
+            
             // assert that the server side metadata is updated correctly.
-            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 3);
-            assertEncodedCQCounter("B", schemaName, baseTableName, 2);
-            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL4", schemaName, baseTableName, 1);
-            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL5", schemaName, baseTableName, 2);
-            assertEncodedCQValue("B", "COL6", schemaName, baseTableName, 1);
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 3, true);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL4", schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL5", schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+            assertEncodedCQValue("B", "COL6", schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 2);
             assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 1);
 
             // Create a view
@@ -2331,26 +2321,19 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
 
             // assert that the client cache for the base table is updated
             baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
-            cqCounters = baseTable.getEncodedCQCounters();
-            counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
-            assertEquals(5, counter);
-            counter = cqCounters.get("B");
-            assertEquals(3, counter);
-            counter = cqCounters.get("A");
-            assertEquals(3, counter);
-
+            encodedCqCounter = baseTable.getEncodedCQCounter();
+            assertEquals((Integer)(ENCODED_CQ_COUNTER_INITIAL_VALUE + 8), encodedCqCounter.getValue());
+            
             // assert client cache for view
             PTable view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullViewName));
-            cqCounters = view.getEncodedCQCounters();
-            assertTrue("A view should always have the column qualifier counters map empty", cqCounters.isEmpty());
-
+            encodedCqCounter = view.getEncodedCQCounter();
+            assertNull("A view should always have the column qualifier counter as null", view.getEncodedCQCounter().getValue());
+            
             // assert that the server side metadata for the base table and the view is also updated correctly.
-            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 5);
-            assertEncodedCQCounter("A", schemaName, baseTableName, 3);
-            assertEncodedCQCounter("B", schemaName, baseTableName, 3);
-            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "VIEW_COL3", schemaName, viewName, 4);
-            assertEncodedCQValue("A", "VIEW_COL4", schemaName, viewName, 2);
-            assertEncodedCQValue("B", "VIEW_COL5", schemaName, viewName, 2);
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 8, true);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "VIEW_COL3", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 5);
+            assertEncodedCQValue("A", "VIEW_COL4", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 6);
+            assertEncodedCQValue("B", "VIEW_COL5", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 7);
             // Adding a column to the should increment the base table's sequence number too since we update the cq counters for column families.
             assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 3);
             assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 1);
@@ -2361,25 +2344,18 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             baseTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullTableName));
             
             // assert that the client cache for the base table is updated 
-            cqCounters = baseTable.getEncodedCQCounters();
-            counter = cqCounters.get(DEFAULT_COLUMN_FAMILY);
-            assertEquals(6, counter);
-            counter = cqCounters.get("B");
-            assertEquals(3, counter);
-            counter = cqCounters.get("A");
-            assertEquals(4, counter);
+            encodedCqCounter = baseTable.getEncodedCQCounter();
+            assertEquals((Integer)(ENCODED_CQ_COUNTER_INITIAL_VALUE + 10), encodedCqCounter.getValue());
             
             // assert client cache for view
             view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), fullViewName));
-            cqCounters = view.getEncodedCQCounters();
-            assertTrue("A view should always have the column qualifier counters map empty", cqCounters.isEmpty());
+            encodedCqCounter = view.getEncodedCQCounter();
+            assertNull("A view should always have the column qualifier counter as null", view.getEncodedCQCounter().getValue());
             
             // assert that the server side metadata for the base table and the view is also updated correctly.
-            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, 6);
-            assertEncodedCQCounter("A", schemaName, baseTableName, 4);
-            assertEncodedCQCounter("B", schemaName, baseTableName, 3);
-            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL10", schemaName, viewName, 5);
-            assertEncodedCQValue("A", "COL11", schemaName, viewName, 3);
+            assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 10), true);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL10", schemaName, viewName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 8));
+            assertEncodedCQValue("A", "COL11", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 9);
             assertSequenceNumber(schemaName, baseTableName, initBaseTableSeqNumber + 4);
             assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 2);
         }
@@ -2401,7 +2377,7 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
         }
     }
     
-    private void assertEncodedCQCounter(String columnFamily, String schemaName, String tableName, int expectedValue) throws Exception {
+    private void assertEncodedCQCounter(String columnFamily, String schemaName, String tableName, int expectedValue, boolean rowExists) throws Exception {
         String query = "SELECT " + COLUMN_QUALIFIER_COUNTER + " FROM SYSTEM.CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ? AND " + COLUMN_QUALIFIER_COUNTER + " IS NOT NULL";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -2410,9 +2386,13 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setString(2, tableName);
             stmt.setString(3, columnFamily);
             ResultSet rs = stmt.executeQuery();
-            assertTrue(rs.next());
-            assertEquals(expectedValue, rs.getInt(1));
-            assertFalse(rs.next());
+            if (rowExists) {
+                assertTrue(rs.next());
+                assertEquals(expectedValue, rs.getInt(1));
+                assertFalse(rs.next());
+            } else {
+                assertFalse(rs.next());
+            }
         }
     }
     

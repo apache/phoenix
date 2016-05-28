@@ -22,7 +22,9 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EXPECTED_
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
+import static org.apache.phoenix.util.ScanUtil.setMinMaxQualifiersOnScan;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInput;
@@ -45,6 +47,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import javax.management.Query;
 
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -71,6 +75,7 @@ import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -225,7 +230,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if(offset!=null){
                 ScanUtil.addOffsetAttribute(scan, offset);
             }
-            if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+            //TODO: samarth add condition to not do position based look ups in case of joins so that we won't need to do the hacky check inside co-processors.
+            if (setMinMaxQualifiersOnScan(table)) {
                 Pair<Integer, Integer> minMaxQualifiers = getMinMaxQualifiers(scan, context);
                 if (minMaxQualifiers != null) {
                     scan.setAttribute(BaseScannerRegionObserver.MIN_QUALIFIER, PInteger.INSTANCE.toBytes(minMaxQualifiers.getFirst()));
@@ -243,10 +249,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         checkArgument(EncodedColumnsUtil.usesEncodedColumnNames(table), "Method should only be used for tables using encoded column names");
         Integer minQualifier = null;
         Integer maxQualifier = null;
+        boolean emptyKVProjected = false;
         for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
             byte[] cq = whereCol.getSecond();
             if (cq != null) {
                 int qualifier = (Integer)PInteger.INSTANCE.toObject(cq);
+                if (qualifier == ENCODED_EMPTY_COLUMN_NAME) {
+                    emptyKVProjected = true;
+                    continue;
+                }
                 if (minQualifier == null && maxQualifier == null) {
                     minQualifier = maxQualifier = qualifier;
                 } else {
@@ -264,6 +275,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 for (byte[] cq : entry.getValue()) {
                     if (cq != null) {
                         int qualifier = (Integer)PInteger.INSTANCE.toObject(cq);
+                        if (qualifier == ENCODED_EMPTY_COLUMN_NAME) {
+                            emptyKVProjected = true;
+                            continue;
+                        }
                         if (minQualifier == null && maxQualifier == null) {
                             minQualifier = maxQualifier = qualifier;
                         } else {
@@ -277,7 +292,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
         }
-        if (minQualifier == null) {
+        if (minQualifier == null && emptyKVProjected) {
+            return new Pair<>(ENCODED_EMPTY_COLUMN_NAME, ENCODED_EMPTY_COLUMN_NAME);
+        } else if (minQualifier == null) {
             return null;
         }
         return new Pair<>(minQualifier, maxQualifier);

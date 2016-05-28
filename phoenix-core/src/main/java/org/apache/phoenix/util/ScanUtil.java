@@ -59,6 +59,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
@@ -824,6 +825,14 @@ public class ScanUtil {
             return null;
         }
         return new Pair<>(minQ, maxQ);
+    }
+    
+    public static boolean useQualifierAsIndex(Pair<Integer, Integer> minMaxQualifiers, boolean isJoin) {
+        return minMaxQualifiers != null && !isJoin;
+    }
+    
+    public static boolean setMinMaxQualifiersOnScan(PTable table) {
+        return EncodedColumnsUtil.usesEncodedColumnNames(table) && !table.isTransactional();
     }
 
 }

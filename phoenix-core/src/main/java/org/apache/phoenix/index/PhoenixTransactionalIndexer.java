@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -222,8 +223,12 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 for (ColumnReference ref : mutableColumns) {
                     scan.addColumn(ref.getFamily(), ref.getQualifier());
                 }
-                // Indexes inherit the storage scheme of the data table which means all the indexes have the same
-                // storage scheme and empty key value qualifier.
+                /*
+                 * Indexes inherit the storage scheme of the data table which means all the indexes have the same
+                 * storage scheme and empty key value qualifier. Note that this assumption would be broken if we start
+                 * supporting new indexes over existing data tables to have a different storage scheme than the data
+                 * table.
+                 */
                 byte[] emptyKeyValueQualifier = indexMaintainers.get(0).getEmptyKeyValueQualifier();
                 
                 // Project empty key value column
@@ -322,17 +327,20 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     boolean hasPuts = false;
                     LinkedList<Cell> singleTimeCells = Lists.newLinkedList();
                     long writePtr;
+                    Cell cell = cells.get(i);
                     do {
-                        Cell cell = cells.get(i);
                         hasPuts |= cell.getTypeByte() == KeyValue.Type.Put.getCode();
                         writePtr = cell.getTimestamp();
+                        ListIterator<Cell> it = singleTimeCells.listIterator();
                         do {
                             // Add at the beginning of the list to match the expected HBase
                             // newest to oldest sort order (which TxTableState relies on
-                            // with the Result.getLatestColumnValue() calls).
-                            singleTimeCells.addFirst(cell);
-                        } while (++i < nCells && cells.get(i).getTimestamp() == writePtr);
-                    } while (i < nCells && cells.get(i).getTimestamp() <= readPtr);
+                            // with the Result.getLatestColumnValue() calls). However, we
+                            // still want to add Cells in the expected order for each time
+                            // bound as otherwise we won't find it in our old state.
+                            it.add(cell);
+                        } while (++i < nCells && (cell=cells.get(i)).getTimestamp() == writePtr);
+                    } while (i < nCells && cell.getTimestamp() <= readPtr);
                     
                     // Generate point delete markers for the prior row deletion of the old index value.
                     // The write timestamp is the next timestamp, not the current timestamp,

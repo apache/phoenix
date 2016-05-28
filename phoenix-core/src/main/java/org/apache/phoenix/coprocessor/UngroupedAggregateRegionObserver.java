@@ -39,6 +39,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
+import co.cask.tephra.TxConstants;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -117,8 +119,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
-import co.cask.tephra.TxConstants;
 
 
 /**
@@ -259,6 +259,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         boolean localIndexScan = ScanUtil.isLocalIndex(scan);
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
+        boolean useQualifierAsIndex = ScanUtil.useQualifierAsIndex(ScanUtil.getMinMaxQualifiersFromScan(scan), j != null) && scan.getAttribute(BaseScannerRegionObserver.TOPN) != null;
         if ((localIndexScan && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
@@ -268,7 +269,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
                     getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector, 
-                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
+                            dataRegion, indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr, useQualifierAsIndex);
         } 
         
         if (j != null)  {
@@ -289,8 +290,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         boolean hasMore;
         boolean hasAny = false;
         Pair<Integer, Integer> minMaxQualifiers = getMinMaxQualifiersFromScan(scan);
-        boolean useEncodedScheme = minMaxQualifiers != null;
-        Tuple result = useEncodedScheme ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
+        Tuple result = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
         }
@@ -300,7 +300,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         try {
             synchronized (innerScanner) {
                 do {
-                    List<Cell> results = useEncodedScheme ? new BoundedSkipNullCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond()) : new ArrayList<Cell>();
+                    List<Cell> results = useQualifierAsIndex ? new BoundedSkipNullCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond()) : new ArrayList<Cell>();
                     // Results are potentially returned even when the return value of s.next is false
                     // since this is an indication of whether or not there are more values after the
                     // ones returned

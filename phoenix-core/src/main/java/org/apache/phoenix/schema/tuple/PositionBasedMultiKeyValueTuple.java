@@ -17,10 +17,13 @@
  */
 package org.apache.phoenix.schema.tuple;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 
 /**
@@ -31,19 +34,15 @@ public class PositionBasedMultiKeyValueTuple extends BaseTuple {
 
     public PositionBasedMultiKeyValueTuple() {}
     
-//    public PositionBasedMultiKeyValueTuple(List<Cell> values, int minQualifier, int maxQualifier) {
-//        this.values = new BoundedSkipNullCellsList(minQualifier, maxQualifier);
-//        setKeyValues(values);
-//    }
-    
-//    public PositionBasedMultiKeyValueTuple(int minQualifier, int maxQualifier){
-//        this.values = new BoundedSkipNullCellsList(minQualifier, maxQualifier);
-//    }
+    public PositionBasedMultiKeyValueTuple(List<Cell> values) {
+        checkArgument(values instanceof BoundedSkipNullCellsList, "PositionBasedMultiKeyValueTuple only works with lists of type BoundedSkipNullCellsList");
+        this.values = (BoundedSkipNullCellsList)values;
+    }
     
     /** Caller must not modify the list that is passed here */
     @Override
     public void setKeyValues(List<Cell> values) {
-        assert values instanceof BoundedSkipNullCellsList;
+        checkArgument(values instanceof BoundedSkipNullCellsList, "PositionBasedMultiKeyValueTuple only works with lists of type BoundedSkipNullCellsList");
         this.values = (BoundedSkipNullCellsList)values;
     }
 
@@ -60,7 +59,7 @@ public class PositionBasedMultiKeyValueTuple extends BaseTuple {
 
     @Override
     public Cell getValue(byte[] family, byte[] qualifier) {
-        return values.getCellForColumnQualifier((int)PInteger.INSTANCE.toObject(qualifier));
+        return values.getCellForColumnQualifier(PInteger.INSTANCE.getCodec().decodeInt(qualifier, 0, SortOrder.ASC));
     }
 
     @Override

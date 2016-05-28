@@ -109,6 +109,8 @@ public class KeyValueSchema extends ValueSchema {
             Field field = fields.get(i);
             PDataType type = field.getDataType();
             for (int j = 0; j < field.getCount(); j++) {
+                //TODO: samarth it is at this point that we are looking up stuff in the result tuple to figure out
+                // where exactly the value is here.
                 if (expressions[index].evaluate(tuple, ptr) && ptr.getLength() > 0) { // Skip null values
                     if (index >= minNullableIndex) {
                         valueSet.set(index - minNullableIndex);

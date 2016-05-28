@@ -161,6 +161,7 @@ public class ListJarsQueryPlan implements QueryPlan {
                                 Type.Put.getCode(), HConstants.EMPTY_BYTE_ARRAY);
                     List<Cell> cells = new ArrayList<Cell>(1);
                     cells.add(cell);
+                    //TODO: samarth confirm if passing false is the right thing to do here.
                     return new ResultTuple(Result.create(cells));
                 } catch (IOException e) {
                     throw new SQLException(e);

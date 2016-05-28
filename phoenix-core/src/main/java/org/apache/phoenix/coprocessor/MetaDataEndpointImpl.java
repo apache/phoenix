@@ -25,6 +25,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME_INDEX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE_BYTES;
@@ -33,7 +34,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODED_COLUMN_QUALIFIER_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FAMILY_NAME_INDEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
@@ -85,11 +85,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -184,6 +182,7 @@ import org.apache.phoenix.schema.PMetaDataEntity;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.StorageScheme;
@@ -925,7 +924,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = new ArrayList<PTable>();
         List<PName> physicalTables = new ArrayList<PName>();
-        Map<String, Integer> encodedColumnQualifierCounters = new HashMap<>(); //TODO: samarth size properly.
+        int counter = 0;
         while (true) {
           results.clear();
           scanner.next(results);
@@ -940,9 +939,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               PName famName = newPName(colKv.getRowArray(), colKv.getRowOffset() + colKeyOffset, colKeyLength-colKeyOffset);
                 if (colName.getString().isEmpty() && famName != null) {
                     if (isQualifierCounterKv(colKv)) {
-                        Integer counter = (Integer)PInteger.INSTANCE.toObject(colKv.getValueArray(),
-                                colKv.getValueOffset(), colKv.getValueLength());
-                        encodedColumnQualifierCounters.put(famName.getString(), counter);
+                        counter = PInteger.INSTANCE.getCodec().decodeInt(colKv.getValueArray(),
+                                colKv.getValueOffset(), SortOrder.ASC);
                     } else {
                         LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
                         if (linkType == LinkType.INDEX_TABLE) {
@@ -956,6 +954,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
               }
           } 
         }
+        EncodedCQCounter cqCounter = (storageScheme == StorageScheme.NON_ENCODED_COLUMN_NAMES || tableType == PTableType.VIEW) ? PTable.EncodedCQCounter.NULL_COUNTER : new EncodedCQCounter(counter);
         PName physicalTableName = physicalTables.isEmpty() ? PNameFactory.newName(SchemaUtil.getPhysicalTableName(
                 Bytes.toBytes(SchemaUtil.getTableName(schemaName.getBytes(), tableName.getBytes())), isNamespaceMapped)
                 .getNameAsString()) : physicalTables.get(0);
@@ -980,7 +979,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName,
                 viewStatement, disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType,
                 rowKeyOrderOptimizable, transactional, updateCacheFrequency, stats, baseColumnCount,
-                indexDisableTimestamp, isNamespaceMapped, storageScheme, encodedColumnQualifierCounters);
+                indexDisableTimestamp, isNamespaceMapped, storageScheme, cqCounter);
     }
 
     private PSchema getSchema(RegionScanner scanner, long clientTimeStamp) throws IOException, SQLException {

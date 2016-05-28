@@ -105,7 +105,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
                 count++;
             }
             // we have 6 values for a_integer present in the atable where a >= 4. x_integer is null for a_integer = 4. So the query should have returned 5 rows.
-            assertTrue(count == 5);   
+            assertEquals(5, count);   
         } finally {
             conn.close();
         }

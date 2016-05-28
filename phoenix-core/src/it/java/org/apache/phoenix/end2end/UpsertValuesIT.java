@@ -958,8 +958,8 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
             ResultScanner scanner = table.getScanner(new Scan());
             Result next = scanner.next();
             assertTrue(next.containsColumn(Bytes.toBytes("CF1"), PInteger.INSTANCE.toBytes(1)));
-            assertTrue(next.containsColumn(Bytes.toBytes("CF2"), PInteger.INSTANCE.toBytes(1)));
             assertTrue(next.containsColumn(Bytes.toBytes("CF2"), PInteger.INSTANCE.toBytes(2)));
+            assertTrue(next.containsColumn(Bytes.toBytes("CF2"), PInteger.INSTANCE.toBytes(3)));
         }
     }
     

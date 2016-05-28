@@ -71,6 +71,7 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTable.StorageScheme;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
@@ -340,6 +341,7 @@ public class FromCompiler {
             if (connection.getSchema() != null) {
                 schema = schema != null ? schema : connection.getSchema();
             }
+            //TODO: samarth should we change the ptableimpl constructor here to set non-encoded column name scheme and null counter
             PTable theTable = new PTableImpl(connection.getTenantId(), schema, table.getName().getTableName(),
                     scn == null ? HConstants.LATEST_TIMESTAMP : scn, families);
            theTable = this.addDynamicColumns(table.getDynamicColumns(), theTable);
@@ -781,7 +783,7 @@ public class FromCompiler {
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, null, null, columns, null, null,
                     Collections.<PTable> emptyList(), false, Collections.<PName> emptyList(), null, null, false, false,
                     false, null, null, null, false, false, 0, 0L, SchemaUtil
-                            .isNamespaceMappingEnabled(PTableType.SUBQUERY, connection.getQueryServices().getProps()), null, null);
+                            .isNamespaceMappingEnabled(PTableType.SUBQUERY, connection.getQueryServices().getProps()), StorageScheme.NON_ENCODED_COLUMN_NAMES, PTable.EncodedCQCounter.NULL_COUNTER);
 
             String alias = subselectNode.getAlias();
             TableRef tableRef = new TableRef(alias, t, MetaDataProtocol.MIN_TABLE_TIMESTAMP, false);

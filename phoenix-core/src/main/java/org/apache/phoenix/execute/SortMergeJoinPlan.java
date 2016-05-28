@@ -651,6 +651,7 @@ public class SortMergeJoinPlan implements QueryPlan {
                 byte[] b = new byte[length];
                 buffer.get(b);
                 Result result = ResultUtil.toResult(new ImmutableBytesWritable(b));
+                //TODO: samarth make joins work with position based look up.
                 return new ResultTuple(result);
             }
             

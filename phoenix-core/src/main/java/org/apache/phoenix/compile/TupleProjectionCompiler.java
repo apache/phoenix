@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
+
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,7 +26,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
@@ -43,7 +44,9 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTable.StorageScheme;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
@@ -154,7 +157,7 @@ public class TupleProjectionCompiler {
                 table.getParentName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName> emptyList(),
                 null, null, table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
                 table.getViewIndexId(),
-                table.getIndexType(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getStorageScheme(), table.getEncodedCQCounters());
+                table.getIndexType(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getStorageScheme(), table.getEncodedCQCounter());
     }
 
     public static PTable createProjectedTable(TableRef tableRef, List<ColumnRef> sourceColumnRefs, boolean retainPKColumns) throws SQLException {
@@ -162,6 +165,8 @@ public class TupleProjectionCompiler {
         boolean hasSaltingColumn = retainPKColumns && table.getBucketNum() != null;
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
         int position = hasSaltingColumn ? 1 : 0;
+        StorageScheme storageScheme = StorageScheme.NON_ENCODED_COLUMN_NAMES;
+        Integer counter = null;
         for (int i = position; i < sourceColumnRefs.size(); i++) {
             ColumnRef sourceColumnRef = sourceColumnRefs.get(i);
             PColumn sourceColumn = sourceColumnRef.getColumn();
@@ -172,9 +177,21 @@ public class TupleProjectionCompiler {
 
             PColumn column = new ProjectedColumn(PNameFactory.newName(aliasedName), 
                     retainPKColumns && SchemaUtil.isPKColumn(sourceColumn) ? 
-                            null : PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), 
+                            null : PNameFactory.newName(VALUE_COLUMN_FAMILY), 
                     position++, sourceColumn.isNullable(), sourceColumnRef);
+            if (EncodedColumnsUtil.hasEncodedColumnName(sourceColumn)) {
+                if (counter == null) {
+                    counter = 1;
+                } else {
+                    counter++;
+                }
+            }
             projectedColumns.add(column);
+        }
+        EncodedCQCounter cqCounter = PTable.EncodedCQCounter.NULL_COUNTER;
+        if (counter != null) {
+            cqCounter = new EncodedCQCounter(counter); //TODO: samarth I am not sure whether the exact count matters here or not
+            storageScheme = StorageScheme.ENCODED_COLUMN_NAMES;
         }
         return PTableImpl.makePTable(table.getTenantId(), PROJECTED_TABLE_SCHEMA, table.getName(), PTableType.PROJECTED,
                 null, table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
@@ -182,7 +199,7 @@ public class TupleProjectionCompiler {
                 Collections.<PTable> emptyList(), table.isImmutableRows(), Collections.<PName> emptyList(), null, null,
                 table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
                 table.getViewIndexId(), null, table.rowKeyOrderOptimizable(), table.isTransactional(),
-                table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getStorageScheme(), table.getEncodedCQCounters());
+                table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), storageScheme, cqCounter);
     }
 
     // For extracting column references from single select statement
