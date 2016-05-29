@@ -556,7 +556,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         }
     }
     
-    private static class MappedByteBufferTupleQueue extends MappedByteBufferQueue<Tuple> {
+    private static class MappedByteBufferTupleQueue extends ByteBufferQueue<Tuple> {
 
         public MappedByteBufferTupleQueue(int thresholdBytes) {
             super(thresholdBytes);
@@ -569,11 +569,11 @@ public class SortMergeJoinPlan implements QueryPlan {
         }
 
         @Override
-        protected Comparator<MappedByteBufferSegmentQueue<Tuple>> getSegmentQueueComparator() {
-            return new Comparator<MappedByteBufferSegmentQueue<Tuple>>() {
+        protected Comparator<BufferSegmentQueue<Tuple>> getSegmentQueueComparator() {
+            return new Comparator<BufferSegmentQueue<Tuple>>() {
                 @Override
-                public int compare(MappedByteBufferSegmentQueue<Tuple> q1, 
-                        MappedByteBufferSegmentQueue<Tuple> q2) {
+                public int compare(BufferSegmentQueue<Tuple> q1,
+                                   BufferSegmentQueue<Tuple> q2) {
                     return q1.index() - q2.index();
                 }                
             };
@@ -582,7 +582,7 @@ public class SortMergeJoinPlan implements QueryPlan {
         @Override
         public Iterator<Tuple> iterator() {
             return new Iterator<Tuple>() {
-                private Iterator<MappedByteBufferSegmentQueue<Tuple>> queueIter;
+                private Iterator<BufferSegmentQueue<Tuple>> queueIter;
                 private Iterator<Tuple> currentIter;
                 {
                     this.queueIter = getSegmentQueues().iterator();

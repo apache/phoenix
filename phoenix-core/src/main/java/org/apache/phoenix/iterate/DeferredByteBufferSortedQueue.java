@@ -38,8 +38,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
 
-public class DeferredByteBufferSortedQueue extends DeferredByteBufferQueue<ResultEntry> {
-    private static final Logger logger = LoggerFactory.getLogger(DeferredByteBufferQueue.class);
+public class DeferredByteBufferSortedQueue extends ByteBufferQueue<ResultEntry> {
 
     private Comparator<ResultEntry> comparator;
     private final int limit;
@@ -58,11 +57,11 @@ public class DeferredByteBufferSortedQueue extends DeferredByteBufferQueue<Resul
     }
 
     @Override
-    protected Comparator<DeferredByteBufferSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
-        return new Comparator<DeferredByteBufferSegmentQueue<ResultEntry>>() {
+    protected Comparator<BufferSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
+        return new Comparator<BufferSegmentQueue<ResultEntry>>() {
             @Override
-            public int compare(DeferredByteBufferSegmentQueue<ResultEntry> q1,
-                               DeferredByteBufferSegmentQueue<ResultEntry> q2) {
+            public int compare(BufferSegmentQueue<ResultEntry> q1,
+                               BufferSegmentQueue<ResultEntry> q2) {
                 return comparator.compare(q1.peek(), q2.peek());
             }};
     }
@@ -152,39 +151,7 @@ public class DeferredByteBufferSortedQueue extends DeferredByteBufferQueue<Resul
 
         }
 
-
-        private List<KeyValue> toKeyValues(ResultEntry entry) {
-            Tuple result = entry.getResult();
-            int size = result.size();
-            List<KeyValue> kvs = new ArrayList<KeyValue>(size);
-            for (int i = 0; i < size; i++) {
-                kvs.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i)));
-            }
-            return kvs;
-        }
-
-        private int sizeof(List<KeyValue> kvs) {
-            int size = Bytes.SIZEOF_INT; // totalLen
-
-            for (KeyValue kv : kvs) {
-                size += kv.getLength();
-                size += Bytes.SIZEOF_INT; // kv.getLength
-            }
-
-            return size;
-        }
-
-        private int sizeof(ImmutableBytesWritable[] sortKeys) {
-            int size = Bytes.SIZEOF_INT;
-            if (sortKeys != null) {
-                for (ImmutableBytesWritable sortKey : sortKeys) {
-                    if (sortKey != null) {
-                        size += sortKey.getLength();
-                    }
-                    size += Bytes.SIZEOF_INT;
-                }
-            }
-            return size;
-        }
     }
+
+
 }

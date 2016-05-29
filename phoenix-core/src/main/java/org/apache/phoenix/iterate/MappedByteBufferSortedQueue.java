@@ -34,7 +34,7 @@ import org.apache.phoenix.util.ResultUtil;
 
 import com.google.common.collect.MinMaxPriorityQueue;
 
-public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEntry> {
+public class MappedByteBufferSortedQueue extends ByteBufferQueue<ResultEntry> {
     private Comparator<ResultEntry> comparator;
     private final int limit;
 
@@ -52,11 +52,11 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
     }
 
     @Override
-    protected Comparator<MappedByteBufferSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
-        return new Comparator<MappedByteBufferSegmentQueue<ResultEntry>>() {
+    protected Comparator<BufferSegmentQueue<ResultEntry>> getSegmentQueueComparator() {
+        return new Comparator<BufferSegmentQueue<ResultEntry>>() {
             @Override
-            public int compare(MappedByteBufferSegmentQueue<ResultEntry> q1,
-                    MappedByteBufferSegmentQueue<ResultEntry> q2) {
+            public int compare(BufferSegmentQueue<ResultEntry> q1,
+                               BufferSegmentQueue<ResultEntry> q2) {
                 return comparator.compare(q1.peek(), q2.peek());
             }};
     }
@@ -110,11 +110,11 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
         }
 
         @Override
-        protected ResultEntry readFromBuffer(MappedByteBuffer buffer) {            
+        protected ResultEntry readFromBuffer(MappedByteBuffer buffer) {
             int length = buffer.getInt();
             if (length < 0)
                 return null;
-            
+
             byte[] rb = new byte[length];
             buffer.get(rb);
             Result result = ResultUtil.toResult(new ImmutableBytesWritable(rb));
@@ -131,42 +131,9 @@ public class MappedByteBufferSortedQueue extends MappedByteBufferQueue<ResultEnt
                     sortKeys[i] = null;
                 }
             }
-            
+
             return new ResultEntry(sortKeys, rt);
         }
 
-        private List<KeyValue> toKeyValues(ResultEntry entry) {
-            Tuple result = entry.getResult();
-            int size = result.size();
-            List<KeyValue> kvs = new ArrayList<KeyValue>(size);
-            for (int i = 0; i < size; i++) {
-                kvs.add(org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(result.getValue(i)));
-            }
-            return kvs;
-        }
-
-        private int sizeof(List<KeyValue> kvs) {
-            int size = Bytes.SIZEOF_INT; // totalLen
-
-            for (KeyValue kv : kvs) {
-                size += kv.getLength();
-                size += Bytes.SIZEOF_INT; // kv.getLength
-            }
-
-            return size;
-        }
-
-        private int sizeof(ImmutableBytesWritable[] sortKeys) {
-            int size = Bytes.SIZEOF_INT;
-            if (sortKeys != null) {
-                for (ImmutableBytesWritable sortKey : sortKeys) {
-                    if (sortKey != null) {
-                        size += sortKey.getLength();
-                    }
-                    size += Bytes.SIZEOF_INT;
-                }
-            }
-            return size;
-        }
     }
 }

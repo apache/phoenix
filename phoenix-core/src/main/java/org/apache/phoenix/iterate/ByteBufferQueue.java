@@ -28,28 +28,28 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
-public abstract class DeferredByteBufferQueue<T> extends AbstractQueue<T> {
+public abstract class ByteBufferQueue<T> extends AbstractQueue<T> {
     private final int thresholdBytes;
-    private List<DeferredByteBufferSegmentQueue<T>> queues;
+    private List<BufferSegmentQueue<T>> queues;
     private int currentIndex;
-    private DeferredByteBufferSegmentQueue<T> currentQueue;
-    private MinMaxPriorityQueue<DeferredByteBufferSegmentQueue<T>> mergedQueue;
+    private BufferSegmentQueue<T> currentQueue;
+    private MinMaxPriorityQueue<BufferSegmentQueue<T>> mergedQueue;
 
-    private static final Logger logger = LoggerFactory.getLogger(DeferredByteBufferQueue.class);
+    private static final Logger logger = LoggerFactory.getLogger(ByteBufferQueue.class);
 
-    public DeferredByteBufferQueue(int thresholdBytes) {
+    public ByteBufferQueue(int thresholdBytes) {
         this.thresholdBytes = thresholdBytes;
-        this.queues = Lists.<DeferredByteBufferSegmentQueue<T>> newArrayList();
+        this.queues = Lists.<BufferSegmentQueue<T>> newArrayList();
         this.currentIndex = -1;
         this.currentQueue = null;
         this.mergedQueue = null;
     }
     
-    abstract protected DeferredByteBufferSegmentQueue<T> createSegmentQueue(int index, int thresholdBytes);
+    abstract protected BufferSegmentQueue<T> createSegmentQueue(int index, int thresholdBytes);
     
-    abstract protected Comparator<DeferredByteBufferSegmentQueue<T>> getSegmentQueueComparator();
+    abstract protected Comparator<BufferSegmentQueue<T>> getSegmentQueueComparator();
     
-    protected final List<DeferredByteBufferSegmentQueue<T>> getSegmentQueues() {
+    protected final List<BufferSegmentQueue<T>> getSegmentQueues() {
         return queues.subList(0, currentIndex + 1);
     }
 
@@ -73,7 +73,7 @@ public abstract class DeferredByteBufferQueue<T> extends AbstractQueue<T> {
     public T poll() {
         initMergedQueue();
         if (mergedQueue != null && !mergedQueue.isEmpty()) {
-            DeferredByteBufferSegmentQueue<T> queue = mergedQueue.poll();
+            BufferSegmentQueue<T> queue = mergedQueue.poll();
             T re = queue.poll();
             if (queue.peek() != null) {
                 mergedQueue.add(queue);
@@ -94,7 +94,7 @@ public abstract class DeferredByteBufferQueue<T> extends AbstractQueue<T> {
     
     @Override
     public void clear() {
-        for (DeferredByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+        for (BufferSegmentQueue<T> queue : getSegmentQueues()) {
             queue.clear();
         }
         currentIndex = -1;
@@ -110,7 +110,7 @@ public abstract class DeferredByteBufferQueue<T> extends AbstractQueue<T> {
     @Override
     public int size() {
         int size = 0;
-        for (DeferredByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+        for (BufferSegmentQueue<T> queue : getSegmentQueues()) {
             size += queue.size();
         }
         return size;
@@ -121,7 +121,7 @@ public abstract class DeferredByteBufferQueue<T> extends AbstractQueue<T> {
     }
 
     public void close() {
-        for (DeferredByteBufferSegmentQueue<T> queue : queues) {
+        for (BufferSegmentQueue<T> queue : queues) {
             queue.close();
         }
         queues.clear();
@@ -129,9 +129,9 @@ public abstract class DeferredByteBufferQueue<T> extends AbstractQueue<T> {
     
     private void initMergedQueue() {
         if (mergedQueue == null && currentIndex >= 0) {
-            mergedQueue = MinMaxPriorityQueue.<DeferredByteBufferSegmentQueue<T>> orderedBy(
+            mergedQueue = MinMaxPriorityQueue.<BufferSegmentQueue<T>> orderedBy(
                     getSegmentQueueComparator()).maximumSize(currentIndex + 1).create();
-            for (DeferredByteBufferSegmentQueue<T> queue : getSegmentQueues()) {
+            for (BufferSegmentQueue<T> queue : getSegmentQueues()) {
                 T re = queue.peek();
                 if (re != null) {
                     mergedQueue.add(queue);
