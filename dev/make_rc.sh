@@ -69,7 +69,7 @@ mkdir $DIR_BIN;
 mv $REL_SRC.tar.gz $DIR_REL_SRC_TAR_PATH;
 
 # Copy common jars
-mvn clean apache-rat:check package -DskipTests -Dcheckstyle.skip=true -q;
+mvn clean apache-rat:check -Drat.numUnapprovedLicenses=100 package -DskipTests -Dcheckstyle.skip=true -q;
 rm -rf $(find . -type d -name archive-tmp);
 
 # Copy all phoenix-*.jars to release dir
