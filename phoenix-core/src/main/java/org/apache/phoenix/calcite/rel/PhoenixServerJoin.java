@@ -82,20 +82,24 @@ public class PhoenixServerJoin extends PhoenixAbstractJoin {
         if (joinType == JoinRelType.FULL || joinType == JoinRelType.RIGHT)
             return planner.getCostFactory().makeInfiniteCost();
         
-        //TODO return infinite cost if RHS size exceeds memory limit.
-        
         double rowCount = mq.getRowCount(this);
-
         double leftRowCount = mq.getRowCount(getLeft());
+        double rightRowCount = mq.getRowCount(getRight());
+        double rightRowSize = mq.getAverageRowSize(getRight());
+        double rightSize = rightRowCount * rightRowSize;
+        
+        //TODO refine this number and apply a estimated limit value from config as well.
+        double sizeLimit = 100000000d;
+        if (rightSize > sizeLimit)
+            return planner.getCostFactory().makeInfiniteCost();
+        
         if (Double.isInfinite(leftRowCount)) {
             rowCount = leftRowCount;
         } else {
             rowCount += leftRowCount;
-            double rightRowCount = mq.getRowCount(getRight());
             if (Double.isInfinite(rightRowCount)) {
                 rowCount = rightRowCount;
             } else {
-                double rightRowSize = mq.getAverageRowSize(getRight());
                 rowCount += (rightRowCount + rightRowCount * rightRowSize);
             }
         }            

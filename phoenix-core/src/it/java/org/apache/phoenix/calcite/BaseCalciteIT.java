@@ -478,6 +478,122 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         conn.close();        
     }
     
+    protected static final String KEY_ORDERING_TABLE_1_NAME = "key_ordering_test_table_1";
+    protected static final String KEY_ORDERING_TABLE_2_NAME = "key_ordering_test_table_2";
+    
+    protected void initKeyOrderingTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute(
+                    "CREATE TABLE " + KEY_ORDERING_TABLE_1_NAME
+                    + "(k0 BIGINT NOT NULL, k1 INTEGER NOT NULL, v0 INTEGER, v1 BIGINT CONSTRAINT pk PRIMARY KEY (k0 DESC, k1))");
+            conn.createStatement().execute(
+                    "CREATE TABLE " + KEY_ORDERING_TABLE_2_NAME
+                    + "(k0 BIGINT NOT NULL, k1 BIGINT NOT NULL, v0 INTEGER, v1 BIGINT CONSTRAINT pk PRIMARY KEY (k0 DESC, k1 DESC))");
+            PreparedStatement stmt = conn.prepareStatement(
+                    "UPSERT INTO " + KEY_ORDERING_TABLE_1_NAME
+                    + " VALUES(?, ?, ?, ?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 1);
+            stmt.setInt(4, 2);
+            stmt.execute();
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 3);
+            stmt.setInt(3, 1);
+            stmt.setInt(4, 3);
+            stmt.execute();
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 4);
+            stmt.setInt(3, 1);
+            stmt.setInt(4, 4);
+            stmt.execute();
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 5);
+            stmt.setInt(3, 1);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 3);
+            stmt.setInt(3, 2);
+            stmt.setInt(4, 3);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 5);
+            stmt.setInt(3, 2);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            stmt.setInt(1, 3);
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 3);
+            stmt.setInt(4, 2);
+            stmt.execute();
+            stmt.setInt(1, 5);
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 5);
+            stmt.setInt(4, 2);
+            stmt.execute();
+            stmt.setInt(1, 5);
+            stmt.setInt(2, 5);
+            stmt.setInt(3, 5);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            conn.commit();
+            stmt = conn.prepareStatement(
+                    "UPSERT INTO " + KEY_ORDERING_TABLE_2_NAME
+                    + " VALUES(?, ?, ?, ?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 1);
+            stmt.setInt(4, 2);
+            stmt.execute();
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 5);
+            stmt.setInt(3, 1);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 2);
+            stmt.setInt(3, 2);
+            stmt.setInt(4, 2);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 3);
+            stmt.setInt(3, 2);
+            stmt.setInt(4, 3);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 4);
+            stmt.setInt(3, 2);
+            stmt.setInt(4, 4);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 5);
+            stmt.setInt(3, 2);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            stmt.setInt(1, 4);
+            stmt.setInt(2, 3);
+            stmt.setInt(3, 4);
+            stmt.setInt(4, 3);
+            stmt.execute();
+            stmt.setInt(1, 5);
+            stmt.setInt(2, 4);
+            stmt.setInt(3, 5);
+            stmt.setInt(4, 4);
+            stmt.execute();
+            stmt.setInt(1, 5);
+            stmt.setInt(2, 5);
+            stmt.setInt(3, 5);
+            stmt.setInt(4, 5);
+            stmt.execute();
+            conn.commit();
+        } catch (TableAlreadyExistsException e) {
+        }
+        conn.close();        
+    }
+    
     protected static final String MULTI_TENANT_TABLE = "multitenant_test_table";
     protected static final String MULTI_TENANT_TABLE_INDEX = "idx_multitenant_test_table";
     protected static final String MULTI_TENANT_VIEW1 = "s1.multitenant_test_view1";

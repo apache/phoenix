@@ -44,6 +44,7 @@ public class CalciteIT extends BaseCalciteIT {
         initJoinTableValues(url, null, null);
         initArrayTable();
         initSaltedTables(null);
+        initKeyOrderingTable();
         final Connection connection = DriverManager.getConnection(url);
         connection.createStatement().execute("CREATE VIEW IF NOT EXISTS v AS SELECT * from aTable where a_string = 'a'");
         connection.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS seq0 START WITH 1 INCREMENT BY 1");
@@ -208,7 +209,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n" +
                            "      PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
-                .resultIs(0, new Object[][] {
+                .resultIs(new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"},
                           {"00A223122312312", "a", "00D300000000XHP"},
                           {"00A323122312312", "a", "00D300000000XHP"},
@@ -218,6 +219,23 @@ public class CalciteIT extends BaseCalciteIT {
                           {"00B723122312312", "b", "00D300000000XHP"},
                           {"00B823122312312", "b", "00D300000000XHP"},
                           {"00C923122312312", "c", "00D300000000XHP"}})
+                .close();
+        
+        start(false, 100000f).sql("select t1.k0, t1.k1, t2.k0, t2.k1 from " + KEY_ORDERING_TABLE_1_NAME + " t1 join " + KEY_ORDERING_TABLE_2_NAME + " t2 on t1.k0 = t2.k0 and t1.k1 = t2.k1")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixClientProject(K0=[$0], K1=[$1], K00=[$3], K10=[$4])\n" +
+                           "    PhoenixClientJoin(condition=[AND(=($0, $3), =($2, $4))], joinType=[inner])\n" +
+                           "      PhoenixServerSort(sort0=[$0], sort1=[$2], dir0=[ASC], dir1=[ASC])\n" +
+                           "        PhoenixServerProject(K0=[$0], K1=[$1], K14=[CAST($1):BIGINT NOT NULL])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, KEY_ORDERING_TEST_TABLE_1]])\n" +
+                           "      PhoenixServerProject(K0=[$0], K1=[$1])\n" +
+                           "        PhoenixTableScan(table=[[phoenix, KEY_ORDERING_TEST_TABLE_2]], scanOrder=[REVERSE])\n")
+                .resultIs(new Object[][] {
+                           {1L, 2, 1L, 2L},
+                           {1L, 5, 1L, 5L},
+                           {2L, 3, 2L, 3L},
+                           {2L, 5, 2L, 5L},
+                           {5L, 5, 5L, 5L}})
                 .close();
     }
     

@@ -1,5 +1,6 @@
 package org.apache.phoenix.calcite.rel;
 
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -15,8 +16,10 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.schema.SortOrder;
 
 /**
  * Implementation of {@link org.apache.calcite.rel.core.Join}
@@ -59,7 +62,16 @@ abstract public class PhoenixAbstractJoin extends Join implements PhoenixQueryRe
             ImmutableIntList keys = index == 0 ? joinInfo.leftKeys : joinInfo.rightKeys;
             for (Iterator<Integer> iter = keys.iterator(); iter.hasNext();) {
                 Integer i = iter.next();
-                conditionExprs.add(implementor.newColumnExpression(i));
+                Expression e = implementor.newColumnExpression(i);
+                if (e.getSortOrder() == SortOrder.DESC) {
+                    try {
+                        e = CoerceExpression.create(
+                                e, e.getDataType(), SortOrder.ASC, e.getMaxLength());
+                    } catch (SQLException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                }
+                conditionExprs.add(e);
             }
             if (conditionExprs.isEmpty()) {
                 conditionExprs.add(LiteralExpression.newConstant(0));
