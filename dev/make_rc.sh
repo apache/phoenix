@@ -28,7 +28,7 @@ echo "Starting...";sleep 2s
 # Set directory variables
 DIR_ROOT="$(cd $(dirname $0);pwd)/.."
 cd $DIR_ROOT
-PHOENIX="$(xpath -q -e '/project/version/text()' pom.xml)"
+PHOENIX="$(xmllint --xpath "//*[local-name()='project']/*[local-name()='version']/text()" pom.xml)"
 DIR_REL_BASE=$DIR_ROOT/release
 DIR_REL_ROOT=$DIR_REL_BASE/phoenix-$PHOENIX
 DIR_REL_BIN=phoenix-$PHOENIX-bin
