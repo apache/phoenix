@@ -1,16 +1,20 @@
 package org.apache.phoenix.iterate;
 
 import org.apache.commons.io.output.DeferredFileOutputStream;
+import org.apache.phoenix.memory.MemoryManager;
+import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 
 import java.io.*;
 import java.util.*;
 
-public abstract  class DeferredByteBufferSegmentQueue<T> extends BufferSegmentQueue<T> {
+public abstract class DeferredByteBufferSegmentQueue<T> extends BufferSegmentQueue<T> {
 
+    final MemoryChunk chunk;
 
-    public DeferredByteBufferSegmentQueue(int index, int thresholdBytes, boolean hasMaxQueueSize) {
+    public DeferredByteBufferSegmentQueue(int index, int thresholdBytes,
+                                          boolean hasMaxQueueSize, MemoryManager memoryManager) {
         super(index, thresholdBytes, hasMaxQueueSize);
-
+        chunk = memoryManager.allocate(thresholdBytes);
     }
 
     abstract protected void writeToBuffer(OutputStream outputStream, T e);
@@ -42,7 +46,7 @@ public abstract  class DeferredByteBufferSegmentQueue<T> extends BufferSegmentQu
                     try {
                         super.thresholdReached();
                     } finally {
-//                            chunk.close();
+                            chunk.close();
                     }
                 }
             };

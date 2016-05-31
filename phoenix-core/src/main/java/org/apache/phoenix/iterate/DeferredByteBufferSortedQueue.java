@@ -24,16 +24,13 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.iterate.OrderedResultIterator.ResultEntry;
+import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.schema.tuple.ResultTuple;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ResultUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.DataInput;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
@@ -41,11 +38,13 @@ import java.util.Queue;
 public class DeferredByteBufferSortedQueue extends ByteBufferQueue<ResultEntry> {
 
     private Comparator<ResultEntry> comparator;
+    private MemoryManager memoryManager;
     private final int limit;
 
-    public DeferredByteBufferSortedQueue(Comparator<ResultEntry> comparator,
+    public DeferredByteBufferSortedQueue(Comparator<ResultEntry> comparator, MemoryManager memoryManager,
                                          Integer limit, int thresholdBytes) throws IOException {
         super(thresholdBytes);
+        this.memoryManager = memoryManager;
         this.comparator = comparator;
         this.limit = limit == null ? -1 : limit;
     }
@@ -53,7 +52,8 @@ public class DeferredByteBufferSortedQueue extends ByteBufferQueue<ResultEntry> 
     @Override
     protected DeferredByteBufferSegmentQueue<ResultEntry> createSegmentQueue(
             int index, int thresholdBytes) {
-        return new DeferredByteBufferResultEntryPriorityQueue(index, thresholdBytes, limit, comparator);
+        return new DeferredByteBufferResultEntryPriorityQueue(index, thresholdBytes,
+                limit, comparator, memoryManager);
     }
 
     @Override
@@ -68,10 +68,11 @@ public class DeferredByteBufferSortedQueue extends ByteBufferQueue<ResultEntry> 
 
     private static class DeferredByteBufferResultEntryPriorityQueue extends DeferredByteBufferSegmentQueue<ResultEntry> {
         private MinMaxPriorityQueue<ResultEntry> results = null;
+
         
-    	public DeferredByteBufferResultEntryPriorityQueue(int index,
-                int thresholdBytes, int limit, Comparator<ResultEntry> comparator) {
-            super(index, thresholdBytes, limit >= 0);
+    	public DeferredByteBufferResultEntryPriorityQueue(int index, int thresholdBytes, int limit,
+                                                          Comparator<ResultEntry> comparator, MemoryManager memoryManager) {
+            super(index, thresholdBytes, limit >= 0, memoryManager);
             this.results = limit < 0 ? 
                     MinMaxPriorityQueue.<ResultEntry> orderedBy(comparator).create()
                   : MinMaxPriorityQueue.<ResultEntry> orderedBy(comparator).maximumSize(limit).create();

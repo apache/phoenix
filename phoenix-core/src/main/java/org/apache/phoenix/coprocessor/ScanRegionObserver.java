@@ -234,6 +234,12 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     scan.getAttribute(QueryConstants.LAST_SCAN) != null);
         }
         final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
+        
+        if(iterator != null){
+            iterator.setMemoryManager(GlobalCache.getTenantCache(c.getEnvironment(), tenantId).getMemoryManager());
+        }
+
+
         if (iterator == null) {
             return innerScanner;
         }
