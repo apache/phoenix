@@ -1840,7 +1840,7 @@ public abstract class SqlOperatorBaseTest {
     // both are valid
     tester.check(
         "values 1 > 2 and sqrt(-4) = -2",
-        SqlTests.BOOLEAN_TYPE_CHECKER,
+        SqlTests.BOOLEAN_TYPE_CHECKER, SqlTests.ANY_PARAMETER_CHECKER,
         new ValueOrExceptionResultChecker(
             Boolean.FALSE, INVALID_ARG_FOR_POWER, CODE_2201F));
   }
@@ -2725,7 +2725,7 @@ public abstract class SqlOperatorBaseTest {
     // get error
     if (ENABLE_CAST_NULL_TEST) tester.check(
         "values 1 < cast(null as integer) or sqrt(-4) = -2",
-        SqlTests.BOOLEAN_TYPE_CHECKER,
+        SqlTests.BOOLEAN_TYPE_CHECKER, SqlTests.ANY_PARAMETER_CHECKER,
         new ValueOrExceptionResultChecker(
             null, INVALID_ARG_FOR_POWER, CODE_2201F));
 
@@ -2735,7 +2735,7 @@ public abstract class SqlOperatorBaseTest {
     // both are valid.
     tester.check(
         "values 1 < 2 or sqrt(-4) = -2",
-        SqlTests.BOOLEAN_TYPE_CHECKER,
+        SqlTests.BOOLEAN_TYPE_CHECKER, SqlTests.ANY_PARAMETER_CHECKER,
         new ValueOrExceptionResultChecker(
             Boolean.TRUE, INVALID_ARG_FOR_POWER, CODE_2201F));
 
@@ -2745,7 +2745,7 @@ public abstract class SqlOperatorBaseTest {
     // both are valid.
     if (ENABLE_CAST_NULL_TEST) tester.check(
         "values 1 < cast(null as integer) or sqrt(4) = -2",
-        SqlTests.BOOLEAN_TYPE_CHECKER,
+        SqlTests.BOOLEAN_TYPE_CHECKER, SqlTests.ANY_PARAMETER_CHECKER,
         new ValueOrExceptionResultChecker(
             null, INVALID_ARG_FOR_POWER, CODE_2201F));
 
@@ -5270,6 +5270,7 @@ public abstract class SqlOperatorBaseTest {
                 query = SqlTesterImpl.buildQuery(s);
               }
               tester.check(query, SqlTests.ANY_TYPE_CHECKER,
+                  SqlTests.ANY_PARAMETER_CHECKER,
                   SqlTests.ANY_RESULT_CHECKER);
             }
           } catch (Error e) {
@@ -5387,10 +5388,12 @@ public abstract class SqlOperatorBaseTest {
     @Override public void check(
         String query,
         TypeChecker typeChecker,
+        ParameterChecker paramChecker,
         ResultChecker resultChecker) {
       super.check(
           query,
           typeChecker,
+          paramChecker,
           resultChecker);
       Statement statement = null;
       try {

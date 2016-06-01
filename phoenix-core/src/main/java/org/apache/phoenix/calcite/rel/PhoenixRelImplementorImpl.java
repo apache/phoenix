@@ -54,8 +54,8 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
     
     @SuppressWarnings("rawtypes")
     @Override
-    public Expression newBindParameterExpression(int index, PDataType type) {
-        return new BindParameterExpression(index, type, runtimeContext);
+    public Expression newBindParameterExpression(int index, PDataType type, Integer maxLength) {
+        return new BindParameterExpression(index, type, maxLength, runtimeContext);
     }
     
     @SuppressWarnings("rawtypes")

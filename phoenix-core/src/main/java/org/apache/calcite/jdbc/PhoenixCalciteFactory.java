@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.avatica.AvaticaConnection;
@@ -34,6 +35,7 @@ import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 
 public class PhoenixCalciteFactory extends CalciteFactory {
@@ -99,6 +101,9 @@ public class PhoenixCalciteFactory extends CalciteFactory {
     }
 
     private static class PhoenixCalciteConnection extends CalciteConnectionImpl {
+        final Map<Meta.StatementHandle, ImmutableList<RuntimeContext>> runtimeContextMap =
+                new ConcurrentHashMap<Meta.StatementHandle, ImmutableList<RuntimeContext>>();
+        
         public PhoenixCalciteConnection(Driver driver, AvaticaFactory factory, String url,
                 Properties info, CalciteSchema rootSchema,
                 JavaTypeFactory typeFactory) {
@@ -115,14 +120,17 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             for (Ord<TypedValue> o : Ord.zip(parameterValues)) {
                 map.put("?" + o.i, o.e.toLocal());
             }
-            try {
-                for (RuntimeContext runtimeContext : RuntimeContext.THREAD_LOCAL.get()) {
-                    runtimeContext.setBindParameterValues(map);
-                }
-                return super.enumerable(handle, signature);
-            } finally {
-                RuntimeContext.THREAD_LOCAL.get().clear();
+            ImmutableList<RuntimeContext> ctxList = runtimeContextMap.get(handle);
+            if (ctxList == null) {
+                List<RuntimeContext> activeCtx = RuntimeContext.THREAD_LOCAL.get();
+                ctxList = ImmutableList.copyOf(activeCtx);
+                runtimeContextMap.put(handle, ctxList);
+                activeCtx.clear();
             }
+            for (RuntimeContext runtimeContext : ctxList) {
+                runtimeContext.setBindParameterValues(map);
+            }
+            return super.enumerable(handle, signature);
         }
 
         public void setAutoCommit(final boolean isAutoCommit) throws SQLException {

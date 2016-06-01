@@ -68,9 +68,11 @@ public class CalciteDMLIT extends BaseCalciteIT {
         start(PROPS).sql("upsert into srcTable values(3, 30, '00300', '03000')")
             .executeUpdate()
             .close();
-        start(PROPS).sql("upsert into tgtTable(pk0, pk1, f0, f2) select * from srcTable where pk1 <> 20")
-            .executeUpdate()
-            .close();
+        final Sql sql = start(PROPS).sql("upsert into tgtTable(pk0, pk1, f0, f2) select * from srcTable where pk1 <> ?");
+        final PreparedStatement stmt = sql.prepareStatement();
+        stmt.setInt(1, 20);
+        stmt.executeUpdate();
+        sql.close();
         start(false, 1L).sql("select * from tgtTable")
             .resultIs(0, new Object[][] {
                 {1, 10, "00100", null, "01000"},
@@ -78,13 +80,24 @@ public class CalciteDMLIT extends BaseCalciteIT {
             .close();
     }
     
-    @Ignore
     @Test public void testUpsertWithPreparedStatement() throws Exception {
         final Sql sql = start(PROPS).sql("upsert into atable(organization_id, entity_id) values(?, ?)");
-        PreparedStatement stmt = sql.prepareStatement();
-        stmt.setString(1, "x");
-        stmt.setString(2, "x");
-        stmt.execute();
+        final PreparedStatement stmt = sql.prepareStatement();
+        stmt.setString(1, "x00000000000001");
+        stmt.setString(2, "y00000000000001");
+        stmt.executeUpdate();
+        stmt.setString(1, "x00000000000002");
+        stmt.setString(2, "y00000000000002");
+        stmt.executeUpdate();
+        stmt.setString(1, "x00000000000003");
+        stmt.setString(2, "y00000000000003");
+        stmt.executeUpdate();
         sql.close();
+        start(PROPS).sql("select organization_id, entity_id, a_string from atable where organization_id like 'x%'")
+            .resultIs(0, new Object[][] {
+                {"x00000000000001", "y00000000000001", null},
+                {"x00000000000002", "y00000000000002", null},
+                {"x00000000000003", "y00000000000003", null}})
+            .close();
     }
 }

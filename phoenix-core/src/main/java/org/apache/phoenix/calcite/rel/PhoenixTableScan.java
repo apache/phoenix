@@ -129,9 +129,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
                 PhoenixRelImplementor tmpImplementor = new PhoenixRelImplementorImpl(null) {                    
                     @SuppressWarnings("rawtypes")
                     @Override
-                    public Expression newBindParameterExpression(int index, PDataType type) {
+                    public Expression newBindParameterExpression(int index, PDataType type, Integer maxLength) {
                         try {
-                            return LiteralExpression.newConstant(type.getSampleValue(), type);
+                            return LiteralExpression.newConstant(type.getSampleValue(maxLength), type);
                         } catch (SQLException e) {
                             throw new RuntimeException(e);
                         }

@@ -92,6 +92,10 @@ import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PCharArray;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -629,8 +633,14 @@ public class CalciteUtils {
                 RexDynamicParam param = (RexDynamicParam) node;
                 int index = param.getIndex();
                 PDataType type = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
-                return implementor.newBindParameterExpression(index, type);
-            }            
+                Integer maxLength =
+                        (type == PChar.INSTANCE
+                            || type == PCharArray.INSTANCE
+                            || type == PBinary.INSTANCE
+                            || type == PBinaryArray.INSTANCE) ?
+                        node.getType().getPrecision() : null;
+                return implementor.newBindParameterExpression(index, type, maxLength);
+            }
         });
 		EXPRESSION_MAP.put(SqlKind.CAST, new ExpressionFactory() {
 

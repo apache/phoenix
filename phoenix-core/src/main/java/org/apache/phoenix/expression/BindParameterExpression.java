@@ -9,11 +9,14 @@ import org.apache.phoenix.schema.types.PDataType;
 public class BindParameterExpression extends VariableExpression {
     @SuppressWarnings("rawtypes")
     private final PDataType type;
+    private final Integer maxLength;
 
     public BindParameterExpression(int index,
-            @SuppressWarnings("rawtypes") PDataType type, RuntimeContext runtimeContext) {
+            @SuppressWarnings("rawtypes") PDataType type, Integer maxLength,
+            RuntimeContext runtimeContext) {
         super("?" + index, runtimeContext);
         this.type = type;
+        this.maxLength = maxLength;
     }
 
     @Override
@@ -38,4 +41,7 @@ public class BindParameterExpression extends VariableExpression {
         return type;
     }
 
+    public Integer getMaxLength() {
+        return maxLength;
+    }
 }
