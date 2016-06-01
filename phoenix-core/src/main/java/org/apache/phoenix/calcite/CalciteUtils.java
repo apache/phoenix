@@ -16,6 +16,7 @@ import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.RelFieldCollation.NullDirection;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexDynamicParam;
@@ -30,6 +31,7 @@ import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Util;
@@ -120,8 +122,19 @@ public class CalciteUtils {
     }
     
     @SuppressWarnings("rawtypes")
-    public static PDataType sqlTypeNameToPDataType(SqlTypeName sqlTypeName) {
-        return PDataType.fromTypeId(sqlTypeName.getJdbcOrdinal());
+    public static PDataType relDataTypeToPDataType(RelDataType relDataType) {
+        SqlTypeName sqlTypeName = relDataType.getSqlTypeName();
+        final boolean isArrayType = sqlTypeName == SqlTypeName.ARRAY;
+        if (isArrayType) {
+            sqlTypeName = ((ArraySqlType) relDataType).getComponentType().getSqlTypeName();
+        }
+        final int ordinal = sqlTypeName.getJdbcOrdinal();
+        if (ordinal >= PDataType.ARRAY_TYPE_BASE) {
+            throw new UnsupportedOperationException(
+                    "Cannot convert RelDataType: " + relDataType +
+                    " to PDataType");
+        }
+        return PDataType.fromTypeId(ordinal + (isArrayType ? PDataType.ARRAY_TYPE_BASE : 0));
     }
     
     public static JoinType convertJoinType(JoinRelType type) {
@@ -365,7 +378,7 @@ public class CalciteUtils {
                         throw TypeMismatchException.newException(theType, node.toString());
                     }
                     
-                    PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                    PDataType targetType = relDataTypeToPDataType(node.getType());
                     return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
@@ -478,7 +491,7 @@ public class CalciteUtils {
                     } else {
                         throw TypeMismatchException.newException(theType, node.toString());
                     }
-                    PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                    PDataType targetType = relDataTypeToPDataType(node.getType());
                     return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
@@ -525,7 +538,7 @@ public class CalciteUtils {
                     } else {
                         expr = LiteralExpression.newConstant(null, theType, determinism);
                     }
-                    PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                    PDataType targetType = relDataTypeToPDataType(node.getType());
                     return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
@@ -572,7 +585,7 @@ public class CalciteUtils {
                     } else {
                         expr = LiteralExpression.newConstant(null, theType, determinism);
                     }
-                    PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                    PDataType targetType = relDataTypeToPDataType(node.getType());
                     return cast(targetType, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
@@ -586,7 +599,7 @@ public class CalciteUtils {
             @Override
 			public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
 				RexLiteral lit = (RexLiteral) node;
-                PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                PDataType targetType = relDataTypeToPDataType(node.getType());
 				Object o = lit.getValue();
 				if (o instanceof NlsString) {
 				    o = ((NlsString) o).getValue();
@@ -622,7 +635,7 @@ public class CalciteUtils {
                 }
                 String varId = ((RexCorrelVariable) refExpr).getName();
                 int index = fieldAccess.getField().getIndex();
-                PDataType type = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                PDataType type = relDataTypeToPDataType(node.getType());
                 return implementor.newFieldAccessExpression(varId, index, type);
             }		    
 		});
@@ -632,7 +645,7 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 RexDynamicParam param = (RexDynamicParam) node;
                 int index = param.getIndex();
-                PDataType type = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                PDataType type = relDataTypeToPDataType(node.getType());
                 Integer maxLength =
                         (type == PChar.INSTANCE
                             || type == PCharArray.INSTANCE
@@ -649,7 +662,7 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node,
                     PhoenixRelImplementor implementor) {                
                 List<Expression> children = convertChildren((RexCall) node, implementor);
-                PDataType targetType = sqlTypeNameToPDataType(node.getType().getSqlTypeName());
+                PDataType targetType = relDataTypeToPDataType(node.getType());
                 try {
                     return cast(targetType, children.get(0), implementor);
                 } catch (SQLException e) {
