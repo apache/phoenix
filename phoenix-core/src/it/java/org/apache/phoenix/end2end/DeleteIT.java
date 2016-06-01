@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -550,6 +551,44 @@ public class DeleteIT extends BaseHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(0, rs.getLong(1));
         }
+    }
+    
+    @Test
+    public void testServerSideDeleteAutoCommitOn() throws Exception {
+        testDeleteCount(true, null);
+    }
+    
+    @Test
+    public void testClientSideDeleteCountAutoCommitOff() throws Exception {
+        testDeleteCount(false, null);
+    }
+    
+    @Test
+    public void testClientSideDeleteAutoCommitOn() throws Exception {
+        testDeleteCount(true, 1000);
+    }
+    
+    private void testDeleteCount(boolean autoCommit, Integer limit) throws Exception {
+        String ddl = "CREATE TABLE IF NOT EXISTS TEST_TABLE (pk1 DECIMAL NOT NULL, v1 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
+        int numRecords = 1010;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            Statement stmt = conn.createStatement();
+            for (int i = 0; i < numRecords ; i++) {
+                stmt.executeUpdate("UPSERT INTO TEST_TABLE (pk1, v1) VALUES (" + i + ",'value')");
+            }
+            conn.commit();
+            conn.setAutoCommit(autoCommit);
+            String delete = "DELETE FROM TEST_TABLE WHERE (pk1) <= (" + numRecords + ")" + (limit == null ? "" : (" limit " + limit));
+            try (PreparedStatement pstmt = conn.prepareStatement(delete)) {
+                int numberOfDeletes = pstmt.executeUpdate();
+                assertEquals(limit == null ? numRecords : limit, numberOfDeletes);
+                if (!autoCommit) {
+                    conn.commit();
+                }
+            }
+        }
+
     }
 }
 
