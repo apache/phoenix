@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.TimeZone;
 
 import org.apache.commons.lang.time.FastDateFormat;
-import org.apache.hadoop.hbase.exceptions.IllegalArgumentIOException;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.joda.time.DateTimeZone;
