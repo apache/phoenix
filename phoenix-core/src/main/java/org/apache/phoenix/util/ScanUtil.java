@@ -876,12 +876,15 @@ public class ScanUtil {
     
     public static final boolean canQueryBeExecutedSerially(PTable table, OrderBy orderBy, StatementContext context) {
         /*
-         * For salted or local index tables, if rows are requested in a row key order, then we
-         * cannot execute a query serially. We need to be able to do a merge sort across all scans
-         * which isn't possible with SerialIterators. For other kinds of tables though we are ok
-         * since SerialIterators execute scans in the correct order.
+         * If ordering by columns not on the PK axis, we can't execute a query serially because we
+         * need to do a merge sort across all the scans which isn't possible with SerialIterators.
+         * Similar reasoning follows for salted and local index tables when ordering rows in a row
+         * key order. Serial execution is OK in other cases since SerialIterators will execute scans
+         * in the correct order.
          */
-        if ((table.getBucketNum() != null || table.getIndexType() == IndexType.LOCAL) && shouldRowsBeInRowKeyOrder(orderBy, context)) {
+        if (!orderBy.getOrderByExpressions().isEmpty()
+                || ((table.getBucketNum() != null || table.getIndexType() == IndexType.LOCAL) && shouldRowsBeInRowKeyOrder(
+                    orderBy, context))) {
             return false;
         }
         return true;

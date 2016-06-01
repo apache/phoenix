@@ -119,8 +119,7 @@ public class ScanPlan extends BaseQueryPlan {
          * If a limit is provided and we have no filter, run the scan serially when we estimate that
          * the limit's worth of data will fit into a single region.
          */
-        boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
-        Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
+        Integer perScanLimit = !allowPageFilter ? null : limit;
         if (perScanLimit == null || scan.getFilter() != null) {
             return false;
         }
