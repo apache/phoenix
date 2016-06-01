@@ -277,5 +277,31 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testSerialHintIgnoredForNonRowkeyOrderBy() throws Exception {
+
+        Properties props = PropertiesUtil.deepCopy(new Properties());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            conn.createStatement().execute("CREATE TABLE FOO(\n" + 
+                    "                a VARCHAR NOT NULL,\n" + 
+                    "                b TIMESTAMP NOT NULL,\n" + 
+                    "                c VARCHAR,\n" + 
+                    "                CONSTRAINT pk PRIMARY KEY (a, b DESC, c)\n" + 
+                    "              )");
+            String query = "select /*+ SERIAL*/ * from foo where a = 'a' ORDER BY b, c";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            String queryPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals(
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER FOO ['a']\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" +
+                    "    SERVER SORTED BY [B, C]\n" +        
+                    "CLIENT MERGE SORT", queryPlan);
+        } finally {
+            conn.close();
+        }
+    
+    }
 
 }
