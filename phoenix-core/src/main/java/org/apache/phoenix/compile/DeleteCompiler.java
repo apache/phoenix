@@ -182,7 +182,7 @@ public class DeleteCompiler {
             }
 
             // If auto commit is true, this last batch will be committed upon return
-            int nCommittedRows = rowCount / batchSize * batchSize;
+            int nCommittedRows = isAutoCommit ? (rowCount / batchSize * batchSize) : 0;
             MutationState state = new MutationState(targetTableRef, mutations, nCommittedRows, maxSize, connection);
             if (indexTableRef != null) {
                 // To prevent the counting of these index rows, we have a negative for remainingRows.
