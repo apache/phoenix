@@ -73,6 +73,7 @@ public class OrderPreservingTracker {
     private final List<Info> orderPreservingInfos;
     private boolean isOrderPreserving = true;
     private Boolean isReverse = null;
+    private int orderPreservingColumnCount = 0;
     
     public OrderPreservingTracker(StatementContext context, GroupBy groupBy, Ordering ordering, int nNodes) {
         this(context, groupBy, ordering, nNodes, null);
@@ -149,6 +150,13 @@ public class OrderPreservingTracker {
         }
     }
     
+    /*
+     * Only valid AFTER call to isOrderPreserving
+     */
+    public int getOrderPreservingColumnCount() {
+        return orderPreservingColumnCount;
+    }
+
     public boolean isOrderPreserving() {
         if (!isOrderPreserving) {
             return false;
@@ -181,6 +189,7 @@ public class OrderPreservingTracker {
             prevSlotSpan = entry.slotSpan;
             prevOrderPreserving = entry.orderPreserving;
         }
+        orderPreservingColumnCount = prevPos + prevSlotSpan;
         return isOrderPreserving;
     }
     
