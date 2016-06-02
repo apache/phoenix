@@ -64,9 +64,11 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.parse.FilterableStatement;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
@@ -221,6 +223,18 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             
             if(offset!=null){
                 ScanUtil.addOffsetAttribute(scan, offset);
+            }
+
+            int cols = plan.getGroupBy().getOrderPreservingColumnCount();
+            if (cols > 0 &&
+                !plan.getStatement().getHint().hasHint(HintNode.Hint.RANGE_SCAN) &&
+                cols < plan.getTableRef().getTable().getRowKeySchema().getFieldCount() &&
+                plan.getGroupBy().isOrderPreserving() && 
+                (plan.getStatement().isDistinct() || context.getAggregationManager().isEmpty()))
+            {
+                ScanUtil.andFilterAtEnd(context.getScan(),
+                        new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(),
+                                cols));
             }
 
             if (optimizeProjection) {

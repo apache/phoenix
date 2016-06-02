@@ -36,6 +36,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
@@ -132,6 +133,7 @@ public abstract class ExplainTable {
         PageFilter pageFilter = null;
         FirstKeyOnlyFilter firstKeyOnlyFilter = null;
         BooleanExpressionFilter whereFilter = null;
+        DistinctPrefixFilter distinctFilter = null;
         Iterator<Filter> filterIterator = ScanUtil.getFilterIterator(scan);
         if (filterIterator.hasNext()) {
             do {
@@ -142,6 +144,8 @@ public abstract class ExplainTable {
                     pageFilter = (PageFilter)filter;
                 } else if (filter instanceof BooleanExpressionFilter) {
                     whereFilter = (BooleanExpressionFilter)filter;
+                } else if (filter instanceof DistinctPrefixFilter) {
+                    distinctFilter = (DistinctPrefixFilter)filter;
                 }
             } while (filterIterator.hasNext());
         }
@@ -149,6 +153,9 @@ public abstract class ExplainTable {
             planSteps.add("    SERVER FILTER BY " + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ") + whereFilter.toString());
         } else if (firstKeyOnlyFilter != null) {
             planSteps.add("    SERVER FILTER BY FIRST KEY ONLY");
+        }
+        if (distinctFilter != null) {
+            planSteps.add("    SERVER DISTINCT PREFIX FILTER OVER "+groupBy.getExpressions().toString());
         }
         if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
             planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))

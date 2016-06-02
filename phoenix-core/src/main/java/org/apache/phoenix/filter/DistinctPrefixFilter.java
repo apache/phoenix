@@ -1,0 +1,116 @@
+package org.apache.phoenix.filter;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.exceptions.DeserializationException;
+import org.apache.hadoop.hbase.filter.FilterBase;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Writables;
+import org.apache.hadoop.io.Writable;
+import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil;
+
+public class DistinctPrefixFilter extends FilterBase implements Writable {
+    private static byte VERSION = 1;
+
+    private RowKeySchema schema;
+    private int prefixLengh;
+    private boolean filterAll = false;
+    private final ImmutableBytesWritable lastKey = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
+
+    public DistinctPrefixFilter() {
+    }
+
+    public DistinctPrefixFilter(RowKeySchema schema, int prefixLength) {
+        this.schema = schema;
+        this.prefixLengh = prefixLength;
+    }
+
+    @Override
+    public ReturnCode filterKeyValue(Cell v) throws IOException {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+
+        // First determine the prefix based on the schema
+        int maxOffset = schema.iterator(v.getRowArray(), v.getRowOffset(), v.getRowLength(), ptr);
+        schema.next(ptr, 0, maxOffset, prefixLengh - 1);
+
+        // now check whether we have seen this prefix before
+        if (lastKey.getLength() != ptr.getLength() || !Bytes.equals(ptr.get(), ptr.getOffset(),
+                ptr.getLength(), lastKey.get(), lastKey.getOffset(), ptr.getLength())) {
+            // if we haven't seen this prefix, include the row and remember this prefix
+            lastKey.set(ptr.get(), ptr.getOffset(), ptr.getLength());
+            return ReturnCode.INCLUDE;
+        }
+        // we've seen this prefix already, seek to the next
+        return ReturnCode.SEEK_NEXT_USING_HINT;
+    }
+
+    @Override
+    public Cell getNextCellHint(Cell v) throws IOException {
+        ImmutableBytesWritable tmp;
+        PDataType<?> type = schema.getField(prefixLengh-1).getDataType();
+        if (reversed) {
+            // simply seek right before the first occurrence of the row
+            tmp = lastKey;
+        } else {
+            if (type.isFixedWidth()) {
+                // copy the bytes, since nextKey will modify in place
+                tmp = new ImmutableBytesWritable(lastKey.copyBytes());
+            } else {
+                // pad with a 0x00 byte (makes a copy)
+                tmp = new ImmutableBytesWritable(lastKey);
+                ByteUtil.nullPad(tmp, tmp.getLength() + 1);
+            }
+            // calculate the next key
+            if (!ByteUtil.nextKey(tmp.get(), tmp.getOffset(), tmp.getLength())) {
+                filterAll = true;
+            }
+        }
+
+        return KeyValue.createFirstOnRow(tmp.get(), tmp.getOffset(), tmp.getLength(), null, 0, 0,
+                null, 0, 0);
+    }
+
+    @Override
+    public boolean filterAllRemaining() throws IOException {
+      return filterAll;
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        out.writeByte(VERSION);
+        schema.write(out);
+        out.writeInt(prefixLengh);
+    }
+
+    @Override
+    public void readFields(DataInput in) throws IOException {
+        in.readByte(); // ignore
+        schema = new RowKeySchema();
+        schema.readFields(in);
+        prefixLengh = in.readInt();
+    }
+
+    @Override
+    public byte[] toByteArray() throws IOException {
+        return Writables.getBytes(this);
+    }
+
+    public static DistinctPrefixFilter parseFrom(final byte[] pbBytes)
+            throws DeserializationException {
+        try {
+            return (DistinctPrefixFilter) Writables.getWritable(pbBytes,
+                    new DistinctPrefixFilter());
+        } catch (IOException e) {
+            throw new DeserializationException(e);
+        }
+    }
+}
