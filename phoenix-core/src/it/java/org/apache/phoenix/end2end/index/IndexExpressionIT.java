@@ -531,7 +531,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
             String expectedPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + (localIndex ? fullDataTableName + " [1,0] - [1,*]"
                             : "INDEX_TEST.IDX [0] - [*]")
-                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + 1)\")]"
+                    + "\n    SERVER FILTER BY FIRST KEY ONLY\n    SERVER DISTINCT PREFIX FILTER OVER [TO_BIGINT(\"(A.INT_COL1 + 1)\")]\n    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + 1)\")]"
                     + (localIndex ? "\nCLIENT MERGE SORT" : "");
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(sql);
