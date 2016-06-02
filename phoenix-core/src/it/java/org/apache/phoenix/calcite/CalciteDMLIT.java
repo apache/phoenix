@@ -100,4 +100,13 @@ public class CalciteDMLIT extends BaseCalciteIT {
                 {"x00000000000003", "y00000000000003", null}})
             .close();
     }
+    
+    @Test public void testDelete() throws Exception {
+        start(PROPS).sql("delete from atable where organization_id = '1' and entity_id = '1'")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixTableModify(table=[[phoenix, ATABLE]], operation=[DELETE], updateColumnList=[[]], flattened=[false])\n" +
+                       "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[AND(=($0, CAST('1'):CHAR(15) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL), =($1, CAST('1'):CHAR(15) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL))])\n")
+            //.executeUpdate()
+            .close();
+    }
 }

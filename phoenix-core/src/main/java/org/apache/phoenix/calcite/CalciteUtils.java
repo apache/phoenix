@@ -379,7 +379,7 @@ public class CalciteUtils {
                     }
                     
                     PDataType targetType = relDataTypeToPDataType(node.getType());
-                    return cast(targetType, expr, implementor);
+                    return cast(targetType, null, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -492,7 +492,7 @@ public class CalciteUtils {
                         throw TypeMismatchException.newException(theType, node.toString());
                     }
                     PDataType targetType = relDataTypeToPDataType(node.getType());
-                    return cast(targetType, expr, implementor);
+                    return cast(targetType, null, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -539,7 +539,7 @@ public class CalciteUtils {
                         expr = LiteralExpression.newConstant(null, theType, determinism);
                     }
                     PDataType targetType = relDataTypeToPDataType(node.getType());
-                    return cast(targetType, expr, implementor);
+                    return cast(targetType, null, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -586,7 +586,7 @@ public class CalciteUtils {
                         expr = LiteralExpression.newConstant(null, theType, determinism);
                     }
                     PDataType targetType = relDataTypeToPDataType(node.getType());
-                    return cast(targetType, expr, implementor);
+                    return cast(targetType, null, expr, implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -663,8 +663,14 @@ public class CalciteUtils {
                     PhoenixRelImplementor implementor) {                
                 List<Expression> children = convertChildren((RexCall) node, implementor);
                 PDataType targetType = relDataTypeToPDataType(node.getType());
+                Integer maxLength =
+                        (targetType == PChar.INSTANCE
+                            || targetType == PCharArray.INSTANCE
+                            || targetType == PBinary.INSTANCE
+                            || targetType == PBinaryArray.INSTANCE) ?
+                        node.getType().getPrecision() : null;
                 try {
-                    return cast(targetType, children.get(0), implementor);
+                    return cast(targetType, maxLength, children.get(0), implementor);
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -901,14 +907,14 @@ public class CalciteUtils {
     }
     
     @SuppressWarnings("rawtypes")
-    private static Expression cast(PDataType targetDataType, Expression childExpr, PhoenixRelImplementor implementor) throws SQLException {
+    private static Expression cast(PDataType targetDataType, Integer maxLength, Expression childExpr, PhoenixRelImplementor implementor) throws SQLException {
         PDataType fromDataType = childExpr.getDataType();
         
         Expression expr = childExpr;
         if(fromDataType != null && implementor.getTableMapping().getPTable().getType() != PTableType.INDEX) {
             expr =  convertToRoundExpressionIfNeeded(fromDataType, targetDataType, childExpr);
         }
-        return CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), expr.getMaxLength(), implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
+        return CoerceExpression.create(expr, targetDataType, SortOrder.getDefault(), maxLength, implementor.getTableMapping().getPTable().rowKeyOrderOptimizable());
     }
     
     @SuppressWarnings("rawtypes")

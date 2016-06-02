@@ -56,6 +56,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
             RelOptTable table, CatalogReader catalogReader, RelNode child,
             Operation operation, List<String> updateColumnList, boolean flattened) {
         super(cluster, traits, table, catalogReader, child, operation, updateColumnList, flattened);
+        assert operation == Operation.INSERT || operation == Operation.DELETE;
     }
 
     @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
@@ -72,20 +73,29 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
 
     @Override
     public StatementPlan implement(PhoenixRelImplementor implementor) {
-        if (getOperation() != Operation.INSERT) {
-            throw new UnsupportedOperationException();
-        }
-        
         final QueryPlan queryPlan = implementor.visitInput(0, (PhoenixQueryRel) input);
         final RowProjector projector = implementor.getTableMapping().createRowProjector();
 
         final PhoenixTable targetTable = getTable().unwrap(PhoenixTable.class);
         final PhoenixConnection connection = targetTable.pc;
         final TableRef targetTableRef = targetTable.tableMapping.getTableRef();
+        
+        if (getOperation() == Operation.INSERT) {
+            return upsert(connection, targetTable, targetTableRef, queryPlan, projector);
+        }
+        
+        // delete
+        throw new UnsupportedOperationException();
+    }
+    
+    private static MutationPlan upsert(final PhoenixConnection connection,
+            final PhoenixTable targetTable, final TableRef targetTableRef,
+            final QueryPlan queryPlan, final RowProjector projector) {
         try (PhoenixStatement stmt = new PhoenixStatement(connection)) {
             final ColumnResolver resolver = FromCompiler.getResolver(targetTableRef);
             final StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
 
+            // TODO TenantId, ViewIndexId, UpdatableViewColumns
             final List<PColumn> mappedColumns = targetTable.tableMapping.getMappedColumns();
             final int[] columnIndexes = new int[mappedColumns.size()];
             final int[] pkSlotIndexes = new int[mappedColumns.size()];

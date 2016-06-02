@@ -24,6 +24,7 @@ import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.SemiJoin;
+import org.apache.calcite.rel.core.TableModify.Operation;
 import org.apache.calcite.rel.core.Uncollect;
 import org.apache.calcite.rel.core.Union;
 import org.apache.calcite.rel.logical.LogicalAggregate;
@@ -837,6 +838,11 @@ public class PhoenixConverterRules {
 
         public RelNode convert(RelNode rel) {
             final LogicalTableModify modify = (LogicalTableModify) rel;
+            if (modify.getOperation() != Operation.INSERT
+                    && modify.getOperation() != Operation.DELETE) {
+                return null;
+            }
+            
             final PhoenixTable phoenixTable = modify.getTable().unwrap(PhoenixTable.class);
             if (phoenixTable == null) {
                 return null;
