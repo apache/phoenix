@@ -58,6 +58,7 @@ public class GroupByCompiler {
         private final List<Expression> expressions;
         private final List<Expression> keyExpressions;
         private final boolean isOrderPreserving;
+        private final int orderPreservingColumnCount;
         public static final GroupByCompiler.GroupBy EMPTY_GROUP_BY = new GroupBy(new GroupByBuilder()) {
             @Override
             public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
@@ -96,6 +97,7 @@ public class GroupByCompiler {
                     this.expressions : builder.keyExpressions == null ? null :
                         ImmutableList.copyOf(builder.keyExpressions);
             this.isOrderPreserving = builder.isOrderPreserving;
+            this.orderPreservingColumnCount = builder.orderPreservingColumnCount;
         }
         
         public List<Expression> getExpressions() {
@@ -120,8 +122,13 @@ public class GroupByCompiler {
             return isOrderPreserving;
         }
         
+        public int getOrderPreservingColumnCount() {
+            return orderPreservingColumnCount;
+        }
+        
         public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
             boolean isOrderPreserving = this.isOrderPreserving;
+            int orderPreservingColumnCount = 0;
             if (isOrderPreserving) {
                 OrderPreservingTracker tracker = new OrderPreservingTracker(context, GroupBy.EMPTY_GROUP_BY, Ordering.UNORDERED, expressions.size(), tupleProjector);
                 for (int i = 0; i < expressions.size(); i++) {
@@ -133,9 +140,10 @@ public class GroupByCompiler {
                 // there are no "gaps" in the PK columns positions used (i.e. we start with the first PK
                 // column and use each subsequent one in PK order).
                 isOrderPreserving = tracker.isOrderPreserving();
+                orderPreservingColumnCount = tracker.getOrderPreservingColumnCount();
             }
             if (isOrderPreserving) {
-                return this;
+                return new GroupBy.GroupByBuilder(this).setOrderPreservingColumnCount(orderPreservingColumnCount).build();
             }
             
             List<Expression> expressions = Lists.newArrayListWithExpectedSize(this.expressions.size());
@@ -232,10 +240,18 @@ public class GroupByCompiler {
         
         public static class GroupByBuilder {
             private boolean isOrderPreserving;
+            private int orderPreservingColumnCount;
             private List<Expression> expressions = Collections.emptyList();
             private List<Expression> keyExpressions = Collections.emptyList();
 
             public GroupByBuilder() {
+            }
+            
+            public GroupByBuilder(GroupBy groupBy) {
+                this.isOrderPreserving = groupBy.isOrderPreserving;
+                this.orderPreservingColumnCount = groupBy.orderPreservingColumnCount;
+                this.expressions = groupBy.expressions;
+                this.keyExpressions = groupBy.keyExpressions;
             }
             
             public GroupByBuilder setExpressions(List<Expression> expressions) {
@@ -252,7 +268,12 @@ public class GroupByCompiler {
                 this.isOrderPreserving = isOrderPreserving;
                 return this;
             }
-            
+
+            public GroupByBuilder setOrderPreservingColumnCount(int orderPreservingColumnCount) {
+                this.orderPreservingColumnCount = orderPreservingColumnCount;
+                return this;
+            }
+
             public GroupBy build() {
                 return new GroupBy(this);
             }
@@ -316,7 +337,6 @@ public class GroupByCompiler {
         if (expressions.isEmpty()) {
             return GroupBy.EMPTY_GROUP_BY;
         }
-        
         GroupBy groupBy = new GroupBy.GroupByBuilder().setIsOrderPreserving(isOrderPreserving).setExpressions(expressions).setKeyExpressions(expressions).build();
         return groupBy;
     }
