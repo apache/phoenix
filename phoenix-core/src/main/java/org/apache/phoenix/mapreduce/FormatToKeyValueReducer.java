@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
@@ -65,7 +64,6 @@ public class FormatToKeyValueReducer
     protected List<String> logicalNames;
     protected KeyValueBuilder builder;
     private Map<Integer, Pair<byte[], byte[]>> columnIndexes;
-    private Map<String, ImmutableBytesPtr> emptyFamilyName;
 
 
     @Override
@@ -91,13 +89,11 @@ public class FormatToKeyValueReducer
     }
 
     private void initColumnsMap(PhoenixConnection conn) throws SQLException {
-        Map <byte[], Integer> indexMap = new TreeMap(Bytes.BYTES_COMPARATOR);
-        emptyFamilyName = new HashMap<>();
+        Map<byte[], Integer> indexMap = new TreeMap(Bytes.BYTES_COMPARATOR);
         columnIndexes = new HashMap<>();
         int columnIndex = 0;
-        for(int index = 0; index < logicalNames.size(); index++) {
+        for (int index = 0; index < logicalNames.size(); index++) {
             PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
-            emptyFamilyName.put(tableNames.get(index), SchemaUtil.getEmptyColumnFamilyPtr(table));
             List<PColumn> cls = table.getColumns();
             for (int i = 0; i < cls.size(); i++) {
                 PColumn c = cls.get(i);
@@ -106,7 +102,7 @@ public class FormatToKeyValueReducer
                     family = c.getFamilyName().getBytes();
                 }
                 byte[] name = c.getName().getBytes();
-                byte[] cfn = Bytes.add(family,":".getBytes(), name);
+                byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES, name);
                 Pair<byte[], byte[]> pair = new Pair(family, name);
                 if (!indexMap.containsKey(cfn)) {
                     indexMap.put(cfn, new Integer(columnIndex));
@@ -114,6 +110,11 @@ public class FormatToKeyValueReducer
                     columnIndex++;
                 }
             }
+            byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
+            Pair<byte[], byte[]> pair = new Pair(emptyColumnFamily, QueryConstants
+                    .EMPTY_COLUMN_BYTES);
+            columnIndexes.put(new Integer(columnIndex), pair);
+            columnIndex++;
         }
     }
 
@@ -131,18 +132,9 @@ public class FormatToKeyValueReducer
                 ImmutableBytesWritable family;
                 ImmutableBytesWritable name;
                 ImmutableBytesWritable value = QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR;
-                if (index == -1) {
-                    family = emptyFamilyName.get(key.getTableName());
-                    name = QueryConstants.EMPTY_COLUMN_BYTES_PTR;
-                } else {
-                    Pair<byte[], byte[]> pair = columnIndexes.get(index);
-                    if(pair.getFirst() != null) {
-                        family = new ImmutableBytesWritable(pair.getFirst());
-                    } else {
-                        family = emptyFamilyName.get(key.getTableName());
-                    }
-                    name = new ImmutableBytesWritable(pair.getSecond());
-                }
+                Pair<byte[], byte[]> pair = columnIndexes.get(index);
+                family = new ImmutableBytesWritable(pair.getFirst());
+                name = new ImmutableBytesWritable(pair.getSecond());
                 int len = WritableUtils.readVInt(input);
                 if (len > 0) {
                     byte[] array = new byte[len];
