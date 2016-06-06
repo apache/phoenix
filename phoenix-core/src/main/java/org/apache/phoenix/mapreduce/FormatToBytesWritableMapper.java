@@ -44,11 +44,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -216,12 +218,17 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                 if (c.getFamilyName() != null)  // Skip PK column
                     family = c.getFamilyName().getBytes();
                 byte[] name = c.getName().getBytes();
-                byte[] cfn = Bytes.add(family,":".getBytes(), name);
+                byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES, name);
                 if (!columnIndexes.containsKey(cfn)) {
                     columnIndexes.put(cfn, new Integer(columnIndex));
                     columnIndex++;
                 }
             }
+            byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
+            byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES,
+                    QueryConstants.EMPTY_COLUMN_BYTES);
+            columnIndexes.put(cfn, new Integer(columnIndex));
+            columnIndex++;
         }
     }
 
@@ -232,16 +239,16 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
      * @param cell       KeyValue for the column
      * @return column index for the specified cell or -1 if was not found
      */
-    private int findIndex(Cell cell) {
+    private int findIndex(Cell cell) throws IOException {
         byte[] familyName = Bytes.copy(cell.getFamilyArray(), cell.getFamilyOffset(),
                 cell.getFamilyLength());
         byte[] name = Bytes.copy(cell.getQualifierArray(), cell.getQualifierOffset(),
                 cell.getQualifierLength());
-        byte[] cfn = Bytes.add(familyName, ":".getBytes(), name);
+        byte[] cfn = Bytes.add(familyName, QueryConstants.NAMESPACE_SEPARATOR_BYTES, name);
         if(columnIndexes.containsKey(cfn)) {
             return columnIndexes.get(cfn);
         }
-        return -1;
+        throw new IOException("Unable to map cell to column index");
     }
 
     /**
