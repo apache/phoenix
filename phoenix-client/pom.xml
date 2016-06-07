@@ -135,8 +135,6 @@
                   <pattern>com.google</pattern>
                   <shadedPattern>${shaded.package}.com.google</shadedPattern>
                   <excludes>
-                    <!--<exclude>com.google.common.base.Preconditions</exclude>-->
-                    <!--<exclude>com.google.common.cache.**</exclude>-->
                   </excludes>
                 </relocation>
                 <relocation>
@@ -182,10 +180,6 @@
                 <relocation>
                   <pattern>org.codehaus</pattern>
                   <shadedPattern>${shaded.package}.org.codehaus</shadedPattern>
-                </relocation>
-                <relocation>
-                  <pattern>org.eclipse.jetty</pattern>
-                  <shadedPattern>${shaded.package}.org.eclipse.jetty</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org.fusesource</pattern>
@@ -258,10 +252,6 @@
                 <relocation>
                   <pattern>org.apache.avro</pattern>
                   <shadedPattern>${shaded.package}.org.apache.avro</shadedPattern>
-                </relocation>
-                <relocation>
-                  <pattern>org.apache.calcite</pattern>
-                  <shadedPattern>${shaded.package}.org.apache.calcite</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org.apache.commons</pattern>
@@ -368,14 +358,6 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-spark</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-queryserver</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-queryserver-client</artifactId>
     </dependency>
   </dependencies>
 </project>

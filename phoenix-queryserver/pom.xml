@@ -10,8 +10,10 @@
   <name>Phoenix Query Server</name>
   <description>A query server for exposing Phoenix to thin clients</description>
 
+
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
+    <shaded.package>org.apache.phoenix.shaded</shaded.package>
   </properties>
 
   <build>
@@ -23,6 +25,50 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>query-server</id>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <finalName>phoenix-${project.version}-queryserver</finalName>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+              <shadeTestJar>false</shadeTestJar>
+              <artifactSet>
+                <includes>
+                  <include>org.apache.phoenix:phoenix-server</include>
+                  <include>org.apache.phoenix:phoenix-server-client</include>
+                  <include>org.apache.calcite.avatica:*</include>
+                  <include>org.eclipse.jetty:*</include>
+                  <include>javax.servlet:*</include>
+                </includes>
+              </artifactSet>
+              <relocations>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>${shaded.package}.com.google</shadedPattern>
+                  <excludes>
+                  </excludes>
+                </relocation>
+                <relocation>
+                  <pattern>org.eclipse.jetty</pattern>
+                  <shadedPattern>${shaded.package}.org.eclipse.jetty</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.calcite</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.calcite</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

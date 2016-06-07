@@ -70,7 +70,7 @@ def findClasspath(command_name):
 def setPath():
     PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
     PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
-    PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-queryserver-*-runnable.jar"
+    PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-*-queryserver.jar"
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*-minimal*.jar"
