@@ -181,8 +181,8 @@ public class IndexTool extends Configured implements Tool {
             final String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             final String dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
-            final String qDataTable = SchemaUtil.getTableName(schemaName, dataTable);
-            final String qIndexTable = SchemaUtil.getTableName(schemaName, indexTable);
+            final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
+            final String qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
 
             connection = ConnectionUtil.getInputConnection(configuration);
             if (!isValidIndexTable(connection, qDataTable, indexTable)) {
