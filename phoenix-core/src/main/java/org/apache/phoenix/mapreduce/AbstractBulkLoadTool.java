@@ -183,10 +183,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         String tableName = cmdLine.getOptionValue(TABLE_NAME_OPT.getOpt());
         String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPT.getOpt());
         String indexTableName = cmdLine.getOptionValue(INDEX_TABLE_NAME_OPT.getOpt());
-        String qualifiedTableName = getQualifiedTableName(schemaName, tableName);
+        String qualifiedTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
         String qualifiedIndexTableName = null;
         if (indexTableName != null){
-            qualifiedIndexTableName = getQualifiedTableName(schemaName, indexTableName);
+            qualifiedIndexTableName = SchemaUtil.getQualifiedTableName(schemaName, indexTableName);
         }
 
         if (cmdLine.hasOption(ZK_QUORUM_OPT.getOpt())) {
@@ -339,23 +339,6 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         }
         return SchemaUtil.generateColumnInfo(
                 conn, qualifiedTableName, userSuppliedColumnNames, true);
-    }
-
-    /**
-     * Calculate the HBase HTable name for which the import is to be done.
-     *
-     * @param schemaName import schema name, can be null
-     * @param tableName import table name
-     * @return the byte representation of the import HTable
-     */
-    @VisibleForTesting
-    static String getQualifiedTableName(String schemaName, String tableName) {
-        if (schemaName != null) {
-            return String.format("%s.%s", SchemaUtil.normalizeIdentifier(schemaName),
-                    SchemaUtil.normalizeIdentifier(tableName));
-        } else {
-            return SchemaUtil.normalizeIdentifier(tableName);
-        }
     }
 
     /**
