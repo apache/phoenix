@@ -1025,4 +1025,20 @@ public class SchemaUtil {
         return physicalTableName.indexOf(indexPrefix) == 0 ? physicalTableName.substring(indexPrefix.length())
                 : physicalTableName;
     }
+
+    /**
+     * Calculate the HBase HTable name.
+     *
+     * @param schemaName import schema name, can be null
+     * @param tableName import table name
+     * @return the byte representation of the HTable
+     */
+    public static String getQualifiedTableName(String schemaName, String tableName) {
+        if (schemaName != null) {
+            return String.format("%s.%s", normalizeIdentifier(schemaName),
+                    normalizeIdentifier(tableName));
+        } else {
+            return normalizeIdentifier(tableName);
+        }
+    }
 }

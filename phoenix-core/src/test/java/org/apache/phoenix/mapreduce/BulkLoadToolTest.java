@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.commons.cli.CommandLine;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -68,11 +69,11 @@ public class BulkLoadToolTest {
 
     @Test
     public void testGetQualifiedTableName() {
-        assertEquals("MYSCHEMA.MYTABLE", CsvBulkLoadTool.getQualifiedTableName("mySchema", "myTable"));
+        assertEquals("MYSCHEMA.MYTABLE", SchemaUtil.getQualifiedTableName("mySchema", "myTable"));
     }
 
     @Test
     public void testGetQualifiedTableName_NullSchema() {
-        assertEquals("MYTABLE", CsvBulkLoadTool.getQualifiedTableName(null, "myTable"));
+        assertEquals("MYTABLE", SchemaUtil.getQualifiedTableName(null, "myTable"));
     }
 }
