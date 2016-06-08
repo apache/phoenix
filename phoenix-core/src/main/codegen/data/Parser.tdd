@@ -36,6 +36,10 @@
   	"SPLIT"
   ]
 
+  # List of keywords from "keywords" section that are not reserved.
+  nonReservedKeywords: [
+  ]
+
   # List of methods for parsing custom SQL statements.
   statementParserMethods: [
     "SqlCommit()",
