@@ -1,5 +1,11 @@
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -7,16 +13,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
     private static String testTableF = generateRandomString();
@@ -286,38 +286,32 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testRVC() throws Exception {
-        String q = "SELECT (prefix1, prefix2) FROM "+ testTableF + " GROUP BY (prefix1, prefix2)";
-        PreparedStatement stmt = conn.prepareStatement(q);
-        ResultSet res = stmt.executeQuery();
-        byte[] r1 = null;
-        res.next();
-        r1 = (byte[])res.getObject(1);
-        assertFalse(res.next());
-        q = "SELECT /*+ RANGE_SCAN */ (prefix1, prefix2) FROM "+ testTableF + " GROUP BY (prefix1, prefix2)";
-        stmt = conn.prepareStatement(q);
-        res = stmt.executeQuery();
-        byte[] r2 = null;
-        res.next();
-        r2 = (byte[])res.getObject(1);
-        assertFalse(res.next());
-        assertTrue(Bytes.equals(r1, r2));
+        int count = 0;
+        ResultSet res1 = conn.createStatement().executeQuery("SELECT (prefix1, prefix2) FROM "+ testTableF + " GROUP BY (prefix1, prefix2)");
+        ResultSet res2 = conn.createStatement().executeQuery("SELECT /*+ RANGE_SCAN */ (prefix1, prefix2) FROM "+ testTableF + " GROUP BY (prefix1, prefix2)");
+        ResultSet res3 = conn.createStatement().executeQuery("SELECT DISTINCT(prefix1, prefix2) FROM "+ testTableF);
+        ResultSet res4 = conn.createStatement().executeQuery("SELECT /*+ RANGE_SCAN */ DISTINCT(prefix1, prefix2) FROM "+ testTableF);
+        while (res1.next()) {
+            byte[] r1 = res1.getBytes(1);
+    
+            assertTrue(res2.next());
+            byte[] r2 = res2.getBytes(1);
+            assertArrayEquals(r1, r2);
+    
+            assertTrue(res3.next());
+            byte[] r3 = res3.getBytes(1);
+            assertArrayEquals(r1, r3);
+    
+            assertTrue(res4.next());
+            byte[] r4 = res4.getBytes(1);
+            assertArrayEquals(r1, r4);
 
-        q = "SELECT DISTINCT(prefix1, prefix2) FROM "+ testTableF;
-        stmt = conn.prepareStatement(q);
-        res = stmt.executeQuery();
-        r1 = null;
-        res.next();
-        r1 = (byte[])res.getObject(1);
-        assertFalse(res.next());
-
-        q = "SELECT /*+ RANGE_SCAN */ DISTINCT(prefix1, prefix2) FROM "+ testTableF;
-        stmt = conn.prepareStatement(q);
-        res = stmt.executeQuery();
-        r2 = null;
-        res.next();
-        r2 = (byte[])res.getObject(1);
-        assertFalse(res.next());
-        assertTrue(Bytes.equals(r1, r2));
+            count++;
+        }
+        assertFalse(res2.next());
+        assertFalse(res3.next());
+        assertFalse(res4.next());
+        assertEquals(11,count);
     }
 
     private void testSkipRange(String q, int expected) throws SQLException {
