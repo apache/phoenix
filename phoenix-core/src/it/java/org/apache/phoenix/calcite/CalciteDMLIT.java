@@ -101,12 +101,26 @@ public class CalciteDMLIT extends BaseCalciteIT {
             .close();
     }
     
+    @Ignore // CALCITE-1278
     @Test public void testDelete() throws Exception {
+        start(PROPS).sql("upsert into atable(organization_id, entity_id) values('1', '1')")
+            .explainIs("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixTableModify(table=[[phoenix, ATABLE]], operation=[INSERT], updateColumnList=[[]], flattened=[false])\n" +
+                       "    PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[null], B_STRING=[null], A_INTEGER=[null], A_DATE=[null], A_TIME=[null], A_TIMESTAMP=[null], X_DECIMAL=[null], X_LONG=[null], X_INTEGER=[null], Y_INTEGER=[null], A_BYTE=[null], A_SHORT=[null], A_FLOAT=[null], A_DOUBLE=[null], A_UNSIGNED_FLOAT=[null], A_UNSIGNED_DOUBLE=[null])\n" +
+                       "      PhoenixValues(tuples=[[{ '1              ', '1              ' }]])\n")
+            .executeUpdate()
+            .close();
+        start(PROPS).sql("select organization_id, entity_id from aTable where organization_id = '1'")
+            .resultIs(0, new Object[][] {{"1              ", "1              "}})
+            .close();
         start(PROPS).sql("delete from atable where organization_id = '1' and entity_id = '1'")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixTableModify(table=[[phoenix, ATABLE]], operation=[DELETE], updateColumnList=[[]], flattened=[false])\n" +
                        "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[AND(=($0, CAST('1'):CHAR(15) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL), =($1, CAST('1'):CHAR(15) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL))])\n")
-            //.executeUpdate()
+            .executeUpdate()
+            .close();
+        start(PROPS).sql("select * from aTable where organization_id = '1'")
+            .resultIs(new Object[][] {})
             .close();
     }
 }
