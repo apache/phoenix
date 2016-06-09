@@ -70,6 +70,26 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <id>default-install</id>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+            <phase>install</phase>
+          </execution>
+        </executions>
+        <configuration>
+          <file>${basedir}/target/phoenix-${project.version}-server.jar</file>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <executions>
           <execution>
