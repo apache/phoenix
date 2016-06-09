@@ -44,7 +44,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     
     private ImmutableBytesWritable ptrs[];
     private ImmutableBytesWritable literalExprPtr;
-    private int counter;
+    private int partialEvalIndex = -1;
     private int estimatedByteSize;
 
     public RowValueConstructorExpression() {
@@ -52,7 +52,6 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     
     public RowValueConstructorExpression(List<Expression> children, boolean isConstant) {
         super(children);
-        counter = 0;
         estimatedByteSize = 0;
         init(isConstant);
     }
@@ -108,9 +107,10 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     
     @Override
     public void reset() {
-        counter = 0;
+        partialEvalIndex = 0;
         estimatedByteSize = 0;
         Arrays.fill(ptrs, null);
+        super.reset();
     }
     
     private static int getExpressionByteCount(Expression e) {
@@ -132,30 +132,32 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
             return true;
         }
         try {
-            int j;
-            int expressionCount = counter;
-            for(j = counter; j < ptrs.length; j++) {
-                final Expression expression = children.get(j);
+            boolean isPartialEval = this.partialEvalIndex >= 0;
+            int evalIndex = isPartialEval ? this.partialEvalIndex : 0;
+            int expressionCount = evalIndex;
+            for(; evalIndex < ptrs.length; evalIndex++) {
+                final Expression expression = children.get(evalIndex);
                 // TODO: handle overflow and underflow
                 if (expression.evaluate(tuple, ptr)) {
                     if (ptr.getLength() == 0) {
                         estimatedByteSize += getExpressionByteCount(expression);
                     } else {
-                        expressionCount = j+1;
-                        ptrs[j] = new ImmutableBytesWritable();
-                        ptrs[j].set(ptr.get(), ptr.getOffset(), ptr.getLength());
+                        expressionCount = evalIndex+1;
+                        ptrs[evalIndex] = new ImmutableBytesWritable();
+                        ptrs[evalIndex].set(ptr.get(), ptr.getOffset(), ptr.getLength());
                         estimatedByteSize += ptr.getLength() + (expression.getDataType().isFixedWidth() ? 0 : 1); // 1 extra for the separator byte.
                     }
-                    counter++;
                 } else if (tuple == null || tuple.isImmutable()) {
                     estimatedByteSize += getExpressionByteCount(expression);
-                    counter++;
-                } else {
+                } else { // Cannot yet be evaluated
                     return false;
                 }
             }
+            if (isPartialEval) {
+                this.partialEvalIndex = evalIndex; // Move counter forward
+            }
             
-            if (j == ptrs.length) {
+            if (evalIndex == ptrs.length) {
                 if (expressionCount == 0) {
                     ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
                     return true;
