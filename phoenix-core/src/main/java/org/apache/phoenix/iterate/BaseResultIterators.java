@@ -230,7 +230,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 !plan.getStatement().getHint().hasHint(HintNode.Hint.RANGE_SCAN) &&
                 cols < plan.getTableRef().getTable().getRowKeySchema().getFieldCount() &&
                 plan.getGroupBy().isOrderPreserving() && 
-                (plan.getStatement().isDistinct() || context.getAggregationManager().isEmpty()))
+                (context.getAggregationManager().isEmpty() || plan.getGroupBy().isUngroupedAggregate()))
             {
                 ScanUtil.andFilterAtEnd(context.getScan(),
                         new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(),
