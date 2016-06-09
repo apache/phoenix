@@ -507,4 +507,33 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testOrderByRVC() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String ddl = "create table test1 (testpk varchar not null primary key, l_quantity decimal(15,2), l_discount decimal(15,2))";
+        conn.createStatement().execute(ddl);
+
+        PreparedStatement stmt = conn.prepareStatement("upsert into test1 values ('a',0.1,0.9)");
+        stmt.execute();
+        stmt = conn.prepareStatement(" upsert into test1 values ('b',0.5,0.5)");
+        stmt.execute();
+        stmt = conn.prepareStatement(" upsert into test1 values ('c',0.9,0.1)");
+        stmt.execute();
+        conn.commit();
+
+        ResultSet rs;
+        stmt = conn.prepareStatement("select l_discount,testpk from test1 order by (l_discount,l_quantity)");
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals(0.1, rs.getDouble(1), 0.01);
+        assertEquals("c", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals(0.5, rs.getDouble(1), 0.01);
+        assertEquals("b", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals(0.9, rs.getDouble(1), 0.01);
+        assertEquals("a", rs.getString(2));
+    }
 }
