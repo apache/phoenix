@@ -199,8 +199,9 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from " + viewName + " where col1='f'");
         if (localIndex) {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, PTableType.TABLE) + " ['"
-                    + tenantId + "',1,'f']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
+                    + Bytes.toString(MetaDataUtil.getLocalIndexPhysicalName(SchemaUtil
+                            .getPhysicalHBaseTableName(tableName, isNamespaceMapped, PTableType.TABLE).getBytes())) + " ['"
+                    + tenantId + "',-32768,'f']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
         } else {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
