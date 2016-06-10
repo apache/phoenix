@@ -85,13 +85,12 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.tephra.util.TxUtils;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
-import org.apache.tephra.util.TxUtils;
 
 /**
  *
@@ -218,9 +217,10 @@ public class PhoenixRuntime {
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
             if (execCmd.isMapNamespace()) {
                 String srcTable = execCmd.getSrcTable();
+                System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
                 UpgradeUtil.upgradeTable(conn, srcTable);
                 Set<String> viewNames = MetaDataUtil.getViewNames(conn, srcTable);
-                System.out.println("Views found:"+viewNames);
+                System.out.println("upgrading following views:"+viewNames);
                 for (String viewName : viewNames) {
                     UpgradeUtil.upgradeTable(conn, viewName);
                 }
