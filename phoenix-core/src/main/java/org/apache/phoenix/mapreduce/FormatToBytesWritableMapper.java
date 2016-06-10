@@ -248,7 +248,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         if(columnIndexes.containsKey(cfn)) {
             return columnIndexes.get(cfn);
         }
-        throw new IOException("Unable to map cell to column index");
+        return -1;
     }
 
     /**
@@ -287,8 +287,14 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                 /*
                 The order of aggregation: type, index of column, length of value, value itself
                  */
-                outputStream.writeByte(cell.getTypeByte());
                 int i = findIndex(cell);
+                if(i == -1) {
+                    //That may happen when we load only local indexes. Since KV pairs for both
+                    // table and local index are going to the same physical table at that point
+                    // we skip those KVs that are not belongs to loca index
+                    continue;
+                }
+                outputStream.writeByte(cell.getTypeByte());
                 WritableUtils.writeVInt(outputStream, i);
                 WritableUtils.writeVInt(outputStream, cell.getValueLength());
                 outputStream.write(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
