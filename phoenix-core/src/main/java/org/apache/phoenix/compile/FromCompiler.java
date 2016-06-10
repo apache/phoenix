@@ -222,6 +222,10 @@ public class FromCompiler {
         return new SchemaResolver(connection, SchemaUtil.normalizeIdentifier(statement.getSchemaName()), true);
     }
 
+    public static ColumnResolver getResolverForSchema(String schema, PhoenixConnection connection) throws SQLException {
+        return new SchemaResolver(connection, SchemaUtil.normalizeIdentifier(schema), true);
+    }
+
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection) throws SQLException {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
         return visitor;
