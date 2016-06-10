@@ -1530,7 +1530,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public MetaDataMutationResult dropTable(final List<Mutation> tableMetaData, final PTableType tableType, final boolean cascade) throws SQLException {
+    public MetaDataMutationResult dropTable(final List<Mutation> tableMetaData, final PTableType tableType,
+            final boolean cascade) throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
         SchemaUtil.getVarChars(tableMetaData.get(0).getRow(), rowKeyMetadata);
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
@@ -1565,19 +1566,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         case TABLE_ALREADY_EXISTS:
             ReadOnlyProps props = this.getProps();
             boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
+            PTable table = result.getTable();
             if (dropMetadata) {
+                flushParentPhysicalTable(table);
                 dropTables(result.getTableNamesToDelete());
             }
             invalidateTables(result.getTableNamesToDelete());
             if (tableType == PTableType.TABLE) {
-                boolean isNamespaceMapped = result.getTable().isNamespaceMapped();
-                byte[] physicalName;
-                if (!isNamespaceMapped) {
-                    physicalName = SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
-                } else {
-                    physicalName = TableName.valueOf(schemaBytes, tableBytes).getName();
-                }
                 long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
+                byte[] physicalName = table.getPhysicalName().getBytes();
                 ensureViewIndexTableDropped(physicalName, timestamp);
                 ensureLocalIndexTableDropped(physicalName, timestamp);
                 tableStatsCache.invalidate(new ImmutableBytesPtr(physicalName));
@@ -1587,6 +1584,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             break;
         }
           return result;
+    }
+
+    /*
+     * PHOENIX-2915 while dropping index, flush data table to avoid stale WAL edits of indexes 1. Flush parent table if
+     * dropping view has indexes 2. Dropping table indexes 3. Dropping view indexes
+     */
+    private void flushParentPhysicalTable(PTable table) throws SQLException {
+        byte[] parentPhysicalTableName = null;
+        if (PTableType.VIEW == table.getType()) {
+            if (!table.getIndexes().isEmpty()) {
+                parentPhysicalTableName = table.getPhysicalName().getBytes();
+            }
+        } else if (PTableType.INDEX == table.getType()) {
+            PTable parentTable = getTable(null, table.getParentName().getString(), HConstants.LATEST_TIMESTAMP);
+            parentPhysicalTableName = parentTable.getPhysicalName().getBytes();
+        }
+        if (parentPhysicalTableName != null) {
+            flushTable(parentPhysicalTableName);
+        }
     }
 
     @Override
@@ -1665,31 +1681,35 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void ensureViewIndexTableCreated(PName tenantId, byte[] physicalIndexTableName, long timestamp,
             boolean isNamespaceMapped) throws SQLException {
-        PTable table;
         String name = Bytes
                 .toString(SchemaUtil.getParentTableNameFromIndexTable(physicalIndexTableName,
                         MetaDataUtil.VIEW_INDEX_TABLE_PREFIX))
                 .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
-        
+        PTable table = getTable(tenantId, name, timestamp);
+        ensureViewIndexTableCreated(table, timestamp, isNamespaceMapped);
+    }
+
+    private PTable getTable(PName tenantId, String fullTableName, long timestamp) throws SQLException {
+        PTable table;
         try {
             PMetaData metadata = latestMetaData;
             if (metadata == null) {
                 throwConnectionClosedException();
             }
-            table = metadata.getTableRef(new PTableKey(tenantId, name)).getTable();
-            if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be the case
+            table = metadata.getTableRef(new PTableKey(tenantId, fullTableName)).getTable();
+            if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be
+                                                     // the case
                 throw new TableNotFoundException(table.getSchemaName().getString(), table.getTableName().getString());
             }
         } catch (TableNotFoundException e) {
-            byte[] schemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(name));
-            byte[] tableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(name));
-            MetaDataMutationResult result = this.getTable(null, schemaName, tableName, HConstants.LATEST_TIMESTAMP, timestamp);
+            byte[] schemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(fullTableName));
+            byte[] tableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(fullTableName));
+            MetaDataMutationResult result = this.getTable(null, schemaName, tableName, HConstants.LATEST_TIMESTAMP,
+                    timestamp);
             table = result.getTable();
-            if (table == null) {
-                throw e;
-            }
+            if (table == null) { throw e; }
         }
-        ensureViewIndexTableCreated(table, timestamp, isNamespaceMapped);
+        return table;
     }
 
 	private void ensureViewIndexTableCreated(PTable table, long timestamp, boolean isNamespaceMapped)
