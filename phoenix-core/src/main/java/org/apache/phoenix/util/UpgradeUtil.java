@@ -19,14 +19,22 @@ package org.apache.phoenix.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
@@ -593,7 +601,8 @@ public class UpgradeUtil {
             byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
             PName physicalName = PNameFactory.newName(unprefixedSchemaName);
             // Reformulate key based on correct data
-            newBuf = MetaDataUtil.getViewIndexSequenceKey(tableName == null ? null : Bytes.toString(tableName), physicalName, nSaltBuckets).getKey();
+            newBuf = MetaDataUtil.getViewIndexSequenceKey(tableName == null ? null : Bytes.toString(tableName),
+                    physicalName, nSaltBuckets, false).getKey();
         } else {
             newBuf = new byte[length + 1];
             System.arraycopy(buf, offset, newBuf, SaltingUtil.NUM_SALTING_BYTES, length);
@@ -1450,10 +1459,23 @@ public class UpgradeUtil {
                 admin.deleteSnapshot(snapshotName);
             }
         }
+
+        byte[] tableKey = SchemaUtil.getTableKey(null, SchemaUtil.getSchemaNameFromFullName(phoenixTableName),
+                SchemaUtil.getTableNameFromFullName(phoenixTableName));
+        List<Cell> columnCells = metatable.get(new Get(tableKey))
+                .getColumnCells(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
+        if (ts == null) {
+            if (!columnCells.isEmpty()) {
+                ts = columnCells.get(0).getTimestamp();
+            } else {
+                throw new IllegalArgumentException(
+                        "Timestamp passed is null and cannot derive timestamp for " + tableKey + " from meta table!!");
+            }
+        }
         // Update flag to represent table is mapped to namespace
-        logger.info(String.format("Updating meta information of phoenix table '%s' to map to namespace..", phoenixTableName));
-        Put put = new Put(SchemaUtil.getTableKey(null, SchemaUtil.getSchemaNameFromFullName(phoenixTableName),
-                SchemaUtil.getTableNameFromFullName(phoenixTableName)), ts);
+        logger.info(String.format("Updating meta information of phoenix table '%s' to map to namespace..",
+                phoenixTableName));
+        Put put = new Put(tableKey, ts);
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES,
                 PBoolean.INSTANCE.toBytes(Boolean.TRUE));
         metatable.put(put);
@@ -1558,16 +1580,40 @@ public class UpgradeUtil {
                     if (updateLink) {
                         logger.info(String.format("Updating link information for index '%s' ..", index.getName()));
                         updateLink(conn, srcTableName, destTableName);
+                        conn.commit();
                     }
                     conn.getQueryServices().clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY,
                             index.getSchemaName().getBytes(), index.getTableName().getBytes(),
                             PhoenixRuntime.getCurrentScn(readOnlyProps));
                 }
+                updateIndexesSequenceIfPresent(conn, table);
+                conn.commit();
 
             } else {
                 throw new RuntimeException("Error: problem occured during upgrade. Table is not upgraded successfully");
             }
         }
+    }
+
+    private static void updateIndexesSequenceIfPresent(PhoenixConnection connection, PTable dataTable)
+            throws SQLException {
+        PName tenantId = connection.getTenantId();
+        PName physicalName = dataTable.getPhysicalName();
+        PName oldPhysicalName = PNameFactory.newName(
+                physicalName.toString().replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR));
+        String oldSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(oldPhysicalName, false);
+        String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
+        String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
+        // create new entry with new schema format
+        String upsert = "UPSERT INTO " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " SELECT " + TENANT_ID + ",\'"
+                + newSchemaName + "\',\'" + newSequenceName + "\'," + START_WITH + "," + CURRENT_VALUE + ","
+                + INCREMENT_BY + "," + CACHE_SIZE + "," + MIN_VALUE + "," + MAX_VALUE + "," + CYCLE_FLAG + ","
+                + LIMIT_REACHED_FLAG + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
+                + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '"
+                + oldSchemaName + "'";
+        connection.createStatement().executeUpdate(upsert);
+        // delete old sequence
+        MetaDataUtil.deleteViewIndexSequences(connection, oldPhysicalName, false);
     }
 
     private static void updateLink(PhoenixConnection conn, String srcTableName, String destTableName)
@@ -1578,7 +1624,6 @@ public class UpgradeUtil {
         updateLinkStatment.setString(1, srcTableName);
         deleteLinkStatment.execute();
         updateLinkStatment.execute();
-        conn.commit();
     }
 
 }

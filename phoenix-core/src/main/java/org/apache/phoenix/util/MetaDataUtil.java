@@ -66,6 +66,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
@@ -389,18 +390,25 @@ public class MetaDataUtil {
         }
     }
 
-    public static String getViewIndexSchemaName(PName physicalName) {
-        return VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString();
+    public static String getViewIndexSequenceSchemaName(PName physicalName, boolean isNamespaceMapped) {
+        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_PREFIX + physicalName.getString(); }
+        return SchemaUtil.getSchemaNameFromFullName(physicalName.toString());
     }
- 
-    public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets) {
+
+    public static String getViewIndexSequenceName(PName physicalName, PName tenantId, boolean isNamespaceMapped) {
+        if (!isNamespaceMapped) { return VIEW_INDEX_SEQUENCE_NAME_PREFIX + (tenantId == null ? "" : tenantId); }
+        return SchemaUtil.getTableNameFromFullName(physicalName.toString()) + VIEW_INDEX_SEQUENCE_NAME_PREFIX;
+    }
+
+    public static SequenceKey getViewIndexSequenceKey(String tenantId, PName physicalName, int nSaltBuckets,
+            boolean isNamespaceMapped) {
         // Create global sequence of the form: <prefixed base table name><tenant id>
         // rather than tenant-specific sequence, as it makes it much easier
         // to cleanup when the physical table is dropped, as we can delete
         // all global sequences leading with <prefix> + physical name.
-        String schemaName = getViewIndexSchemaName(physicalName);
-        String tableName = VIEW_INDEX_SEQUENCE_NAME_PREFIX + (tenantId == null ? "" : tenantId);
-        return new SequenceKey(null, schemaName, tableName, nSaltBuckets);
+        String schemaName = getViewIndexSequenceSchemaName(physicalName, isNamespaceMapped);
+        String tableName = getViewIndexSequenceName(physicalName, PNameFactory.newName(tenantId), isNamespaceMapped);
+        return new SequenceKey(isNamespaceMapped ? tenantId : null, schemaName, tableName, nSaltBuckets);
     }
 
     public static PDataType getViewIndexIdDataType() {
@@ -459,13 +467,15 @@ public class MetaDataUtil {
     	return families;
     }
 
+    public static void deleteViewIndexSequences(PhoenixConnection connection, PName name, boolean isNamespaceMapped)
+            throws SQLException {
+        String schemaName = getViewIndexSequenceSchemaName(name, isNamespaceMapped);
+        String sequenceName = getViewIndexSequenceName(name, null, isNamespaceMapped);
+        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE "
+                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
+                + (schemaName.length() > 0 ? "='" + schemaName + "'" : " IS NULL") + (isNamespaceMapped
+                        ? " AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + " = '" + sequenceName + "'" : ""));
 
-    public static void deleteViewIndexSequences(PhoenixConnection connection, PName name) throws SQLException {
-        String schemaName = getViewIndexSchemaName(name);
-        connection.createStatement().executeUpdate("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + 
-                " WHERE " + PhoenixDatabaseMetaData.TENANT_ID + " IS NULL AND " + 
-                PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + schemaName + "'");
-        
     }
     
     /**
