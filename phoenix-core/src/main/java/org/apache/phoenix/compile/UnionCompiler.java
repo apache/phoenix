@@ -60,7 +60,7 @@ public class UnionCompiler {
             List<? extends ColumnProjector> pros =  plan.getProjector().getColumnProjectors();
             for (int j = 0; j < columnCount; j++) {
                 PDataType type = pros.get(j).getExpression().getDataType();
-                if (!type.isCoercibleTo(selectTypes.get(j))) {
+                if (type != null && !type.isCoercibleTo(selectTypes.get(j))) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS).setMessage(".").build().buildException();
                 }
             }
