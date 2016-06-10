@@ -37,6 +37,7 @@ import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -116,21 +117,32 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         this.viewIndexPhysicalTableName = MetaDataUtil.getLocalIndexTableName(physicalTableName.getNameAsString());
     }
 
-
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
         createBaseTable(tableName, false, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
-        conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME + " AS SELECT * FROM " + tableName);
-        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + VIEW_NAME + " (v1)");
+        String viewName = schemaName + "." + VIEW_NAME;
+        conn1.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + " (v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_schema like '%"
+                + schemaName + "%'";
+        ResultSet rs = conn1.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(MetaDataUtil.getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped),
+                rs.getString("sequence_schema"));
+        assertEquals(MetaDataUtil.getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped),
+                rs.getString("sequence_name"));
+        assertEquals(-32767, rs.getInt("current_value"));
+        assertEquals(1, rs.getInt("increment_by"));
+        assertFalse(rs.next());
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        conn1.createStatement().execute("DROP VIEW " + VIEW_NAME);
+        conn1.createStatement().execute("DROP VIEW " + viewName);
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(viewIndexPhysicalTableName)));
-        ResultSet rs = conn2.createStatement().executeQuery("SELECT "
+        rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);

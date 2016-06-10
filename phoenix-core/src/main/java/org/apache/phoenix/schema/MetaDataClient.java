@@ -211,10 +211,9 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.UpgradeUtil;
+import org.apache.tephra.TxConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.tephra.TxConstants;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
@@ -1432,7 +1431,8 @@ public class MetaDataClient {
                     String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
                     PName physicalName = dataTable.getPhysicalName();
                     int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
-                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName, nSequenceSaltBuckets);
+                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName,
+                            nSequenceSaltBuckets, dataTable.isNamespaceMapped());
                     // if scn is set create at scn-1, so we can see the sequence or else use latest timestamp (so that latest server time is used)
                     long sequenceTimestamp = scn!=null ? scn-1 : HConstants.LATEST_TIMESTAMP;
                     createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
@@ -1511,7 +1511,16 @@ public class MetaDataClient {
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         String tenantId =
                 connection.getTenantId() == null ? null : connection.getTenantId().getString();
-        return createSequence(tenantId, statement.getSequenceName().getSchemaName(), statement
+        String schemaName=statement.getSequenceName().getSchemaName();
+        if (SchemaUtil.isNamespaceMappingEnabled(null, connection.getQueryServices().getProps())) {
+            if (schemaName == null || schemaName.equals(StringUtil.EMPTY_STRING)) {
+                schemaName = connection.getSchema();
+            }
+            if (schemaName != null) {
+                FromCompiler.getResolverForSchema(schemaName, connection);
+            }
+        }
+        return createSequence(tenantId, schemaName, statement
                 .getSequenceName().getTableName(), statement.ifNotExists(), startWith, incrementBy,
             cacheSize, statement.getCycle(), minValue, maxValue, timestamp);
     }
@@ -2576,7 +2585,7 @@ public class MetaDataClient {
                         if (tableType == PTableType.TABLE
                                 && (table.isMultiTenant() || hasViewIndexTable || hasLocalIndexTable)) {
     
-                            MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName());
+                            MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(), table.isNamespaceMapped());
                             if (hasViewIndexTable) {
                                 String viewIndexSchemaName = null;
                                 String viewIndexTableName = null;
@@ -3113,7 +3122,7 @@ public class MetaDataClient {
                             && Boolean.FALSE.equals(multiTenant)
                             && MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName())) {
                         connection.setAutoCommit(true);
-                        MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName());
+                        MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(), table.isNamespaceMapped());
                         // If we're not dropping metadata, then make sure no rows are left in
                         // our view index physical table.
                         // TODO: remove this, as the DROP INDEX commands run when the DROP VIEW
