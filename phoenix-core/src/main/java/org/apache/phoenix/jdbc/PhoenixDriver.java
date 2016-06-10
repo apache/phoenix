@@ -226,7 +226,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 }
             }
             String noUpgradeProp = info.getProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB);
-            if (!Boolean.TRUE.equals(noUpgradeProp)) {
+            if (!(Boolean.valueOf(noUpgradeProp))) {
                 boolean success = false;
                 SQLException sqlE = null;
                 try {
