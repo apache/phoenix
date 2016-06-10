@@ -189,7 +189,6 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
             }
         };
         expression.accept(visitor);
-        expression.reset();
     }
     
     @Override
