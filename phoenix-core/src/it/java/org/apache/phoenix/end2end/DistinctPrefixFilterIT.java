@@ -19,9 +19,10 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
-    private static String testTableF = generateRandomString();
-    private static String testTableV = generateRandomString();
-    private static String testSeq = testTableF + "_seq";
+    private static final String testTableF = generateRandomString();
+    private static final String testTableV = generateRandomString();
+    private static final String testSeq = testTableF + "_seq";
+    private static final String PREFIX = "SERVER DISTINCT PREFIX";
     private static Connection conn;
 
     @BeforeClass
@@ -118,104 +119,55 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testPlans() throws Exception {
-        final String PREFIX = "SERVER DISTINCT PREFIX";
-
         // use the filter even when the SkipScan filter is used
-        String dataSql = "SELECT DISTINCT prefix1, prefix2 FROM "+testTableF+ " WHERE prefix1 IN (1,2)";
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(PREFIX));
-
-        dataSql = "SELECT prefix1, 1, 2 FROM "+testTableF+" GROUP BY prefix1 HAVING prefix1 = 1";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(PREFIX));
-
-        dataSql = "SELECT prefix1 FROM "+testTableF+" GROUP BY prefix1, TRUNC(prefix1), TRUNC(prefix2)";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(PREFIX));
-
-        dataSql = "SELECT DISTINCT prefix1, prefix2 FROM "+testTableV+ " WHERE prefix1 IN ('1','2')";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(PREFIX));
-
-        dataSql = "SELECT prefix1, 1, 2 FROM "+testTableV+" GROUP BY prefix1 HAVING prefix1 = '1'";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(PREFIX));
+        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTableF+ " WHERE prefix1 IN (1,2)", true);
+        testPlan("SELECT prefix1, 1, 2 FROM "+testTableF+" GROUP BY prefix1 HAVING prefix1 = 1", true);
+        testPlan("SELECT prefix1 FROM "+testTableF+" GROUP BY prefix1, TRUNC(prefix1), TRUNC(prefix2)", true);
+        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTableV+ " WHERE prefix1 IN ('1','2')", true);
+        testPlan("SELECT prefix1, 1, 2 FROM "+testTableV+" GROUP BY prefix1 HAVING prefix1 = '1'", true);
+        // make sure we do not mis-optimize this case
+        testPlan("SELECT DISTINCT SUM(prefix1) FROM "+testTableF+" GROUP BY prefix1", false);
 
         testCommonPlans(testTableF, PREFIX);
         testCommonPlans(testTableV, PREFIX);
     }
 
     private void testCommonPlans(String testTable, String contains) throws Exception {
+        testPlan("SELECT DISTINCT prefix1 FROM "+testTable, true);
 
-        String dataSql = "SELECT DISTINCT prefix1 FROM "+testTable;
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT /*+ RANGE_SCAN */ DISTINCT prefix1 FROM "+testTable;
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT DISTINCT prefix1, prefix2 FROM "+testTable;
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(contains));
-
+        // COUNT(DISTINCT) is not yet optimized
+        testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable, false);
+        testPlan("SELECT COUNT(DISTINCT prefix1), COUNT(DISTINCT prefix2) FROM "+testTable, false);
+        testPlan("SELECT COUNT(DISTINCT prefix1), COUNT(DISTINCT (prefix1,prefix2)) FROM "+testTable, false);
+        // a plain aggregate, cannot optimize
+        testPlan("SELECT COUNT(prefix1), COUNT(DISTINCT prefix1) FROM "+testTable, false);
+        testPlan("SELECT COUNT(*) FROM (SELECT DISTINCT(prefix1) FROM "+testTable+")", true);
+        testPlan("SELECT /*+ RANGE_SCAN */ DISTINCT prefix1 FROM "+testTable, false);
+        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable, true);
         // use the filter even when the boolean expression filter is used
-        dataSql = "SELECT DISTINCT prefix1, prefix2 FROM "+testTable+ " WHERE col1 > 0.5";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(contains));
-
+        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable+ " WHERE col1 > 0.5", true);
         // do not use the filter when the distinct is on the entire key
-        dataSql = "SELECT DISTINCT prefix1, prefix2, prefix3 FROM "+testTable;
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
+        testPlan("SELECT DISTINCT prefix1, prefix2, prefix3 FROM "+testTable, false);
+        testPlan("SELECT DISTINCT (prefix1, prefix2, prefix3) FROM "+testTable, false);
+        testPlan("SELECT DISTINCT prefix1, prefix2, col1, prefix3 FROM "+testTable, false);
+        testPlan("SELECT DISTINCT prefix1, prefix2, col1 FROM "+testTable, false);
+        testPlan("SELECT DISTINCT col1, prefix1, prefix2 FROM "+testTable, false);;
+        testPlan("SELECT prefix1 FROM "+testTable+" GROUP BY prefix1", true);
+        testPlan("SELECT COUNT(prefix1) FROM (SELECT prefix1 FROM "+testTable+" GROUP BY prefix1)", true);
+        // aggregate over the group by, cannot optimize
+        testPlan("SELECT prefix1, count(*) FROM "+testTable+" GROUP BY prefix1", false);
+        testPlan("SELECT prefix1 FROM "+testTable+" GROUP BY prefix1, prefix2", true);
+        // again using full key
+        testPlan("SELECT prefix1 FROM "+testTable+" GROUP BY prefix1, prefix2, prefix3", false);
+        testPlan("SELECT (prefix1, prefix2, prefix3) FROM "+testTable+" GROUP BY (prefix1, prefix2, prefix3)", false);
+        testPlan("SELECT prefix1, 1, 2 FROM "+testTable+" GROUP BY prefix1", true);
+        testPlan("SELECT prefix1 FROM "+testTable+" GROUP BY prefix1, col1", false);
+        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable+" WHERE col1 > 0.5", true);
+    }
 
-        dataSql = "SELECT DISTINCT (prefix1, prefix2, prefix3) FROM "+testTable;
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT DISTINCT prefix1, prefix2, col1, prefix3 FROM "+testTable;
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT DISTINCT prefix1, prefix2, col1 FROM "+testTable;
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT DISTINCT col1, prefix1, prefix2 FROM "+testTable;
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT prefix1 FROM "+testTable+" GROUP BY prefix1";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT prefix1, count(*) FROM "+testTable+" GROUP BY prefix1";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT prefix1 FROM "+testTable+" GROUP BY prefix1, prefix2";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT prefix1 FROM "+testTable+" GROUP BY prefix1, prefix2, prefix3";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT (prefix1, prefix2, prefix3) FROM "+testTable+" GROUP BY (prefix1, prefix2, prefix3)";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT prefix1, 1, 2 FROM "+testTable+" GROUP BY prefix1";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT prefix1 FROM "+testTable+" GROUP BY prefix1, col1";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertFalse(QueryUtil.getExplainPlan(rs).contains(contains));
-
-        dataSql = "SELECT DISTINCT prefix1, prefix2 FROM "+testTable+" WHERE col1 > 0.5";
-        rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertTrue(QueryUtil.getExplainPlan(rs).contains(contains));
+    private void testPlan(String query, boolean optimizable) throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+        assertEquals(QueryUtil.getExplainPlan(rs).contains(PREFIX), optimizable);
     }
 
     @Test
@@ -260,6 +212,9 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         // mix distinct and boolean expression filters
         testSkipRange("SELECT %s DISTINCT prefix1, prefix2 FROM " + testTableF + " WHERE col1 > 0.99 AND prefix1 IN (1,2)", -1);
 
+        testCount("SELECT %s COUNT(DISTINCT prefix1), COUNT(DISTINCT (prefix1, prefix2)) FROM " + testTableF + " WHERE prefix2=2", 3, 3);
+        testCount("SELECT %s COUNT(DISTINCT prefix1), COUNT(DISTINCT (prefix1, prefix2)) FROM " + testTableF + " WHERE prefix1=2", 1, 3);
+
         // mix distinct prefix and SkipScan filters
         testSkipRange("SELECT %s DISTINCT prefix1, prefix2 FROM " + testTableV + " WHERE prefix1 IN ('1','2')", 6);
         testSkipRange("SELECT %s DISTINCT prefix1, prefix2 FROM " + testTableV + " WHERE prefix1 IN ('3','22')", 5);
@@ -282,6 +237,14 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testSkipRange("SELECT %s DISTINCT prefix1, prefix2 FROM " + testTable + " ORDER BY prefix1, prefix2 DESC", 11);
         testSkipRange("SELECT %s DISTINCT prefix1, prefix2 FROM " + testTable + " WHERE col1 > 0.99", -1);
         testSkipRange("SELECT %s DISTINCT prefix1, prefix2 FROM " + testTable + " WHERE col1 > 0.99 ORDER BY prefix1, prefix2 DESC", -1);
+
+        testCount("SELECT %s COUNT(DISTINCT prefix1) FROM " + testTable, 4);
+        testCount("SELECT COUNT(*) FROM (SELECT %s DISTINCT prefix1, prefix2 FROM " + testTable + ")", 11);
+        testCount("SELECT %s COUNT(DISTINCT prefix1) FROM " + testTable + " WHERE col1 > 0.99", -1);
+        testCount("SELECT COUNT(*) FROM (SELECT %s DISTINCT prefix1, prefix2 FROM " + testTable + " WHERE col1 > 0.99)", -1);
+        testCount("SELECT %s COUNT(DISTINCT prefix1), COUNT(DISTINCT prefix2) FROM " + testTable, 4, 4);
+        testCount("SELECT %s COUNT(DISTINCT prefix1), COUNT(DISTINCT (prefix1, prefix2)) FROM " + testTable, 4, 11);
+        testCount("SELECT %s COUNT(DISTINCT prefix1), COUNT(DISTINCT (prefix1, prefix2)) FROM " + testTable + " WHERE col1 > 0.99", -1, -1);
     }
 
     @Test
@@ -333,6 +296,28 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
             count1++;
         }
         assertEquals(count, count1);
+    }
+
+    private void testCount(String q, int... expected) throws SQLException {
+        String q1 = String.format(q, "");
+        PreparedStatement stmt = conn.prepareStatement(q1);
+        ResultSet res = stmt.executeQuery();
+        int[] count = new int[expected.length];
+        assertTrue(res.next());
+        for (int i=0; i<expected.length; i++) {
+            count[i] = res.getInt(i+1);
+            if (expected[i] > 0) assertEquals(expected[i], count[i]);
+        }
+        assertFalse(res.next());
+
+        q1 = String.format(q, "/*+ RANGE_SCAN */");
+        stmt = conn.prepareStatement(q1);
+        res = stmt.executeQuery();
+        assertTrue(res.next());
+        for (int i=0; i<expected.length; i++) {
+            assertEquals(count[i], res.getInt(i+1));
+        }
+        assertFalse(res.next());
     }
 
     private static void insertPrefixF(int prefix1, int prefix2) throws SQLException {
