@@ -21,10 +21,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
-import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
 import org.apache.phoenix.expression.function.ScalarFunction;
-import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
@@ -232,19 +230,6 @@ public class OrderPreservingTracker {
                 return super.visit(node);
             }
             return expression.accept(this);
-        }
-
-        @Override
-        public Iterator<Expression> visitEnter(SingleAggregateFunction node) {
-            return node instanceof DistinctCountAggregateFunction ?
-                    node.getChildren().iterator() :
-                    Iterators.<Expression> emptyIterator();
-        }
-
-        @Override
-        public Info visitLeave(SingleAggregateFunction node, List<Info> l) {
-            if (l.isEmpty()) { return null; }
-            return l.get(0);
         }
 
         @Override
