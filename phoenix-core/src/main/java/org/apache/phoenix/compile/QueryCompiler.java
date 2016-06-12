@@ -174,19 +174,16 @@ public class QueryCompiler {
                 }
             }
             QueryPlan subPlan = compileSubquery(subSelect, true);
-            TupleProjector projector = new TupleProjector(subPlan.getProjector());
-            subPlan = new TupleProjectionPlan(subPlan, projector, null);
             plans.add(subPlan);
         }
-        UnionCompiler.checkProjectionNumAndTypes(plans);
-
-        TableRef tableRef = UnionCompiler.contructSchemaTable(statement, plans.get(0), select.hasWildcard() ? null : select.getSelect());
+        TableRef tableRef = UnionCompiler.contructSchemaTable(statement, plans,
+            select.hasWildcard() ? null : select.getSelect());
         ColumnResolver resolver = FromCompiler.getResolver(tableRef);
         StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
-
         QueryPlan plan = compileSingleFlatQuery(context, select, statement.getParameters(), false, false, null, null, false);
-        plan = new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(), plan.getOffset(),
-                plan.getOrderBy(), GroupBy.EMPTY_GROUP_BY, plans, context.getBindManager().getParameterMetaData());
+        plan = new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(),
+            plan.getOffset(), plan.getOrderBy(), GroupBy.EMPTY_GROUP_BY, plans,
+            context.getBindManager().getParameterMetaData());
         return plan;
     }
 
