@@ -145,6 +145,10 @@ public class PChar extends PDataType<String> {
         throw newIllegalDataException("CHAR types may only contain single byte characters (" + o + ")");
       }
       super.coerceBytes(ptr, o, actualType, actualMaxLength, actualScale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
+      if (ptr.getLength() > 0 && desiredMaxLength != null &&
+              desiredMaxLength > ptr.getLength()) {
+          pad(ptr, desiredMaxLength, expectedModifier);
+      }
     }
 
     @Override
