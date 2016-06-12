@@ -155,6 +155,18 @@ public class DistinctPrefixFilterTest extends TestCase {
         assertSeekAndHint("00005", f, "00005\01");
     }
 
+    public void testVariableWithNull() throws Exception {
+        Filter f = createFilter(new int[]{-2,-2}, 1);
+        assertInclude("\00aa", f);
+        assertSeekAndHint("\00aa", f, "\01");
+        assertSeekAndHint("\00aa", f, "\01");
+
+        f = createFilter(new int[]{-2,-2}, 2);
+        assertInclude("\00\00", f);
+        assertSeekAndHint("\00\00", f, "\00\00\01");
+        assertSeekAndHint("\00\00", f, "\00\00\01");
+    }
+
     public void testMultiVariableWidth() throws Exception {
         Filter f = createFilter(new int[]{-5,-4}, 1);
         assertInclude("00000\00aaaa", f);
