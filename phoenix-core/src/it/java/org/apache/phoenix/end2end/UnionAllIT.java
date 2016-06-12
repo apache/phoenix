@@ -952,4 +952,89 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testCoerceExpr() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        String ddl = "create table user ( id integer not null primary key desc, " +
+                "firstname char(8), lastname varchar, sales double)";
+        createTestTable(getUrl(), ddl);
+        String dml = "upsert into user values (?, ?, ?, ?)";
+        PreparedStatement  stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "sam");
+        stmt.setString(3, "johnson");
+        stmt.setDouble(4, 100.6798);
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "ann");
+        stmt.setString(3, "wiely");
+        stmt.setDouble(4, 10.67);
+        stmt.execute();
+        conn.commit();
+
+        ddl = "create table person (id bigint not null primary key, " +
+                "firstname char(10), lastname varchar(10), sales decimal)";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into person values (?, ?, ?, ?)";
+        stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "john");
+        stmt.setString(3, "doe");
+        stmt.setBigDecimal(4, BigDecimal.valueOf(467.894745));
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "jane");
+        stmt.setString(3, "doe");
+        stmt.setBigDecimal(4, BigDecimal.valueOf(88.89474501));
+        stmt.execute();
+        conn.commit();
+
+        String query = "select id, cast('foo' as char(10)) firstname, lastname, sales " +
+                "from person union all select * from user";
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(467.894745), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(88.89474501), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("ann", rs.getString(2).trim());
+            assertEquals("wiely", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(10.67), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("sam", rs.getString(2).trim());
+            assertEquals("johnson", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(100.6798), rs.getBigDecimal(4));
+            assertFalse(rs.next());
+
+            query = "select id, cast('foo' as char(10)) firstname, lastname, sales from person";
+            pstmt = conn.prepareStatement(query);
+            rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3));
+            assertEquals(BigDecimal.valueOf(467.894745), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3));
+            assertEquals(BigDecimal.valueOf(88.89474501), rs.getBigDecimal(4));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }
