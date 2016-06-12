@@ -14,9 +14,7 @@ import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ScanUtil;
 
 public class DistinctPrefixFilter extends FilterBase implements Writable {
     private static byte VERSION = 1;
@@ -24,7 +22,7 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
     private RowKeySchema schema;
     private int prefixLengh;
     private boolean filterAll = false;
-    private final ImmutableBytesWritable lastKey = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
+    private final ImmutableBytesWritable lastKey = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY, -1, -1);
 
     public DistinctPrefixFilter() {
     }
