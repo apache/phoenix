@@ -834,6 +834,31 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testSelectDistinctAndOrderBy() throws Exception {
+        long ts = nextTimestamp();
+        String query = "select /*+ RANGE_SCAN */ count(distinct organization_id) from atable order by organization_id";
+        String query1 = "select count(distinct organization_id) from atable order by organization_id";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.executeQuery();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            statement.executeQuery();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
+    }
+
+    @Test
     public void testOrderByNotInSelectDistinctAgg() throws Exception {
         long ts = nextTimestamp();
         String query = "SELECT distinct count(1) from atable order by x_integer";
