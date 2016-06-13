@@ -293,5 +293,28 @@ public class CoalesceFunctionIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.wasNull());
     }
 
+    @Test
+    public void testCoalesceInRowKeyColumn() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("CREATE TABLE coalesceTest(k1 decimal, k2 decimal, constraint pk primary key (k1,k2))");
+        conn.createStatement().execute("UPSERT INTO coalesceTest(k2) VALUES (1)");
+        conn.createStatement().execute("UPSERT INTO coalesceTest VALUES (2,2)");
+        conn.createStatement().execute("UPSERT INTO coalesceTest VALUES (3,3)");
+        conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT coalesce(k1, 1) ,k2 FROM coalesceTest");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(1, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+        assertTrue(rs.next());
+        assertEquals(3, rs.getInt(1));
+        assertEquals(3, rs.getInt(2));
+        assertFalse(rs.next());
+    }
+
 
 }

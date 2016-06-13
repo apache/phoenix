@@ -129,9 +129,11 @@ public class RowKeyColumnExpression  extends ColumnExpression {
             } else {
                 ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             }
-            return true;
+        } else {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
         }
-        return false;
+        // Always return true because we're always able to evaluate a row key column
+        return true;
     }
 
     @Override
