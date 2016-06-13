@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.NumberUtil;
 
@@ -303,6 +304,13 @@ public class PDecimal extends PRealNumber<BigDecimal> {
       Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
     if (ptr.getLength() == 0) {
       return true;
+    }
+    // Any numeric type fits into a DECIMAL
+    if (srcType != PDecimal.INSTANCE) {
+        if(!srcType.isCoercibleTo(this)) {
+            throw new IllegalArgumentException(TypeMismatchException.newException(srcType, this));
+        }
+        return true;
     }
     // Use the scale from the value if provided, as it prevents a deserialization.
     // The maxLength and scale for the underlying expression are ignored, because they
