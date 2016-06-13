@@ -172,25 +172,6 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     count shouldEqual 1L
   }
 
-  test("Using a predicate referring to a non-existent column should fail") {
-    intercept[Exception] {
-      val sqlContext = new SQLContext(sc)
-
-      val df1 = sqlContext.phoenixTableAsDataFrame(
-        SchemaUtil.getEscapedArgument("table3"),
-        Array("id", "col1"),
-        predicate = Some("foo = bar"),
-        conf = hbaseConfiguration)
-
-      df1.registerTempTable("table3")
-
-      val sqlRdd = sqlContext.sql("SELECT * FROM table3")
-
-      // we have to execute an action before the predicate failure can occur
-      val count = sqlRdd.count()
-    }.getCause shouldBe a[ColumnNotFoundException]
-  }
-
   test("Can create schema RDD with predicate that will never match") {
     val sqlContext = new SQLContext(sc)
 
