@@ -875,4 +875,51 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testBug2961() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        
+        conn.createStatement().execute("CREATE TABLE test2961 (\n" + 
+                "ACCOUNT_ID VARCHAR NOT NULL,\n" + 
+                "BUCKET_ID VARCHAR NOT NULL,\n" + 
+                "OBJECT_ID VARCHAR NOT NULL,\n" + 
+                "OBJECT_VERSION VARCHAR NOT NULL,\n" + 
+                "LOC VARCHAR,\n" + 
+                "CONSTRAINT PK PRIMARY KEY (ACCOUNT_ID, BUCKET_ID, OBJECT_ID, OBJECT_VERSION DESC))");
+        conn.createStatement().execute("UPSERT INTO test2961  (ACCOUNT_ID, BUCKET_ID, OBJECT_ID, OBJECT_VERSION, LOC) VALUES ('acct1', 'bucket1', 'obj1', '1111', 'loc1')");
+        ResultSet rs = conn.createStatement().executeQuery("select ACCOUNT_ID, BUCKET_ID, OBJECT_VERSION  from test2961  WHERE ACCOUNT_ID = 'acct1' and BUCKET_ID = 'bucket1' and OBJECT_VERSION = '1111'");
+        assertTrue(rs.next());
+        rs = conn.createStatement().executeQuery("select ACCOUNT_ID, BUCKET_ID, OBJECT_VERSION  from test2961  WHERE ACCOUNT_ID = 'acct1' and BUCKET_ID = 'bucket1' and OBJECT_ID = 'obj1'");
+        assertTrue(rs.next());
+        rs = conn.createStatement().executeQuery("select ACCOUNT_ID, BUCKET_ID, OBJECT_VERSION  from test2961  WHERE ACCOUNT_ID = 'acct1' and BUCKET_ID = 'bucket1' and OBJECT_VERSION = '1111'  and OBJECT_ID = 'obj1'");
+        assertTrue(rs.next());
+
+        conn.createStatement().execute("UPSERT INTO test2961  (ACCOUNT_ID, BUCKET_ID, OBJECT_ID, OBJECT_VERSION, LOC) VALUES ('acct1', 'bucket1', 'obj1', '2222', 'loc1')");
+        rs = conn.createStatement().executeQuery("SELECT  OBJ.ACCOUNT_ID, OBJ.BUCKET_ID, OBJ.OBJECT_ID, OBJ.OBJECT_VERSION, OBJ.LOC "
+                + "FROM ( SELECT ACCOUNT_ID, BUCKET_ID, OBJECT_ID, MAX(OBJECT_VERSION) AS MAXVER"
+                + "       FROM test2961 GROUP BY ACCOUNT_ID, BUCKET_ID, OBJECT_ID) AS X "
+                + "       INNER JOIN test2961 AS OBJ ON X.ACCOUNT_ID = OBJ.ACCOUNT_ID AND X.BUCKET_ID = OBJ.BUCKET_ID AND X.OBJECT_ID = OBJ.OBJECT_ID AND X.MAXVER = OBJ.OBJECT_VERSION");
+        assertTrue(rs.next());
+        assertEquals("2222", rs.getString(4));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT  OBJ.ACCOUNT_ID, OBJ.BUCKET_ID, OBJ.OBJECT_ID, OBJ.OBJECT_VERSION, OBJ.LOC "
+                + "FROM ( SELECT ACCOUNT_ID, BUCKET_ID, OBJECT_ID, MAX(OBJECT_VERSION) AS MAXVER "
+                + "       FROM test2961 GROUP BY ACCOUNT_ID, BUCKET_ID, OBJECT_ID) AS X "
+                + "       INNER JOIN test2961 AS OBJ ON X.ACCOUNT_ID = OBJ.ACCOUNT_ID AND X.OBJECT_ID = OBJ.OBJECT_ID AND X.MAXVER = OBJ.OBJECT_VERSION");
+        assertTrue(rs.next());
+        assertEquals("2222", rs.getString(4));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT  OBJ.ACCOUNT_ID, OBJ.BUCKET_ID, OBJ.OBJECT_ID, OBJ.OBJECT_VERSION, OBJ.LOC "
+                + "FROM ( SELECT ACCOUNT_ID, BUCKET_ID, OBJECT_ID, MAX(OBJECT_VERSION) AS MAXVER "
+                + "       FROM test2961 GROUP BY ACCOUNT_ID, BUCKET_ID, OBJECT_ID) AS X "
+                + "       INNER JOIN test2961 AS OBJ ON X.ACCOUNT_ID = OBJ.ACCOUNT_ID AND X.BUCKET_ID = OBJ.BUCKET_ID AND  X.MAXVER = OBJ.OBJECT_VERSION");
+        assertTrue(rs.next());
+        assertEquals("2222", rs.getString(4));
+        assertFalse(rs.next());
+    }
 }
