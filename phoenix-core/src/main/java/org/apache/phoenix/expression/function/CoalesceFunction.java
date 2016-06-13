@@ -28,8 +28,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ExpressionUtil;
 
 
@@ -81,10 +81,10 @@ public class CoalesceFunction extends ScalarFunction {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         boolean evaluated = children.get(0).evaluate(tuple, ptr);
-        if (evaluated) {
+        if (evaluated && ptr.getLength() > 0) {
             return true;
         }
-        if (tuple.isImmutable()) {
+        if (evaluated || tuple.isImmutable()) {
             Expression secondChild = children.get(1);
             if (secondChild.evaluate(tuple, ptr)) {
                 // Coerce the type of the second child to the type of the first child
