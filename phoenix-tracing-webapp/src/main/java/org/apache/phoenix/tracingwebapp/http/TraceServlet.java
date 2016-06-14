@@ -56,6 +56,7 @@ public class TraceServlet extends HttpServlet {
     String limit = request.getParameter("limit");
     String traceid = request.getParameter("traceid");
     String parentid = request.getParameter("parentid");
+    String traceStatus = request.getParameter("status");
     String jsonObject = "{}";
     if ("getall".equals(action)) {
       jsonObject = getAll(limit);
@@ -65,6 +66,8 @@ public class TraceServlet extends HttpServlet {
       jsonObject = getCount(DEFAULT_COUNTBY);
     } else if ("searchTrace".equals(action)) {
       jsonObject = searchTrace(parentid, traceid, LOGIC_OR);
+    } else if ("setTrace".equals(action)) {
+      jsonObject = traceON(traceStatus);
     } else {
       jsonObject = "{ \"Server\": \"Phoenix Tracing Web App\", \"API version\": 0.1 }";
     }
@@ -87,6 +90,17 @@ public class TraceServlet extends HttpServlet {
     return getJson(json);
   }
 
+  //set trace on and off
+  protected String traceON(String status) {
+    String json = null;
+    String sqlQuery = "TRACE ON";
+    if (status.equals("OFF")){
+      sqlQuery = "TRACE OFF";
+    }
+    json = getResults(sqlQuery);
+    return json;
+  }
+  
   //get count on traces can pick on param to count
   protected String getCount(String countby) {
     String json = null;
@@ -149,4 +163,7 @@ public class TraceServlet extends HttpServlet {
     }
     return json;
   }
+  
+  
 }
+
