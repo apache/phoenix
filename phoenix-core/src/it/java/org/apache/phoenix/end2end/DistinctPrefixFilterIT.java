@@ -164,13 +164,14 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable+" WHERE col1 > 0.5", true);
 
         testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" HAVING COUNT(col1) > 10", false);
-        testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" ORDER BY COUNT(col1)", false);
+        testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" ORDER BY COUNT(col1)", true);
+        testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" ORDER BY COUNT(prefix1)", true);
+        testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" ORDER BY COUNT(prefix2)", true);
 
         // can't optimize the following, yet, even though it would be possible
         testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" HAVING COUNT(DISTINCT prefix2) > 10", false);
         testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" HAVING COUNT(DISTINCT prefix1) > 10", false);
         testPlan("SELECT COUNT(DISTINCT prefix1) / 10 FROM "+testTable, false);
-        testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" ORDER BY COUNT(prefix1)", false);
     }
 
     private void testPlan(String query, boolean optimizable) throws Exception {

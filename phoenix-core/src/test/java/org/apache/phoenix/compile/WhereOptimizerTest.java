@@ -2015,5 +2015,21 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(3)), context.getScan().getStartRow());
         assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), ByteUtil.nextKey(PInteger.INSTANCE.toBytes(3))), context.getScan().getStopRow());
     }
-    
+
+    @Test
+    public void testNoAggregatorForOrderBy() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute("create table test (pk1 integer not null, pk2 integer not null, constraint pk primary key (pk1,pk2))");
+        StatementContext context = compileStatement("select count(distinct pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        context = compileStatement("select sum(pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        context = compileStatement("select min(pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        context = compileStatement("select max(pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        // here the ORDER BY is not optimized away
+        context = compileStatement("select avg(pk1) from test order by count(distinct pk2)");
+        assertEquals(2, context.getAggregationManager().getAggregators().getAggregatorCount());
+    }
 }
