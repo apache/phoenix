@@ -77,7 +77,7 @@ public class GroupByCompiler {
                 return null;
             }
         };
-        public static final GroupByCompiler.GroupBy UNGROUPED_GROUP_BY = new GroupBy(new GroupByBuilder().setIsOrderPreserving(true)) {
+        public static final GroupByCompiler.GroupBy UNGROUPED_GROUP_BY = new GroupBy(new GroupByBuilder().setIsOrderPreserving(true).setIsUngroupedAggregate(true)) {
             @Override
             public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
                 return this;
@@ -332,11 +332,9 @@ public class GroupByCompiler {
                 // do not optimize if
                 // 1. we were asked not to optimize
                 // 2. there's any HAVING clause
-                // 3. there's any ORDER BY clause
-                // TODO: PHOENIX-2989 suggests some ways to optimize the latter two cases
+                // TODO: PHOENIX-2989 suggests some ways to optimize the latter case
                 if (statement.getHint().hasHint(Hint.RANGE_SCAN) ||
-                        statement.getHaving() != null ||
-                        !statement.getOrderBy().isEmpty()) {
+                        statement.getHaving() != null) {
                     return GroupBy.UNGROUPED_GROUP_BY;
                 }
                 groupByNodes = Lists.newArrayListWithExpectedSize(statement.getSelect().size());
