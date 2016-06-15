@@ -21,6 +21,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -36,8 +37,11 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.BeforeClass;
@@ -51,11 +55,12 @@ public class QueryTimeoutIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(700));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(10000));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -68,6 +73,31 @@ public class QueryTimeoutIT extends BaseOwnClusterHBaseManagedTimeIT {
         } finally {
             conn.close();
         }
+    }
+    
+    @Test
+    public void testSetRPCTimeOnConnection() throws Exception {
+        Properties overriddenProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        overriddenProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        overriddenProps.setProperty("hbase.rpc.timeout", Long.toString(100));
+        String url = QueryUtil.getConnectionUrl(overriddenProps, config, "longRunning");
+        Connection conn1 = DriverManager.getConnection(url, overriddenProps);
+        ConnectionQueryServices s1 = conn1.unwrap(PhoenixConnection.class).getQueryServices();
+        ReadOnlyProps configProps = s1.getProps();
+        assertEquals("100", configProps.get("hbase.rpc.timeout"));
+        
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        Connection conn2 = DriverManager.getConnection(getUrl(), props);
+        ConnectionQueryServices s2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
+        assertFalse(s1 == s2);
+        Connection conn3 = DriverManager.getConnection(getUrl(), props);
+        ConnectionQueryServices s3 = conn3.unwrap(PhoenixConnection.class).getQueryServices();
+        assertTrue(s2 == s3);
+        
+        Connection conn4 = DriverManager.getConnection(url, overriddenProps);
+        ConnectionQueryServices s4 = conn4.unwrap(PhoenixConnection.class).getQueryServices();
+        assertTrue(s1 == s4);
     }
     
     @Test
