@@ -1,4 +1,27 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<?xml version='1.0'?>
+<!--
+
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
+
+-->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
@@ -7,52 +30,118 @@
     <version>4.8.0-HBase-1.1-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-server</artifactId>
-  <name>Phoenix Query Server</name>
-  <description>A query server for exposing Phoenix to thin clients</description>
-
-  <licenses>
-    <license>
-      <name>The Apache Software License, Version 2.0</name>
-      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-      <distribution>repo</distribution>
-      <comments />
-    </license>
-  </licenses>
-
-  <organization>
-    <name>Apache Software Foundation</name>
-    <url>http://www.apache.org</url>
-  </organization>
-
+  <name>Phoenix Server</name>
+  <description>Phoenix Server</description>
+  <packaging>jar</packaging>
   <properties>
+    <!-- Don't make a test-jar -->
+    <maven.test.skip>true</maven.test.skip>
+    <!-- Don't make a source-jar -->
+    <source.skip>true</source.skip>
+    <license.bundles.dependencies>true</license.bundles.dependencies>
     <top.dir>${project.basedir}/..</top.dir>
   </properties>
 
   <build>
     <plugins>
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-site-plugin</artifactId>
+        <configuration>
+          <skip>true</skip>
+        </configuration>
+      </plugin>
+      <plugin>
+        <!--Make it so assembly:single does nothing in here-->
+        <artifactId>maven-assembly-plugin</artifactId>
+        <configuration>
+          <skipAssembly>true</skipAssembly>
+        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-failsafe-plugin</artifactId>
-      </plugin>
-      <plugin>
-        <artifactId>maven-assembly-plugin</artifactId>
+        <artifactId>maven-jar-plugin</artifactId>
         <executions>
           <execution>
-            <id>runnable</id>
+            <id>default-jar</id>
+            <phase>none</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <id>default-install</id>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+            <phase>install</phase>
+          </execution>
+        </executions>
+        <configuration>
+          <file>${basedir}/target/phoenix-${project.version}-server.jar</file>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
             <phase>package</phase>
             <goals>
-              <goal>single</goal>
+              <goal>shade</goal>
             </goals>
             <configuration>
-              <attach>false</attach>
-              <finalName>${project.artifactId}-${project.version}</finalName>
-              <descriptors>
-                <descriptor>src/build/query-server-runnable.xml</descriptor>
-              </descriptors>
+              <finalName>phoenix-${project.version}-server</finalName>
+                <shadedArtifactAttached>false</shadedArtifactAttached>
+                <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+                <shadeTestJar>false</shadeTestJar>
+                <transformers>
+                    <!--<transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer">-->
+                    <!--</transformer>-->
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                        <resources>
+                            <resource>LICENSE.txt</resource>
+                            <resource>ASL2.0</resource>
+                        </resources>
+                    </transformer>
+                    <transformer
+                            implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                        <addHeader>false</addHeader>
+                    </transformer>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                    <transformer
+                            implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                        <resource>LICENSE.txt</resource>
+                        <file>${project.basedir}/../LICENSE.txt</file>
+                    </transformer>
+                </transformers>
+                <artifactSet>
+                <includes>
+                  <include>org.apache.phoenix:phoenix-core</include>
+                  <include>org.iq80.snappy:snappy</include>
+                  <include>org.antlr:antlr*</include>
+                  <include>org.apache.tephra:tephra*</include>
+                  <include>com.google.code.gson:gson</include>
+                  <include>org.jruby.joni:joni</include>
+                  <include>org.jruby.jcodings:jcodings</include>
+                  <include>joda-time:joda-time</include>
+                  <include>org.apache.twill:twill*</include>
+                  <include>com.google.inject.extensions:guice-assistedinject</include>
+                  <include>it.unimi.dsi:fastutil</include>
+                  <include>io.dropwizard.metrics:metrics-core</include>
+                  <include>org.apache.thrift:libthrift</include>
+                </includes>
+                  <excludes>
+                    <exclude>org.apache.phoenix:phoenix-server</exclude>
+                  </excludes>
+              </artifactSet>
             </configuration>
           </execution>
         </executions>
@@ -61,45 +150,10 @@
   </build>
 
   <dependencies>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-server-client</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.calcite.avatica</groupId>
-      <artifactId>avatica</artifactId>
-      <version>${avatica.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.calcite.avatica</groupId>
-      <artifactId>avatica-server</artifactId>
-      <version>${avatica.version}</version>
-    </dependency>
+    <!-- Depend on all other internal projects -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>commons-logging</groupId>
-      <artifactId>commons-logging</artifactId>
-    </dependency>
-    <!-- for tests -->
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
-      <classifier>tests</classifier>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-it</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-minicluster</artifactId>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
