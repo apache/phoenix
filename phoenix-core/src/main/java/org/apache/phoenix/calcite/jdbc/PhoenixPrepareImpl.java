@@ -1,5 +1,6 @@
 package org.apache.phoenix.calcite.jdbc;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
@@ -18,6 +19,10 @@ import org.apache.calcite.rel.rules.SortProjectTransposeRule;
 import org.apache.calcite.rel.rules.SortUnionTransposeRule;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Hook;
+import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
+import org.apache.calcite.sql.SqlColumnDefNode;
+import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.tools.Program;
@@ -40,8 +45,18 @@ import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
 import org.apache.phoenix.calcite.rules.PhoenixTableScanColumnRefRule;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.ColumnDef;
+import org.apache.phoenix.parse.ColumnDefInPkConstraint;
+import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.PrimaryKeyConstraint;
+import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.base.Function;
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 
 public class PhoenixPrepareImpl extends CalcitePrepareImpl {
     public static final ThreadLocal<String> THREAD_SQL_STRING =
@@ -142,17 +157,62 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
 
     @Override
     public void executeDdl(Context context, SqlNode node) {
-        switch (node.getKind()) {
-        case CREATE_VIEW:
-            final SqlCreateView cv = (SqlCreateView) node;
-            System.out.println("Create view: " + cv.name);
-            break;
-        case CREATE_TABLE:
-            final SqlCreateTable table = (SqlCreateTable) node;
-            System.out.println("Create table: " + table.tableName);
-            break;
-        default:
-            throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());
+        try {
+            final ParseNodeFactory nodeFactory = new ParseNodeFactory();
+            final PhoenixConnection connection = getPhoenixConnection(context.getRootSchema().plus());
+            final MetaDataClient client = new MetaDataClient(connection);
+            switch (node.getKind()) {
+            case CREATE_VIEW:
+                final SqlCreateView cv = (SqlCreateView) node;
+                System.out.println("Create view: " + cv.name);
+                break;
+            case CREATE_TABLE:
+                final SqlCreateTable table = (SqlCreateTable) node;
+                final SqlIdentifier tableIdentifier = table.tableName;
+                final String schemaName = tableIdentifier.isSimple() ? null : tableIdentifier.skipLast(1).toString();
+                final String tableName = tableIdentifier.names.get(tableIdentifier.names.size() - 1);
+                final ListMultimap<String,org.apache.hadoop.hbase.util.Pair<String,Object>> props = null; // TODO
+                final List<ColumnDef> columnDefs = Lists.newArrayList();
+                for (SqlNode columnDef : table.columnDefs) {
+                    columnDefs.add(((SqlColumnDefNode) columnDef).getColumnDef());
+                }
+                final PrimaryKeyConstraint pkConstraint;
+                if (table.pkConstraint == null) {
+                    pkConstraint = null;
+                } else {
+                    final List<ColumnDefInPkConstraint> pkColumns = Lists.newArrayList();
+                    for (SqlNode pkColumn : table.pkConstraintColumnDefs) {
+                        pkColumns.add(((SqlColumnDefInPkConstraintNode) pkColumn).getPkConstraint());
+                    }
+                    pkConstraint = nodeFactory.primaryKey(table.pkConstraint.getSimple(), pkColumns);
+                }
+                final byte[][] splits = new byte[0][]; //TODO
+
+                final CreateTableStatement create = nodeFactory.createTable(
+                        nodeFactory.table(schemaName, tableName),
+                        props, columnDefs, pkConstraint,
+                        null, PTableType.TABLE, table.ifNotExists.booleanValue(),
+                        null, null, 0);
+                client.createTable(create, splits, null, null, null, null, null);
+                break;
+            default:
+                throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());
+            }
+        } catch (SQLException ex) {
+            throw new RuntimeException(ex);
         }
+    }
+    
+    private static PhoenixConnection getPhoenixConnection(SchemaPlus rootSchema) {
+        for (String subSchemaName : rootSchema.getSubSchemaNames()) {               
+            try {
+                PhoenixSchema phoenixSchema = rootSchema
+                        .getSubSchema(subSchemaName).unwrap(PhoenixSchema.class);
+                return phoenixSchema.pc;
+            } catch (ClassCastException e) {
+            }
+        }
+
+        throw new RuntimeException("Phoenix schema not found.");
     }
 }

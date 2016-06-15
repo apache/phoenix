@@ -102,8 +102,8 @@ SqlNode SqlCreateTable() :
     	( 	
     		<COMMA> <CONSTRAINT> {pkConstraint = SimpleIdentifier();} <PRIMARY> <KEY>
     			<LPAREN>
-    				{	item = CompoundIdentifier();pkConstraintList.add(item);}
-    				( <COMMA> {item = CompoundIdentifier();pkConstraintList.add(item);} ) *
+    				{	item = SqlColumnDefInPkConstraintNode();pkConstraintList.add(item);}
+    				( <COMMA> {item = SqlColumnDefInPkConstraintNode();pkConstraintList.add(item);} ) *
     			<RPAREN>
     		|
     		<COMMA>
@@ -205,5 +205,38 @@ SqlColumnDefNode SqlColumnDefNode() :
     	}
     	ColumnDef cd = new ColumnDef(name, dataType.names.get(0), isArray, arrSize, isNull, maxLength, scale, isPk, sortOrder, null, isRowTimestamp);
     	return new SqlColumnDefNode(pos,cd);
+    }
+}
+
+SqlColumnDefInPkConstraintNode SqlColumnDefInPkConstraintNode() :
+{
+    SqlIdentifier columnName;
+    SortOrder sortOrder = SortOrder.getDefault();
+    boolean isRowTimestamp = false;
+    SqlParserPos pos;
+}
+{
+    columnName = CompoundIdentifier()
+	(
+		<ASC>
+        |
+        <DESC>
+        {sortOrder = SortOrder.DESC;}
+	)?
+	(
+		<ROW_TIMESTAMP>
+        {isRowTimestamp = true;}
+		
+	)?
+    {
+    	pos = columnName.getParserPosition().plus(getPos());
+    	ColumnName name;    	
+    	if(columnName.names.size()==2) {
+    		name = new ColumnName(columnName.names.get(0), columnName.names.get(0));
+    	} else{
+    		name = new ColumnName(columnName.names.get(0));
+    	}
+    	ColumnDefInPkConstraint cd = new ColumnDefInPkConstraint(name, sortOrder, isRowTimestamp);
+    	return new SqlColumnDefInPkConstraintNode(pos,cd);
     }
 }

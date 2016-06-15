@@ -25,7 +25,9 @@
     "org.apache.phoenix.schema.SortOrder",
     "org.apache.phoenix.parse.ColumnName",
     "org.apache.phoenix.parse.ColumnDef",
+    "org.apache.phoenix.parse.ColumnDefInPkConstraint",
     "org.apache.calcite.sql.SqlColumnDefNode"
+    "org.apache.calcite.sql.SqlColumnDefInPkConstraintNode"
     "java.util.*"
   ]
 
