@@ -70,7 +70,7 @@ def findClasspath(command_name):
 def setPath():
     PHOENIX_CLIENT_JAR_PATTERN = "phoenix-*-client.jar"
     PHOENIX_THIN_CLIENT_JAR_PATTERN = "phoenix-*-thin-client.jar"
-    PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-server-*-runnable.jar"
+    PHOENIX_QUERYSERVER_JAR_PATTERN = "phoenix-*-queryserver.jar"
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*-minimal*.jar"
@@ -107,7 +107,7 @@ def setPath():
         pherf_conf_path = os.path.join(current_dir, "..", "phoenix-pherf", "config")
 
     global phoenix_jar_path
-    phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
+    phoenix_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*")
 
     global phoenix_client_jar
     phoenix_client_jar = find("phoenix-*-client.jar", phoenix_jar_path)
@@ -137,13 +137,13 @@ def setPath():
         hadoop_classpath = os.getenv('HADOOP_CLASSPATH', '')
 
     global hadoop_common_jar_path
-    hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
+    hadoop_common_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*")
 
     global hadoop_common_jar
     hadoop_common_jar = find("hadoop-common*.jar", hadoop_common_jar_path)
 
     global hadoop_hdfs_jar_path
-    hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-assembly", "target","*")
+    hadoop_hdfs_jar_path = os.path.join(current_dir, "..", "phoenix-client", "target","*")
 
     global hadoop_hdfs_jar
     hadoop_hdfs_jar = find("hadoop-hdfs*.jar", hadoop_hdfs_jar_path)
@@ -156,7 +156,7 @@ def setPath():
         testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 
     global phoenix_queryserver_jar
-    phoenix_queryserver_jar = find(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server", "target", "*"))
+    phoenix_queryserver_jar = find(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-queryserver", "target", "*"))
     if phoenix_queryserver_jar == "":
         phoenix_queryserver_jar = findFileInPathWithoutRecursion(PHOENIX_QUERYSERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
     if phoenix_queryserver_jar == "":
@@ -177,7 +177,7 @@ def setPath():
         phoenix_pherf_jar = findFileInPathWithoutRecursion(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, ".."))
 
     global phoenix_thin_client_jar
-    phoenix_thin_client_jar = find(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-server-client", "target", "*"))
+    phoenix_thin_client_jar = find(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-queryserver-client", "target", "*"))
     if phoenix_thin_client_jar == "":
         phoenix_thin_client_jar = findFileInPathWithoutRecursion(PHOENIX_THIN_CLIENT_JAR_PATTERN, os.path.join(current_dir, ".."))
 

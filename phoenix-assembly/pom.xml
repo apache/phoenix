@@ -20,7 +20,8 @@
 
 -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
@@ -35,72 +36,27 @@
 
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
+    <maven.test.skip>true</maven.test.skip>
+    <source.skip>true</source.skip>
   </properties>
 
   <build>
     <plugins>
+      <!-- No jars created for this module -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>default-jar</id>
+            <phase>none</phase>
+            <goals/>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <artifactId>maven-assembly-plugin</artifactId>
         <executions>
-          <execution>
-            <id>client</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <attach>false</attach>
-              <finalName>phoenix-${project.version}</finalName>
-              <archive>
-                <index>true</index>
-                <manifest>
-                  <addClasspath>true</addClasspath>
-                  <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                  <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                </manifest>
-              </archive>
-              <descriptors>
-                <descriptor>src/build/client.xml</descriptor>
-              </descriptors>
-            </configuration>
-          </execution>
-          <!-- Due to SPARK-8332 and Calcite's fasterxml dependency, we need a custom spark client -->
-          <execution>
-            <id>client-spark</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-              <finalName>phoenix-${project.version}</finalName>
-              <attach>false</attach>
-              <appendAssemblyId>true</appendAssemblyId>
-              <descriptors>
-                <!-- build the phoenix spark client jar -->
-                <descriptor>src/build/client-spark.xml</descriptor>
-              </descriptors>
-            </configuration>
-          </execution>
-          <execution>
-            <id>client-minimal</id>
-            <phase>package</phase>
-            <goals>
-              <goal>single</goal>
-            </goals>
-            <configuration>
-            <finalName>phoenix-${project.version}</finalName>
-              <attach>false</attach>
-              <appendAssemblyId>true</appendAssemblyId>
-              <descriptors>
-               <!--build the phoenix client jar, but without HBase code. -->
-                <descriptor>src/build/client-without-hbase.xml</descriptor>
-               <!-- build the phoenix client jar, but without HBase (or its depenencies). -->
-                <descriptor>src/build/client-minimal.xml</descriptor>
-               <!-- build the phoenix server side jar, that includes phoenix-hadoopX-compat, phoenix-hadoop-compat and antlr -->
-                <descriptor>src/build/server.xml</descriptor>
-              </descriptors>
-            </configuration>
-          </execution>
           <execution>
             <id>package-to-tar</id>
             <phase>package</phase>
@@ -137,17 +93,6 @@
           </execution>
         </executions>
       </plugin>
-      <!-- No jars created for this module -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>prepare-package</phase>
-            <goals />
-          </execution>
-        </executions>
-      </plugin>
     </plugins>
   </build>
 
@@ -171,11 +116,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-server</artifactId>
+      <artifactId>phoenix-queryserver</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-server-client</artifactId>
+      <artifactId>phoenix-queryserver-client</artifactId>
     </dependency>
   </dependencies>
 </project>

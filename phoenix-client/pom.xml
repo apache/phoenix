@@ -1,0 +1,381 @@
+<?xml version='1.0'?>
+<!--
+
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
+
+-->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.phoenix</groupId>
+    <artifactId>phoenix</artifactId>
+    <version>4.8.0-HBase-1.2-SNAPSHOT</version>
+  </parent>
+  <artifactId>phoenix-client</artifactId>
+  <name>Phoenix Client</name>
+  <description>Phoenix Client</description>
+  <packaging>jar</packaging>
+  <properties>
+    <!-- Don't make a test-jar -->
+    <maven.test.skip>true</maven.test.skip>
+    <!-- Don't make a source-jar -->
+    <source.skip>true</source.skip>
+    <license.bundles.dependencies>true</license.bundles.dependencies>
+    <top.dir>${project.basedir}/..</top.dir>
+    <shaded.package>org.apache.phoenix.shaded</shaded.package>
+
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-site-plugin</artifactId>
+        <configuration>
+          <skip>true</skip>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>default-jar</id>
+            <phase>none</phase>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>install-file</goal>
+            </goals>
+            <id>default-install</id>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+            <phase>install</phase>
+          </execution>
+        </executions>
+        <configuration>
+          <file>${basedir}/target/phoenix-${project.version}-client.jar</file>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <finalName>phoenix-${project.version}-client</finalName>
+              <shadedArtifactAttached>false</shadedArtifactAttached>
+              <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+              <shadeTestJar>false</shadeTestJar>
+              <transformers>
+                <!--<transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer">-->
+                <!--</transformer>-->
+                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                  <resources>
+                    <resource>LICENSE.txt</resource>
+                    <resource>ASL2.0</resource>
+                  </resources>
+                </transformer>
+                <transformer
+                        implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                  <addHeader>false</addHeader>
+                </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer
+                        implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                  <resource>csv-bulk-load-config.properties</resource>
+                  <file>
+                    ${project.basedir}/../config/csv-bulk-load-config.properties
+                  </file>
+                </transformer>
+                <transformer
+                        implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                  <resource>README.md</resource>
+                  <file>${project.basedir}/../README.md</file>
+                </transformer>
+                <transformer
+                        implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                  <resource>LICENSE.txt</resource>
+                  <file>${project.basedir}/../LICENSE.txt</file>
+                </transformer>
+              </transformers>
+              <artifactSet>
+                <includes>
+                  <include>*:*</include>
+                </includes>
+                <excludes>
+                  <exclude>org.apache.phoenix:phoenix-client</exclude>
+                </excludes>
+              </artifactSet>
+
+              <relocations>
+
+                <!-- COM relocation -->
+                <relocation>
+                  <pattern>com.codahale</pattern>
+                  <shadedPattern>${shaded.package}.com.codahale</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.fasterxml</pattern>
+                  <shadedPattern>${shaded.package}.com.fasterxml</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>${shaded.package}.com.google</shadedPattern>
+                  <excludes>
+                  </excludes>
+                </relocation>
+                <relocation>
+                  <pattern>com.jamesmurty</pattern>
+                  <shadedPattern>${shaded.package}.com.jamesmurty</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.jcraft</pattern>
+                  <shadedPattern>${shaded.package}.com.jcraft</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.lmax</pattern>
+                  <shadedPattern>${shaded.package}.com.lmax</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.thoughtworks</pattern>
+                  <shadedPattern>${shaded.package}.com.thoughtworks</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.sun.jersey</pattern>
+                  <shadedPattern>${shaded.package}.com.sun.jersey</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.yammer</pattern>
+                  <shadedPattern>${shaded.package}.com.yammer</shadedPattern>
+                </relocation>
+
+                <!-- IO relocations -->
+                <relocation>
+                  <pattern>io.netty</pattern>
+                  <shadedPattern>${shaded.package}.io.netty</shadedPattern>
+                </relocation>
+
+                <!-- ORG relocations -->
+                <relocation>
+                  <pattern>org.antlr</pattern>
+                  <shadedPattern>${shaded.package}.org.antlr</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.aopalliance</pattern>
+                  <shadedPattern>${shaded.package}.org.aopalliance</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.codehaus</pattern>
+                  <shadedPattern>${shaded.package}.org.codehaus</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.fusesource</pattern>
+                  <shadedPattern>${shaded.package}.org.fusesource</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.hamcrest</pattern>
+                  <shadedPattern>${shaded.package}.org.hamcrest</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.hsqldb</pattern>
+                  <shadedPattern>${shaded.package}.org.hsqldb</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.iq80</pattern>
+                  <shadedPattern>${shaded.package}.org.iq80</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.jamon</pattern>
+                  <shadedPattern>${shaded.package}.org.jamon</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.jboss</pattern>
+                  <shadedPattern>${shaded.package}.org.jboss</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.jcodings</pattern>
+                  <shadedPattern>${shaded.package}.org.jcodings</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.jets3t</pattern>
+                  <shadedPattern>${shaded.package}.org.jets3t</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.joda</pattern>
+                  <shadedPattern>${shaded.package}.org.joda</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.joni</pattern>
+                  <shadedPattern>${shaded.package}.org.joni</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.junit</pattern>
+                  <shadedPattern>${shaded.package}.org.junit</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.kosmix</pattern>
+                  <shadedPattern>${shaded.package}.org.kosmix</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.mortbay</pattern>
+                  <shadedPattern>${shaded.package}.org.mortbay</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.objectweb</pattern>
+                  <shadedPattern>${shaded.package}.org.objectweb</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.stringtemplate</pattern>
+                  <shadedPattern>${shaded.package}.org.stringtemplate</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.tukaani</pattern>
+                  <shadedPattern>${shaded.package}.org.tukaani</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.znerd</pattern>
+                  <shadedPattern>${shaded.package}.org.znerd</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.avro</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.avro</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.commons</shadedPattern>
+                  <excludes>
+                    <exclude>org.apache.commons.csv.**</exclude>
+                    <exclude>org.apache.commons.logging.**</exclude>
+                  </excludes>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.directory</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.directory</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.http</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.http</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.jasper</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.jasper</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.jute</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.jute</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.mina</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.mina</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.oro</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.oro</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.taglibs</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.taglibs</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.thrift</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.thrift</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.tools</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.tools</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.twill</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.twill</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.velocity</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.velocity</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.zookeeper</pattern>
+                  <shadedPattern>${shaded.package}.org.apache.zookeeper</shadedPattern>
+                </relocation>
+
+                <!-- NET relocations -->
+                <relocation>
+                  <pattern>net</pattern>
+                  <shadedPattern>${shaded.package}.net</shadedPattern>
+                </relocation>
+
+                <!-- Misc relocations -->
+                <relocation>
+                  <pattern>antlr</pattern>
+                  <shadedPattern>${shaded.package}.antlr</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>it.unimi</pattern>
+                  <shadedPattern>${shaded.package}.it.unimi</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>jline</pattern>
+                  <shadedPattern>${shaded.package}.jline</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>junit</pattern>
+                  <shadedPattern>${shaded.package}.junit</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <!-- Depend on all other internal projects -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-flume</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-pig</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-spark</artifactId>
+    </dependency>
+  </dependencies>
+</project>

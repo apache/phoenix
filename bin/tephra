@@ -91,11 +91,11 @@ set_classpath()
   export HBASE_CP
 
   if [ -n "$HBASE_CP" ]; then
-    CP=$COMP_HOME/phoenix-assembly/target/*:$HBASE_CP:$EXTRA_CLASSPATH
+    CP=$COMP_HOME/phoenix-client/target/*:$HBASE_CP:$EXTRA_CLASSPATH
   else
     # assume Hadoop/HBase libs are included via EXTRA_CLASSPATH
     echo "WARN: could not find Hadoop and HBase libraries"
-    CP=$COMP_HOME/phoenix-assembly/target/*:$EXTRA_CLASSPATH
+    CP=$COMP_HOME/phoenix-client/target/*:$EXTRA_CLASSPATH
   fi
 
   # Setup classpaths.

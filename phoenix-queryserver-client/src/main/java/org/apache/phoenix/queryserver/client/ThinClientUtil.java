@@ -21,7 +21,7 @@ package org.apache.phoenix.queryserver.client;
  * Utilities for thin clients.
  */
 public final class ThinClientUtil {
-  // The default serialization is also defined in QueryServicesOptions. phoenix-server-client
+  // The default serialization is also defined in QueryServicesOptions. phoenix-queryserver-client
   // currently doesn't depend on phoenix-core so we have to deal with the duplication.
   private static final String DEFAULT_SERIALIZATION = "PROTOBUF";
 

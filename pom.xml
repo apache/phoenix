@@ -26,11 +26,13 @@
     <module>phoenix-core</module>
     <module>phoenix-flume</module>
     <module>phoenix-pig</module>
-    <module>phoenix-server-client</module>
-    <module>phoenix-server</module>
+    <module>phoenix-queryserver-client</module>
+    <module>phoenix-queryserver</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
     <module>phoenix-hive</module>
+    <module>phoenix-client</module>
+    <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
   </modules>
@@ -160,6 +162,11 @@
               </pluginExecutions>
             </lifecycleMappingMetadata>
           </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-install-plugin</artifactId>
+          <version>2.5.2</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -340,6 +347,11 @@
             </execution>
           </executions>
         </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>2.4.3</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -478,12 +490,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server</artifactId>
+        <artifactId>phoenix-queryserver</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server-client</artifactId>
+        <artifactId>phoenix-queryserver-client</artifactId>
         <version>${project.version}</version>
       </dependency>
 

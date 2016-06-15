@@ -150,6 +150,10 @@
             <goals>
               <goal>single</goal>
             </goals>
+            <configuration>
+              <appendAssemblyId>false</appendAssemblyId>
+              <finalName>phoenix-${project.version}-hive</finalName>
+            </configuration>
           </execution>
         </executions>
       </plugin>
