@@ -235,7 +235,7 @@ public class QueryServicesOptions {
     
     public static final long DEFAULT_INDEX_POPULATION_SLEEP_TIME = 5000;
 
-    // QueryServer defaults -- ensure ThinClientUtil is also updated since phoenix-server-client
+    // QueryServer defaults -- ensure ThinClientUtil is also updated since phoenix-queryserver-client
     // doesn't depend on phoenix-core.
     public static final String DEFAULT_QUERY_SERVER_SERIALIZATION = "PROTOBUF";
     public static final int DEFAULT_QUERY_SERVER_HTTP_PORT = 8765;
