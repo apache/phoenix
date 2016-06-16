@@ -32,6 +32,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
@@ -44,6 +45,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
@@ -210,6 +212,9 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 conn.commit();
                 fail();
             } catch (SQLException e) {
+                System.out.println();
+            }  catch(Exception e) {
+                System.out.println();
             }
 
             // Verify the metadata for index is correct.
@@ -292,8 +297,8 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             expectedPlan = " OVER "
                     + (localIndex
-                            ? Bytes.toString(MetaDataUtil.getLocalIndexPhysicalName(SchemaUtil
-                                    .getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName()))
+                            ? Bytes.toString(SchemaUtil
+                                    .getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
                             : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped).getNameAsString());
             String explainPlan = QueryUtil.getExplainPlan(rs);
             assertTrue(explainPlan.contains(expectedPlan));
@@ -335,6 +340,13 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
             if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().contains(INDEX_NAME) && FAIL_WRITE) {
                 throw new DoNotRetryIOException();
+            }
+            Mutation operation = miniBatchOp.getOperation(0);
+            Set<byte[]> keySet = operation.getFamilyMap().keySet();
+            for(byte[] family: keySet) {
+                if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) && FAIL_WRITE) {
+                    throw new DoNotRetryIOException();
+                }
             }
         }
     }

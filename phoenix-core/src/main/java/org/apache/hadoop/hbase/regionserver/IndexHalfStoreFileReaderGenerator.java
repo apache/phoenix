@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -141,8 +142,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             try {
                 conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
                             PhoenixConnection.class);
-                String userTableName = MetaDataUtil.getUserTableName(tableName.getNameAsString());
-                PTable dataTable = PhoenixRuntime.getTable(conn, userTableName);
+                PTable dataTable = PhoenixRuntime.getTable(conn, tableName.getNameAsString());
                 List<PTable> indexes = dataTable.getIndexes();
                 Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();
@@ -181,7 +181,11 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
             Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
             long earliestPutTs, InternalScanner s, CompactionRequest request) throws IOException {
-        if (!scanType.equals(ScanType.COMPACT_DROP_DELETES) || s != null || !store.hasReferences()) {
+        if (!store.getFamily().getNameAsString()
+                .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
+                || !scanType.equals(ScanType.COMPACT_DROP_DELETES)
+                || s != null
+                || !store.hasReferences()) {
             return s;
         }
         List<StoreFileScanner> newScanners = new ArrayList<StoreFileScanner>(scanners.size());
@@ -237,7 +241,9 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     public KeyValueScanner preStoreScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Store store, final Scan scan, final NavigableSet<byte[]> targetCols,
         final KeyValueScanner s) throws IOException {
-        if(store.hasReferences()) {
+        if (store.getFamily().getNameAsString()
+                .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
+                && store.hasReferences()) {
             long readPt = c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel());
             boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
             Collection<StoreFile> storeFiles = store.getStorefiles();

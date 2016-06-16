@@ -208,7 +208,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         if (dataColumns != null) {
             tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-            dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+            dataRegion = c.getEnvironment().getRegion();
             byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
             List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
             indexMaintainer = indexMaintainers.get(0);

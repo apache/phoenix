@@ -206,8 +206,7 @@ public class IndexTool extends Configured implements Tool {
             // computed from the qDataTable name.
             String physicalIndexTable = pindexTable.getPhysicalName().getString();
             if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
-                physicalIndexTable = Bytes
-                        .toString(MetaDataUtil.getLocalIndexPhysicalName(pdataTable.getPhysicalName().getBytes()));
+                physicalIndexTable = qDataTable;
             }
 
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);

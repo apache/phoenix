@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -438,13 +439,32 @@ public class MetaDataUtil {
     }
 
     public static boolean hasLocalIndexTable(PhoenixConnection connection, byte[] physicalTableName) throws SQLException {
-        byte[] physicalIndexName = MetaDataUtil.getLocalIndexPhysicalName(physicalTableName);
         try {
-            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalIndexName);
-            return desc != null && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(IS_LOCAL_INDEX_TABLE_PROP_BYTES)));
+            HTableDescriptor desc = connection.getQueryServices().getTableDescriptor(physicalTableName);
+            if(desc == null ) return false;
+            return hasLocalIndexColumnFamily(desc);
         } catch (TableNotFoundException e) {
             return false;
         }
+    }
+
+    public static boolean hasLocalIndexColumnFamily(HTableDescriptor desc) {
+        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
+            if (cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static List<byte[]> getNonLocalIndexColumnFamilies(HTableDescriptor desc) {
+       List<byte[]> families = new ArrayList<byte[]>(desc.getColumnFamilies().length);
+        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
+            if (!cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+               families.add(cf.getName());
+            }
+        }
+       return families;
     }
 
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name, boolean isNamespaceMapped)
