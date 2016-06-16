@@ -50,7 +50,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         conn.createStatement().execute("CREATE INDEX i1 ON v(v2) INCLUDE(v1)");
         
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT v1,v2 FROM v WHERE v2 > 'a' ORDER BY v2");
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32768,'a'] - ['me',-32768,*]",
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-32768,'me','a'] - [-32768,'me',*]",
                 QueryUtil.getExplainPlan(rs));
     }
 
@@ -194,7 +194,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         conn.createStatement().execute("CREATE INDEX i1 ON v(v2)");
         
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM v WHERE v2 > 'a' and k2 = 'a' ORDER BY v2,k2");
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32766,'a'] - ['me',-32766,*]\n" + 
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-32766,'me','a'] - [-32766,'me',*]\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
                 QueryUtil.getExplainPlan(rs));
         
@@ -227,7 +227,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
         
         // Confirm that a read-only view on an updatable view still optimizes out the read-only parts of the updatable view
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM v2 WHERE v3 > 'a' and k2 = 'a' ORDER BY v3,k2");
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['me',-32767,'a'] - ['me',-32767,*]",
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-32767,'me','a'] - [-32767,'me',*]",
                 QueryUtil.getExplainPlan(rs));
     }
     

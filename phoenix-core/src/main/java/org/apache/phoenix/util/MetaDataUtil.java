@@ -93,7 +93,7 @@ public class MetaDataUtil {
     public static final String VIEW_INDEX_SEQUENCE_PREFIX = "_SEQ_";
     public static final String VIEW_INDEX_SEQUENCE_NAME_PREFIX = "_ID_";
     public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES = Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
-    public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
+    private static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
     public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
     public static final byte[] PARENT_TABLE_KEY_BYTES = Bytes.toBytes("PARENT_TABLE");
     

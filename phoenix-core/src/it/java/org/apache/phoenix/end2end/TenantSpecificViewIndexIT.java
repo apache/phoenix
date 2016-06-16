@@ -206,7 +206,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
                     + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(SchemaUtil
                             .getPhysicalHBaseTableName(tableName, isNamespaceMapped, PTableType.TABLE).getBytes()))
-                    + " ['" + tenantId + "',-32768,'f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
+                    + " [-32768,'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
                     QueryUtil.getExplainPlan(rs));
         }
 

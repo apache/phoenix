@@ -61,7 +61,7 @@ public class TenantIdByteConversionTest {
     @Test
     public void test() {
         try {
-            byte[] actualTenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId);
+            byte[] actualTenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, false);
             assertArrayEquals(expectedTenantIdBytes, actualTenantIdBytes);
         } catch (SQLException ex) {
             fail(ex.getMessage());

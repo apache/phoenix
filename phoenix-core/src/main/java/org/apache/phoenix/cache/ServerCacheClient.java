@@ -195,18 +195,22 @@ public class ServerCacheClient {
                                                     BlockingRpcCallback<AddServerCacheResponse> rpcCallback =
                                                             new BlockingRpcCallback<AddServerCacheResponse>();
                                                     AddServerCacheRequest.Builder builder = AddServerCacheRequest.newBuilder();
-                                                    if(connection.getTenantId() != null){
+                                                    final byte[] tenantIdBytes;
+                                                    if(cacheUsingTable.isMultiTenant()) {
                                                         try {
-                                                            byte[] tenantIdBytes =
+                                                            tenantIdBytes = connection.getTenantId() == null ? null :
                                                                     ScanUtil.getTenantIdBytes(
                                                                             cacheUsingTable.getRowKeySchema(),
-                                                                            cacheUsingTable.getBucketNum()!=null,
-                                                                            connection.getTenantId(),
-                                                                            cacheUsingTable.isMultiTenant());
-                                                            builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                                                            cacheUsingTable.getBucketNum() != null,
+                                                                            connection.getTenantId(), cacheUsingTable.getViewIndexId() != null);
                                                         } catch (SQLException e) {
-                                                            new IOException(e);
+                                                            throw new IOException(e);
                                                         }
+                                                    } else {
+                                                        tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+                                                    }
+                                                    if (tenantIdBytes != null) {
+                                                        builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
                                                     }
                                                     builder.setCacheId(ByteStringer.wrap(cacheId));
                                                     builder.setCachePtr(org.apache.phoenix.protobuf.ProtobufUtil.toProto(cachePtr));
@@ -325,20 +329,24 @@ public class ServerCacheClient {
     							BlockingRpcCallback<RemoveServerCacheResponse> rpcCallback =
     									new BlockingRpcCallback<RemoveServerCacheResponse>();
     							RemoveServerCacheRequest.Builder builder = RemoveServerCacheRequest.newBuilder();
-    							if(connection.getTenantId() != null){
+                                final byte[] tenantIdBytes;
+                                if(cacheUsingTable.isMultiTenant()) {
                                     try {
-                                        byte[] tenantIdBytes =
+                                        tenantIdBytes = connection.getTenantId() == null ? null :
                                                 ScanUtil.getTenantIdBytes(
                                                         cacheUsingTable.getRowKeySchema(),
-                                                        cacheUsingTable.getBucketNum()!=null,
-                                                        connection.getTenantId(),
-                                                        cacheUsingTable.isMultiTenant());
-                                        builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                                        cacheUsingTable.getBucketNum() != null,
+                                                        connection.getTenantId(), cacheUsingTable.getViewIndexId() != null);
                                     } catch (SQLException e) {
-                                        new IOException(e);
+                                        throw new IOException(e);
                                     }
-    							}
-    							builder.setCacheId(ByteStringer.wrap(cacheId));
+                                } else {
+                                    tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+                                }
+                                if (tenantIdBytes != null) {
+                                    builder.setTenantId(ByteStringer.wrap(tenantIdBytes));
+                                }
+                                builder.setCacheId(ByteStringer.wrap(cacheId));
     							instance.removeServerCache(controller, builder.build(), rpcCallback);
     							if(controller.getFailedOn() != null) {
     								throw controller.getFailedOn();
