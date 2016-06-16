@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -33,9 +34,11 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -190,5 +193,36 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         rs = conn1.prepareStatement(sql).executeQuery();
         assertTrue(rs.next());
         assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testCreatingIndexOnGlobalView() throws Exception {
+        String baseTable = "testCreatingIndexOnGlobalView".toUpperCase();
+        String globalView = "globalView".toUpperCase();
+        String globalViewIdx = "globalView_idx".toUpperCase();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);
+            conn.createStatement().execute("CREATE INDEX " + globalViewIdx + " ON " + globalView + " (PK3 DESC, KV3) INCLUDE (KV1)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + globalView + " (TENANT_ID, PK2, PK3, KV1, KV3) VALUES (?, ?, ?, ?, ?)");
+            stmt.setString(1, "tenantId");
+            stmt.setDate(2, new Date(100));
+            stmt.setInt(3, 1);
+            stmt.setString(4, "KV1");
+            stmt.setString(5, "KV3");
+            stmt.executeUpdate();
+            conn.commit();
+            
+            // Verify that query against the global view index works
+            stmt = conn.prepareStatement("SELECT KV1 FROM  " + globalView + " WHERE PK3 = ? AND KV3 = ?");
+            stmt.setInt(1, 1);
+            stmt.setString(2, "KV3");
+            ResultSet rs = stmt.executeQuery();
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertFalse(rs.next());
+        }
     }
 }

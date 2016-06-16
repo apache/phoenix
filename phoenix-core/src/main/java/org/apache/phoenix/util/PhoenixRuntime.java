@@ -1065,7 +1065,8 @@ public class PhoenixRuntime {
             throw new SQLFeatureNotSupportedException();
         }
         
-        int pkPosition = table.getBucketNum() == null ? 0 : 1;
+        // skip salt and viewIndexId columns.
+        int pkPosition = table.getBucketNum() == null ? 0 : 1 + (table.getViewIndexId() == null ? 0 : 1);
         List<PColumn> pkColumns = table.getPKColumns();
         return new RowKeyColumnExpression(pkColumns.get(pkPosition), new RowKeyValueAccessor(pkColumns, pkPosition));
     }
