@@ -53,7 +53,7 @@ public class ArrayLengthFunction extends ScalarFunction {
 		PDataType baseType = PDataType.fromTypeId(children.get(0).getDataType()
 				.getSqlType()
 				- PDataType.ARRAY_TYPE_BASE);
-		int length = PArrayDataType.getArrayLength(ptr, baseType, arrayExpr.getMaxLength());
+		int length = Math.abs(PArrayDataType.getArrayLength(ptr, baseType, arrayExpr.getMaxLength()));
 		byte[] lengthBuf = new byte[PInteger.INSTANCE.getByteSize()];
     PInteger.INSTANCE.getCodec().encodeInt(length, lengthBuf, 0);
 		ptr.set(lengthBuf);
