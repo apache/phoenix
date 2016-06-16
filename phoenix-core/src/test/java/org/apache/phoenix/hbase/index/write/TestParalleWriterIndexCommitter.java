@@ -108,7 +108,7 @@ public class TestParalleWriterIndexCommitter {
     // setup the writer and failure policy
     ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     writer.setup(factory, exec, abort, stop, 1);
-    writer.write(indexUpdates);
+    writer.write(indexUpdates, true);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
     writer.stop(this.test.getTableNameString() + " finished");

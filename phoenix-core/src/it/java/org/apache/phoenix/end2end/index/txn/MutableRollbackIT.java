@@ -33,8 +33,11 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -305,7 +308,11 @@ public class MutableRollbackIT extends BaseHBaseManagedTimeIT {
             
             conn.rollback();
             assertDataAndIndexRows(stmt);
-
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            if(localIndex) {
+                dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName1);
+                dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName2);
+            }
         } finally {
             conn.close();
         }
@@ -440,7 +447,8 @@ public class MutableRollbackIT extends BaseHBaseManagedTimeIT {
             assertEquals("x", rs.getString(1));
             assertEquals("yyyy", rs.getString(2));
             assertFalse(rs.next());
-                        
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            if(localIndex) dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName1);
         } finally {
             conn.close();
         }
@@ -503,9 +511,19 @@ public class MutableRollbackIT extends BaseHBaseManagedTimeIT {
             assertEquals("x", rs.getString(1));
             assertEquals("a", rs.getString(2));
             assertFalse(rs.next());
-
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            if(localIndex) dropTable(phoenixConn.getQueryServices().getAdmin(), conn, fullTableName1);
         } finally {
             conn.close();
         }
     }
+
+    private void dropTable(HBaseAdmin admin, Connection conn, String tableName) throws SQLException, IOException {
+        conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
+        if(admin.tableExists(tableName)) {
+            admin.disableTable(TableName.valueOf(tableName));
+            admin.deleteTable(TableName.valueOf(tableName));
+        } 
+    }
+
 }
