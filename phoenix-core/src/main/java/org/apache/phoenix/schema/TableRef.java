@@ -21,6 +21,7 @@ import java.util.Objects;
 
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -101,7 +102,7 @@ public class TableRef {
             String defaultFamilyName = table.getDefaultFamilyName() == null ? QueryConstants.DEFAULT_COLUMN_FAMILY : table.getDefaultFamilyName().getString();
             // Translate to the data table column name
             String dataFamilyName = isIndex ? IndexUtil.getDataColumnFamilyName(name) : column.getFamilyName().getString() ;
-            cf = defaultFamilyName.equals(dataFamilyName) ? null : dataFamilyName;
+            cf = (table.getIndexType()==IndexType.LOCAL? IndexUtil.getActualColumnFamilyName(defaultFamilyName):defaultFamilyName).equals(dataFamilyName) ? null : dataFamilyName;
             cq = isIndex ? IndexUtil.getDataColumnName(name) : name;
         }
         

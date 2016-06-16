@@ -128,10 +128,11 @@ public class IndexWriter implements Stoppable {
    * @param indexUpdates Updates to write
  * @throws IOException 
    */
-  public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates) throws IOException  {
+    public void writeAndKillYourselfOnFailure(Collection<Pair<Mutation, byte[]>> indexUpdates,
+            boolean allowLocalUpdates) throws IOException {
     // convert the strings to htableinterfaces to which we can talk and group by TABLE
     Multimap<HTableInterfaceReference, Mutation> toWrite = resolveTableReferences(indexUpdates);
-    writeAndKillYourselfOnFailure(toWrite);
+    writeAndKillYourselfOnFailure(toWrite, allowLocalUpdates);
   }
 
   /**
@@ -139,9 +140,10 @@ public class IndexWriter implements Stoppable {
    * @param toWrite
  * @throws IOException 
    */
-  public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite) throws IOException {
+    public void writeAndKillYourselfOnFailure(Multimap<HTableInterfaceReference, Mutation> toWrite,
+            boolean allowLocalUpdates) throws IOException {
     try {
-      write(toWrite);
+      write(toWrite, allowLocalUpdates);
       if (LOG.isTraceEnabled()) {
         LOG.trace("Done writing all index updates!\n\t" + toWrite);
       }
@@ -165,20 +167,23 @@ public class IndexWriter implements Stoppable {
    * @throws IndexWriteException if we cannot successfully write to the index. Whether or not we
    *           stop early depends on the {@link IndexCommitter}.
    */
-  public void write(Collection<Pair<Mutation, byte[]>> toWrite) throws IndexWriteException {
-    write(resolveTableReferences(toWrite));
-  }
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite) throws IndexWriteException {
+    	write(resolveTableReferences(toWrite), false);
+    }
+
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates) throws IndexWriteException {
+    	write(resolveTableReferences(toWrite), allowLocalUpdates);
+    }
 
   /**
    * see {@link #write(Collection)}
    * @param toWrite
    * @throws IndexWriteException
    */
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite)
-      throws IndexWriteException {
-    this.writer.write(toWrite);
+  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates)
+	      throws IndexWriteException {
+	  this.writer.write(toWrite, allowLocalUpdates);
   }
-
 
   /**
    * Convert the passed index updates to {@link HTableInterfaceReference}s.

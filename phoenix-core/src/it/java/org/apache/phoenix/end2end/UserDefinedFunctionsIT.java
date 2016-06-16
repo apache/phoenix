@@ -776,7 +776,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
         stmt.execute("create local index idx2 on t5(myreverse5(lastname_reverse))");
         query = "select k,k1,myreverse5(lastname_reverse) from t5 where myreverse5(lastname_reverse)='kcoj'";
         rs = stmt.executeQuery("explain " + query);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_T5 [-32768,'kcoj']\n"
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER T5 [1,'kcoj']\n"
                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                 +"CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         rs = stmt.executeQuery(query);

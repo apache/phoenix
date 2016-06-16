@@ -55,7 +55,7 @@ public class PostLocalIndexDDLCompiler {
         this.tableName = tableName;
     }
 
-	public MutationPlan compile(final PTable index) throws SQLException {
+	public MutationPlan compile(PTable index) throws SQLException {
 		try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
             String query = "SELECT count(*) FROM " + tableName;
             final QueryPlan plan = statement.compileQuery(query);
@@ -64,6 +64,12 @@ public class PostLocalIndexDDLCompiler {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             final PTable dataTable = tableRef.getTable();
             List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
+            for (PTable indexTable : dataTable.getIndexes()) {
+                if (indexTable.getKey().equals(index.getKey())) {
+                    index = indexTable;
+                    break;
+                }
+            }
             // Only build newly created index.
             indexes.add(index);
             IndexMaintainer.serialize(dataTable, ptr, indexes, plan.getContext().getConnection());

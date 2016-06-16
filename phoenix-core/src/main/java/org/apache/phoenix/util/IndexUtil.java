@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 
 import java.io.ByteArrayInputStream;
@@ -24,6 +25,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -40,10 +42,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -141,24 +141,37 @@ public class IndexUtil {
         return name.substring(0,name.indexOf(INDEX_COLUMN_NAME_SEP));
     }
 
+    public static String getActualColumnFamilyName(String name) {
+        if(name.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+            return name.substring(LOCAL_INDEX_COLUMN_FAMILY_PREFIX.length());
+        }
+        return name;
+    }
+
     public static String getCaseSensitiveDataColumnFullName(String name) {
         int index = name.indexOf(INDEX_COLUMN_NAME_SEP) ;
-        return SchemaUtil.getCaseSensitiveColumnDisplayName(name.substring(0, index), name.substring(index+1));
+        return SchemaUtil.getCaseSensitiveColumnDisplayName(getDataColumnFamilyName(name), name.substring(index+1));
     }
 
     public static String getIndexColumnName(String dataColumnFamilyName, String dataColumnName) {
-        return (dataColumnFamilyName == null ? "" : dataColumnFamilyName) + INDEX_COLUMN_NAME_SEP + dataColumnName;
+        return (dataColumnFamilyName == null ? "" : dataColumnFamilyName) + INDEX_COLUMN_NAME_SEP
+                + dataColumnName;
     }
     
     public static byte[] getIndexColumnName(byte[] dataColumnFamilyName, byte[] dataColumnName) {
         return ByteUtil.concat(dataColumnFamilyName == null ?  ByteUtil.EMPTY_BYTE_ARRAY : dataColumnFamilyName, INDEX_COLUMN_NAME_SEP_BYTES, dataColumnName);
     }
-    
+
     public static String getIndexColumnName(PColumn dataColumn) {
         String dataColumnFamilyName = SchemaUtil.isPKColumn(dataColumn) ? null : dataColumn.getFamilyName().getString();
         return getIndexColumnName(dataColumnFamilyName, dataColumn.getName().getString());
     }
 
+    public static String getLocalIndexColumnFamily(String dataColumnFamilyName) {
+        return dataColumnFamilyName == null ? null
+                : QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + dataColumnFamilyName;
+    }
+    
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
         int pos = indexColumnName.indexOf(INDEX_COLUMN_NAME_SEP);
         if (pos < 0) {
@@ -173,7 +186,7 @@ public class IndexUtil {
         }
         PColumnFamily family;
         try {
-            family = dataTable.getColumnFamily(indexColumnName.substring(0, pos));
+            family = dataTable.getColumnFamily(getDataColumnFamilyName(indexColumnName));                
         } catch (ColumnFamilyNotFoundException e) {
             throw new IllegalArgumentException("Could not find column family \"" +  indexColumnName.substring(0, pos) + "\" in index column name of \"" + indexColumnName + "\"", e);
         }
@@ -222,7 +235,14 @@ public class IndexUtil {
             for (final Mutation dataMutation : dataMutations) {
                 long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
                 ptr.set(dataMutation.getRow());
-                Delete delete = maintainer.buildDeleteMutation(kvBuilder, ptr, ts);
+                byte[] regionStartKey = null;
+                byte[] regionEndkey = null;
+                if(maintainer.isLocalIndex()) {
+                    HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
+                    regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+                    regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+                }
+                Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<KeyValue>emptyList(), ts, regionStartKey, regionEndkey);
                 delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY));
                 indexMutations.add(delete);
             }
@@ -334,55 +354,6 @@ public class IndexUtil {
             }
             
         });
-    }
-
-    public static Region getIndexRegion(RegionCoprocessorEnvironment environment)
-            throws IOException {
-        Region dataRegion = environment.getRegion();
-        return getIndexRegion(dataRegion, environment.getRegionServerServices());
-    }
-
-    public static Region
-            getIndexRegion(Region dataRegion, RegionServerCoprocessorEnvironment env)
-                    throws IOException {
-        return getIndexRegion(dataRegion, env.getRegionServerServices());
-    }
-
-    public static Region getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
-        Region indexRegion = env.getRegion();
-        return getDataRegion(indexRegion, env.getRegionServerServices());
-    }
-
-    public static Region
-            getDataRegion(Region indexRegion, RegionServerCoprocessorEnvironment env)
-                    throws IOException {
-        return getDataRegion(indexRegion, env.getRegionServerServices());
-    }
-
-    public static Region getIndexRegion(Region dataRegion, RegionServerServices rss) throws IOException {
-        TableName indexTableName =
-                TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(dataRegion.getTableDesc()
-                        .getName()));
-        List<Region> onlineRegions = rss.getOnlineRegions(indexTableName);
-        for(Region indexRegion : onlineRegions) {
-            if (Bytes.compareTo(dataRegion.getRegionInfo().getStartKey(),
-                    indexRegion.getRegionInfo().getStartKey()) == 0) {
-                return indexRegion;
-            }
-        }
-        return null;
-    }
-
-    public static Region getDataRegion(Region indexRegion, RegionServerServices rss) throws IOException {
-        TableName dataTableName = TableName.valueOf(MetaDataUtil.getUserTableName(indexRegion.getTableDesc().getNameAsString()));
-        List<Region> onlineRegions = rss.getOnlineRegions(dataTableName);
-        for(Region region : onlineRegions) {
-            if (Bytes.compareTo(indexRegion.getRegionInfo().getStartKey(),
-                    region.getRegionInfo().getStartKey()) == 0) {
-                return region;
-            }
-        }
-        return null;
     }
 
     public static ColumnReference[] deserializeDataTableColumnsToJoin(Scan scan) {

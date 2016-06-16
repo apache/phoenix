@@ -50,7 +50,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -117,7 +116,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
             String query = "SELECT char_col1, int_col1, long_col2 from " + fullTableName;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName +" [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName +" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
             }
@@ -184,7 +183,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
             if(localIndex) {
                 query = "SELECT b.* from " + fullTableName + " where int_col1 = 4";
                 rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName +" [-32768]\n" +
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName +" [1]\n" +
                 		"    SERVER FILTER BY TO_INTEGER(\"INT_COL1\") = 4\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
@@ -247,7 +246,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex) {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName+" [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
 	        } else {
 	            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
 	        }
@@ -268,7 +267,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex) {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName + " [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
 	        } else {
 	            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
 	        }
@@ -289,7 +288,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex) {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName+" [-32768]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
 	        } else {
 	            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
 	        }
@@ -354,7 +353,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if (localIndex) {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName+" [-32768]\n"
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
 	                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
 	                    + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
 	        } else {
@@ -478,7 +477,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
 	        query = "SELECT * FROM " + fullTableName;
 	        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
 	        if(localIndex) {
-	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER _LOCAL_IDX_" + fullTableName+" [-32768]\n"
+	            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
 	                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
 	                    + "CLIENT MERGE SORT",
 	                QueryUtil.getExplainPlan(rs));
@@ -620,28 +619,38 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(2));
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
-        try(Connection conn1 = DriverManager.getConnection(getUrl(), props)){
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        dropTable(admin, conn1);
+        try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
-            HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            dropTable(admin, conn1);
             createTableAndLoadData(conn1, strings, isReverse);
 
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
             splitDuringScan(conn1, strings, admin, isReverse);
             dropTable(admin, conn1);
-       } 
+       } finally {
+           dropTable(admin, conn1);
+           if(conn1 != null) conn1.close();
+           if(admin != null) admin.close();
+       }
     }
 
     private void dropTable(HBaseAdmin admin, Connection conn) throws SQLException, IOException {
-        conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
-        if(admin.tableExists(tableName)) {
-            admin.disableTable(TableName.valueOf(tableName));
-            admin.deleteTable(TableName.valueOf(tableName));
-        } 
-        if(admin.tableExists(localIndex? MetaDataUtil.getLocalIndexTableName(tableName): indexName)) {
-            admin.disableTable(localIndex? MetaDataUtil.getLocalIndexTableName(tableName): indexName);
-            admin.deleteTable(localIndex? MetaDataUtil.getLocalIndexTableName(tableName): indexName);
+        try {
+            conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
+        } finally {
+            if(admin.tableExists(tableName)) {
+                admin.disableTable(TableName.valueOf(tableName));
+                admin.deleteTable(TableName.valueOf(tableName));
+            }
+            if(!localIndex) {
+                if(admin.tableExists(indexName)) {
+                    admin.disableTable(TableName.valueOf(indexName));
+                    admin.deleteTable(TableName.valueOf(indexName));
+                }
+            }
         }
     }
 
@@ -677,7 +686,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
             assertEquals(4, rs.getInt(1));
 
             TableName table = TableName.valueOf(localIndex?tableName: indexName);
-            TableName indexTable = TableName.valueOf(localIndex?MetaDataUtil.getLocalIndexTableName(tableName): indexName);
+            TableName indexTable = TableName.valueOf(localIndex?tableName: indexName);
             admin.flush(indexTable);
             boolean merged = false;
             // merge regions until 1 left
@@ -697,7 +706,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
                   if(!merged) {
                             List<HRegionInfo> regions =
                                     admin.getTableRegions(localIndex ? table : indexTable);
-                      System.out.println("Merging: " + regions.size());
+                      Log.info("Merging: " + regions.size());
                       admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
                           regions.get(1).getEncodedNameAsBytes(), false);
                       merged = true;
@@ -707,52 +716,23 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
                 } catch (Exception ex) {
                   Log.info(ex);
                 }
-
-                long waitStartTime = System.currentTimeMillis();
-                // wait until merge happened
-                while (System.currentTimeMillis() - waitStartTime < 10000) {
-                  List<HRegionInfo> regions = admin.getTableRegions(indexTable);
-                  System.out.println("Waiting:" + regions.size());
-                  if (regions.size() < numRegions) {
-                    break;
-                  }
-                  Threads.sleep(1000);
+                if(!localIndex) {
+                    long waitStartTime = System.currentTimeMillis();
+                    // wait until merge happened
+                    while (System.currentTimeMillis() - waitStartTime < 10000) {
+                      List<HRegionInfo> regions = admin.getTableRegions(indexTable);
+                      Log.info("Waiting:" + regions.size());
+                      if (regions.size() < numRegions) {
+                        break;
+                      }
+                      Threads.sleep(1000);
+                    }
                 }
               }
             }
         } finally {
             dropTable(admin, conn1);
         }
-    }
-
-    private List<HRegionInfo> mergeRegions(HBaseAdmin admin, List<HRegionInfo> regionsOfUserTable)
-            throws IOException, InterruptedException {
-        for (int i = 2; i > 0; i--) {
-            Threads.sleep(10000);
-            admin.mergeRegions(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
-                regionsOfUserTable.get(1).getEncodedNameAsBytes(), false);
-            regionsOfUserTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
-                        TableName.valueOf(localIndex? tableName:indexName), false);
-
-            while (regionsOfUserTable.size() != i) {
-                Thread.sleep(100);
-                regionsOfUserTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                    admin.getConnection(), TableName.valueOf(localIndex? tableName:indexName), false);
-            }
-            assertEquals(i, regionsOfUserTable.size());
-            if(localIndex) {
-                List<HRegionInfo> regionsOfIndexTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                    admin.getConnection(), TableName.valueOf(MetaDataUtil.getLocalIndexTableName(tableName)), false);
-               while (regionsOfIndexTable.size() != i) {
-                   Thread.sleep(100);
-                   regionsOfIndexTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                       admin.getConnection(), TableName.valueOf(MetaDataUtil.getLocalIndexTableName(tableName)), false);
-               }
-               assertEquals(i, regionsOfIndexTable.size());
-            }
-        }
-        return regionsOfUserTable;
     }
 
     private List<HRegionInfo> splitDuringScan(Connection conn1, String[] strings, HBaseAdmin admin, boolean isReverse)

@@ -1608,7 +1608,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                     results.add(result);
                 }
-                TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
+                TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results, table);
                 if (numOfChildViews > 0 && !allViewsInCurrentRegion) {
                     tableViewFinderResult.setAllViewsNotInSingleRegion();
                 }
@@ -3377,13 +3377,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
         private List<Result> results = Lists.newArrayList();
         private boolean allViewsNotInSingleRegion = false;
+        private PTable table;
 
-        private TableViewFinderResult(List<Result> results) {
+        private TableViewFinderResult(List<Result> results, PTable table) {
             this.results = results;
+            this.table = table;
         }
 
         public boolean hasViews() {
-            return results.size() > 0;
+            int localIndexesCount = 0;
+            for(PTable index : table.getIndexes()) {
+                if(index.getIndexType().equals(IndexType.LOCAL)) {
+                    localIndexesCount++;
+                }
+            }
+            return results.size()-localIndexesCount > 0;
         }
 
         private void setAllViewsNotInSingleRegion() {

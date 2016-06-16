@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -38,8 +39,11 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -48,6 +52,7 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.htrace.Span;
@@ -62,6 +67,7 @@ import org.apache.phoenix.hbase.index.covered.TableState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 import org.apache.phoenix.hbase.index.covered.update.IndexedColumnGroup;
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.query.KeyRange;
@@ -69,6 +75,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -95,6 +102,8 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     private PhoenixIndexCodec codec;
     private IndexWriter writer;
     private boolean stopped;
+    private Map<Long, Collection<Pair<Mutation, byte[]>>> localUpdates =
+            new ConcurrentHashMap<Long, Collection<Pair<Mutation, byte[]>>>();
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -147,6 +156,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         }
 
         Map<String,byte[]> updateAttributes = m.getAttributesMap();
+        String tableName = c.getEnvironment().getRegion().getTableDesc().getNameAsString();
         PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(c.getEnvironment(),updateAttributes);
         byte[] txRollbackAttribute = m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY);
         Collection<Pair<Mutation, byte[]>> indexUpdates = null;
@@ -159,18 +169,58 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
             // get the index updates for all elements in this batch
             indexUpdates = getIndexUpdates(c.getEnvironment(), indexMetaData, getMutationIterator(miniBatchOp), txRollbackAttribute);
-
+            Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
+            List<Pair<Mutation, byte[]>> localIndexUpdates = new ArrayList<Pair<Mutation, byte[]>>(indexUpdates.size());
+            while(indexUpdatesItr.hasNext()) {
+                Pair<Mutation, byte[]> next = indexUpdatesItr.next();
+                if(tableName.equals(Bytes.toString(next.getSecond()))) {
+                    localIndexUpdates.add(next);
+                    indexUpdatesItr.remove();
+                }
+            }
+            if(!localIndexUpdates.isEmpty()) {
+                byte[] bs = indexMetaData.getAttributes().get(PhoenixIndexCodec.INDEX_UUID); 
+                localUpdates.put(Bytes.toLong(bs), localIndexUpdates);
+            }
             current.addTimelineAnnotation("Built index updates, doing preStep");
             TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
 
             // no index updates, so we are done
             if (!indexUpdates.isEmpty()) {
-                this.writer.write(indexUpdates);
+                this.writer.write(indexUpdates, false);
             }
         } catch (Throwable t) {
             String msg = "Failed to update index with entries:" + indexUpdates;
             LOG.error(msg, t);
             ServerUtil.throwIOException(msg, t);
+        }
+    }
+
+    @Override
+    public void postPut(ObserverContext<RegionCoprocessorEnvironment> e, Put put, WALEdit edit,
+            Durability durability) throws IOException {
+        Map<String,byte[]> updateAttributes = put.getAttributesMap();
+        PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(e.getEnvironment(),updateAttributes);
+        byte[] bs = indexMetaData.getAttributes().get(PhoenixIndexCodec.INDEX_UUID);
+        if (bs == null || localUpdates.get(Bytes.toLong(bs)) == null) {
+            super.prePut(e, put, edit, durability);
+        } else {
+            Collection<Pair<Mutation, byte[]>> localIndexUpdates = localUpdates.remove(Bytes.toLong(bs));
+            this.writer.write(localIndexUpdates, true);
+        }
+    }
+
+    @Override
+    public void postDelete(ObserverContext<RegionCoprocessorEnvironment> e, Delete delete,
+            WALEdit edit, Durability durability) throws IOException {
+        Map<String,byte[]> updateAttributes = delete.getAttributesMap();
+        PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(e.getEnvironment(),updateAttributes);
+        byte[] bs = indexMetaData.getAttributes().get(PhoenixIndexCodec.INDEX_UUID);
+        if (bs == null || localUpdates.get(Bytes.toLong(bs)) == null) {
+            super.postDelete(e, delete, edit, durability);
+        } else {
+            Collection<Pair<Mutation, byte[]>> localIndexUpdates = localUpdates.remove(Bytes.toLong(bs));
+            this.writer.write(localIndexUpdates, true);
         }
     }
 
