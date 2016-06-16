@@ -140,9 +140,9 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
                             + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
             String expected = saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T ['" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_T [0,'" + tenantId + "',-32768,'" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_T [0,-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                   + "    SERVER FILTER BY FIRST KEY ONLY\n"
                   + "CLIENT MERGE SORT";
             assertEquals(expected, QueryUtil.getExplainPlan(rs));
