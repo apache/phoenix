@@ -24,6 +24,7 @@ import java.util.Map.Entry;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -44,6 +45,11 @@ import org.iq80.snappy.Snappy;
 public class DistinctValueWithCountServerAggregator extends BaseAggregator {
     public static final int DEFAULT_ESTIMATED_DISTINCT_VALUES = 10000;
     public static final byte[] COMPRESS_MARKER = new byte[] { (byte)1 };
+    // copy a key unless it uses at least 10% of the backing array
+    private static final int COPY_THRESHOLD = 100/10;
+    // copy key only (make a new array) if the backing array is at least this size
+    // (to avoid ending up using _more_ memory)
+    private static final int FIXED_COPY_THRESHOLD = SizedUtil.ARRAY_SIZE * 2;
 
     private int compressThreshold;
     private byte[] buffer = null;
@@ -62,7 +68,10 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
 
     @Override
     public void aggregate(Tuple tuple, ImmutableBytesWritable ptr) {
-        ImmutableBytesPtr key = new ImmutableBytesPtr(ptr.get(), ptr.getOffset(), ptr.getLength());
+        ImmutableBytesPtr key = ptr.get().length > FIXED_COPY_THRESHOLD &&
+                                ptr.get().length > ptr.getLength() * COPY_THRESHOLD ?
+                        new ImmutableBytesPtr(ptr.copyBytes()) :
+                        new ImmutableBytesPtr(ptr);
         Integer count = this.valueVsCount.get(key);
         if (count == null) {
             this.valueVsCount.put(key, 1);
