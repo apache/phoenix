@@ -187,7 +187,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         String sql = "SELECT * FROM " + VIEW_NAME + " WHERE v2 = 100";
         ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['10',1,100]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [1,'10',100]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         rs = conn1.prepareStatement(sql).executeQuery();
