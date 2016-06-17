@@ -286,8 +286,6 @@ public abstract class ExplainTable {
                 }
             }
             if (isLocalIndex && i == 0) {
-                    //&& ((context.getConnection().getTenantId() != null && i == 0) || (context
-                    //        .getConnection().getTenantId() == null && i == 1))) {
                 appendPKColumnValue(buf, b, isNull, i, true);
             } else {
                 appendPKColumnValue(buf, b, isNull, i, false);
