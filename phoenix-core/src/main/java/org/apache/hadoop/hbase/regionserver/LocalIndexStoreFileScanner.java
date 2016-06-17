@@ -141,13 +141,6 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
     }
 
     private boolean isSatisfiedMidKeyCondition(Cell kv) {
-        if (CellUtil.isDelete(kv) && kv.getValueLength() == 0) {
-            // In case of a Delete type KV, let it be going to both the daughter regions.
-            // No problems in doing so. In the correct daughter region where it belongs to, this delete
-            // tomb will really delete a KV. In the other it will just hang around there with no actual
-            // kv coming for which this is a delete tomb. :)
-            return true;
-        }
         ImmutableBytesWritable rowKey =
                 new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset() + reader.getOffset(),
                         kv.getRowLength() - reader.getOffset());
@@ -155,15 +148,18 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         IndexMaintainer indexMaintainer = entry.getValue();
         byte[] viewIndexId = indexMaintainer.getViewIndexIdFromIndexRowKey(rowKey);
         IndexMaintainer actualIndexMaintainer = reader.getIndexMaintainers().get(new ImmutableBytesWritable(viewIndexId));
-        byte[] dataRowKey = actualIndexMaintainer.buildDataRowKey(rowKey, reader.getViewConstants());
-        int compareResult = Bytes.compareTo(dataRowKey, reader.getSplitRow());
-        if (reader.isTop()) {
-            if (compareResult >= 0) {
-                return true;
-            }
-        } else {
-            if (compareResult < 0) {
-                return true;
+        if(actualIndexMaintainer != null) {
+            byte[] dataRowKey = actualIndexMaintainer.buildDataRowKey(rowKey, reader.getViewConstants());
+
+            int compareResult = Bytes.compareTo(dataRowKey, reader.getSplitRow());
+            if (reader.isTop()) {
+                if (compareResult >= 0) {
+                    return true;
+                }
+            } else {
+                if (compareResult < 0) {
+                    return true;
+                }
             }
         }
         return false;
