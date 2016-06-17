@@ -114,8 +114,10 @@ public class WhereOptimizer {
     	boolean isSalted = nBuckets != null;
     	RowKeySchema schema = table.getRowKeySchema();
     	boolean isMultiTenant = tenantId != null && table.isMultiTenant();
+    	boolean isSharedIndex = table.getViewIndexId() != null;
+    	
     	if (isMultiTenant) {
-            tenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId);
+            tenantIdBytes = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex);
     	}
 
         if (whereClause == null && (tenantId == null || !table.isMultiTenant()) && table.getViewIndexId() == null) {
@@ -187,6 +189,19 @@ public class WhereOptimizer {
             pkPos++;
         }
         
+        // Add unique index ID for shared indexes on views. This ensures
+        // that different indexes don't interleave.
+        if (hasViewIndex) {
+            byte[] viewIndexBytes = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+            KeyRange indexIdKeyRange = KeyRange.getKeyRange(viewIndexBytes);
+            cnf.add(singletonList(indexIdKeyRange));
+            if (hasMinMaxRange) {
+                System.arraycopy(viewIndexBytes, 0, minMaxRangePrefix, minMaxRangeOffset, viewIndexBytes.length);
+                minMaxRangeOffset += viewIndexBytes.length;
+            }
+            pkPos++;
+        }
+        
         // Add tenant data isolation for tenant-specific tables
         if (isMultiTenant) {
             KeyRange tenantIdKeyRange = KeyRange.getKeyRange(tenantIdBytes);
@@ -199,18 +214,6 @@ public class WhereOptimizer {
                     minMaxRangePrefix[minMaxRangeOffset] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), tenantIdBytes.length==0, f);
                     minMaxRangeOffset++;
                 }
-            }
-            pkPos++;
-        }
-        // Add unique index ID for shared indexes on views. This ensures
-        // that different indexes don't interleave.
-        if (hasViewIndex) {
-            byte[] viewIndexBytes = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
-            KeyRange indexIdKeyRange = KeyRange.getKeyRange(viewIndexBytes);
-            cnf.add(singletonList(indexIdKeyRange));
-            if (hasMinMaxRange) {
-                System.arraycopy(viewIndexBytes, 0, minMaxRangePrefix, minMaxRangeOffset, viewIndexBytes.length);
-                minMaxRangeOffset += viewIndexBytes.length;
             }
             pkPos++;
         }
