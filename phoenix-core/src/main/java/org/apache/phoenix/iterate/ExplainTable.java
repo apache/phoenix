@@ -289,9 +289,7 @@ public abstract class ExplainTable {
                     minMaxIterator = Iterators.emptyIterator();
                 }
             }
-            if (isLocalIndex
-                    && ((context.getConnection().getTenantId() != null && i == 0) || (context
-                            .getConnection().getTenantId() == null && i == 1))) {
+            if (isLocalIndex && i == 0) {
                 appendPKColumnValue(buf, b, isNull, i, true);
             } else {
                 appendPKColumnValue(buf, b, isNull, i, false);
