@@ -206,7 +206,13 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             super.prePut(e, put, edit, durability);
         } else {
             Collection<Pair<Mutation, byte[]>> localIndexUpdates = localUpdates.remove(Bytes.toLong(bs));
-            this.writer.write(localIndexUpdates, true);
+            try{
+                this.writer.write(localIndexUpdates, true);
+            } catch (Throwable t) {
+                String msg = "Failed to update index with entries:" + localIndexUpdates;
+                LOG.error(msg, t);
+                ServerUtil.throwIOException(msg, t);
+            }
         }
     }
 
@@ -220,7 +226,13 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             super.postDelete(e, delete, edit, durability);
         } else {
             Collection<Pair<Mutation, byte[]>> localIndexUpdates = localUpdates.remove(Bytes.toLong(bs));
-            this.writer.write(localIndexUpdates, true);
+            try{
+                this.writer.write(localIndexUpdates, true);
+            } catch (Throwable t) {
+                String msg = "Failed to update index with entries:" + localIndexUpdates;
+                LOG.error(msg, t);
+                ServerUtil.throwIOException(msg, t);
+            }
         }
     }
 

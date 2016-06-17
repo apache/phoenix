@@ -67,7 +67,7 @@ public class ServerUtil {
         } else if (t instanceof IOException) {
             // If the IOException does not wrap any exception, then bubble it up.
             Throwable cause = t.getCause();
-            if (cause instanceof RetriesExhaustedWithDetailsException)
+            if (cause instanceof RetriesExhaustedWithDetailsException || cause instanceof DoNotRetryIOException)
             	return new DoNotRetryIOException(t.getMessage(), cause);
             else if (cause == null || cause instanceof IOException) {
                 return (IOException) t;
