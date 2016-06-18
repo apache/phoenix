@@ -33,8 +33,6 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.phoenix.jdbc.PhoenixConnection;
-
 /**
  *
  * Server to show trace information
@@ -211,7 +209,6 @@ public class TraceServlet extends HttpServlet {
     }else{
     try {
       con = ConnectionFactory.getConnection();
-      PhoenixConnection pconn = (PhoenixConnection) con;
       Statement statement = con.createStatement();
       ResultSet rs = statement.executeQuery("TRACE ON");
       while (rs.next()) {
