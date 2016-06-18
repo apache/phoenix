@@ -27,9 +27,13 @@ import javax.servlet.http.HttpServletResponse;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.phoenix.jdbc.PhoenixConnection;
 
 /**
  *
@@ -59,6 +63,7 @@ public class TraceServlet extends HttpServlet {
     String hostname = request.getParameter("hostname");
     String traceStatus = request.getParameter("status");
     String description = request.getParameter("description");
+    String query = request.getParameter("query");
     String jsonObject = "{}";
     if ("getall".equals(action)) {
       jsonObject = getAll(limit);
@@ -74,6 +79,8 @@ public class TraceServlet extends HttpServlet {
       jsonObject = traceByDescription(description);
     } else if ("setTrace".equals(action)) {
       jsonObject = traceON(traceStatus);
+    } else if ("query".equals(action)) {
+      jsonObject = getResultId(query);
     } else {
       jsonObject = "{ \"Server\": \"Phoenix Tracing Web App\", \"API version\": 0.1 }";
     }
@@ -106,7 +113,7 @@ public class TraceServlet extends HttpServlet {
     json = getResults(sqlQuery);
     return json;
   }
-  
+
   //get count on traces can pick on param to count
   protected String getCount(String countby) {
     String json = null;
@@ -194,7 +201,39 @@ public class TraceServlet extends HttpServlet {
     }
     return json;
   }
-  
-  
+
+    //get traceid from statments
+  protected String getResultId(String sqlQuery) {
+    String json = null;
+    String traceId = "12";
+    if(sqlQuery == null){
+      json = "{error:true,msg:'SQL was null'}";
+    }else{
+    try {
+      con = ConnectionFactory.getConnection();
+      PhoenixConnection pconn = (PhoenixConnection) con;
+      Statement statement = con.createStatement();
+      ResultSet rs = statement.executeQuery("TRACE ON");
+      while (rs.next()) {
+        traceId = rs.getString("trace_id");
+      }
+      statement.executeQuery(sqlQuery);
+      statement.executeQuery("TRACE OFF");
+      json = "{error:false,trace_id:"+traceId+"}";
+    } catch (Exception e) {
+      json = "{error:true,msg:'Serrver Error:"+e.getMessage()+"'}";
+    } finally {
+      if (con != null) {
+        try {
+          con.close();
+        } catch (SQLException e) {
+          json = "{error:true,msg:'SQL Serrver Error:"+e.getMessage()+"'}";
+        }
+      }
+    }
+    }
+    return json;
+  }
+
 }
 
