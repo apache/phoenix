@@ -54,7 +54,7 @@ public class RoundTimestampExpression extends RoundDateExpression {
 
     public RoundTimestampExpression() {}
     
-    private RoundTimestampExpression(List<Expression> children) {
+    public RoundTimestampExpression(List<Expression> children) {
         super(children);
     }
     
