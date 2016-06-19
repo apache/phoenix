@@ -92,7 +92,7 @@ public class RoundDecimalExpression extends ScalarFunction {
 
     public RoundDecimalExpression() {}
 
-    protected RoundDecimalExpression(List<Expression> children) {
+    public RoundDecimalExpression(List<Expression> children) {
         super(children);
         LiteralExpression scaleChild = (LiteralExpression)children.get(1);
         PDataType scaleType = scaleChild.getDataType();
