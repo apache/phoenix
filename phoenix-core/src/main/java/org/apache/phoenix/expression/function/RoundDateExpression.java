@@ -119,7 +119,7 @@ public class RoundDateExpression extends ScalarFunction {
         return LiteralExpression.newConstant(multiplier, PInteger.INSTANCE, Determinism.ALWAYS);
     }
     
-    RoundDateExpression(List<Expression> children) {
+    public RoundDateExpression(List<Expression> children) {
         super(children.subList(0, 1));
         int numChildren = children.size();
         Object timeUnitValue = ((LiteralExpression)children.get(1)).getValue();

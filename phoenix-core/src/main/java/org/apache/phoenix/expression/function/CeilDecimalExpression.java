@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.util.List;
@@ -24,15 +25,12 @@ import java.util.List;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.schema.types.PDecimal;
-
-import com.google.common.collect.Lists;
-
-import java.math.BigDecimal;
-
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+
+import com.google.common.collect.Lists;
 
 /**
  *
@@ -45,7 +43,7 @@ public class CeilDecimalExpression extends RoundDecimalExpression {
 
     public CeilDecimalExpression() {}
 
-    private CeilDecimalExpression(List<Expression> children) {
+    public CeilDecimalExpression(List<Expression> children) {
         super(children);
     }
 
