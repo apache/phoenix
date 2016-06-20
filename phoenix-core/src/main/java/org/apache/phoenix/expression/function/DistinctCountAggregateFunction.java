@@ -21,16 +21,16 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.DistinctCountClientAggregator;
 import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggregator;
+import org.apache.phoenix.parse.DistinctCountParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -41,7 +41,7 @@ import org.apache.phoenix.util.SchemaUtil;
  * 
  * @since 1.2.1
  */
-@BuiltInFunction(name=DistinctCountAggregateFunction.NAME, args= {@Argument()} )
+@BuiltInFunction(name=DistinctCountAggregateFunction.NAME, nodeClass=DistinctCountParseNode.class, args= {@Argument()} )
 public class DistinctCountAggregateFunction extends DelegateConstantToCountAggregateFunction {
     public static final String NAME = "DISTINCT_COUNT";
     public static final String NORMALIZED_NAME = SchemaUtil.normalizeIdentifier(NAME);
