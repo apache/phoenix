@@ -19,7 +19,7 @@
 'use strict';
 
 var TimeLineCtrl = angular.module('TimeLineCtrl', ['ui.bootstrap']);
-TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) {
+TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location, GenerateTimelineService) {
   $scope.page = {
     title: 'Timeline for Trace'
   };
@@ -60,7 +60,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) 
           //adding to the time line
           for (var i = 0; i < data.length; i++) {
             var currentData = data[i];
-            var dest = getDescription(currentData.description);
+            var dest = GenerateTimelineService.getDescription(currentData.description);
             $scope.chartObject.data.rows[nextid + i] = {
               "c": [{
                 "v": "Trace " + (nextid + i)
@@ -100,35 +100,8 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) 
       getTimeLineChart(newsurl);
       //getTimeLineChart(url);
     }
-
     $scope.clearId();
   };
-
-  //shortning description
-  function getDescription(description) {
-    var dst = '';
-    var haveBracket = description.indexOf("(");
-    if (haveBracket != -1) {
-      dst = description.substring(0, description.indexOf("("))
-    } else {
-      dst = description;
-    }
-    console.log(dst);
-    return dst;
-  }
-
-  //trace item to show current time
-  var cdatamodel = [{
-    "v": "Trace 01"
-  }, {
-    "v": "Current Time"
-  }, {
-    "v": new Date()
-  }, {
-    "v": new Date()
-  }, {
-    "v": "Current time"
-  }];
 
   //getting TimeLine chart with data
   function getTimeLineChart(url) {
@@ -137,7 +110,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) 
       for (var i = 0; i < data.length; i++) {
         console.log(data[i])
         var datax = data[i];
-        var dest = getDescription(datax.description);
+        var dest = GenerateTimelineService.getDescription(datax.description);
         var datamodel = [{
           "v": "Trace " + i
         }, {
@@ -155,7 +128,7 @@ TimeLineCtrl.controller('TraceTimeLineCtrl', function($scope, $http, $location) 
         }
       }
       timeLine.data.rows[data.length] = {
-        "c": cdatamodel
+        "c": GenerateTimelineService.getDataModel()
       }
       console.log(timeLine);
       $scope.chartObject = timeLine;
