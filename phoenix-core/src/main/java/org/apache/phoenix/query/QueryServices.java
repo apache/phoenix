@@ -161,6 +161,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String RUN_UPDATE_STATS_ASYNC = "phoenix.update.stats.command.async";
     public static final String STATS_SERVER_POOL_SIZE = "phoenix.stats.pool.size";
     public static final String COMMIT_STATS_ASYNC = "phoenix.stats.commit.async";
+    // Maximum size in bytes taken up by cached table stats in the client
+    public static final String STATS_MAX_CACHE_SIZE = "phoenix.stats.cache.maxSize";
 
     public static final String SEQUENCE_SALT_BUCKETS_ATTRIB = "phoenix.sequence.saltBuckets";
     public static final String COPROCESSOR_PRIORITY_ATTRIB = "phoenix.coprocessor.priority";
