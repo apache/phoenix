@@ -4,13 +4,14 @@
 </div>
 
 <label>Search By 
-  <select>
+  <select ng-model="selectedSearchType">
     <option value="trace_id">Trace ID</option>
     <option value="host">Host</option>
     <option value="query">Query</option>
     <option value="description">Description</option>
   </select>
   <input type="text" ng-model="traceId"/>
+  <button ng-click="searchTrace()">Search</button>
 </label>
 
 <ul class="nav nav-tabs">
@@ -28,14 +29,38 @@
 <script type="text/ng-template" id="one.tpl.html">
   <div id="List">
     <h1>List</h1>
-    <p>List...</p>
+      <div class="col-md-12">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Parent ID</th>
+        <th>Span ID</th>
+        <th>Description</th>
+        <th>View Models</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr ng-repeat="trace in traces">
+        <td>{{trace.parent_id}}</td>
+        <td>{{trace.span_id}}</td>
+        <td>{{trace.description | limitTo:letterLimit}}</td>
+        <td>
+          <div class="btn-group " role="group" aria-label="...">
+             <a href="./#/dependency-tree?traceid={{trace.trace_id}}" class="btn btn-info" role="button"><i class="fa fa-sort-amount-asc"></i></a>
+             <a href="./#/trace-timeline?traceid={{trace.trace_id}}" class="btn btn-info" role="button"><i class="fa fa-sliders"></i></a>
+          </div>
+        </td>
+      </tr>
+     </tbody>
+  </table>
+</div>
   </div>
 </script>
   
 <script type="text/ng-template" id="two.tpl.html">
   <div id="timeline">
   <h1>TimeLine</h1>
-  <p>TimeLine...</p>
+  <div google-chart chart="chartObject" style="height: 100%;"></div>
   </div>
 </script>
 
