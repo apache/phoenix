@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.stats.PTableStats;
 
 
@@ -327,7 +328,6 @@ public interface PTable extends PMetaDataEntity {
     PTableKey getKey();
 
     IndexType getIndexType();
-    PTableStats getTableStats();
     int getBaseColumnCount();
 
     /**

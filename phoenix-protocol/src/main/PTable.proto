@@ -72,7 +72,9 @@ message PTable {
   repeated PColumn columns = 9;
   repeated PTable indexes = 10;
   required bool isImmutableRows = 11;
-  repeated PTableStats guidePosts = 12;
+  // Do NOT reuse the tag '12'. Stats are no longer passed
+  // along with the PTable.
+  //repeated PTableStats guidePosts = 12;
   optional bytes dataTableNameBytes = 13;
   optional bytes defaultFamilyName = 14;
   required bool disableWAL = 15;

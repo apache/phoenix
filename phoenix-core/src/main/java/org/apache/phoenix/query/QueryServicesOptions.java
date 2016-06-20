@@ -189,6 +189,8 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = true;
     public static final boolean DEFAULT_COMMIT_STATS_ASYNC = true;
     public static final int DEFAULT_STATS_POOL_SIZE = 4;
+    // Maximum size (in bytes) that cached table stats should take upm
+    public static final long DEFAULT_STATS_MAX_CACHE_SIZE = 256 * 1024 * 1024;
 
     public static final boolean DEFAULT_USE_REVERSE_SCAN = true;
 

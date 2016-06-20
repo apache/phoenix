@@ -1024,10 +1024,6 @@ public class MetaDataClient {
                         public PName getPhysicalName() {
                             return physicalNames.get(index);
                         }
-                        @Override
-                        public PTableStats getTableStats() {
-                            return PTableStats.EMPTY_STATS;
-                        }
                     };
                     rowCount += updateStatisticsInternal(name, indexLogicalTable, updateStatisticsStmt.getProps());
                 }
@@ -3582,24 +3578,9 @@ public class MetaDataClient {
         String physicalName = table.getPhysicalName().toString().replace(QueryConstants.NAMESPACE_SEPARATOR,
                 QueryConstants.NAME_SEPARATOR);
         if (isView && table.getViewType() != ViewType.MAPPED) {
-            try {
-                return connection.getTable(new PTableKey(null, physicalName)).getTableStats();
-            } catch (TableNotFoundException e) {
-                // Possible when the table timestamp == current timestamp - 1.
-                // This would be most likely during the initial index build of a view index
-                // where we're doing an upsert select from the tenant specific table.
-                // TODO: would we want to always load the physical table in updateCache in
-                // this case too, as we might not update the view with all of it's indexes?
-                String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
-                String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
-                MetaDataMutationResult result = updateCache(null, physicalSchemaName, physicalTableName, false);
-                if (result.getTable() == null) {
-                    throw new TableNotFoundException(physicalSchemaName, physicalTableName);
-                }
-                return result.getTable().getTableStats();
-            }
+              return connection.getQueryServices().getTableStats(Bytes.toBytes(physicalName), getCurrentScn());
         }
-        return table.getTableStats();
+        return connection.getQueryServices().getTableStats(table.getName().getBytes(), getCurrentScn());
     }
 
     private void throwIfLastPKOfParentIsFixedLength(PTable parent, String viewSchemaName, String viewName, ColumnDef col) throws SQLException {
