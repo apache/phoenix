@@ -554,7 +554,9 @@ public class TestUtil {
         }
         pstmt.execute();
         TableRef tableRef = pstmt.getQueryPlan().getTableRef();
-        PTableStats tableStats = tableRef.getTable().getTableStats();
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        long scn = null == pconn.getSCN() ? Long.MAX_VALUE : pconn.getSCN();
+        PTableStats tableStats = pconn.getQueryServices().getTableStats(tableRef.getTable().getName().getBytes(), scn);
         return tableStats.getGuidePosts().values();
     }
 
