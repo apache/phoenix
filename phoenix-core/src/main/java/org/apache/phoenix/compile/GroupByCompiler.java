@@ -154,11 +154,8 @@ public class GroupByCompiler {
                 isOrderPreserving = tracker.isOrderPreserving();
                 orderPreservingColumnCount = tracker.getOrderPreservingColumnCount();
             }
-            if (isOrderPreserving) {
-                return new GroupBy.GroupByBuilder(this).setOrderPreservingColumnCount(orderPreservingColumnCount).build();
-            }
-            if (isUngroupedAggregate) {
-                return UNGROUPED_GROUP_BY;
+            if (isOrderPreserving || isUngroupedAggregate) {
+                return new GroupBy.GroupByBuilder(this).setIsOrderPreserving(isOrderPreserving).setOrderPreservingColumnCount(orderPreservingColumnCount).build();
             }
             List<Expression> expressions = Lists.newArrayListWithExpectedSize(this.expressions.size());
             List<Expression> keyExpressions = expressions;

@@ -34,13 +34,16 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         conn.setAutoCommit(false);
         String ddl = "CREATE TABLE " + testTableF +
                 "  (prefix1 INTEGER NOT NULL, prefix2 INTEGER NOT NULL, prefix3 INTEGER NOT NULL, " +
-                "col1 FLOAT, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3))";
+                "col1 FLOAT, col2 INTEGER, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3)) DISABLE_WAL=true, IMMUTABLE_ROWS=true";
         createTestTable(getUrl(), ddl);
 
         ddl = "CREATE TABLE " + testTableV +
                 "  (prefix1 varchar NOT NULL, prefix2 varchar NOT NULL, prefix3 INTEGER NOT NULL, " +
-                "col1 FLOAT, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3))";
+                "col1 FLOAT, col2 INTEGER, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3)) DISABLE_WAL=true, IMMUTABLE_ROWS=true";
         createTestTable(getUrl(), ddl);
+
+        conn.prepareStatement("CREATE INDEX " + testTableF + "_idx ON "+testTableF+"(col2) DISABLE_WAL=true").execute();
+        conn.prepareStatement("CREATE INDEX " + testTableV + "_idx ON "+testTableV+"(col2) DISABLE_WAL=true").execute();
 
         conn.prepareStatement("CREATE SEQUENCE " + testSeq + " CACHE 1000").execute();
 
@@ -76,8 +79,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         multiply();
         multiply();
         multiply();
-        multiply();
-        multiply(); // 512 per unique prefix
+        multiply(); // 256 per unique prefix
     }
 
     @Test
@@ -150,7 +152,11 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testPlan("SELECT DISTINCT (prefix1, prefix2, prefix3) FROM "+testTable, false);
         testPlan("SELECT DISTINCT prefix1, prefix2, col1, prefix3 FROM "+testTable, false);
         testPlan("SELECT DISTINCT prefix1, prefix2, col1 FROM "+testTable, false);
-        testPlan("SELECT DISTINCT col1, prefix1, prefix2 FROM "+testTable, false);;
+        testPlan("SELECT DISTINCT col1, prefix1, prefix2 FROM "+testTable, false);
+        testPlan("SELECT DISTINCT col1 FROM "+testTable, false);
+        testPlan("SELECT COUNT(DISTINCT col1) FROM "+testTable, false);
+        testPlan("SELECT DISTINCT col2 FROM "+testTable, true);
+        testPlan("SELECT COUNT(DISTINCT col2) FROM "+testTable, true);
         testPlan("SELECT prefix1 FROM "+testTable+" GROUP BY prefix1", true);
         testPlan("SELECT COUNT(prefix1) FROM (SELECT prefix1 FROM "+testTable+" GROUP BY prefix1)", true);
         // aggregate over the group by, cannot optimize
@@ -176,7 +182,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private void testPlan(String query, boolean optimizable) throws Exception {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+query);
-        assertEquals(QueryUtil.getExplainPlan(rs).contains(PREFIX), optimizable);
+        assertEquals(optimizable, QueryUtil.getExplainPlan(rs).contains(PREFIX));
     }
 
     @Test
@@ -256,6 +262,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testCount("SELECT %s COUNT(DISTINCT prefix1), COUNT(DISTINCT (prefix1, prefix2)) FROM " + testTable + " WHERE col1 > 0.99", -1, -1);
 
         testCount("SELECT %s COUNT(DISTINCT col1) FROM " + testTable, -1);
+        testCount("SELECT %s COUNT(DISTINCT col2) FROM " + testTable, -1);
     }
 
     @Test
@@ -333,7 +340,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static void insertPrefixF(int prefix1, int prefix2) throws SQLException {
         String query = "UPSERT INTO " + testTableF
-                + "(prefix1, prefix2, prefix3, col1) VALUES(?,?,NEXT VALUE FOR "+testSeq+",rand())";
+                + "(prefix1, prefix2, prefix3, col1, col2) VALUES(?,?,NEXT VALUE FOR "+testSeq+",rand(), trunc(rand()*1000))";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setInt(1, prefix1);
             stmt.setInt(2, prefix2);
@@ -342,7 +349,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static void insertPrefixV(String prefix1, String prefix2) throws SQLException {
         String query = "UPSERT INTO " + testTableV
-                + "(prefix1, prefix2, prefix3, col1) VALUES(?,?,NEXT VALUE FOR "+testSeq+",rand())";
+                + "(prefix1, prefix2, prefix3, col1, col2) VALUES(?,?,NEXT VALUE FOR "+testSeq+",rand(), trunc(rand()*1000))";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setString(1, prefix1);
             stmt.setString(2, prefix2);
@@ -351,9 +358,9 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static void multiply() throws SQLException {
         conn.prepareStatement("UPSERT INTO " + testTableF
-                + " SELECT prefix1,prefix2,NEXT VALUE FOR "+testSeq+",rand() FROM "+testTableF).execute();
+                + " SELECT prefix1,prefix2,NEXT VALUE FOR "+testSeq+",rand(), trunc(rand()*1000) FROM "+testTableF).execute();
         conn.prepareStatement("UPSERT INTO " + testTableV
-                + " SELECT prefix1,prefix2,NEXT VALUE FOR "+testSeq+",rand() FROM "+testTableV).execute();
+                + " SELECT prefix1,prefix2,NEXT VALUE FOR "+testSeq+",rand(), trunc(rand()*1000) FROM "+testTableV).execute();
         conn.commit();
     }
 }

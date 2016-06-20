@@ -613,6 +613,30 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals("Query should not use index", PTableType.VIEW, plan.getTableRef().getTable().getType());
     }
 
+    @Test
+    public void testDistinctPrefixOnVarcharIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("SELECT COUNT(DISTINCT v1) FROM t");
+        assertTrue(plan.getGroupBy().isOrderPreserving());
+        assertFalse(plan.getGroupBy().getKeyExpressions().isEmpty());
+        assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
+    }
+
+    @Test
+    public void testDistinctPrefixOnIntIndex() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 VARCHAR)");
+        conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("SELECT COUNT(DISTINCT v1) FROM t");
+        assertTrue(plan.getGroupBy().isOrderPreserving());
+        assertFalse(plan.getGroupBy().getKeyExpressions().isEmpty());
+        assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
+    }
+
     private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {
         Connection conn = stmt.getConnection();
         QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
