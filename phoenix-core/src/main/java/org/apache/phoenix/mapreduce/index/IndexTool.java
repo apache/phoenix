@@ -97,7 +97,7 @@ public class IndexTool extends Configured implements Tool {
     private static final Option OUTPUT_PATH_OPTION = new Option("op", "output-path", true,
             "Output path where the files are written");
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
-    private static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s_INDX_%s";
+    public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s_INDX_%s";
 
     private Options getOptions() {
         final Options options = new Options();
