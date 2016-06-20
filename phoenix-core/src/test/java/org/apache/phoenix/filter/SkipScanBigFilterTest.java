@@ -32,10 +32,11 @@ import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
@@ -654,7 +655,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
         GuidePostsInfo info = gpWriter.build();
         final SortedMap<byte[], GuidePostsInfo> gpMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
         gpMap.put(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, info);
-        PTable tableWithStats = PTableImpl.makePTable(table, new PTableStats() {
+        PTableStats stats = new PTableStats() {
 
             @Override
             public SortedMap<byte[], GuidePostsInfo> getGuidePosts() {
@@ -670,8 +671,11 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
             public long getTimestamp() {
                 return table.getTimeStamp()+1;
             }
-        });
-        conn.unwrap(PhoenixConnection.class).addTable(tableWithStats, System.currentTimeMillis());
+        };
+        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+        pConn.addTable(table, System.currentTimeMillis());
+        ((ConnectionlessQueryServicesImpl) pConn.getQueryServices())
+                .addTableStats(table.getName().getBytesPtr(), stats);
 
         String query = "SELECT count(1) cnt,\n" + 
                 "       coalesce(SUM(impressions), 0.0) AS \"impressions\",\n" + 
