@@ -1,0 +1,54 @@
+<!-- Main jumbotron for a primary marketing message or call to action -->
+<div class="jumbotron">
+  <h1>Phoenix Tracing Search</h1>
+</div>
+
+<label>Search By 
+  <select>
+    <option value="trace_id">Trace ID</option>
+    <option value="host">Host</option>
+    <option value="query">Query</option>
+    <option value="description">Description</option>
+  </select>
+  <input type="text" ng-model="traceId"/>
+</label>
+
+<ul class="nav nav-tabs">
+  <li ng-repeat="tab in tabs" 
+    ng-class="{active:isActiveTab(tab.url)}" 
+    ng-click="onClickTab(tab)"><a>{{tab.title}}</a>
+  </li>
+</ul>
+
+<div id="mainView">
+  <div ng-include="currentTab"></div>
+</div>
+
+<!-- template for tab view -->
+<script type="text/ng-template" id="one.tpl.html">
+  <div id="List">
+    <h1>List</h1>
+    <p>List...</p>
+  </div>
+</script>
+  
+<script type="text/ng-template" id="two.tpl.html">
+  <div id="timeline">
+  <h1>TimeLine</h1>
+  <p>TimeLine...</p>
+  </div>
+</script>
+
+<script type="text/ng-template" id="three.tpl.html">
+  <div id="dependencytree">
+    <h1>Dependency Tree</h1>
+    <p>Dependency Tree....</p>
+  </div>
+</script>
+
+<script type="text/ng-template" id="four.tpl.html">
+  <div id="Trace Distribution">
+    <h1>Trace Distribution</h1>
+    <p>Trace Distribution...</p>
+  </div>
+</script>
