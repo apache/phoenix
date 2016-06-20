@@ -86,6 +86,23 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     }
 
     @Test
+    public void testArrayLenWithRegExpSplit() throws SQLException {
+    	Connection conn = DriverManager.getConnection(getUrl());
+    	String val = "T";
+    	for(int i = 1; i < Short.MAX_VALUE + 500; i++) {
+    		val += ",T";
+    	}
+    	
+        initTable(conn, val);
+
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT array_length(REGEXP_SPLIT(VAL, ',')) FROM " + SPLIT_TEST);
+        assertTrue(rs.next());
+        assertEquals(33267, rs.getInt(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
     public void testSplit_InFilter() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "ONE,TWO,THREE");
