@@ -1185,8 +1185,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         }
         // In case where the number of elements is greater than SHORT.MAX_VALUE we do negate the number of
         // elements. So it is always better to return the absolute value
-		return Math
-				.abs(Bytes.toInt(bytes, (ptr.getOffset() + ptr.getLength() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT))));
+		return (Bytes.toInt(bytes, (ptr.getOffset() + ptr.getLength() - (Bytes.SIZEOF_BYTE + Bytes.SIZEOF_INT))));
     }
 
     public static int estimateSize(int size, PDataType baseType) {
