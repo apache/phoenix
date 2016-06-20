@@ -1512,6 +1512,8 @@ public class UpgradeUtil {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
             // Confirm table is not already upgraded
             PTable table = PhoenixRuntime.getTable(conn, tableName);
+            if (table.isMultiTenant()) { throw new IllegalArgumentException(
+                    "Sorry!! currently support for upgrading multi-tenant table to map to namespace is not supported!!"); }
             // Upgrade is not required if schemaName is not present.
             if (schemaName.equals("") && !PTableType.VIEW
                     .equals(table.getType())) { throw new IllegalArgumentException("Table doesn't have schema name"); }
