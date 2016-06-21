@@ -36,6 +36,7 @@ import org.apache.phoenix.util.ByteUtil;
 public class DistinctPrefixFilter extends FilterBase implements Writable {
     private static byte VERSION = 1;
 
+    private int offset;
     private RowKeySchema schema;
     private int prefixLengh;
     private boolean filterAll = false;
@@ -49,12 +50,16 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
         this.prefixLengh = prefixLength;
     }
 
+    public void setOffset(int offset) {
+        this.offset = offset;
+    }
+
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
         // First determine the prefix based on the schema
-        int maxOffset = schema.iterator(v.getRowArray(), v.getRowOffset(), v.getRowLength(), ptr);
+        int maxOffset = schema.iterator(v.getRowArray(), v.getRowOffset()+offset, v.getRowLength()-offset, ptr);
         schema.next(ptr, 0, maxOffset, prefixLengh - 1);
 
         // now check whether we have seen this prefix before
@@ -70,26 +75,44 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
     @Override
     public Cell getNextCellHint(Cell v) throws IOException {
-        ImmutableBytesWritable tmp;
         PDataType<?> type = schema.getField(prefixLengh-1).getDataType();
-        if (reversed) {
-            // simply seek right before the first occurrence of the row
-            tmp = lastKey;
-        } else {
-            if (type.isFixedWidth()) {
-                // copy the bytes, since nextKey will modify in place
-                tmp = new ImmutableBytesWritable(lastKey.copyBytes());
-            } else {
-                // pad with a 0x00 byte (makes a copy)
-                tmp = new ImmutableBytesWritable(lastKey);
-                ByteUtil.nullPad(tmp, tmp.getLength() + 1);
+
+        ImmutableBytesWritable tmp;
+        // In the following we make sure we copy the key at most once
+        // Either because we have an offset, or when needed for nextKey
+        if (offset > 0) {
+            // make space to copy the missing offset, also 0-pad here if needed
+            // (since we're making a copy anyway)
+            byte[] tmpKey = new byte[offset + lastKey.getLength() + 
+                                     (reversed || type.isFixedWidth() ? 0 : 1)];
+            System.arraycopy(v.getRowArray(), v.getRowOffset(), tmpKey, 0, offset);
+            System.arraycopy(lastKey.get(), 0, tmpKey, offset, lastKey.getLength());
+            tmp = new ImmutableBytesWritable(tmpKey);
+            if (!reversed) {
+                // calculate the next key, the above already 0-padded if needed
+                if (!ByteUtil.nextKey(tmp.get(), tmp.getOffset(), tmp.getLength())) {
+                    filterAll = true;
+                }
             }
-            // calculate the next key
-            if (!ByteUtil.nextKey(tmp.get(), tmp.getOffset(), tmp.getLength())) {
-                filterAll = true;
+        } else {
+            if (reversed) {
+                // simply seek right before the first occurrence of the row
+                tmp = lastKey;
+            } else {
+                if (type.isFixedWidth()) {
+                    // copy the bytes, since nextKey will modify in place
+                    tmp = new ImmutableBytesWritable(lastKey.copyBytes());
+                } else {
+                    // pad with a 0x00 byte (makes a copy)
+                    tmp = new ImmutableBytesWritable(lastKey);
+                    ByteUtil.nullPad(tmp, tmp.getLength() + 1);
+                }
+                // calculate the next key
+                if (!ByteUtil.nextKey(tmp.get(), tmp.getOffset(), tmp.getLength())) {
+                    filterAll = true;
+                }
             }
         }
-
         return KeyValue.createFirstOnRow(tmp.get(), tmp.getOffset(), tmp.getLength(), null, 0, 0,
                 null, 0, 0);
     }
