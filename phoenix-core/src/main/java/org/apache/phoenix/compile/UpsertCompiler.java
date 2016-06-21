@@ -113,7 +113,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class UpsertCompiler {
-    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes, PTable table, Map<ImmutableBytesPtr,RowMutationState> mutation, PhoenixStatement statement, boolean useServerTimestamp) throws SQLException {
+    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes,
+            PTable table, Map<ImmutableBytesPtr, RowMutationState> mutation,
+            PhoenixStatement statement, boolean useServerTimestamp, IndexMaintainer maintainer,
+            byte[][] viewConstants) throws SQLException {
         Map<PColumn,byte[]> columnValues = Maps.newHashMapWithExpectedSize(columnIndexes.length);
         byte[][] pkValues = new byte[table.getPKColumns().size()][];
         // If the table uses salting, the first byte is the salting byte, set to an empty array
@@ -144,6 +147,19 @@ public class UpsertCompiler {
         }
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         table.newKey(ptr, pkValues);
+        if (table.getIndexType() == IndexType.LOCAL && maintainer != null) {
+            byte[] rowKey = maintainer.buildDataRowKey(ptr, viewConstants);
+            HRegionLocation region =
+                    statement.getConnection().getQueryServices()
+                            .getTableRegionLocation(table.getParentName().getBytes(), rowKey);
+            byte[] regionPrefix =
+                    region.getRegionInfo().getStartKey().length == 0 ? new byte[region
+                            .getRegionInfo().getEndKey().length] : region.getRegionInfo()
+                            .getStartKey();
+            if (regionPrefix.length != 0) {
+                ptr.set(ScanRanges.prefixKey(ptr.get(), 0, regionPrefix, regionPrefix.length));
+            }
+        } 
         mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo));
     }
     
@@ -160,6 +176,19 @@ public class UpsertCompiler {
         int rowCount = 0;
         Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(batchSize);
         PTable table = tableRef.getTable();
+        IndexMaintainer indexMaintainer = null;
+        byte[][] viewConstants = null;
+        if (table.getIndexType() == IndexType.LOCAL) {
+            PTable parentTable =
+                    statement
+                            .getConnection()
+                            .getMetaDataCache()
+                            .getTableRef(
+                                new PTableKey(statement.getConnection().getTenantId(), table
+                                        .getParentName().getString())).getTable();
+            indexMaintainer = table.getIndexMaintainer(parentTable, connection);
+            viewConstants = IndexUtil.getViewConstants(parentTable);
+        }
         try (ResultSet rs = new PhoenixResultSet(iterator, projector, childContext)) {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             while (rs.next()) {
@@ -185,7 +214,7 @@ public class UpsertCompiler {
                             table.rowKeyOrderOptimizable());
                     values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
-                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp);
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants);
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (isAutoCommit && rowCount % batchSize == 0) {
@@ -927,7 +956,20 @@ public class UpsertCompiler {
                     }
                 }
                 Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(1);
-                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp);
+                IndexMaintainer indexMaintainer = null;
+                byte[][] viewConstants = null;
+                if (table.getIndexType() == IndexType.LOCAL) {
+                    PTable parentTable =
+                            statement
+                                    .getConnection()
+                                    .getMetaDataCache()
+                                    .getTableRef(
+                                        new PTableKey(statement.getConnection().getTenantId(),
+                                                table.getParentName().getString())).getTable();
+                    indexMaintainer = table.getIndexMaintainer(parentTable, connection);
+                    viewConstants = IndexUtil.getViewConstants(parentTable);
+                }
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants);
                 return new MutationState(tableRef, mutation, 0, maxSize, connection);
             }
 
