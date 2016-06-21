@@ -1,11 +1,18 @@
 'use strict';
 
-TraceCtrl.controller('TraceSearchCtrl', function($scope, $http, GenerateTimelineService) {
+TraceCtrl.controller('TraceSearchCtrl', function($scope, $http, GenerateTimelineService, GenerateDependancyTreeService) {
 $scope.traceId =0;
 $scope.selectedSearchType="trace_id";
 $scope.traces = [];
 $scope.tracesLimit =100;
 $scope.letterLimit =100;
+$scope.page = {
+  alertType: 'alert-info'
+};
+$scope.rootId = "";
+
+var sqlQuery = null;
+var rootId = null;
 
 $scope.tabs = [{
             title: 'List',
@@ -52,9 +59,9 @@ $scope.tabs = [{
             url: searchurl
         }).success(function(data, status) {
             $scope.traces = data;
-            getTimeLineChart(data);
+            $scope.chartObject = getTimeLineChart(data);
+            $scope.dependencyTreeObject = getTreeData(data);
         });
-
     };
 
 
@@ -83,11 +90,56 @@ $scope.tabs = [{
       timeLine.data.rows[data.length] = {
         "c": GenerateTimelineService.getDataModel()
       }
-      console.log(timeLine);
-      $scope.chartObject = timeLine;
-    console.log(timeLine);
     return timeLine;
   };
 
+
+  function setSQLQuery(data) {
+    for (var i = 0; i < data.length; i++) {
+      var currentParentID = data[i].parent_id;
+      //console.log('p '+currentParentID);
+      for (var j = 0; j < data.length; j++) {
+        var currentSpanID = data[j].span_id;
+        //console.log('s '+currentSpanID);
+        if (currentSpanID == currentParentID) {
+          break;
+        } else if (j == data.length - 1) {
+          sqlQuery = data[i].description;
+          rootId = currentParentID;
+        }
+      }
+    }
+  };
+
+  //get Dependancy tree with data model
+  function getTreeData(data) {
+    $scope.reqStatus = "Retriving data from Phoenix.";
+      //getRootID(data);
+      setSQLQuery(data);
+      for (var i = 0; i < data.length; i++) {
+        var currentData = data[i];
+        var currentDataParentId = currentData.parent_id;
+        //check for root id
+        if (currentDataParentId == rootId) {
+          currentDataParentId = '';
+        }
+        var toolTip = GenerateDependancyTreeService.getToolTip(currentData);
+        var datamodel = [{
+          "v": currentData.span_id,
+          'f': GenerateDependancyTreeService.getDescription(currentData.description)
+        }, {
+          "v": currentDataParentId
+        }, {
+          "v": toolTip
+        }]
+        dependencyChart.data.rows[i] = {
+          "c": datamodel
+        }
+      }
+      $scope.page.alertType = 'alert-success';
+      $scope.reqStatus = "Data retrieved on SQL Query - " +
+        sqlQuery;
+    return dependencyChart;
+  };
 
 });

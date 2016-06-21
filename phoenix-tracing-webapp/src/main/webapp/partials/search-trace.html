@@ -67,7 +67,8 @@
 <script type="text/ng-template" id="three.tpl.html">
   <div id="dependencytree">
     <h1>Dependency Tree</h1>
-    
+    <div class="alert {{page.alertType}}" role="alert">{{reqStatus}}</div>
+    <div google-chart chart="dependencyTreeObject" style="height: 70%;"></div>
   </div>
 </script>
 
