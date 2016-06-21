@@ -60,7 +60,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         createTestTable(getUrl(), ddl);
 
         conn.prepareStatement("CREATE INDEX " + testTableF + "_idx ON "+testTableF+"(col2) DISABLE_WAL=true").execute();
-        conn.prepareStatement("CREATE INDEX " + testTableV + "_idx ON "+testTableV+"(col2) DISABLE_WAL=true").execute();
+        conn.prepareStatement("CREATE LOCAL INDEX " + testTableV + "_idx ON "+testTableV+"(col2) DISABLE_WAL=true").execute();
 
         conn.prepareStatement("CREATE SEQUENCE " + testSeq + " CACHE 1000").execute();
 

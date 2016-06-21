@@ -53,6 +53,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
@@ -693,6 +694,9 @@ public class ScanUtil {
         } else if (filter instanceof SkipScanFilter) {
             SkipScanFilter skipScanFilter = (SkipScanFilter)filter;
             skipScanFilter.setOffset(offset);
+        } else if (filter instanceof DistinctPrefixFilter) {
+            DistinctPrefixFilter prefixFilter = (DistinctPrefixFilter) filter;
+            prefixFilter.setOffset(offset);
         }
     }
 
