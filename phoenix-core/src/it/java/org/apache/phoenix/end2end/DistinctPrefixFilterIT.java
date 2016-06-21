@@ -56,7 +56,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
         ddl = "CREATE TABLE " + testTableV +
                 "  (prefix1 varchar NOT NULL, prefix2 varchar NOT NULL, prefix3 INTEGER NOT NULL, " +
-                "col1 FLOAT, col2 INTEGER, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3)) DISABLE_WAL=true, IMMUTABLE_ROWS=true";
+                "col1 FLOAT, col2 INTEGER, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3)) DISABLE_WAL=true, IMMUTABLE_ROWS=true, SALT_BUCKETS=8";
         createTestTable(getUrl(), ddl);
 
         conn.prepareStatement("CREATE INDEX " + testTableF + "_idx ON "+testTableF+"(col2) DISABLE_WAL=true").execute();
