@@ -102,6 +102,9 @@ public class ToCharFunction extends ScalarFunction {
         if (!expression.evaluate(tuple, ptr)) {
             return false;
         }
+        if (ptr.getLength() == 0) {
+            return true;
+        }
         PDataType type = expression.getDataType();
         Object value = formatter.format(type.toObject(ptr, expression.getSortOrder()));
         byte[] b = getDataType().toBytes(value);
