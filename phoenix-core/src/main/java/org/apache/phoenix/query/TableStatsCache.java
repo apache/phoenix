@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -93,6 +94,10 @@ public class TableStatsCache {
                         Long.MAX_VALUE);
                 traceStatsUpdate(tableNameBytes, stats);
                 return stats;
+            } catch (TableNotFoundException e) {
+                // On a fresh install, stats might not yet be created, don't warn about this.
+                logger.debug("Unable to locate Phoenix stats table", e);
+                return PTableStats.EMPTY_STATS;
             } catch (IOException e) {
                 logger.warn("Unable to read from stats table", e);
                 // Just cache empty stats. We'll try again after some time anyway.
