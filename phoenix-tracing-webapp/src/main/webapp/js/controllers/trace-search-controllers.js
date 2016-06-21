@@ -25,7 +25,7 @@ $scope.tabs = [{
 
   $scope.onClickTab = function (tab) {
     $scope.currentTab = tab.url;
-  }
+  };
 
   $scope.searchTrace = function () {
     
@@ -33,18 +33,23 @@ $scope.tabs = [{
     console.log($scope.selectedSearchType);
     
     if($scope.traceId!=0 && $scope.selectedSearchType=="trace_id")
-    $scope.loadTrace();
-
+      $scope.loadTrace('../trace?action=searchTrace&traceid='+$scope.traceId);
+    else if($scope.traceId!=null && $scope.selectedSearchType=="host")
+      $scope.loadTrace('../trace?action=searchTraceByHost&hostname='+$scope.traceId);
+    else if($scope.traceId!=null && $scope.selectedSearchType=="description")
+      $scope.loadTrace('../trace?action=searchTraceByDescription&description='+$scope.traceId);
+    else if($scope.traceId!=null && $scope.selectedSearchType=="query")
+      $scope.loadTrace('../trace?action=searchQuery&query='+$scope.traceId);
   };
 
   $scope.isActiveTab = function(tabUrl) {
     return tabUrl == $scope.currentTab;
-  }
+  };
 
-  $scope.loadTrace = function() {
+  $scope.loadTrace = function(searchurl) {
         var httpRequest = $http({
             method: 'GET',
-            url: '../trace?action=searchTrace&traceid='+$scope.traceId
+            url: searchurl
         }).success(function(data, status) {
             $scope.traces = data;
             getTimeLineChart(data);

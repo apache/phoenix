@@ -74,10 +74,10 @@ public class TraceServlet extends HttpServlet {
     } else if ("searchTraceByHost".equals(action)) {
       jsonObject = tracebyHost(hostname,limit);
     } else if ("searchTraceByDescription".equals(action)) {
-      jsonObject = traceByDescription(description);
+      jsonObject = traceByDescription(description,limit);
     } else if ("setTrace".equals(action)) {
       jsonObject = traceON(traceStatus);
-    } else if ("query".equals(action)) {
+    } else if ("searchQuery".equals(action)) {
       jsonObject = getResultId(query);
     } else {
       jsonObject = "{ \"Server\": \"Phoenix Tracing Web App\", \"API version\": 0.1 }";
@@ -131,7 +131,7 @@ public class TraceServlet extends HttpServlet {
       query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId+" "+logic+" trace_id="+traceId;
     }else if (parentId != null && traceId == null) {
       query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId;
-    }else if(parentId == null && traceId != null) {
+    }else if(parentId == null && traceId != null ) {
       query = "SELECT * FROM " + TRACING_TABLE + " WHERE trace_id="+traceId;
     }
     json = getResults(query);
@@ -153,11 +153,14 @@ public class TraceServlet extends HttpServlet {
   }
 
   //search the trace over description
-  protected String traceByDescription(String description) {
+  protected String traceByDescription(String description,String limit) {
     String json = null;
     String query = null;
-    if(description!= null ) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE DESCRIPTION like '%"+description+"%'";
+    if(limit == null) {
+      limit = DEFAULT_LIMIT;
+    }
+    if(description!= null && limit !=null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE DESCRIPTION like '%"+description+"%' LIMIT " +limit;
     }
     json = getResults(query);
     return getJson(json);
@@ -203,20 +206,21 @@ public class TraceServlet extends HttpServlet {
     //get traceid from statments
   protected String getResultId(String sqlQuery) {
     String json = null;
-    String traceId = "12";
+    String traceId = "0";
     if(sqlQuery == null){
       json = "{error:true,msg:'SQL was null'}";
     }else{
     try {
       con = ConnectionFactory.getConnection();
       Statement statement = con.createStatement();
-      ResultSet rs = statement.executeQuery("TRACE ON");
+      ResultSet rs =statement.executeQuery("TRACE ON");
       while (rs.next()) {
         traceId = rs.getString("trace_id");
       }
       statement.executeQuery(sqlQuery);
       statement.executeQuery("TRACE OFF");
-      json = "{error:false,trace_id:"+traceId+"}";
+      ResultSet t=statement.executeQuery("Select * from SYSTEM.TRACING_STATS WHERE TRACE_ID ="+traceId );
+      json=getJson(getResults("Select * from SYSTEM.TRACING_STATS WHERE TRACE_ID ="+traceId));
     } catch (Exception e) {
       json = "{error:true,msg:'Serrver Error:"+e.getMessage()+"'}";
     } finally {
