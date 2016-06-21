@@ -225,26 +225,24 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                     connectionQueryServices = prevValue;
                 }
             }
-            String noUpgradeProp = info.getProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB);
-            if (!Boolean.TRUE.equals(noUpgradeProp)) {
-                boolean success = false;
-                SQLException sqlE = null;
-                try {
-                    connectionQueryServices.init(url, info);
-                    success = true;
-                } catch (SQLException e) {
-                    sqlE = e;
-                }
-                finally {
-                    if (!success) {
-                        // Remove from map, as initialization failed
-                        connectionQueryServicesMap.remove(normalizedConnInfo);
-                        if (sqlE != null) {
-                            throw sqlE;
-                        }
+            boolean success = false;
+            SQLException sqlE = null;
+            try {
+                connectionQueryServices.init(url, info);
+                success = true;
+            } catch (SQLException e) {
+                sqlE = e;
+            }
+            finally {
+                if (!success) {
+                    // Remove from map, as initialization failed
+                    connectionQueryServicesMap.remove(normalizedConnInfo);
+                    if (sqlE != null) {
+                        throw sqlE;
                     }
                 }
             }
+
             return connectionQueryServices;
         } finally {
             unlock(LockMode.READ);
