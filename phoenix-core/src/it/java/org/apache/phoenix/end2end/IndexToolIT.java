@@ -80,6 +80,7 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
                 optionBuilder.append(",");
             optionBuilder.append(" TRANSACTIONAL=true ");
         }
+        optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
     }
     
@@ -143,7 +144,7 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             
             //assert we are pulling from data table.
-            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s", fullTableName), actualExplainPlan);
+            assertEquals(String.format("CLIENT 3-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s", fullTableName), actualExplainPlan);
             
             rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -204,7 +205,7 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         String expectedExplainPlan = "";
         if(isLocal) {
             final String localIndexName = SchemaUtil.getTableName(schemaName, dataTable);
-            expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN RANGE SCAN OVER %s [1]"
+            expectedExplainPlan = String.format("CLIENT 3-CHUNK PARALLEL 3-WAY ROUND ROBIN RANGE SCAN OVER %s [1]"
                 + "\n    SERVER FILTER BY FIRST KEY ONLY", localIndexName);
         } else {
             expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s"
