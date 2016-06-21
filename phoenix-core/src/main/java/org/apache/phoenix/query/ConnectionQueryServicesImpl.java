@@ -2324,7 +2324,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         try {
                             openConnection();
                             String noUpgradeProp = props.getProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB);
-                            if (!Boolean.TRUE.equals(noUpgradeProp)) {
+                            if (!Boolean.TRUE.equals(Boolean.valueOf(noUpgradeProp))) {
                                 Properties scnProps = PropertiesUtil.deepCopy(props);
                                 scnProps.setProperty(
                                         PhoenixRuntime.CURRENT_SCN_ATTRIB,
