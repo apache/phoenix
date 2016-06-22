@@ -86,7 +86,7 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
             byte[] tmpKey = new byte[offset + lastKey.getLength() + 
                                      (reversed || type.isFixedWidth() ? 0 : 1)];
             System.arraycopy(v.getRowArray(), v.getRowOffset(), tmpKey, 0, offset);
-            System.arraycopy(lastKey.get(), 0, tmpKey, offset, lastKey.getLength());
+            System.arraycopy(lastKey.get(), lastKey.getOffset(), tmpKey, offset, lastKey.getLength());
             tmp = new ImmutableBytesWritable(tmpKey);
             if (!reversed) {
                 // calculate the next key, the above already 0-padded if needed
