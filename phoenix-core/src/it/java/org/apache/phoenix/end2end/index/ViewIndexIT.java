@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -33,10 +34,13 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -116,21 +120,32 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         this.viewIndexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
 
-
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
         createBaseTable(tableName, false, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
-        conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME + " AS SELECT * FROM " + tableName);
-        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + VIEW_NAME + " (v1)");
+        String viewName = schemaName + "." + VIEW_NAME;
+        conn1.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + " (v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_schema like '%"
+                + schemaName + "%'";
+        ResultSet rs = conn1.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(MetaDataUtil.getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped),
+                rs.getString("sequence_schema"));
+        assertEquals(MetaDataUtil.getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped),
+                rs.getString("sequence_name"));
+        assertEquals(-32767, rs.getInt("current_value"));
+        assertEquals(1, rs.getInt("increment_by"));
+        assertFalse(rs.next());
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        conn1.createStatement().execute("DROP VIEW " + VIEW_NAME);
+        conn1.createStatement().execute("DROP VIEW " + viewName);
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(viewIndexPhysicalTableName)));
-        ResultSet rs = conn2.createStatement().executeQuery("SELECT "
+        rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
@@ -172,11 +187,42 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         String sql = "SELECT * FROM " + VIEW_NAME + " WHERE v2 = 100";
         ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['10',1,100]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [1,'10',100]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         rs = conn1.prepareStatement(sql).executeQuery();
         assertTrue(rs.next());
         assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testCreatingIndexOnGlobalView() throws Exception {
+        String baseTable = "testCreatingIndexOnGlobalView".toUpperCase();
+        String globalView = "globalView".toUpperCase();
+        String globalViewIdx = "globalView_idx".toUpperCase();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);
+            conn.createStatement().execute("CREATE INDEX " + globalViewIdx + " ON " + globalView + " (PK3 DESC, KV3) INCLUDE (KV1)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + globalView + " (TENANT_ID, PK2, PK3, KV1, KV3) VALUES (?, ?, ?, ?, ?)");
+            stmt.setString(1, "tenantId");
+            stmt.setDate(2, new Date(100));
+            stmt.setInt(3, 1);
+            stmt.setString(4, "KV1");
+            stmt.setString(5, "KV3");
+            stmt.executeUpdate();
+            conn.commit();
+            
+            // Verify that query against the global view index works
+            stmt = conn.prepareStatement("SELECT KV1 FROM  " + globalView + " WHERE PK3 = ? AND KV3 = ?");
+            stmt.setInt(1, 1);
+            stmt.setString(2, "KV3");
+            ResultSet rs = stmt.executeQuery();
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertFalse(rs.next());
+        }
     }
 }

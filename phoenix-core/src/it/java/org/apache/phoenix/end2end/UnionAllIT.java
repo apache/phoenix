@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -56,7 +57,7 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
 
         try {
             String ddl = "CREATE TABLE test_table " +
-                    "  (a_string varchar not null, col1 integer" +
+                    "  (a_string varchar(10) not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
@@ -68,7 +69,7 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.commit();
 
             ddl = "CREATE TABLE b_table " +
-                    "  (a_string varchar not null, col1 integer" +
+                    "  (a_string char(20) not null, col1 bigint" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
             dml = "UPSERT INTO b_table VALUES(?, ?)";
@@ -87,10 +88,10 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals("a",rs.getString(1));
             assertEquals(10,rs.getInt(2));
             assertTrue(rs.next());
-            assertEquals("b",rs.getString(1));
+            assertEquals("b",rs.getString(1).trim());
             assertEquals(20,rs.getInt(2));
             assertTrue(rs.next());
-            assertEquals("c",rs.getString(1));
+            assertEquals("c",rs.getString(1).trim());
             assertEquals(20,rs.getInt(2));
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
@@ -109,7 +110,7 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
 
         try {
             String ddl = "CREATE TABLE test_table " +
-                    "  (a_string varchar not null, col1 integer" +
+                    "  (a_string char(5) not null, col1 tinyint" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
@@ -719,11 +720,321 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals("b",rs.getString(1));
             assertEquals(20,rs.getInt(2));
             assertFalse(rs.next()); 
-        } catch (Exception ex) {
-            ex.printStackTrace();
         } finally {
             conn.close();
         }
     } 
 
+    @Test
+    public void testDiffDataTypes() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        String ddl = "create table person ( id bigint not null primary key, " +
+                "firstname varchar(10), lastname varchar(10) )";
+        createTestTable(getUrl(), ddl);
+        String dml = "upsert into person values (?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "john");
+        stmt.setString(3, "doe");
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "jane");
+        stmt.setString(3, "doe");
+        stmt.execute();
+        conn.commit();
+
+        ddl = "create table user ( id integer not null primary key, firstname char(12)," +
+                " lastname varchar(12) )";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into user values (?, ?, ?)";
+        stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "sam");
+        stmt.setString(3, "johnson");
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "ann");
+        stmt.setString(3, "wiely");
+        stmt.execute();
+        conn.commit();
+
+        ddl = "create table t1 ( id varchar(20) not null primary key)";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into t1 values ('abcd')";
+        stmt = conn.prepareStatement(dml);
+        stmt.execute();
+        conn.commit();
+        ddl = "create table t2 ( id char(50) not null primary key)";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into t2 values ('xyz')";
+        stmt = conn.prepareStatement(dml);
+        stmt.execute();
+        conn.commit();
+        String query = "select id, 'foo' firstname, lastname from person union all" +
+                " select * from user";
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("foo", rs.getString(2));
+            assertEquals("doe", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("foo", rs.getString(2));
+            assertEquals("doe", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("sam", rs.getString(2).trim());
+            assertEquals("johnson", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("ann", rs.getString(2).trim());
+            assertEquals("wiely", rs.getString(3));
+            assertFalse(rs.next());
+
+            pstmt = conn.prepareStatement("select * from t1 union all select * from t2");
+            rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("abcd", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1).trim());
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testDiffScaleSortOrder() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        String ddl = "create table person ( id bigint not null primary key desc, " +
+                "firstname char(10), lastname varchar(10) )";
+        createTestTable(getUrl(), ddl);
+        String dml = "upsert into person values (?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "john");
+        stmt.setString(3, "doe");
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "jane");
+        stmt.setString(3, "doe");
+        stmt.execute();
+        conn.commit();
+
+        ddl = "create table user ( id integer not null primary key asc, " +
+                "firstname varchar(12), lastname varchar(10) )";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into user values (?, ?, ?)";
+        stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "sam");
+        stmt.setString(3, "johnson");
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "ann");
+        stmt.setString(3, "wiely");
+        stmt.execute();
+        conn.commit();
+
+        ddl = "create table t1 ( id varchar(20) not null primary key, col1 decimal)";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into t1 values ('abcd', 234.23)";
+        stmt = conn.prepareStatement(dml);
+        stmt.execute();
+        conn.commit();
+        ddl = "create table t2 ( id char(50) not null primary key, col1 decimal(12,4))";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into t2 values ('xyz', 1342.1234)";
+        stmt = conn.prepareStatement(dml);
+        stmt.execute();
+        conn.commit();
+
+        String query = "select * from user union all select * from person";
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("sam", rs.getString(2));
+            assertEquals("johnson", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("ann", rs.getString(2));
+            assertEquals("wiely", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("jane", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("john", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3));
+            assertFalse(rs.next());
+
+            pstmt = conn.prepareStatement("select * from t1 union all select * from t2");
+            rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals("abcd", rs.getString(1));
+            assertEquals(BigDecimal.valueOf(234.2300), rs.getBigDecimal(2));
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1).trim());
+            assertEquals(BigDecimal.valueOf(1342.1234), rs.getBigDecimal(2));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testVarcharChar() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        String ddl = "create table user ( id integer not null primary key asc, " +
+                "firstname char(8), lastname varchar )";
+        createTestTable(getUrl(), ddl);
+        String dml = "upsert into user values (?, ?, ?)";
+        PreparedStatement  stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "sam");
+        stmt.setString(3, "johnson");
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "ann");
+        stmt.setString(3, "wiely");
+        stmt.execute();
+        conn.commit();
+
+        ddl = "create table person ( id bigint not null primary key desc, " +
+                "firstname varchar(10), lastname char(10) )";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into person values (?, ?, ?)";
+        stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "john");
+        stmt.setString(3, "doe");
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "jane");
+        stmt.setString(3, "doe");
+        stmt.execute();
+        conn.commit();
+
+        String query = "select id, 'baa' firstname, lastname from user " +
+                "union all select * from person";
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("baa", rs.getString(2));
+            assertEquals("johnson", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("baa", rs.getString(2));
+            assertEquals("wiely", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("jane", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3).trim());
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("john", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3).trim());
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testCoerceExpr() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        String ddl = "create table user ( id integer not null primary key desc, " +
+                "firstname char(8), lastname varchar, sales double)";
+        createTestTable(getUrl(), ddl);
+        String dml = "upsert into user values (?, ?, ?, ?)";
+        PreparedStatement  stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "sam");
+        stmt.setString(3, "johnson");
+        stmt.setDouble(4, 100.6798);
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "ann");
+        stmt.setString(3, "wiely");
+        stmt.setDouble(4, 10.67);
+        stmt.execute();
+        conn.commit();
+
+        ddl = "create table person (id bigint not null primary key, " +
+                "firstname char(10), lastname varchar(10), sales decimal)";
+        createTestTable(getUrl(), ddl);
+        dml = "upsert into person values (?, ?, ?, ?)";
+        stmt = conn.prepareStatement(dml);
+        stmt.setInt(1, 1);
+        stmt.setString(2, "john");
+        stmt.setString(3, "doe");
+        stmt.setBigDecimal(4, BigDecimal.valueOf(467.894745));
+        stmt.execute();
+        stmt.setInt(1, 2);
+        stmt.setString(2, "jane");
+        stmt.setString(3, "doe");
+        stmt.setBigDecimal(4, BigDecimal.valueOf(88.89474501));
+        stmt.execute();
+        conn.commit();
+
+        String query = "select id, cast('foo' as char(10)) firstname, lastname, sales " +
+                "from person union all select * from user";
+        try {
+            PreparedStatement pstmt = conn.prepareStatement(query);
+            ResultSet rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(467.894745), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(88.89474501), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("ann", rs.getString(2).trim());
+            assertEquals("wiely", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(10.67), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("sam", rs.getString(2).trim());
+            assertEquals("johnson", rs.getString(3).trim());
+            assertEquals(BigDecimal.valueOf(100.6798), rs.getBigDecimal(4));
+            assertFalse(rs.next());
+
+            query = "select id, cast('foo' as char(10)) firstname, lastname, sales from person";
+            pstmt = conn.prepareStatement(query);
+            rs = pstmt.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3));
+            assertEquals(BigDecimal.valueOf(467.894745), rs.getBigDecimal(4));
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("foo", rs.getString(2).trim());
+            assertEquals("doe", rs.getString(3));
+            assertEquals(BigDecimal.valueOf(88.89474501), rs.getBigDecimal(4));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
 }

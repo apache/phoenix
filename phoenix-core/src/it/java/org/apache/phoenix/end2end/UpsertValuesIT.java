@@ -925,6 +925,25 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         }
     }
     
+    @Test
+    public void testAutoCastLongToBigDecimal() throws Exception {
+        long ts = nextTimestamp();
+        try (Connection conn = getConnection(ts)) {
+            conn.createStatement().execute("CREATE TABLE LONG_BUG (NAME VARCHAR PRIMARY KEY, AMOUNT DECIMAL)");
+        }
+        try (Connection conn = getConnection(ts + 10)) {
+            conn.createStatement().execute("UPSERT INTO LONG_BUG (NAME, AMOUNT) VALUES('HELLO1', -50000)");
+            conn.commit();
+        }
+        try (Connection conn = getConnection(ts + 20)) {
+            ResultSet rs = conn.createStatement().executeQuery("SELECT NAME, AMOUNT FROM LONG_BUG");
+            assertTrue(rs.next());
+            assertEquals("HELLO1", rs.getString(1));
+            assertTrue(new BigDecimal(-50000).compareTo(rs.getBigDecimal(2)) == 0);
+            assertFalse(rs.next());
+        }
+    }
+    
     private static Connection getConnection(long ts) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));

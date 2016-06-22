@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.phoenix.filter;
 
 import java.io.IOException;
@@ -8,11 +25,10 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -153,6 +169,18 @@ public class DistinctPrefixFilterTest extends TestCase {
         assertInclude("00004", f);
         assertInclude("00005", f);
         assertSeekAndHint("00005", f, "00005\01");
+    }
+
+    public void testVariableWithNull() throws Exception {
+        Filter f = createFilter(new int[]{-2,-2}, 1);
+        assertInclude("\00aa", f);
+        assertSeekAndHint("\00aa", f, "\01");
+        assertSeekAndHint("\00aa", f, "\01");
+
+        f = createFilter(new int[]{-2,-2}, 2);
+        assertInclude("\00\00", f);
+        assertSeekAndHint("\00\00", f, "\00\00\01");
+        assertSeekAndHint("\00\00", f, "\00\00\01");
     }
 
     public void testMultiVariableWidth() throws Exception {

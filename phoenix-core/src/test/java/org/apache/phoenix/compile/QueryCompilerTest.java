@@ -48,8 +48,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
@@ -67,6 +69,10 @@ import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -831,6 +837,31 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         } finally {
             conn.close();
         }
+    }
+
+    @Test
+    public void testSelectDistinctAndOrderBy() throws Exception {
+        long ts = nextTimestamp();
+        String query = "select /*+ RANGE_SCAN */ count(distinct organization_id) from atable order by organization_id";
+        String query1 = "select count(distinct organization_id) from atable order by organization_id";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.executeQuery();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            statement.executeQuery();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
     }
 
     @Test
@@ -2286,6 +2317,33 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute
                     (BaseScannerRegionObserver.AGGREGATORS), null);
             assertEquals(2,aggregators.getAggregatorCount());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testColumnProjectionUnionAll() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t1(k INTEGER PRIMARY KEY,"+
+                    " col1 CHAR(8), col2 VARCHAR(10), col3 decimal(10,2))");
+            conn.createStatement().execute("CREATE TABLE t2(k TINYINT PRIMARY KEY," +
+                    " col1 CHAR(20), col2 CHAR(30), col3 double)");
+            QueryPlan plan = getQueryPlan("SELECT * from t1 union all select * from t2",
+                Collections.emptyList());
+            RowProjector rowProj = plan.getProjector();
+            assertTrue(rowProj.getColumnProjector(0).getExpression().getDataType()
+                instanceof PInteger);
+            assertTrue(rowProj.getColumnProjector(1).getExpression().getDataType()
+                instanceof PChar);
+            assertTrue(rowProj.getColumnProjector(1).getExpression().getMaxLength() == 20);
+            assertTrue(rowProj.getColumnProjector(2).getExpression().getDataType()
+                instanceof PVarchar);
+            assertTrue(rowProj.getColumnProjector(2).getExpression().getMaxLength() == 30);
+            assertTrue(rowProj.getColumnProjector(3).getExpression().getDataType()
+                instanceof PDecimal);
+            assertTrue(rowProj.getColumnProjector(3).getExpression().getScale() == 2);
         } finally {
             conn.close();
         }

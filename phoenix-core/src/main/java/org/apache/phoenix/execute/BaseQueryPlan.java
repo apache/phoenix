@@ -278,8 +278,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
             tenantIdBytes = connection.getTenantId() == null ? null :
                     ScanUtil.getTenantIdBytes(
                             table.getRowKeySchema(),
-                            table.getBucketNum()!=null,
-                            connection.getTenantId());
+                            table.getBucketNum() != null,
+                            connection.getTenantId(), table.getViewIndexId() != null);
         } else {
             tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
         }

@@ -53,6 +53,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
@@ -693,6 +694,9 @@ public class ScanUtil {
         } else if (filter instanceof SkipScanFilter) {
             SkipScanFilter skipScanFilter = (SkipScanFilter)filter;
             skipScanFilter.setOffset(offset);
+        } else if (filter instanceof DistinctPrefixFilter) {
+            DistinctPrefixFilter prefixFilter = (DistinctPrefixFilter) filter;
+            prefixFilter.setOffset(offset);
         }
     }
 
@@ -766,16 +770,16 @@ public class ScanUtil {
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
 
-    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isMultiTenantTable)
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isMultiTenantTable, boolean isSharedIndex)
             throws SQLException {
         return isMultiTenantTable ?
-                  getTenantIdBytes(schema, isSalted, tenantId)
+                  getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex)
                 : tenantId.getBytes();
     }
 
-    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId)
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isSharedIndex)
             throws SQLException {
-        int pkPos = isSalted ? 1 : 0;
+        int pkPos = (isSalted ? 1 : 0) + (isSharedIndex ? 1 : 0); 
         Field field = schema.getField(pkPos);
         PDataType dataType = field.getDataType();
         byte[] convertedValue;

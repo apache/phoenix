@@ -77,6 +77,7 @@ import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -637,5 +638,25 @@ public class IndexUtil {
     public static String getIndexColumnExpressionStr(PColumn col) {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
+    }
+
+    public static byte[][] getViewConstants(PTable dataTable) {
+        if (dataTable.getType() != PTableType.VIEW) return null;
+        int dataPosOffset = (dataTable.getBucketNum() != null ? 1 : 0) + (dataTable.isMultiTenant() ? 1 : 0);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        List<byte[]> viewConstants = new ArrayList<byte[]>();
+        List<PColumn> dataPkColumns = dataTable.getPKColumns();
+        for (int i = dataPosOffset; i < dataPkColumns.size(); i++) {
+            PColumn dataPKColumn = dataPkColumns.get(i);
+            if (dataPKColumn.getViewConstant() != null) {
+                if (IndexUtil.getViewConstantValue(dataPKColumn, ptr)) {
+                    viewConstants.add(ByteUtil.copyKeyBytesIfNecessary(ptr));
+                } else {
+                    throw new IllegalStateException();
+                }
+            }
+        }
+        return viewConstants.isEmpty() ? null : viewConstants
+                .toArray(new byte[viewConstants.size()][]);
     }
 }

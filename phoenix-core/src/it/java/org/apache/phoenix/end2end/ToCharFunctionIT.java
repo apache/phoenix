@@ -255,4 +255,23 @@ public class ToCharFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
         assertEquals("Unexpected value for date ", String.valueOf(1234), rs.getString(1));
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testIndexedNull() throws SQLException {
+        final String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("create table " + tableName +
+                " (id integer primary key, ts1 timestamp, ts2 timestamp)");
+        conn.createStatement().execute("create index t_ts2_idx on " + tableName + " (ts2)");
+        conn.createStatement().execute("upsert into " + tableName + " values (1, null, null)");
+        conn.commit();
+        for (String columnName : new String[]{"ts1", "ts2"}) {
+            try (ResultSet rs = conn.createStatement().executeQuery(
+                    String.format("select to_char(%s) from %s", columnName, tableName))) {
+                assertTrue(rs.next());
+                assertEquals(null, rs.getString(1));
+            }
+        }
+        conn.close();
+    }
 }

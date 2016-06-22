@@ -211,10 +211,9 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.UpgradeUtil;
+import org.apache.tephra.TxConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.tephra.TxConstants;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
@@ -1025,10 +1024,6 @@ public class MetaDataClient {
                         public PName getPhysicalName() {
                             return physicalNames.get(index);
                         }
-                        @Override
-                        public PTableStats getTableStats() {
-                            return PTableStats.EMPTY_STATS;
-                        }
                     };
                     rowCount += updateStatisticsInternal(name, indexLogicalTable, updateStatisticsStmt.getProps());
                 }
@@ -1317,16 +1312,6 @@ public class MetaDataClient {
                 List<ColumnDefInPkConstraint> allPkColumns = Lists.newArrayListWithExpectedSize(unusedPkColumns.size());
                 List<ColumnDef> columnDefs = Lists.newArrayListWithExpectedSize(includedColumns.size() + indexParseNodeAndSortOrderList.size());
                 
-                if (dataTable.isMultiTenant()) {
-                    // Add tenant ID column as first column in index
-                    PColumn col = dataTable.getPKColumns().get(posOffset);
-                    RowKeyColumnExpression columnExpression = new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, posOffset), col.getName().getString());
-                    unusedPkColumns.remove(columnExpression);
-                    PDataType dataType = IndexUtil.getIndexColumnDataType(col);
-                    ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
-                    allPkColumns.add(new ColumnDefInPkConstraint(colName, col.getSortOrder(), false));
-                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), col.getName().getString(), col.isRowTimestamp()));
-                }
                 /*
                  * Allocate an index ID in two circumstances:
                  * 1) for a local index, as all local indexes will reside in the same HBase table
@@ -1334,11 +1319,20 @@ public class MetaDataClient {
                  */
                 if (isLocalIndex || (dataTable.getType() == PTableType.VIEW && dataTable.getViewType() != ViewType.MAPPED)) {
                     allocateIndexId = true;
-                    // Next add index ID column
                     PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
                     ColumnName colName = ColumnName.caseSensitiveColumnName(MetaDataUtil.getViewIndexIdColumnName());
                     allPkColumns.add(new ColumnDefInPkConstraint(colName, SortOrder.getDefault(), false));
                     columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), false, null, null, false, SortOrder.getDefault(), null, false));
+                }
+                
+                if (dataTable.isMultiTenant()) {
+                    PColumn col = dataTable.getPKColumns().get(posOffset);
+                    RowKeyColumnExpression columnExpression = new RowKeyColumnExpression(col, new RowKeyValueAccessor(pkColumns, posOffset), col.getName().getString());
+                    unusedPkColumns.remove(columnExpression);
+                    PDataType dataType = IndexUtil.getIndexColumnDataType(col);
+                    ColumnName colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(col));
+                    allPkColumns.add(new ColumnDefInPkConstraint(colName, col.getSortOrder(), false));
+                    columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, SortOrder.getDefault(), col.getName().getString(), col.isRowTimestamp()));
                 }
                 
                 PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
@@ -1432,7 +1426,8 @@ public class MetaDataClient {
                     String tenantIdStr = tenantId == null ? null : connection.getTenantId().getString();
                     PName physicalName = dataTable.getPhysicalName();
                     int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
-                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName, nSequenceSaltBuckets);
+                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName,
+                            nSequenceSaltBuckets, dataTable.isNamespaceMapped());
                     // if scn is set create at scn-1, so we can see the sequence or else use latest timestamp (so that latest server time is used)
                     long sequenceTimestamp = scn!=null ? scn-1 : HConstants.LATEST_TIMESTAMP;
                     createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
@@ -1511,7 +1506,16 @@ public class MetaDataClient {
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
         String tenantId =
                 connection.getTenantId() == null ? null : connection.getTenantId().getString();
-        return createSequence(tenantId, statement.getSequenceName().getSchemaName(), statement
+        String schemaName=statement.getSequenceName().getSchemaName();
+        if (SchemaUtil.isNamespaceMappingEnabled(null, connection.getQueryServices().getProps())) {
+            if (schemaName == null || schemaName.equals(StringUtil.EMPTY_STRING)) {
+                schemaName = connection.getSchema();
+            }
+            if (schemaName != null) {
+                FromCompiler.getResolverForSchema(schemaName, connection);
+            }
+        }
+        return createSequence(tenantId, schemaName, statement
                 .getSequenceName().getTableName(), statement.ifNotExists(), startWith, incrementBy,
             cacheSize, statement.getCycle(), minValue, maxValue, timestamp);
     }
@@ -2584,7 +2588,7 @@ public class MetaDataClient {
                         if (tableType == PTableType.TABLE
                                 && (table.isMultiTenant() || hasViewIndexTable || hasLocalIndexTable)) {
     
-                            MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName());
+                            MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(), table.isNamespaceMapped());
                             if (hasViewIndexTable) {
                                 String viewIndexSchemaName = null;
                                 String viewIndexTableName = null;
@@ -3119,7 +3123,7 @@ public class MetaDataClient {
                             && Boolean.FALSE.equals(multiTenant)
                             && MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName())) {
                         connection.setAutoCommit(true);
-                        MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName());
+                        MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(), table.isNamespaceMapped());
                         // If we're not dropping metadata, then make sure no rows are left in
                         // our view index physical table.
                         // TODO: remove this, as the DROP INDEX commands run when the DROP VIEW
@@ -3574,24 +3578,9 @@ public class MetaDataClient {
         String physicalName = table.getPhysicalName().toString().replace(QueryConstants.NAMESPACE_SEPARATOR,
                 QueryConstants.NAME_SEPARATOR);
         if (isView && table.getViewType() != ViewType.MAPPED) {
-            try {
-                return connection.getTable(new PTableKey(null, physicalName)).getTableStats();
-            } catch (TableNotFoundException e) {
-                // Possible when the table timestamp == current timestamp - 1.
-                // This would be most likely during the initial index build of a view index
-                // where we're doing an upsert select from the tenant specific table.
-                // TODO: would we want to always load the physical table in updateCache in
-                // this case too, as we might not update the view with all of it's indexes?
-                String physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
-                String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
-                MetaDataMutationResult result = updateCache(null, physicalSchemaName, physicalTableName, false);
-                if (result.getTable() == null) {
-                    throw new TableNotFoundException(physicalSchemaName, physicalTableName);
-                }
-                return result.getTable().getTableStats();
-            }
+              return connection.getQueryServices().getTableStats(Bytes.toBytes(physicalName), getCurrentScn());
         }
-        return table.getTableStats();
+        return connection.getQueryServices().getTableStats(table.getName().getBytes(), getCurrentScn());
     }
 
     private void throwIfLastPKOfParentIsFixedLength(PTable parent, String viewSchemaName, String viewName, ColumnDef col) throws SQLException {

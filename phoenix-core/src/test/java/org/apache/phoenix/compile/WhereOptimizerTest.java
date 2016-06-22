@@ -1625,6 +1625,39 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    public void testQueryMoreRVC() throws SQLException {
+        String tenantId = "000000000000001";
+        String parentId = "000000000000008";
+        
+        String ddl = "CREATE TABLE rvcTestIdx "
+                + " (\n" + 
+                "    pk1 VARCHAR NOT NULL,\n" + 
+                "    v1 VARCHAR,\n" + 
+                "    pk2 DECIMAL NOT NULL,\n" + 
+                "    CONSTRAINT PK PRIMARY KEY \n" + 
+                "    (\n" + 
+                "        pk1,\n" + 
+                "        v1,\n" + 
+                "        pk2\n" + 
+                "    )\n" + 
+                ") MULTI_TENANT=true,IMMUTABLE_ROWS=true";
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute(ddl);
+        String query = "SELECT pk1, pk2, v1 FROM rvcTestIdx WHERE pk1 = 'a' AND\n" + 
+                "(pk1, pk2) > ('a', 1)\n" + 
+                "ORDER BY PK1, PK2\n" + 
+                "LIMIT 2";
+        StatementContext context = compileStatement(query, 2);
+        Scan scan = context.getScan();
+        Filter filter = scan.getFilter();
+        assertNotNull(filter);
+        byte[] startRow = Bytes.toBytes("a");
+        byte[] stopRow = ByteUtil.concat(startRow, ByteUtil.nextKey(QueryConstants.SEPARATOR_BYTE_ARRAY));
+        assertArrayEquals(startRow, scan.getStartRow());
+        assertArrayEquals(stopRow, scan.getStopRow());
+    }
+    
+    @Test
     public void testCombiningRVCUsingOr() throws SQLException {
         String firstTenantId = "000000000000001";
         String secondTenantId = "000000000000005";
@@ -1982,5 +2015,21 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(3)), context.getScan().getStartRow());
         assertArrayEquals(ByteUtil.concat(PVarchar.INSTANCE.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, PChar.INSTANCE.toBytes("foo"), PInteger.INSTANCE.toBytes(1), ByteUtil.nextKey(PInteger.INSTANCE.toBytes(3))), context.getScan().getStopRow());
     }
-    
+
+    @Test
+    public void testNoAggregatorForOrderBy() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute("create table test (pk1 integer not null, pk2 integer not null, constraint pk primary key (pk1,pk2))");
+        StatementContext context = compileStatement("select count(distinct pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        context = compileStatement("select sum(pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        context = compileStatement("select min(pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        context = compileStatement("select max(pk1) from test order by count(distinct pk2)");
+        assertEquals(1, context.getAggregationManager().getAggregators().getAggregatorCount());
+        // here the ORDER BY is not optimized away
+        context = compileStatement("select avg(pk1) from test order by count(distinct pk2)");
+        assertEquals(2, context.getAggregationManager().getAggregators().getAggregatorCount());
+    }
 }

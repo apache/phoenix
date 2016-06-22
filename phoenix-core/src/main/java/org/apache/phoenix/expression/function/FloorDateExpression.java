@@ -46,7 +46,7 @@ public class FloorDateExpression extends RoundDateExpression {
     
     public FloorDateExpression() {}
     
-    protected FloorDateExpression(List<Expression> children) {
+    public FloorDateExpression(List<Expression> children) {
         super(children);
     }
     

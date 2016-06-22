@@ -45,6 +45,8 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -130,6 +132,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             String localIndexName = "LIDX";
             String[] tableNames = new String[] { phoenixFullTableName, schemaName + "." + indexName,
                     schemaName + "." + localIndexName, "diff.v", "test.v","v"};
+            String[] viewIndexes = new String[] { "diff.v_idx", "test.v_idx" };
             conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
                     + "(k VARCHAR PRIMARY KEY, v INTEGER, f INTEGER, g INTEGER NULL, h INTEGER NULL)");
             PreparedStatement upsertStmt = conn
@@ -164,6 +167,15 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
                 }
             }
 
+            // validate view Index data
+            for (String viewIndex : viewIndexes) {
+                ResultSet rs = conn.createStatement().executeQuery("select * from " + viewIndex);
+                for (String str : strings) {
+                    assertTrue(rs.next());
+                    assertEquals(str, rs.getString(2));
+                }
+            }
+
             HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             assertTrue(admin.tableExists(phoenixFullTableName));
             assertTrue(admin.tableExists(schemaName + QueryConstants.NAME_SEPARATOR + indexName));
@@ -178,7 +190,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             for (String viewName : viewNames) {
                 UpgradeUtil.upgradeTable(phxConn, viewName);
             }
-            admin = phxConn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            admin = phxConn.getQueryServices().getAdmin();
             String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
                     .getNameAsString();
             assertTrue(admin.tableExists(hbaseTableName));
@@ -194,8 +206,35 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
                     assertEquals(str, rs.getString(1));
                 }
             }
+            // validate view Index data
+            for (String viewIndex : viewIndexes) {
+                ResultSet rs = conn.createStatement().executeQuery("select * from " + viewIndex);
+                for (String str : strings) {
+                    assertTrue(rs.next());
+                    assertEquals(str, rs.getString(2));
+                }
+            }
+            PName tenantId = phxConn.getTenantId();
+            PName physicalName = PNameFactory.newName(hbaseTableName);
+            String oldSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(PNameFactory.newName(phoenixFullTableName),
+                    false);
+            String newSchemaName = MetaDataUtil.getViewIndexSequenceSchemaName(physicalName, true);
+            String newSequenceName = MetaDataUtil.getViewIndexSequenceName(physicalName, tenantId, true);
+            ResultSet rs = phxConn.createStatement()
+                    .executeQuery("SELECT " + PhoenixDatabaseMetaData.CURRENT_VALUE + "  FROM "
+                            + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
+                            + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + newSchemaName
+                            + "' AND " + PhoenixDatabaseMetaData.SEQUENCE_NAME + "='" + newSequenceName + "'");
+            assertTrue(rs.next());
+            assertEquals("-32765", rs.getString(1));
+            rs = phxConn.createStatement().executeQuery("SELECT " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
+                    + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + "," + PhoenixDatabaseMetaData.CURRENT_VALUE + "  FROM "
+                    + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE + " WHERE " + PhoenixDatabaseMetaData.TENANT_ID
+                    + " IS NULL AND " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + " = '" + oldSchemaName + "'");
+            assertFalse(rs.next());
             phxConn.close();
             admin.close();
+   
         }
     }
     
