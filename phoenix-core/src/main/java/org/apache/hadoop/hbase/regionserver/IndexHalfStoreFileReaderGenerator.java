@@ -144,7 +144,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             try {
                 conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
                             PhoenixConnection.class);
-                PTable dataTable = PhoenixRuntime.getTable(conn, tableName.getNameAsString());
+                PTable dataTable = PhoenixRuntime.getTableNoCache(conn, tableName.getNameAsString());
                 List<PTable> indexes = dataTable.getIndexes();
                 Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();

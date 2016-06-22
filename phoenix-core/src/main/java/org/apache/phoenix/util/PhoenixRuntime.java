@@ -371,6 +371,19 @@ public class PhoenixRuntime {
         };
     }
 
+    public static PTable getTableNoCache(Connection conn, String name) throws SQLException {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+        String tableName = SchemaUtil.getTableNameFromFullName(name);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
+                schemaName, tableName, true);
+        if(result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+            throw new TableNotFoundException(schemaName, tableName);
+        }
+
+        return result.getTable();
+
+    }
     /**
      * 
      * @param conn
