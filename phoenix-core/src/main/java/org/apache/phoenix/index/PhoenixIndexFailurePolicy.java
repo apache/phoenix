@@ -224,7 +224,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         try {
             conn = QueryUtil.getConnectionOnServer(this.env.getConfiguration()).unwrap(
                     PhoenixConnection.class);
-            PTable dataTable = PhoenixRuntime.getTable(conn, ref.getTableName());
+            PTable dataTable = PhoenixRuntime.getTableNoCache(conn, ref.getTableName());
             List<PTable> indexes = dataTable.getIndexes();
             // local index used to get view id from index mutation row key.
             PTable localIndex = null;
