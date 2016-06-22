@@ -28,7 +28,6 @@ angular.module('TracingAppCtrl').service('GenerateTimelineService', function() {
     } else {
       dst = description;
     }
-    console.log(dst);
     return dst;
   };
 

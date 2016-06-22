@@ -1,6 +1,6 @@
 'use strict';
 
-TraceCtrl.controller('TraceSearchCtrl', function($scope, $http, GenerateTimelineService, GenerateDependancyTreeService) {
+TraceCtrl.controller('TraceSearchCtrl', function($scope, $http, GenerateTimelineService, GenerateDependancyTreeService,GenerateDistributionService) {
 $scope.traceId =0;
 $scope.selectedSearchType="trace_id";
 $scope.traces = [];
@@ -10,10 +10,9 @@ $scope.page = {
   alertType: 'alert-info'
 };
 $scope.rootId = "";
-
 var sqlQuery = null;
 var rootId = null;
-
+$scope.distributionChartObject = {};
 $scope.tabs = [{
             title: 'List',
             url: 'one.tpl.html'
@@ -36,8 +35,6 @@ $scope.tabs = [{
 
   $scope.searchTrace = function () {
     
-    console.log($scope.traceId);
-    console.log($scope.selectedSearchType);
     
     if($scope.traceId!=0 && $scope.selectedSearchType=="trace_id")
       $scope.loadTrace('../trace?action=searchTrace&traceid='+$scope.traceId);
@@ -61,14 +58,14 @@ $scope.tabs = [{
             $scope.traces = data;
             $scope.chartObject = getTimeLineChart(data);
             $scope.dependencyTreeObject = getTreeData(data);
+            $scope.distributionChartObject = GenerateDistributionService.loadData(data);
         });
     };
 
 
   //getting TimeLine chart with data
-  function getTimeLineChart(data) {
+    function getTimeLineChart(data) {
       for (var i = 0; i < data.length; i++) {
-        console.log(data[i])
         var datax = data[i];
         var dest = GenerateTimelineService.getDescription(datax.description);
         var datamodel = [{
@@ -82,7 +79,6 @@ $scope.tabs = [{
         }, {
           "v": dest
         }]
-        console.log(i)
         timeLine.data.rows[i] = {
           "c": datamodel
         }
@@ -137,9 +133,10 @@ $scope.tabs = [{
         }
       }
       $scope.page.alertType = 'alert-success';
-      $scope.reqStatus = "Data retrieved on SQL Query - " +
-        sqlQuery;
+      $scope.reqStatus = "Data retrieved on SQL Query ";
     return dependencyChart;
   };
+
+
 
 });
