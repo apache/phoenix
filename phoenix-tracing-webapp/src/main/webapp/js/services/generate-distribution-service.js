@@ -14,13 +14,13 @@ this.loadData = function(data) {
         var datamodel =[{
             "v": datax.hostname
           }, {
-            "v": parseFloat(datax.count)
+            "v": parseFloat(1)
           }]
         chartObject.data.rows[i] = {"c": datamodel
         }
       }
         
-    
+    this.setChartType('PieChart');
     return chartObject;
   };
 
