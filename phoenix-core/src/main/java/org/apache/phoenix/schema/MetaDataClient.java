@@ -2628,7 +2628,7 @@ public class MetaDataClient {
     private void deleteFromStatsTable(List<TableRef> tableRefs, long ts) throws SQLException {
         Properties props = new Properties(connection.getClientInfo());
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        Connection conn = DriverManager.getConnection(connection.getURL(), props);
+        Connection conn = new PhoenixConnection(connection.getQueryServices(), connection, ts);
         conn.setAutoCommit(true);
         boolean success = false;
         SQLException sqlException = null;

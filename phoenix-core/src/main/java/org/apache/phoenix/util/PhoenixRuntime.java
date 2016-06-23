@@ -220,6 +220,9 @@ public class PhoenixRuntime {
         PhoenixConnection conn = null;
         try {
             Properties props = new Properties();
+            if (execCmd.isLocalIndexUpgrade()) {
+                props.setProperty(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, "false");
+            }
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
             if (execCmd.isMapNamespace()) {
                 String srcTable = execCmd.getSrcTable();
@@ -254,6 +257,8 @@ public class PhoenixRuntime {
                 } else {
                     UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles(), execCmd.isBypassUpgrade());
                 }
+            } else if(execCmd.isLocalIndexUpgrade()) {
+                UpgradeUtil.upgradeLocalIndexes(conn);
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
                     if (inputFile.endsWith(SQL_FILE_EXT)) {
@@ -649,7 +654,9 @@ public class PhoenixRuntime {
                 }
                 execCmd.isBypassUpgrade = true;
             }
-            execCmd.localIndexUpgrade = cmdLine.hasOption(localIndexUpgradeOption.getOpt());
+            if(cmdLine.hasOption(localIndexUpgradeOption.getOpt())) {
+                execCmd.localIndexUpgrade = true;
+            }
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
             if (argList.isEmpty()) {
@@ -665,7 +672,7 @@ public class PhoenixRuntime {
                 }
             }
 
-            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace()) {
+            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace() && !execCmd.isLocalIndexUpgrade()) {
                 usageError("At least one input file must be supplied", options);
             }
 
