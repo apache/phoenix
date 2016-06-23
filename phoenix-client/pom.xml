@@ -98,18 +98,6 @@
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <transformers>
-                <!--<transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer">-->
-                <!--</transformer>-->
-                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
-                  <resources>
-                    <resource>LICENSE.txt</resource>
-                    <resource>ASL2.0</resource>
-                  </resources>
-                </transformer>
-                <transformer
-                        implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
-                  <addHeader>false</addHeader>
-                </transformer>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                 <transformer
                         implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
@@ -126,7 +114,12 @@
                 <transformer
                         implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
                   <resource>LICENSE.txt</resource>
-                  <file>${project.basedir}/../LICENSE.txt</file>
+                  <file>${project.basedir}/../LICENSE</file>
+                </transformer>
+                <transformer
+                    implementation="org.apache.maven.plugins.shade.resource.IncludeResourceTransformer">
+                  <resource>NOTICE</resource>
+                  <file>${project.basedir}/../NOTICE</file>
                 </transformer>
               </transformers>
               <artifactSet>
@@ -137,6 +130,19 @@
                   <exclude>org.apache.phoenix:phoenix-client</exclude>
                 </excludes>
               </artifactSet>
+              <filters>
+                <filter>
+                  <artifact>*:*</artifact>
+                  <excludes>
+                    <exclude>META-INF/*.SF</exclude>
+                    <exclude>META-INF/*.DSA</exclude>
+                    <exclude>META-INF/*.RSA</exclude>
+                    <exclude>META-INF/license/*</exclude>
+                    <exclude>LICENSE.*</exclude>
+                    <exclude>NOTICE.*</exclude>
+                  </excludes>
+                </filter>
+              </filters>
 
               <relocations>
 
@@ -170,10 +176,6 @@
                 <relocation>
                   <pattern>com.thoughtworks</pattern>
                   <shadedPattern>${shaded.package}.com.thoughtworks</shadedPattern>
-                </relocation>
-                <relocation>
-                  <pattern>com.sun.jersey</pattern>
-                  <shadedPattern>${shaded.package}.com.sun.jersey</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>com.yammer</pattern>
