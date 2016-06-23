@@ -217,7 +217,7 @@ public interface QueryServices extends SQLCloseable {
 
     // time to wait before running second index population upsert select (so that any pending batches of rows on region server are also written to index)
     public static final String INDEX_POPULATION_SLEEP_TIME = "phoenix.index.population.wait.time";
-
+    public static final String LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB = "phoenix.client.localIndexUpgrade";
     /**
      * Get executor service used for parallel scans
      */
