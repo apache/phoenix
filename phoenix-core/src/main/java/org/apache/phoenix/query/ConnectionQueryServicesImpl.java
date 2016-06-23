@@ -21,17 +21,7 @@ import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
@@ -94,6 +84,7 @@ import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
+import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -190,6 +181,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -2472,19 +2464,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         }
 
                                         if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0) {
-                                            Properties props = PropertiesUtil.deepCopy(metaConnection.getClientInfo());
-                                            props.remove(PhoenixRuntime.CURRENT_SCN_ATTRIB);
-                                            props.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
-                                            PhoenixConnection conn =
-                                                    new PhoenixConnection(ConnectionQueryServicesImpl.this,
-                                                        metaConnection.getURL(), props, metaConnection
-                                                        .getMetaDataCache());
-                                            try {
-                                                UpgradeUtil.upgradeLocalIndexes(conn, true);
-                                            } finally {
-                                                if (conn != null) conn.close();
-                                            }
-
                                             metaConnection = addColumnsIfNotExists(metaConnection,
                                                 PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 - 2,
@@ -2500,7 +2479,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0,
                                                 PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA + " "
                                                         + PBoolean.INSTANCE.getSqlTypeName());
-                                            metaConnection = disableViewIndexes(metaConnection);
+                                            if(getProps().getBoolean(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB,
+                                                QueryServicesOptions.DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)) {
+                                                metaConnection = UpgradeUtil.upgradeLocalIndexes(metaConnection);
+                                            }
+                                            metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
                                             ConnectionQueryServicesImpl.this.removeTable(null,
                                                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
                                                 MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
@@ -2722,176 +2705,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         return metaConnection;
     }
-    
-    private PhoenixConnection disableViewIndexes(PhoenixConnection connParam) throws SQLException, IOException, InterruptedException, TimeoutException {
-        Properties props = PropertiesUtil.deepCopy(connParam.getClientInfo());
-        Long originalScn = null;
-        String str = props.getProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB);
-        if (str != null) {
-            originalScn = Long.valueOf(str);
-        }
-        // don't use the passed timestamp as scn because we want to query all view indexes up to now.
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
-        Set<String> physicalTables = new HashSet<>();
-        SQLException sqlEx = null;
-        PhoenixConnection globalConnection = null;
-        PhoenixConnection toReturn = null;
-        try {
-            globalConnection = new PhoenixConnection(connParam, this, props);
-            String tenantId = null;
-            try (HBaseAdmin admin = getAdmin()) {
-                String fetchViewIndexes = "SELECT " + TENANT_ID + ", " + TABLE_SCHEM + ", " + TABLE_NAME + 
-                        ", " + DATA_TABLE_NAME + " FROM " + SYSTEM_CATALOG_NAME + " WHERE " + VIEW_INDEX_ID
-                        + " IS NOT NULL AND " + INDEX_TYPE + "<>" + IndexType.LOCAL.getSerializedValue();
-                String disableIndexDDL = "ALTER INDEX %s ON %s DISABLE"; 
-                try (ResultSet rs = globalConnection.createStatement().executeQuery(fetchViewIndexes)) {
-                    while (rs.next()) {
-                        tenantId = rs.getString(1);
-                        String indexSchema = rs.getString(2);
-                        String indexName = rs.getString(3);
-                        String viewName = rs.getString(4);
-                        String fullIndexName = SchemaUtil.getTableName(indexSchema, indexName);
-                        PTable viewPTable = null;
-                        // Disable the view index and truncate the underlying hbase table. 
-                        // Users would need to rebuild the view indexes. 
-                        if (tenantId != null && !tenantId.isEmpty()) {
-                            Properties newProps = PropertiesUtil.deepCopy(globalConnection.getClientInfo());
-                            newProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-                            PTable indexPTable = null;
-                            try (PhoenixConnection tenantConnection = new PhoenixConnection(globalConnection, this, newProps)) {
-                                viewPTable = PhoenixRuntime.getTable(tenantConnection, viewName);
-                                tenantConnection.createStatement().execute(String.format(disableIndexDDL, fullIndexName, viewName));
-                                indexPTable = PhoenixRuntime.getTable(tenantConnection, fullIndexName);
-                            }
 
-                            int offset = indexPTable.getBucketNum() != null ? 1 : 0;
-                            int existingTenantIdPosition = ++offset; // positions are stored 1 based
-                            int existingViewIdxIdPosition = ++offset;
-                            int newTenantIdPosition = existingViewIdxIdPosition;
-                            int newViewIdxPosition = existingTenantIdPosition;
-                            String tenantIdColumn = indexPTable.getColumns().get(existingTenantIdPosition - 1).getName().getString();
-                            int index = 0;
-                            String updatePosition =
-                                    "UPSERT INTO "
-                                            + SYSTEM_CATALOG_NAME
-                                            + " ( "
-                                            + TENANT_ID
-                                            + ","
-                                            + TABLE_SCHEM
-                                            + ","
-                                            + TABLE_NAME
-                                            + ","
-                                            + COLUMN_NAME
-                                            + ","
-                                            + COLUMN_FAMILY
-                                            + ","
-                                            + ORDINAL_POSITION
-                                            + ") SELECT "
-                                            + TENANT_ID
-                                            + ","
-                                            + TABLE_SCHEM
-                                            + ","
-                                            + TABLE_NAME
-                                            + ","
-                                            + COLUMN_NAME
-                                            + ","
-                                            + COLUMN_FAMILY
-                                            + ","
-                                            + "?"
-                                            + " FROM "
-                                            + SYSTEM_CATALOG_NAME
-                                            + " WHERE "
-                                            + TENANT_ID
-                                            + " = ? "
-                                            + " AND "
-                                            + TABLE_NAME
-                                            + " = ? "
-                                            + " AND "
-                                            + (indexSchema == null ? TABLE_SCHEM + " IS NULL" : TABLE_SCHEM + " = ? ") 
-                                            + " AND "
-                                            + COLUMN_NAME 
-                                            + " = ? ";
-                            // update view index position
-                            try (PreparedStatement s = globalConnection.prepareStatement(updatePosition)) {
-                                index = 0;
-                                s.setInt(++index, newViewIdxPosition);
-                                s.setString(++index, tenantId);
-                                s.setString(++index, indexName);
-                                if (indexSchema != null) {
-                                    s.setString(++index, indexSchema);
-                                }
-                                s.setString(++index, MetaDataUtil.getViewIndexIdColumnName());
-                                s.executeUpdate();
-                            }
-                            // update tenant id position
-                            try (PreparedStatement s = globalConnection.prepareStatement(updatePosition)) {
-                                index = 0;
-                                s.setInt(++index, newTenantIdPosition);
-                                s.setString(++index, tenantId);
-                                s.setString(++index, indexName);
-                                if (indexSchema != null) {
-                                    s.setString(++index, indexSchema);
-                                }
-                                s.setString(++index, tenantIdColumn);
-                                s.executeUpdate();
-                            }
-                            globalConnection.commit();
-                        } else {
-                            viewPTable = PhoenixRuntime.getTable(globalConnection, viewName);
-                            globalConnection.createStatement().execute(String.format(disableIndexDDL, fullIndexName, viewName));
-                        }
-                        String indexPhysicalTableName = MetaDataUtil.getViewIndexTableName(viewPTable.getPhysicalName().getString());
-                        if (physicalTables.add(indexPhysicalTableName)) {
-                            final TableName tableName = TableName.valueOf(indexPhysicalTableName);
-                            admin.disableTableAsync(tableName);
-                            checkAndRetry(new RetriableOperation() {
-                                @Override
-                                public boolean checkForCompletion() throws TimeoutException,
-                                IOException {
-                                    return admin.isTableDisabled(tableName);
-                                }
 
-                                @Override
-                                public String getOperationName() {
-                                    return "Disable table: " + tableName.getNameAsString();
-                                }
-
-                            });
-                            admin.truncateTable(tableName, false);
-                        }
-                    }
-                }
-            }
-            if (originalScn != null) {
-                props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(originalScn));
-            }
-            toReturn = new PhoenixConnection(globalConnection, this, props);
-        } catch (SQLException e) {
-            sqlEx = e;
-        } finally {
-            sqlEx = closeConnection(connParam, sqlEx);
-            sqlEx = closeConnection(globalConnection, sqlEx);
-            if (sqlEx != null) {
-                throw sqlEx;
-            }
-        }
-        return toReturn;
-    }
-    
-    
-    private static SQLException closeConnection(PhoenixConnection conn, SQLException sqlEx) {
-        SQLException toReturn = sqlEx;
-        try {
-            conn.close();
-        } catch (SQLException e) {
-            if (toReturn != null) {
-                toReturn.setNextException(e);
-            } else {
-                toReturn = e;
-            }
-        }
-        return toReturn;
-    }
 
     /**
      * Forces update of SYSTEM.CATALOG by setting column to existing value
