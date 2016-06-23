@@ -214,7 +214,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String HCONNECTION_POOL_CORE_SIZE = "hbase.hconnection.threads.core";
     public static final String HCONNECTION_POOL_MAX_SIZE = "hbase.hconnection.threads.max";
     public static final String HTABLE_MAX_THREADS = "hbase.htable.threads.max";
-
+    public static final String QUERY_PARALLEL_LIMIT_THRESHOLD = "phoenix.query.parallelThresholdBytes";
     // time to wait before running second index population upsert select (so that any pending batches of rows on region server are also written to index)
     public static final String INDEX_POPULATION_SLEEP_TIME = "phoenix.index.population.wait.time";
     public static final String LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB = "phoenix.client.localIndexUpgrade";
