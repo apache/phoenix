@@ -25,7 +25,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -62,7 +62,6 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
-import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -118,7 +117,7 @@ public class ScanPlan extends BaseQueryPlan {
         Scan scan = context.getScan();
         /*
          * If a limit is provided and we have no filter, run the scan serially when we estimate that
-         * the limit's worth of data will fit into a single region.
+         * the limit's worth of data is less than the threshold bytes provided in QueryServices.QUERY_PARALLEL_LIMIT_THRESHOLD
          */
         Integer perScanLimit = !allowPageFilter ? null : limit;
         if (perScanLimit == null || scan.getFilter() != null) {
@@ -127,32 +126,35 @@ public class ScanPlan extends BaseQueryPlan {
         long scn = context.getConnection().getSCN() == null ? Long.MAX_VALUE : context.getConnection().getSCN();
         PTableStats tableStats = context.getConnection().getQueryServices().getTableStats(table.getName().getBytes(), scn);
         GuidePostsInfo gpsInfo = tableStats.getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(table));
-        long estRowSize = SchemaUtil.estimateRowSize(table);
-        long estRegionSize;
+        ConnectionQueryServices services = context.getConnection().getQueryServices();
+        long estRowSize;
+        long estimatedParallelThresholdBytes;
         if (gpsInfo == null) {
-            // Use guidepost depth as minimum size
-            ConnectionQueryServices services = context.getConnection().getQueryServices();
-            HTableDescriptor desc = services.getTableDescriptor(table.getPhysicalName().getBytes());
-            int guidepostPerRegion = services.getProps().getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
-                    QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION);
-            long guidepostWidth = services.getProps().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                    QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
-            estRegionSize = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth, desc);
+            estRowSize = SchemaUtil.estimateRowSize(table);
+            estimatedParallelThresholdBytes = services.getProps().getLong(HConstants.HREGION_MAX_FILESIZE,
+                    HConstants.DEFAULT_MAX_FILE_SIZE);
         } else {
-            // Region size estimated based on total number of bytes divided by number of regions
             long totByteSize = 0;
+            long totRowCount = 0;
             for (long byteCount : gpsInfo.getByteCounts()) {
                 totByteSize += byteCount;
             }
-            estRegionSize = totByteSize / (gpsInfo.getGuidePostsCount()+1);
+            for (long rowCount : gpsInfo.getRowCounts()) {
+                totRowCount += rowCount;
+            }
+            estRowSize = totByteSize / totRowCount;
+            estimatedParallelThresholdBytes = 2
+                    * services.getProps().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
         }
-        // TODO: configurable number of bytes?
-        boolean isSerial = (perScanLimit * estRowSize < estRegionSize);
-        
-        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations("With LIMIT=" + perScanLimit
-                + ", estimated row size=" + estRowSize
-                + ", estimated region size=" + estRegionSize + " (" + (gpsInfo == null ? "without " : "with ") + "stats)"
-                + ": " + (isSerial ? "SERIAL" : "PARALLEL") + " execution", context.getConnection()));
+        long limitThreshold = services.getProps().getLong(QueryServices.QUERY_PARALLEL_LIMIT_THRESHOLD,
+                estimatedParallelThresholdBytes);
+        boolean isSerial = (perScanLimit * estRowSize < limitThreshold);
+
+        if (logger.isDebugEnabled()) logger.debug(LogUtil.addCustomAnnotations(
+                "With LIMIT=" + perScanLimit + ", estimated row size=" + estRowSize + ", limitThreshold="
+                        + limitThreshold + ": " + (isSerial ? "SERIAL" : "PARALLEL") + " execution",
+                context.getConnection()));
         return isSerial;
     }
     
