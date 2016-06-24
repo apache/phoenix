@@ -50,6 +50,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -92,6 +93,8 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
+        // Forces server cache to be used
+        props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(1));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 	
@@ -809,4 +812,38 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
                         + (tableDDLOptions!=null?tableDDLOptions:"") + (splits != null ? (" split on " + splits) : "");
         conn.createStatement().execute(ddl);
     }
+    
+  @Test
+  public void testTenantSpecificConnection() throws Exception {
+      String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
+      String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+      try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+          conn.setAutoCommit(false);
+          // create data table
+          conn.createStatement().execute(
+              "CREATE TABLE IF NOT EXISTS " + fullTableName + 
+              "(TENANT_ID CHAR(15) NOT NULL,"+
+              "TYPE VARCHAR(25) NOT NULL,"+
+              "ENTITY_ID CHAR(15) NOT NULL,"+
+              "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (TENANT_ID, TYPE, ENTITY_ID)) MULTI_TENANT=TRUE "
+              + (!tableDDLOptions.isEmpty() ? "," + tableDDLOptions : "") );
+          // create index
+          conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON " + fullTableName + " (ENTITY_ID, TYPE)");
+          
+          // upsert rows
+          String dml = "UPSERT INTO " + fullTableName + " (ENTITY_ID, TYPE) VALUES ( ?, ?)";
+          props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
+          // connection is tenant-specific
+          try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+              for (int i=0; i<2; ++i) {
+                  PreparedStatement stmt = tenantConn.prepareStatement(dml);
+                  stmt.setString(1, "00000000000000" + String.valueOf(i));
+                  stmt.setString(2, String.valueOf(i));
+                  assertEquals(1,stmt.executeUpdate());
+              }
+              tenantConn.commit();
+          }
+      }
+  }
 }
