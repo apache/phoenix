@@ -90,7 +90,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
             String tableName = generateRandomString();
-            String viewOfTable = tableName + "_view";
+            String viewOfTable = tableName + "_VIEW";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -115,7 +115,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
             String tableName = generateRandomString();
-            String viewOfTable = tableName + "_view";
+            String viewOfTable = tableName + "_VIEW";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL," + " COL2 bigint NOT NULL,"
                             + " COL3 varchar(10)," + " COL4 varchar(10)," + " COL5 varchar(10),"
@@ -147,7 +147,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             String tableName = generateRandomString();
-            String viewOfTable = tableName + "_view";
+            String viewOfTable = tableName + "_VIEW";
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
@@ -254,7 +254,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             String tableName = generateRandomString();
-            String viewOfTable = tableName + "_view";
+            String viewOfTable = tableName + "_VIEW";
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(10) NOT NULL,"
@@ -365,8 +365,8 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
             String tableName = generateRandomString();
-            String viewOfTable1 = tableName + "_view1";
-            String viewOfTable2 = tableName + "_view2";
+            String viewOfTable1 = tableName + "_VIEW1";
+            String viewOfTable2 = tableName + "_VIEW2";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                             + " %s ID char(10) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -429,8 +429,8 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
             viewConn.setAutoCommit(false);
             viewConn2.setAutoCommit(false);
             String tableName = generateRandomString();
-            String viewOfTable1 = tableName + "_view1";
-            String viewOfTable2 = tableName + "_view2";
+            String viewOfTable1 = tableName + "_VIEW1";
+            String viewOfTable2 = tableName + "_VIEW2";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
                     + " %s ID char(10) NOT NULL,"
                     + " COL1 integer NOT NULL,"
@@ -619,8 +619,8 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testDivergedViewsStayDiverged() throws Exception {
         String baseTable = generateRandomString();
-        String view1 = baseTable + "_view1";
-        String view2 = baseTable + "_view2";
+        String view1 = baseTable + "_VIEW1";
+        String view2 = baseTable + "_VIEW2";
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ;
                 Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2) : conn) {
@@ -661,9 +661,8 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testMakeBaseTableTransactional() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
-            String baseTableName = "NONTXNTBL_" + (isMultiTenant ? "0":"1");
-            String tableName = generateRandomString();
-            String viewOfTable = tableName + "_view";
+            String baseTableName = "NONTXNTBL_" + generateRandomString() + (isMultiTenant ? "0":"1");
+            String viewOfTable = baseTableName + "_VIEW";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTableName + " ("
                             + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL,"
@@ -674,7 +673,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
             assertTableDefinition(conn, baseTableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "+baseTableName);
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
