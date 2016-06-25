@@ -844,9 +844,10 @@ MIN(NAME)
 "
 
 "Functions (Aggregate)","SUM","
-SUM( { numericTerm } )
+SUM( [ DISTINCT ] { numericTerm } )
 ","
 The sum of all values.
+When DISTINCT is used, it counts only distinct values.
 If no rows are selected, the result is NULL.
 Aggregates are only allowed in select statements.
 The returned value is of the same data type as the parameter.
