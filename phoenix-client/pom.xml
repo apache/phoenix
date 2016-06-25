@@ -156,12 +156,6 @@
                   <shadedPattern>${shaded.package}.com.fasterxml</shadedPattern>
                 </relocation>
                 <relocation>
-                  <pattern>com.google</pattern>
-                  <shadedPattern>${shaded.package}.com.google</shadedPattern>
-                  <excludes>
-                  </excludes>
-                </relocation>
-                <relocation>
                   <pattern>com.jamesmurty</pattern>
                   <shadedPattern>${shaded.package}.com.jamesmurty</shadedPattern>
                 </relocation>
