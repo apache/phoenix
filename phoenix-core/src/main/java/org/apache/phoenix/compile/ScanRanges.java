@@ -174,7 +174,7 @@ public class ScanRanges {
         // bucket values in this case because we use intersect against a key that may have
         // any of the possible bucket values. Otherwise, we can pretty easily ignore the
         // bucket values.
-        if (useSkipScanFilter && isSalted && !isPointLookup) {
+        if ( isSalted && !isPointLookup) {
         	ranges.set(0, SaltingUtil.generateAllSaltingRanges(bucketNum));
         }
         this.ranges = ImmutableList.copyOf(ranges);
