@@ -64,6 +64,7 @@ public class DecimalSumDistinctAggregator extends BaseAggregator {
         BigDecimal value = (BigDecimal) getDataType().toObject(ptr, getInputDataType(), sortOrder);
         if (!set.contains(value)) {
             sum = sum.add(value);
+            set.add(value);
             if (sumBuffer == null) {
                 sumBuffer = new byte[getDataType().getByteSize()];
             }

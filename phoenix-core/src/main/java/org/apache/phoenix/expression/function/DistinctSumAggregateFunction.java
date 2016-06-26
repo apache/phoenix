@@ -76,9 +76,20 @@ import java.util.List;
     }
 
     @Override
+    public Aggregator newClientAggregator() {
+        return newAggregator(getDataType(), SortOrder.getDefault(), null);
+    }
+
+    @Override
     public Aggregator newServerAggregator(Configuration conf) {
         Expression child = getAggregatorExpression();
         return newAggregator(child.getDataType(), child.getSortOrder(), null);
+    }
+
+    @Override
+    public Aggregator newServerAggregator(Configuration conf, ImmutableBytesWritable ptr) {
+        Expression child = getAggregatorExpression();
+        return newAggregator(child.getDataType(), child.getSortOrder(), ptr);
     }
 
     @Override

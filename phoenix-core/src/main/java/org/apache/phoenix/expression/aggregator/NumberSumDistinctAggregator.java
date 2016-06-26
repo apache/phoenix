@@ -71,6 +71,7 @@ abstract public class NumberSumDistinctAggregator extends BaseAggregator {
         Long value = getInputDataType().getCodec().decodeLong(ptr, sortOrder);
         if (!set.contains(value)) {
             sum += value;
+            set.add(value);
             if (buffer == null) {
                 initBuffer();
             }

@@ -55,6 +55,7 @@ public class DoubleSumDistinctAggregator extends BaseAggregator {
         Double value = getInputDataType().getCodec().decodeDouble(ptr, sortOrder);
         if (!set.contains(value)) {
             sum += value;
+            set.add(value);
             if (buffer == null) {
                 initBuffer();
             }
