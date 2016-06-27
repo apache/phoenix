@@ -215,7 +215,7 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         BaseResultIterators iterators = hasSerialHint && canBeExecutedSerially
                 ? new SerialIterators(this, null, null, wrapParallelIteratorFactory(), scanGrouper, scan)
-                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan);
+                : new ParallelIterators(this, null, wrapParallelIteratorFactory(), scan, false);
 
         splits = iterators.getSplits();
         scans = iterators.getScans();
