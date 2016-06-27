@@ -32,7 +32,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.junit.Before;
 import org.junit.Test;
 
-public class TestMRJobSubmitter {
+public class MRJobSubmitterTest {
 
     private Map<String, PhoenixAsyncIndex> candidateJobs =
             new LinkedHashMap<String, PhoenixAsyncIndex>();
