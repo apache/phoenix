@@ -1551,7 +1551,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 parentPhysicalTableName = table.getPhysicalName().getBytes();
             }
         } else if (PTableType.INDEX == table.getType()) {
-            PTable parentTable = getTable(null, table.getParentName().getString(), HConstants.LATEST_TIMESTAMP);
+            PTable parentTable = getTable(table.getTenantId(), table.getParentName().getString(), HConstants.LATEST_TIMESTAMP);
             parentPhysicalTableName = parentTable.getPhysicalName().getBytes();
         }
         if (parentPhysicalTableName != null) {
@@ -1658,7 +1658,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TableNotFoundException e) {
             byte[] schemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(fullTableName));
             byte[] tableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(fullTableName));
-            MetaDataMutationResult result = this.getTable(null, schemaName, tableName, HConstants.LATEST_TIMESTAMP,
+            MetaDataMutationResult result = this.getTable(tenantId, schemaName, tableName, HConstants.LATEST_TIMESTAMP,
                     timestamp);
             table = result.getTable();
             if (table == null) { throw e; }
