@@ -44,7 +44,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
     private InternalScanner delegate;
-    private StatisticsWriter stats;
+    private StatisticsWriter statsWriter;
     private Region region;
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
@@ -53,7 +53,7 @@ public class StatisticsScanner implements InternalScanner {
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, RegionCoprocessorEnvironment env,
             InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
-        this.stats = stats;
+        this.statsWriter = stats;
         this.delegate = delegate;
         this.region = env.getRegion();
         this.family = family;
@@ -64,14 +64,14 @@ public class StatisticsScanner implements InternalScanner {
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean ret = delegate.next(result);
-        updateStat(result);
+        updateStats(result);
         return ret;
     }
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
         boolean ret = delegate.next(result, scannerContext);
-        updateStat(result);
+        updateStats(result);
         return ret;
     }
 
@@ -81,7 +81,7 @@ public class StatisticsScanner implements InternalScanner {
      * @param results
      *            next batch of {@link KeyValue}s
      */
-    protected void updateStat(final List<Cell> results) {
+    private void updateStats(final List<Cell> results) {
         if (!results.isEmpty()) {
             tracker.collectStatistics(results);
         }
@@ -114,24 +114,24 @@ public class StatisticsScanner implements InternalScanner {
                     LOG.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
-                stats.deleteStats(region, tracker, family, mutations);
+                statsWriter.deleteStats(region, tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
-                stats.addStats(tracker, family, mutations);
+                statsWriter.addStats(tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
-                stats.commitStats(mutations);
+                statsWriter.commitStats(mutations, tracker);
             } catch (IOException e) {
                 LOG.error("Failed to update statistics table!", e);
                 toThrow = e;
             } finally {
                 try {
                     collectionTracker.removeCompactingRegion(regionInfo);
-                    stats.close();// close the writer
+                    statsWriter.close();// close the writer
                     tracker.close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
