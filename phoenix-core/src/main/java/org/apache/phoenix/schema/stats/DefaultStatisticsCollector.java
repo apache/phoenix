@@ -154,7 +154,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     }
 
     private void commitStats(List<Mutation> mutations) throws IOException {
-        statsWriter.commitStats(mutations);
+        statsWriter.commitStats(mutations, this);
     }
 
     /**
@@ -215,7 +215,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
         return getInternalScanner(env, store, s, cfKey);
     }
 
-    protected InternalScanner getInternalScanner(RegionCoprocessorEnvironment env, Store store,
+    private InternalScanner getInternalScanner(RegionCoprocessorEnvironment env, Store store,
             InternalScanner internalScan, ImmutableBytesPtr family) {
         return new StatisticsScanner(this, statsWriter, env, internalScan, family);
     }

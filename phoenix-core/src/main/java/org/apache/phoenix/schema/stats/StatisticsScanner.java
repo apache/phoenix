@@ -43,35 +43,34 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 public class StatisticsScanner implements InternalScanner {
     private static final Log LOG = LogFactory.getLog(StatisticsScanner.class);
     private InternalScanner delegate;
-    private StatisticsWriter stats;
+    private StatisticsWriter statsWriter;
     private HRegion region;
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
     private final Configuration config;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, RegionCoprocessorEnvironment env,
+    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter statsWriter, RegionCoprocessorEnvironment env,
             InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
-        this.stats = stats;
+        this.statsWriter = statsWriter;
         this.delegate = delegate;
         this.region = env.getRegion();
         this.config = env.getConfiguration();
         this.family = family;
-
         StatisticsCollectionRunTracker.getInstance(config).addCompactingRegion(region.getRegionInfo());
     }
 
     @Override
     public boolean next(List<Cell> result) throws IOException {
         boolean ret = delegate.next(result);
-        updateStat(result);
+        updateStats(result);
         return ret;
     }
 
     @Override
     public boolean next(List<Cell> result, int limit) throws IOException {
         boolean ret = delegate.next(result, limit);
-        updateStat(result);
+        updateStats(result);
         return ret;
     }
 
@@ -81,7 +80,7 @@ public class StatisticsScanner implements InternalScanner {
      * @param results
      *            next batch of {@link KeyValue}s
      */
-    protected void updateStat(final List<Cell> results) {
+    private void updateStats(final List<Cell> results) {
         if (!results.isEmpty()) {
             tracker.collectStatistics(results);
         }
@@ -101,24 +100,24 @@ public class StatisticsScanner implements InternalScanner {
                     LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
                 }
-                stats.deleteStats(region, tracker, family, mutations);
+                statsWriter.deleteStats(region, tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
                 }
-                stats.addStats(tracker, family, mutations);
+                statsWriter.addStats(tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
                 }
-                stats.commitStats(mutations);
+                statsWriter.commitStats(mutations, tracker);
             } catch (IOException e) {
                 LOG.error("Failed to update statistics table!", e);
                 toThrow = e;
             } finally {
                 try {
                     statsRunState.removeCompactingRegion(region.getRegionInfo());
-                    stats.close();
+                    statsWriter.close();
                     tracker.close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
