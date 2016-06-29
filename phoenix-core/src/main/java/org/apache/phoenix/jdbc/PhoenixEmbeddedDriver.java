@@ -31,13 +31,19 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 
@@ -58,6 +64,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     /**
      * The protocol for Phoenix Network Client 
      */ 
+    private static final Log LOG = LogFactory.getLog(PhoenixEmbeddedDriver.class);
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -214,6 +221,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         
         public static ConnectionInfo create(String url) throws SQLException {
             url = url == null ? "" : url;
+            if (url.isEmpty() || url.equalsIgnoreCase("jdbc:phoenix:")
+                    || url.equalsIgnoreCase("jdbc:phoenix")) {
+                return defaultConnectionInfo(url);
+            }
             url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
                     ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
                     : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
@@ -433,6 +444,23 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         public String toUrl() {
             return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
                     + toString();
+        }
+
+        private static ConnectionInfo defaultConnectionInfo(String url) throws SQLException {
+            Configuration config =
+                    HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            String quorum = config.get(HConstants.ZOOKEEPER_QUORUM);
+            if (quorum == null || quorum.isEmpty()) {
+                throw getMalFormedUrlException(url);
+            }
+            String clientPort = config.get(HConstants.ZOOKEEPER_CLIENT_PORT);
+            Integer port = clientPort==null ? null : Integer.parseInt(clientPort);
+            if (port == null || port < 0) {
+                throw getMalFormedUrlException(url);
+            }
+            String znodeParent = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
+            LOG.debug("Getting default jdbc connection url " + quorum + ":" + port + ":" + znodeParent);
+            return new ConnectionInfo(quorum, port, znodeParent);
         }
     }
 
