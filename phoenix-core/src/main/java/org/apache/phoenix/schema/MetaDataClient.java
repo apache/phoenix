@@ -907,40 +907,14 @@ public class MetaDataClient {
                 List<ColumnDef> columnDefs = statement.getColumnDefs();
                 PrimaryKeyConstraint pkConstraint = statement.getPrimaryKeyConstraint();
                 // get the list of columns to add
-                List<ColumnDef> newColumnDefs = Lists.newArrayList();
                 for (ColumnDef columnDef : columnDefs) {
                     if (pkConstraint.contains(columnDef.getColumnDefName())) {
                         columnDef.setIsPK(true);
                     }
-                    String familyName = columnDef.getColumnDefName().getFamilyName();
-                    String columnName = columnDef.getColumnDefName().getColumnName();
-                    if (familyName!=null) {
-                        try {
-                            PColumnFamily columnFamily = table.getColumnFamily(familyName);
-                            columnFamily.getColumn(columnName);
-                        }
-                        catch (ColumnFamilyNotFoundException | ColumnNotFoundException e){
-                            newColumnDefs.add(columnDef);
-                        }
-                    }
-                    else {
-                        try {
-                            table.getColumn(columnName);
-                        }
-                        catch (ColumnNotFoundException e){
-                            newColumnDefs.add(columnDef);
-                        }
-                    }
                 }
                 // if there are new columns to add 
-                if (!newColumnDefs.isEmpty()) {
-                    return addColumn(table, newColumnDefs, statement.getProps(),
-                        statement.ifNotExists(), true,
-                        NamedTableNode.create(statement.getTableName()), statement.getTableType());
-                }
-                else {
-                    return new MutationState(0,connection);
-                }
+                return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(),
+                    true, NamedTableNode.create(statement.getTableName()), statement.getTableType());
             }
         }
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, null, null, null, tableProps, commonFamilyProps);
@@ -2804,7 +2778,7 @@ public class MetaDataClient {
         return addColumn(table, statement.getColumnDefs(), statement.getProps(), statement.ifNotExists(), false, statement.getTable(), statement.getTableType());
     }
 
-    public MutationState addColumn(PTable table, List<ColumnDef> columnDefs,
+    public MutationState addColumn(PTable table, List<ColumnDef> origColumnDefs,
             ListMultimap<String, Pair<String, Object>> stmtProperties, boolean ifNotExists,
             boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType)
             throws SQLException {
@@ -2824,8 +2798,40 @@ public class MetaDataClient {
             Long updateCacheFrequencyProp = null;
 
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
-            if (columnDefs == null) {
-                columnDefs = Collections.emptyList();
+            List<ColumnDef> columnDefs = null;
+            if (table.isAppendOnlySchema()) {
+                // only make the rpc if we are adding new columns
+                columnDefs = Lists.newArrayList();
+                for (ColumnDef columnDef : origColumnDefs) {
+                    String familyName = columnDef.getColumnDefName().getFamilyName();
+                    String columnName = columnDef.getColumnDefName().getColumnName();
+                    if (familyName!=null) {
+                        try {
+                            PColumnFamily columnFamily = table.getColumnFamily(familyName);
+                            columnFamily.getColumn(columnName);
+                            if (!ifNotExists) {
+                                throw new ColumnAlreadyExistsException(schemaName, tableName, columnName);
+                            }
+                        }
+                        catch (ColumnFamilyNotFoundException | ColumnNotFoundException e){
+                            columnDefs.add(columnDef);
+                        }
+                    }
+                    else {
+                        try {
+                            table.getColumn(columnName);
+                            if (!ifNotExists) {
+                                throw new ColumnAlreadyExistsException(schemaName, tableName, columnName);
+                            }
+                        }
+                        catch (ColumnNotFoundException e){
+                            columnDefs.add(columnDef);
+                        }
+                    }
+                }
+            }
+            else {
+                columnDefs = origColumnDefs == null ? Collections.<ColumnDef>emptyList() : origColumnDefs;
             }
             for (String family : stmtProperties.keySet()) {
                 List<Pair<String, Object>> origPropsList = stmtProperties.get(family);
