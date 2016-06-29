@@ -153,13 +153,9 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     }
                     try {
 						if (allowLocalUpdates && env!=null) {
-							for (Mutation m : mutations) {
-								m.setDurability(Durability.SKIP_WAL);
-							}
 	                        try {
 	                            throwFailureIfDone();
-	                            env.getRegion().batchMutate(mutations.toArray(new Mutation[mutations.size()]),
-	                                HConstants.NO_NONCE, HConstants.NO_NONCE);
+	                            IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
 	                            return null;
 	                        } catch (IOException ignord) {
 	                            // when it's failed we fall back to the standard & slow way
