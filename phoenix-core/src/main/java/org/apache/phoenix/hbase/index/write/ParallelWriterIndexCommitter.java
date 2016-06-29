@@ -152,14 +152,24 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
                     }
                     try {
-						if (allowLocalUpdates) {
-							for (Mutation m : mutations) {
-								m.setDurability(Durability.SKIP_WAL);
-							}
-						}
+                        if (allowLocalUpdates
+                                && env != null
+                                && tableReference.getTableName().equals(
+                                    env.getRegion().getTableDesc().getNameAsString())) {
+                            try {
+                                throwFailureIfDone();
+                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
+                                return null;
+                            } catch (IOException ignord) {
+                                // when it's failed we fall back to the standard & slow way
+                                if (LOG.isDebugEnabled()) {
+                                    LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
+                                            + ignord);
+                                }
+                            }
+                        }
                         HTableInterface table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
-                        int i = 0;
                         table.batch(mutations);
                     } catch (SingleIndexWriteFailureException e) {
                         throw e;
