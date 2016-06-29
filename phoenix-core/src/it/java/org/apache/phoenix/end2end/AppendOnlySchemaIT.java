@@ -27,17 +27,19 @@ import static org.mockito.Matchers.anyList;
 import static org.mockito.Matchers.anyListOf;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyMap;
+import static org.mockito.Matchers.anySetOf;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
-import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
@@ -47,6 +49,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -59,7 +62,7 @@ import org.mockito.Mockito;
 
 public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
     
-    private void createTableWithSameSchema(boolean notExists, boolean sameClient) throws Exception {
+    private void testTableWithSameSchema(boolean notExists, boolean sameClient) throws Exception {
         // use a spyed ConnectionQueryServices so we can verify calls to getTable
         ConnectionQueryServices connectionQueryServices =
                 Mockito.spy(driver.getConnectionQueryServices(getUrl(),
@@ -77,7 +80,7 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             // create view
             String ddl =
                     "CREATE VIEW " + (notExists ? "IF NOT EXISTS" : "")
-                            + " view1( hostName varchar NOT NULL,"
+                            + " view1( hostName varchar NOT NULL, tagName varChar"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
                             + " AS SELECT * FROM metric_table"
                             + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
@@ -86,7 +89,7 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             conn1.commit();
             reset(connectionQueryServices);
 
-            // execute same ddl
+            // execute same create ddl
             try {
                 conn2.createStatement().execute(ddl);
                 if (!notExists) {
@@ -100,12 +103,31 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             }
             
             // verify getTable rpcs
-            verify(connectionQueryServices, sameClient ? never() : atMost(1)).getTable((PName)isNull(), eq(new byte[0]), eq(Bytes.toBytes("VIEW1")), anyLong(), anyLong());
+            verify(connectionQueryServices, sameClient ? never() : times(1)).getTable((PName)isNull(), eq(new byte[0]), eq(Bytes.toBytes("VIEW1")), anyLong(), anyLong());
             
-            // verify create table rpcs
+            // verify no create table rpcs
             verify(connectionQueryServices, never()).createTable(anyListOf(Mutation.class),
                 any(byte[].class), any(PTableType.class), anyMap(), anyList(), any(byte[][].class),
                 eq(false));
+            reset(connectionQueryServices);
+            
+            // execute alter table ddl that adds the same column
+            ddl = "ALTER VIEW view1 ADD " + (notExists ? "IF NOT EXISTS" : "") + " tagName varchar";
+            try {
+                conn2.createStatement().execute(ddl);
+                if (!notExists) {
+                    fail("Alter Table should fail");
+                }
+            }
+            catch (ColumnAlreadyExistsException e) {
+                if (notExists) {
+                    fail("Alter Table should not fail");
+                }
+            }
+            
+            // if not verify exists is true one call to add column table with empty mutation list (which does not make a rpc) 
+            // else verify no add column calls
+            verify(connectionQueryServices, notExists ? times(1) : never() ).addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class), anyMap(), anySetOf(String.class));
 
             // upsert one row
             conn2.createStatement().execute("UPSERT INTO view1(hostName, metricVal) VALUES('host2', 2.0)");
@@ -135,25 +157,25 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSameSchemaWithNotExistsSameClient() throws Exception {
-        createTableWithSameSchema(true, true);
+        testTableWithSameSchema(true, true);
     }
     
     @Test
     public void testSameSchemaWithNotExistsDifferentClient() throws Exception {
-        createTableWithSameSchema(true, false);
+        testTableWithSameSchema(true, false);
     }
     
     @Test
     public void testSameSchemaSameClient() throws Exception {
-        createTableWithSameSchema(false, true);
+        testTableWithSameSchema(false, true);
     }
     
     @Test
     public void testSameSchemaDifferentClient() throws Exception {
-        createTableWithSameSchema(false, false);
+        testTableWithSameSchema(false, false);
     }
 
-    private void createTableAddColumns(boolean sameClient) throws Exception {
+    private void testAddColumns(boolean sameClient) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn1 = DriverManager.getConnection(getUrl(), props);
                 Connection conn2 = sameClient ? conn1 : DriverManager.getConnection(getUrl(), props)) {
@@ -243,13 +265,13 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
-    public void testCreateTableAddColumnsSameClient() throws Exception {
-        createTableAddColumns(true);
+    public void testAddColumnsSameClient() throws Exception {
+        testAddColumns(true);
     }
     
     @Test
-    public void testCreateTableAddColumnsDifferentClient() throws Exception {
-        createTableAddColumns(false);
+    public void testTableAddColumnsDifferentClient() throws Exception {
+        testAddColumns(false);
     }
 
     public void testCreateTableDropColumns() throws Exception {
