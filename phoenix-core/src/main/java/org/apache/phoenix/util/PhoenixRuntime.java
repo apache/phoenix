@@ -50,12 +50,14 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
@@ -68,6 +70,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -611,6 +614,7 @@ public class PhoenixRuntime {
             }
 
             ExecutionCommand execCmd = new ExecutionCommand();
+            execCmd.connectionString = "";
             if(cmdLine.hasOption(mapNamespaceOption.getOpt())){
                 execCmd.mapNamespace = true;
                 execCmd.srcTable = validateTableName(cmdLine.getOptionValue(mapNamespaceOption.getOpt()));
@@ -660,16 +664,21 @@ public class PhoenixRuntime {
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
             if (argList.isEmpty()) {
-                usageError("Connection string to HBase must be supplied", options);
+                usageError("At least one input file must be supplied", options);
             }
-            execCmd.connectionString = argList.remove(0);
             List<String> inputFiles = Lists.newArrayList();
+            int i = 0;
             for (String arg : argList) {
                 if (execCmd.isUpgrade || arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
                     inputFiles.add(arg);
                 } else {
-                    usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    if (i == 0) {
+                        execCmd.connectionString = arg;
+                    } else {
+                        usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    }
                 }
+                i++;
             }
 
             if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace() && !execCmd.isLocalIndexUpgrade()) {
@@ -712,6 +721,7 @@ public class PhoenixRuntime {
                             "<path-to-sql-or-csv-file>...",
                     options);
             System.out.println("Examples:\n" +
+                    "  psql my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql my_table.csv\n" +
                     "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +
