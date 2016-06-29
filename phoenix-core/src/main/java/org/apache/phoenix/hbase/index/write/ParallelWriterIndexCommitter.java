@@ -39,6 +39,7 @@ import org.apache.phoenix.hbase.index.table.CachingHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.util.IndexUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -150,14 +151,9 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     }
                     try {
                         if (allowLocalUpdates && env != null) {
-                            for (Mutation m : mutations) {
-                                m.setDurability(Durability.SKIP_WAL);
-                            }
                             try {
                                 throwFailureIfDone();
-                                env.getRegion().batchMutate(
-                                    mutations.toArray(new Mutation[mutations.size()]),
-                                    HConstants.NO_NONCE, HConstants.NO_NONCE);
+                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
                                 return null;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way

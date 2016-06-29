@@ -28,10 +28,12 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -658,5 +660,16 @@ public class IndexUtil {
         }
         return viewConstants.isEmpty() ? null : viewConstants
                 .toArray(new byte[viewConstants.size()][]);
+    }
+
+    public static void writeLocalUpdates(HRegion region, final List<Mutation> mutations, boolean skipWAL) throws IOException {
+        if(skipWAL) {
+            for (Mutation m : mutations) {
+                m.setDurability(Durability.SKIP_WAL);
+            }
+        }
+        region.batchMutate(
+            mutations.toArray(new Mutation[mutations.size()]),
+            HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 }

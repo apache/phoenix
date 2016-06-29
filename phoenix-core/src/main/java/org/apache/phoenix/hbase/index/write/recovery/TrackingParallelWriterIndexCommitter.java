@@ -156,13 +156,9 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         }
                         if (allowLocalUpdates && env!=null && tableReference.getTableName().equals(
                             env.getRegion().getTableDesc().getNameAsString())) {
-                            for (Mutation m : mutations) {
-                                m.setDurability(Durability.SKIP_WAL);
-                            }
                             try {
                                 throwFailureIfDone();
-                                env.getRegion().batchMutate(mutations.toArray(new Mutation[mutations.size()]),
-                                    HConstants.NO_NONCE, HConstants.NO_NONCE);
+                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
                                 return Boolean.TRUE;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
