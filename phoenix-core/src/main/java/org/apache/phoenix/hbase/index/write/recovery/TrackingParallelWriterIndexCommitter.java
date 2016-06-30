@@ -151,11 +151,22 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                     try {
                         // this may have been queued, but there was an abort/stop so we try to early exit
                         throwFailureIfDone();
-						if (allowLocalUpdates) {
-							for (Mutation m : mutations) {
-								m.setDurability(Durability.SKIP_WAL);
-							}
-						}
+                        if (allowLocalUpdates
+                                && env != null
+                                && tableReference.getTableName().equals(
+                                    env.getRegion().getTableDesc().getNameAsString())) {
+                            try {
+                                throwFailureIfDone();
+                                IndexUtil.writeLocalUpdates(env.getRegion(), mutations, true);
+                                return Boolean.TRUE;
+                            } catch (IOException ignord) {
+                                // when it's failed we fall back to the standard & slow way
+                                if (LOG.isDebugEnabled()) {
+                                    LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
+                                            + ignord);
+                                }
+                            }
+                        }
 
                         if (LOG.isDebugEnabled()) {
                             LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
