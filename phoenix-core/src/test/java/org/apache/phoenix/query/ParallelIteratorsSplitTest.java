@@ -471,6 +471,11 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             public boolean useRoundRobinIterator() {
                 return false;
             }
+
+            @Override
+            public boolean isSerial() {
+                return true;
+            }
             
         }, null, new SpoolingResultIterator.SpoolingResultIteratorFactory(context.getConnection().getQueryServices()), context.getScan(), false);
         List<KeyRange> keyRanges = parallelIterators.getSplits();
