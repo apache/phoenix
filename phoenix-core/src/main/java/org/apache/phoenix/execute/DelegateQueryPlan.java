@@ -124,4 +124,9 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public Integer getOffset() {
         return delegate.getOffset();
     }
+	
+	@Override
+	public boolean isSerial() {
+	    return delegate.isSerial();
+	}
 }
