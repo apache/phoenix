@@ -231,4 +231,13 @@ public class UnionPlan implements QueryPlan {
 		}
 		return sources;
 	}
+
+    @Override
+    public boolean isSerial() {
+        boolean isSerial = true;
+        for (QueryPlan plan : getPlans()) {
+            isSerial &= plan.isSerial();
+        }
+        return isSerial;
+    }
 }

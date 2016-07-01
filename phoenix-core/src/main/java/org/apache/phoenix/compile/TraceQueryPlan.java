@@ -259,4 +259,9 @@ public class TraceQueryPlan implements QueryPlan {
     public boolean useRoundRobinIterator() {
         return false;
     }
+
+    @Override
+    public boolean isSerial() {
+        return true;
+    }
 }
