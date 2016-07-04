@@ -19,7 +19,7 @@ package org.apache.phoenix.schema.stats;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -48,8 +48,8 @@ public class GuidePostsInfoBuilder {
     private int maxLength;
     private DataOutputStream output;
     private TrustedByteArrayOutputStream stream;
-    private List<Long> rowCounts = new LinkedList<Long>();
-    private List<Long> byteCounts = new LinkedList<Long>();
+    private List<Long> rowCounts = new ArrayList<Long>();
+    private List<Long> byteCounts = new ArrayList<Long>();
 
     public List<Long> getRowCounts() {
         return rowCounts;
