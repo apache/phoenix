@@ -638,7 +638,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
                 }
                 try {
-                    while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
+                    while (guideIndex < gpsSize && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
                         Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                                 false);
                         if (newScan != null) {
@@ -648,7 +648,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             estimatedSize += gps.getByteCounts().get(guideIndex);
                         }
                         scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
-                        currentKeyBytes = currentGuidePost.copyBytes();
+                        currentKeyBytes = currentGuidePostBytes;
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();
                         guideIndex++;
