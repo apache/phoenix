@@ -930,8 +930,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (schemaPattern != null) {
             buf.append(" and " + TABLE_SCHEM + " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'");
         }
-        buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
-        
+        if (SchemaUtil.isNamespaceMappingEnabled(null, connection.getQueryServices().getProps())) {
+            buf.append(" and " + TABLE_NAME + " = '" + MetaDataClient.EMPTY_TABLE + "'");
+        }
+
         // TODO: we should union this with SYSTEM.SEQUENCE too, but we only have support for
         // UNION ALL and we really need UNION so that it dedups.
         Statement stmt = connection.createStatement();
