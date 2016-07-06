@@ -49,7 +49,6 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
-import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -60,7 +59,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.ColumnInfo;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -68,7 +66,6 @@ import org.apache.phoenix.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.Lists;
@@ -291,7 +288,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         if(hasLocalIndexes) {
             try{
                 table = new HTable(job.getConfiguration(), qualifiedTableName);
-                splitKeysBeforeJob = table.getRegionLocator().getStartKeys();
+                splitKeysBeforeJob = table.getStartKeys();
             } finally {
                 if(table != null )table.close();
             }
@@ -315,7 +312,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
                 byte[][] splitKeysAfterJob = null;
                 try {
                     table = new HTable(job.getConfiguration(), qualifiedTableName);
-                    splitKeysAfterJob = table.getRegionLocator().getStartKeys();
+                    splitKeysAfterJob = table.getStartKeys();
                 } finally {
                     if (table != null) table.close();
                 }
