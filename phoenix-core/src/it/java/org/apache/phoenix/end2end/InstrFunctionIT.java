@@ -28,11 +28,11 @@ import java.sql.ResultSet;
 
 import org.junit.Test;
 
-public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
-    private void initTable(Connection conn, String sortOrder, String s, String subStr) throws Exception {
-        String ddl = "CREATE TABLE SAMPLE (name VARCHAR NOT NULL PRIMARY KEY " + sortOrder + ", substr VARCHAR)";
+public class InstrFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+    private void initTable(Connection conn, String tableName, String sortOrder, String s, String subStr) throws Exception {
+        String ddl = "CREATE TABLE " + tableName + " (name VARCHAR NOT NULL PRIMARY KEY " + sortOrder + ", substr VARCHAR)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO SAMPLE VALUES(?,?)";
+        String dml = "UPSERT INTO " + tableName + " VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setString(1, s);
         stmt.setString(2, subStr);
@@ -61,56 +61,63 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSingleByteInstrAscending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ASC", "abcdefghijkl","fgh");
-        String queryToExecute = "SELECT INSTR(name, 'fgh') FROM SAMPLE";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "ASC", "abcdefghijkl","fgh");
+        String queryToExecute = "SELECT INSTR(name, 'fgh') FROM " + tableName;
         testInstr(conn, queryToExecute, 6);
     }
     
     @Test
     public void testSingleByteInstrDescending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "DESC", "abcdefghijkl","fgh");
-        String queryToExecute = "SELECT INSTR(name, 'fgh') FROM SAMPLE";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "DESC", "abcdefghijkl","fgh");
+        String queryToExecute = "SELECT INSTR(name, 'fgh') FROM " + tableName;
         testInstr(conn, queryToExecute, 6);
     }
     
     @Test
     public void testSingleByteInstrAscendingNoString() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ASC", "abcde fghijkl","lmn");
-        String queryToExecute = "SELECT INSTR(name, 'lmn') FROM SAMPLE";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "ASC", "abcde fghijkl","lmn");
+        String queryToExecute = "SELECT INSTR(name, 'lmn') FROM " + tableName;
         testInstr(conn, queryToExecute, 0);
     }
     
     @Test
     public void testSingleByteInstrDescendingNoString() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "DESC", "abcde fghijkl","lmn");
-        String queryToExecute = "SELECT INSTR(name, 'lmn') FROM SAMPLE";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "DESC", "abcde fghijkl","lmn");
+        String queryToExecute = "SELECT INSTR(name, 'lmn') FROM " + tableName;
         testInstr(conn, queryToExecute, 0);
     }
 
     @Test
     public void testMultiByteInstrAscending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ASC", "AɚɦFGH","ɚɦ");
-        String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM SAMPLE";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "ASC", "AɚɦFGH","ɚɦ");
+        String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM " + tableName;
         testInstr(conn, queryToExecute, 2);
     }
     
     @Test
     public void testMultiByteInstrDecending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "DESC", "AɚɦFGH","ɚɦ");
-        String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM SAMPLE";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "DESC", "AɚɦFGH","ɚɦ");
+        String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM " + tableName;
         testInstr(conn, queryToExecute, 2);
     } 
 
     @Test
     public void testByteInstrAscendingFilter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "ASC", "abcdefghijkl","fgh");
-        String queryToExecute = "select NAME from sample where instr(name, 'fgh') > 0";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "ASC", "abcdefghijkl","fgh");
+        String queryToExecute = "select NAME from " + tableName + " where instr(name, 'fgh') > 0";
         testInstrFilter(conn, queryToExecute,"abcdefghijkl");
     }
     
@@ -118,8 +125,9 @@ public class InstrFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testByteInstrDecendingFilter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, "DESC", "abcdefghijkl","fgh");
-        String queryToExecute = "select NAME from sample where instr(name, 'fgh') > 0";
+        String tableName = generateRandomString();
+        initTable(conn, tableName, "DESC", "abcdefghijkl","fgh");
+        String queryToExecute = "select NAME from " + tableName + " where instr(name, 'fgh') > 0";
         testInstrFilter(conn, queryToExecute,"abcdefghijkl");
     }
 

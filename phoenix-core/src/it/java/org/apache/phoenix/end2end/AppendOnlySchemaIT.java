@@ -58,7 +58,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
-    
+
     private void createTableWithSameSchema(boolean notExists, boolean sameClient) throws Exception {
         // use a spyed ConnectionQueryServices so we can verify calls to getTable
         ConnectionQueryServices connectionQueryServices =
