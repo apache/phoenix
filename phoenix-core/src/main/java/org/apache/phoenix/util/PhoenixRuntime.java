@@ -50,14 +50,12 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
@@ -70,7 +68,6 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
-import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -231,11 +228,7 @@ public class PhoenixRuntime {
                 String srcTable = execCmd.getSrcTable();
                 System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
                 UpgradeUtil.upgradeTable(conn, srcTable);
-                Set<String> viewNames = MetaDataUtil.getViewNames(conn, srcTable);
-                System.out.println("upgrading following views:"+viewNames);
-                for (String viewName : viewNames) {
-                    UpgradeUtil.upgradeTable(conn, viewName);
-                }
+                UpgradeUtil.mapChildViewsToNamespace(conn, srcTable,props);
             } else if (execCmd.isUpgrade()) {
                 if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
                         "May not specify the CURRENT_SCN property when upgrading"); }

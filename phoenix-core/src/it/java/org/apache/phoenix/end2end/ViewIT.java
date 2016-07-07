@@ -410,6 +410,8 @@ public class ViewIT extends BaseViewIT {
         conn.createStatement().execute(ddl);
         ddl = "CREATE VIEW s2.v1 (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 5";
         conn.createStatement().execute(ddl);
+        ddl = "CREATE LOCAL INDEX idx on s2.v1(v2)";
+        conn.createStatement().execute(ddl);
         ddl = "CREATE VIEW s2.v2 (v2 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE k > 10";
         conn.createStatement().execute(ddl);
 
