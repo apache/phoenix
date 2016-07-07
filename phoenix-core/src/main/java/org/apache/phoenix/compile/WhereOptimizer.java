@@ -325,8 +325,14 @@ public class WhereOptimizer {
         final List<Integer> pkPositions = Lists.newArrayList();
         PTable table = context.getCurrentTable().getTable();
         for (int i = 0; i < expressions.size(); i++) {
+            Expression expression = expressions.get(i);
+            // TODO this is a temporary fix for PHOENIX-3029.
+            if (expression instanceof CoerceExpression
+                    && expression.getSortOrder() != expression.getChildren().get(0).getSortOrder()) {
+                continue;
+            }
             KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, table);
-            KeyExpressionVisitor.KeySlots keySlots = expressions.get(i).accept(visitor);
+            KeyExpressionVisitor.KeySlots keySlots = expression.accept(visitor);
             int minPkPos = Integer.MAX_VALUE; 
             if (keySlots != null) {
                 Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.iterator();

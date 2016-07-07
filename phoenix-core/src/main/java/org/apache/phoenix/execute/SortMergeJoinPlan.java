@@ -672,4 +672,9 @@ public class SortMergeJoinPlan implements QueryPlan {
         return tableRefs;
     }
 
+    @Override
+    public boolean isSerial() {
+        return false;
+    }
+
 }
