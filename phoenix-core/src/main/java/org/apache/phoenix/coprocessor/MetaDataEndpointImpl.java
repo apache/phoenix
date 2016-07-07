@@ -113,7 +113,6 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
@@ -1555,14 +1554,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             scan.setStopRow(stopRow);
         }
         SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES, CompareOp.EQUAL, linkTypeBytes);
+        SingleColumnValueFilter tableTypeFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES,
+                CompareOp.EQUAL, PTableType.VIEW.getSerializedValue().getBytes());
+        tableTypeFilter.setFilterIfMissing(false);
         linkFilter.setFilterIfMissing(true);
         byte[] suffix = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, SchemaUtil
                 .getPhysicalTableName(SchemaUtil.getTableNameAsBytes(schemaName, tableName), table.isNamespaceMapped())
                 .getName());
         SuffixFilter rowFilter = new SuffixFilter(suffix);
-        Filter filter = new FilterList(linkFilter, rowFilter);
+        FilterList filter = new FilterList(linkFilter,tableTypeFilter,rowFilter);
         scan.setFilter(filter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+        scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
         scan.addColumn(TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         
         // Original region-only scanner modified due to PHOENIX-1208
