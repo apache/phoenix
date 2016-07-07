@@ -152,7 +152,7 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     " org.apache.phoenix.queryserver.client.SqllineWrapper -d org.apache.phoenix.queryserver.client.Driver " + \
     " -u \"jdbc:phoenix:thin:url=" + url + ";serialization=" + serialization + "\"" + \
     " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true " + \
-    " --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
+    " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
 exitcode = subprocess.call(java_cmd, shell=True)
 sys.exit(exitcode)
