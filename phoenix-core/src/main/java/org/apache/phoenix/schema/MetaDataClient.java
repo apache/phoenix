@@ -273,8 +273,9 @@ public class MetaDataClient {
             TABLE_NAME + "," +
             COLUMN_FAMILY + "," +
             LINK_TYPE + "," +
-            TABLE_SEQ_NUM + // this is actually set to the parent table's sequence number
-            ") VALUES (?, ?, ?, ?, ?, ?)";
+            TABLE_SEQ_NUM +","+ // this is actually set to the parent table's sequence number
+            TABLE_TYPE +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?)";
     private static final String CREATE_VIEW_LINK =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
@@ -1708,6 +1709,7 @@ public class MetaDataClient {
                 linkStatement.setString(4, tableName);
                 linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
                 linkStatement.setLong(6, parent.getSequenceNumber());
+                linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
                 linkStatement.execute();
             }
 
@@ -1960,8 +1962,10 @@ public class MetaDataClient {
                             PTable physicalTable = connection.getTable(new PTableKey(null, physicalName.getString()
                                     .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR)));
                             linkStatement.setLong(6, physicalTable.getSequenceNumber());
+                            linkStatement.setString(7, null);
                         } else {
                             linkStatement.setLong(6, parent.getSequenceNumber());
+                            linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
                         }
                         linkStatement.execute();
                     }
