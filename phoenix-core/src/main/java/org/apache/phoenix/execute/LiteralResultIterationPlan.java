@@ -110,10 +110,4 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
         
         return scanner;
     }
-
-    @Override
-    public boolean isSerial() {
-        return true;
-    }
-
 }

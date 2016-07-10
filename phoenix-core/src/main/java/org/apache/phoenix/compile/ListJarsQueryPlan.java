@@ -251,9 +251,4 @@ public class ListJarsQueryPlan implements QueryPlan {
 	public Operation getOperation() {
 		return stmt.getUpdateOperation();
 	}
-
-    @Override
-    public boolean isSerial() {
-        return true;
-    }
 }
