@@ -570,11 +570,6 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
                 }
-
-                @Override
-                public boolean isSerial() {
-                    return true;
-                }
                 
             };
         }
