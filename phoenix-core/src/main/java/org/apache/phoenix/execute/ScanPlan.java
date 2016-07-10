@@ -60,8 +60,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.PTableStats;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -135,41 +133,15 @@ public class ScanPlan extends BaseQueryPlan {
              * the amount of data we need to scan is less than the threshold.
              */
             return false;
-        } else if (perScanLimit != null && scan.getFilter() == null) {
-            /*
-             * In presence of a limit and in absence of a filter, we are not relying on guide post info to
-             * see if we are beyond a threshold.
-             */
-            float factor =
-                    services.getProps().getFloat(QueryServices.NONFILTERED_AND_LIMITED_QUERY_SERIAL_THRESHOLD,
-                        QueryServicesOptions.DEFAULT_NONFILTERED_LIMITED_QUERY_SERIAL_THRESHOLD);
-            return Float.compare(estRowSize * perScanLimit, factor * regionSize) < 0;
-        }
-        long scn = context.getConnection().getSCN() == null ? Long.MAX_VALUE : context.getConnection().getSCN();
-        PTableStats tableStats = context.getConnection().getQueryServices().getTableStats(table.getName().getBytes(), scn);
-        GuidePostsInfo gpsInfo = tableStats.getGuidePosts().get(SchemaUtil.getEmptyColumnFamily(table));
-        long threshold;
-        if (gpsInfo == null || gpsInfo.getGuidePostsCount() == 0) {
-            threshold = regionSize;
-        } else {
-            long totByteSize = 0;
-            long totRowCount = 0;
-            for (long byteCount : gpsInfo.getByteCounts()) {
-                totByteSize += byteCount;
-            }
-            for (long rowCount : gpsInfo.getRowCounts()) {
-                totRowCount += rowCount;
-            }
-            estRowSize = totByteSize / totRowCount;
-            threshold = 2
-                    * services.getProps().getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES);
-        }
-        long thresholdToUse = services.getProps().getLong(QueryServices.FILTERED_OR_NONLIMITED_QUERY_SERIAL_THRESHOLD,
-                threshold);
-        return (perScanLimit * estRowSize < thresholdToUse);
+        } 
+        float factor =
+            services.getProps().getFloat(QueryServices.LIMITED_QUERY_SERIAL_THRESHOLD,
+                QueryServicesOptions.DEFAULT_LIMITED_QUERY_SERIAL_THRESHOLD);
+        long threshold = (long)(factor * regionSize);
+        return (perScanLimit * estRowSize < threshold);
     }
     
+    @SuppressWarnings("deprecation")
     private static ParallelIteratorFactory buildResultIteratorFactory(StatementContext context, FilterableStatement statement,
             TableRef tableRef, OrderBy orderBy, Integer limit,Integer offset, boolean allowPageFilter) throws SQLException {
 
@@ -292,10 +264,4 @@ public class ScanPlan extends BaseQueryPlan {
     public boolean useRoundRobinIterator() throws SQLException {
         return ScanUtil.isRoundRobinPossible(orderBy, context);
     }
-
-    @Override
-    public boolean isSerial() {
-        return isSerial;
-    }
-
 }

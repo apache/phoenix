@@ -76,7 +76,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -141,14 +140,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return plan.getTableRef().getTable();
     }
     
-    private boolean useStats() {
+    protected boolean useStats() {
         /*
          * Don't use guide posts:
          * 1) If we're collecting stats, as in this case we need to scan entire
          * regions worth of data to track where to put the guide posts.
          * 2) If the query is going to be executed serially.
          */
-        if (ScanUtil.isAnalyzeTable(scan) || plan.isSerial()) {
+        if (ScanUtil.isAnalyzeTable(scan)) {
             return false;
         }
         return true;
@@ -664,8 +663,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 regionIndex++;
             }
             if (scanRanges.isPointLookup()) {
-                this.estimatedRows = 1L;
-                this.estimatedSize = SchemaUtil.estimateRowSize(table);
+                this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
+                this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
             } else if (hasGuidePosts) {
                 this.estimatedRows = estimatedRows;
                 this.estimatedSize = estimatedSize;
