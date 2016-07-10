@@ -114,6 +114,14 @@ public class SerialIterators extends BaseResultIterators {
         }
     }
 
+    /**
+     * No need to use stats when executing serially
+     */
+    @Override
+    protected boolean useStats() {
+        return false;
+    }
+    
     @Override
     protected String getName() {
         return NAME;
