@@ -290,7 +290,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             // Normalize connInfo so that a url explicitly specifying versus implicitly inheriting
             // the default values will both share the same ConnectionQueryServices.
             if (zookeeperQuorum == null) {
-                zookeeperQuorum = props.get(QueryServices.ZOOKEEPER_QUARUM_ATTRIB);
+                zookeeperQuorum = props.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
                 if (zookeeperQuorum == null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                     .setMessage(this.toString()).build().buildException();
@@ -357,7 +357,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         public ReadOnlyProps asProps() {
             Map<String, String> connectionProps = Maps.newHashMapWithExpectedSize(3);
             if (getZookeeperQuorum() != null) {
-                connectionProps.put(QueryServices.ZOOKEEPER_QUARUM_ATTRIB, getZookeeperQuorum());
+                connectionProps.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, getZookeeperQuorum());
             }
             if (getPort() != null) {
                 connectionProps.put(QueryServices.ZOOKEEPER_PORT_ATTRIB, getPort().toString());
