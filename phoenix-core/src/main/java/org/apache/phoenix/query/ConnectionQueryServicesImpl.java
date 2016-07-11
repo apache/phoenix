@@ -2475,11 +2475,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0,
                                             PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA + " "
                                                     + PBoolean.INSTANCE.getSqlTypeName());
+                                        metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
                                         if(getProps().getBoolean(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB,
                                             QueryServicesOptions.DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)) {
                                             metaConnection = UpgradeUtil.upgradeLocalIndexes(metaConnection);
                                         }
-                                        metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
                                         ConnectionQueryServicesImpl.this.removeTable(null,
                                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
