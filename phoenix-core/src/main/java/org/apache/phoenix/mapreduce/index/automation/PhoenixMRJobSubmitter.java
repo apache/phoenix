@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.mapreduce.index.automation;
 
+import static org.apache.phoenix.query.QueryConstants.ASYNC_INDEX_INFO_QUERY;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -67,15 +69,6 @@ public class PhoenixMRJobSubmitter {
             "/phoenix/automated-mr-index-build-leader-election";
     private static final String AUTO_INDEX_BUILD_LOCK_NAME = "ActiveStandbyElectorLock";
 
-    private static final String CANDIDATE_INDEX_INFO_QUERY = "SELECT "
-            + PhoenixDatabaseMetaData.INDEX_TYPE + ", " + PhoenixDatabaseMetaData.DATA_TABLE_NAME
-            + ", " + PhoenixDatabaseMetaData.TABLE_SCHEM + ", "
-            + PhoenixDatabaseMetaData.TABLE_NAME + " FROM "
-            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE "
-            + PhoenixDatabaseMetaData.COLUMN_NAME + " is null and "
-            + PhoenixDatabaseMetaData.TABLE_TYPE + " = '" + PTableType.INDEX.getSerializedValue()
-            + "' and " + PhoenixDatabaseMetaData.INDEX_STATE + " = '"
-            + PIndexState.BUILDING.getSerializedValue() + "'";
     // TODO - Move this to a property?
     private static final int JOB_SUBMIT_POOL_TIMEOUT = 5;
     private Configuration conf;
@@ -151,7 +144,7 @@ public class PhoenixMRJobSubmitter {
     public Map<String, PhoenixAsyncIndex> getCandidateJobs() throws SQLException {
         Connection con = DriverManager.getConnection("jdbc:phoenix:" + zkQuorum);
         Statement s = con.createStatement();
-        ResultSet rs = s.executeQuery(CANDIDATE_INDEX_INFO_QUERY);
+        ResultSet rs = s.executeQuery(ASYNC_INDEX_INFO_QUERY);
         Map<String, PhoenixAsyncIndex> candidateIndexes = new HashMap<String, PhoenixAsyncIndex>();
         while (rs.next()) {
             PhoenixAsyncIndex indexInfo = new PhoenixAsyncIndex();
