@@ -17,8 +17,12 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.query.QueryConstants.ASYNC_INDEX_INFO_QUERY;
+
 import java.io.IOException;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -87,10 +92,12 @@ import com.google.common.collect.Lists;
  */
 public class MetaDataRegionObserver extends BaseRegionObserver {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
-    protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
+    protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(2);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
     private boolean blockWriteRebuildIndex = false;
+    private final String HBASE_CLUSTER_DISTRIBUTED_CONFIG = "true";
+    private final String MAPRED_FRAMEWORK_YARN_CONFIG = "yarn";
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -158,23 +165,109 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         };
         (new Thread(r)).start();
 
-        if (!enableRebuildIndex && !blockWriteRebuildIndex) {
-            LOG.info("Failure Index Rebuild is skipped by configuration.");
-            return;
-        }
         // turn off verbose deprecation logging
         Logger deprecationLogger = Logger.getLogger("org.apache.hadoop.conf.Configuration.deprecation");
         if (deprecationLogger != null) {
             deprecationLogger.setLevel(Level.WARN);
         }
+
         try {
             Class.forName(PhoenixDriver.class.getName());
-            // starts index rebuild schedule work
-            BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
-            // run scheduled task every 10 secs
-            executor.scheduleAtFixedRate(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
         } catch (ClassNotFoundException ex) {
-            LOG.error("BuildIndexScheduleTask cannot start!", ex);
+            LOG.error("Phoenix Driver class is not found. Fix the classpath.", ex);
+        }
+         
+        Configuration conf = env.getConfiguration();
+        String hbaseClusterDistributedMode = conf.get(QueryServices.HBASE_CLUSTER_DISTRIBUTED_ATTRIB);
+        String mapredFrameworkName = conf.get(QueryServices.MAPRED_FRAMEWORK_NAME); 
+
+        // In case of non-distributed mode of hbase service or local mode of map reduce service, add timer task to rebuild the async indexes  
+        if ((hbaseClusterDistributedMode != null && !hbaseClusterDistributedMode.equals(HBASE_CLUSTER_DISTRIBUTED_CONFIG)) || 
+            (mapredFrameworkName != null && !mapredFrameworkName.equals(MAPRED_FRAMEWORK_YARN_CONFIG)))
+        {
+            LOG.info("Enabling Async Index rebuilder");
+            AsyncIndexRebuilderTask asyncIndexRebuilderTask = new AsyncIndexRebuilderTask(e.getEnvironment());
+            // run async index rebuilder task every 10 secs to rebuild any newly created async indexes
+            executor.scheduleAtFixedRate(asyncIndexRebuilderTask, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
+        }
+
+        if (!enableRebuildIndex && !blockWriteRebuildIndex) {
+            LOG.info("Failure Index Rebuild is skipped by configuration.");
+            return;
+        }
+
+        // starts index rebuild schedule work
+        BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
+        // run scheduled task every 10 secs
+        executor.scheduleAtFixedRate(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
+    }
+    
+    /**
+     * Task runs periodically to re-build async indexes when hbase is running in non-distributed mode or 
+     * when mapreduce is running in local mode
+     *
+     */
+    public static class AsyncIndexRebuilderTask extends TimerTask {
+        RegionCoprocessorEnvironment env;
+        PhoenixConnection conn = null;
+
+        public AsyncIndexRebuilderTask(RegionCoprocessorEnvironment env) {
+            this.env = env;
+        }
+
+        @Override
+        public void run() {
+            try {
+                if (conn == null) {
+                   conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+                }
+                Statement s = conn.createStatement();
+                ResultSet rs = s.executeQuery(ASYNC_INDEX_INFO_QUERY);
+
+                PhoenixConnection alterIndexConnection = null;
+                while (rs.next()) {
+                    String tableName = rs.getString(PhoenixDatabaseMetaData.DATA_TABLE_NAME);
+                    String tableSchema = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                    String indexName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+                    String tableNameWithSchema = SchemaUtil.getTableName(tableSchema, tableName);
+                    
+                    final PTable pindexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(tableSchema, indexName));
+                    // this is set to ensure index tables remains consistent post population.
+                    long maxTimeRange = pindexTable.getTimeStamp()+1;
+
+                    try {
+                        final Properties props = new Properties();
+                        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(maxTimeRange));
+                        alterIndexConnection = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
+
+                        // Alter index query for rebuilding async indexes
+                        String alterIndexQuery = String.format("ALTER INDEX IF EXISTS %s ON %s REBUILD", indexName, tableNameWithSchema);
+    
+                        LOG.info("Executing Rebuild Index Query:" + alterIndexQuery);
+                        alterIndexConnection.createStatement().execute(alterIndexQuery);
+                    } catch (Throwable t) {
+                        LOG.error("AsyncIndexRebuilderTask failed during rebuilding index!", t);
+                    } finally {
+                        if (alterIndexConnection != null) {
+                            try {
+                                alterIndexConnection.close();
+                            } catch (SQLException ignored) {
+                                LOG.debug("AsyncIndexRebuilderTask can't close alterIndexConnection", ignored);
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                LOG.error("AsyncIndexRebuilderTask failed!", t);
+            } finally {
+                if (conn != null) {
+                    try {
+                        conn.close();
+                    } catch (SQLException ignored) {
+                        LOG.debug("AsyncIndexRebuilderTask can't close connection", ignored);
+                    }
+                }
+            }
         }
     }
 
