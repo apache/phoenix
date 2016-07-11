@@ -256,8 +256,8 @@ public class IndexTool extends Configured implements Tool {
             }
             return 0;
         } catch (Exception ex) {
-            LOG.error(" An exception occured while performing the indexing job : "
-                    + ExceptionUtils.getStackTrace(ex));
+            LOG.error("An exception occurred while performing the indexing job: "
+                    + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
             try {
@@ -278,7 +278,7 @@ public class IndexTool extends Configured implements Tool {
      * @return
      * @throws Exception
      */
-    private int configureRunnableJobUsingBulkLoad(Job job, Path outputPath) throws Exception {
+    private void configureRunnableJobUsingBulkLoad(Job job, Path outputPath) throws Exception {
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
         job.setMapOutputValueClass(KeyValue.class);
         final Configuration configuration = job.getConfiguration();
@@ -288,9 +288,9 @@ public class IndexTool extends Configured implements Tool {
         HFileOutputFormat.configureIncrementalLoad(job, htable);
         boolean status = job.waitForCompletion(true);
         if (!status) {
-            LOG.error("Failed to run the IndexTool job. ");
+            LOG.error("Failed to run the IndexTool job.");
             htable.close();
-            return -1;
+            throw new Exception("IndexTool job failed: " + job.toString());
         }
 
         LOG.info("Loading HFiles from {}", outputPath);
@@ -299,8 +299,6 @@ public class IndexTool extends Configured implements Tool {
         htable.close();
         
         FileSystem.get(configuration).delete(outputPath, true);
-        
-        return 0;
     }
     
     /**
@@ -314,7 +312,7 @@ public class IndexTool extends Configured implements Tool {
      * @return
      * @throws Exception
      */
-    private int configureSubmittableJobUsingDirectApi(Job job, Path outputPath, boolean runForeground)
+    private void configureSubmittableJobUsingDirectApi(Job job, Path outputPath, boolean runForeground)
             throws Exception {
         Configuration conf = job.getConfiguration();
         HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
@@ -333,16 +331,15 @@ public class IndexTool extends Configured implements Tool {
         if (!runForeground) {
             LOG.info("Running Index Build in Background - Submit async and exit");
             job.submit();
-            return 0;
+            return;
         }
         LOG.info("Running Index Build in Foreground. Waits for the build to complete. This may take a long time!.");
         boolean result = job.waitForCompletion(true);
         if (!result) {
             LOG.error("Job execution failed!");
-            return -1;
+            throw new Exception("IndexTool job failed: " + job.toString());
         }
         FileSystem.get(conf).delete(outputPath, true);
-        return 0;
     }
 
     /**
