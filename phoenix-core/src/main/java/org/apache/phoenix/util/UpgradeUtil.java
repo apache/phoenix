@@ -329,10 +329,10 @@ public class UpgradeUtil {
         globalConnection = new PhoenixConnection(metaConnection, metaConnection.getQueryServices(), props);
         SQLException sqlEx = null;
         try (HBaseAdmin admin = globalConnection.getQueryServices().getAdmin()) {
-            ResultSet rs = globalConnection.createStatement().executeQuery("SELECT TABLE_SCHEM, TABLE_NAME, DATA_TABLE_NAME, TENANT_ID FROM SYSTEM.CATALOG  "
+            ResultSet rs = globalConnection.createStatement().executeQuery("SELECT TABLE_SCHEM, TABLE_NAME, DATA_TABLE_NAME, TENANT_ID, MULTI_TENANT, SALT_BUCKETS FROM SYSTEM.CATALOG  "
                     + "      WHERE COLUMN_NAME IS NULL"
                     + "           AND COLUMN_FAMILY IS NULL"
-                    + "           AND INDEX_TYPE=2");
+                    + "           AND INDEX_TYPE=" + IndexType.LOCAL.getSerializedValue());
             boolean droppedLocalIndexes = false;
             while (rs.next()) {
                 if(!droppedLocalIndexes) {
@@ -373,12 +373,14 @@ public class UpgradeUtil {
                 String indexTableName = rs.getString(2);
                 String dataTableName = rs.getString(3);
                 String tenantId = rs.getString(4);
+                boolean multiTenantTable = rs.getBoolean(5);
+                int numColumnsToSkip = 1 + (multiTenantTable ? 1 : 0);
                 String getColumns =
                         "SELECT COLUMN_NAME, COLUMN_FAMILY FROM SYSTEM.CATALOG  WHERE TABLE_SCHEM "
                                 + (schemaName == null ? "IS NULL " : "='" + schemaName+ "'")
                                 + " AND TENANT_ID "+(tenantId == null ? "IS NULL " : "='" + tenantId + "'")
                                 + " and TABLE_NAME='" + indexTableName
-                                + "' AND COLUMN_NAME IS NOT NULL  ORDER BY KEY_SEQ";
+                                + "' AND COLUMN_NAME IS NOT NULL AND KEY_SEQ > "+ numColumnsToSkip +" ORDER BY KEY_SEQ";
                 ResultSet getColumnsRs = globalConnection.createStatement().executeQuery(getColumns);
                 List<String> indexedColumns = new ArrayList<String>(1);
                 List<String> coveredColumns = new ArrayList<String>(1);
@@ -386,9 +388,6 @@ public class UpgradeUtil {
                 while (getColumnsRs.next()) {
                     String column = getColumnsRs.getString(1);
                     String columnName = IndexUtil.getDataColumnName(column);
-                    if (SchemaUtil.normalizeIdentifier(columnName).equals(MetaDataUtil.getViewIndexIdColumnName())) {
-                        continue;
-                    }
                     String columnFamily = IndexUtil.getDataColumnFamilyName(column);
                     if (getColumnsRs.getString(2) == null) {
                         if (columnFamily != null && !columnFamily.isEmpty()) {
@@ -493,7 +492,7 @@ public class UpgradeUtil {
             try (HBaseAdmin admin = globalConnection.getQueryServices().getAdmin()) {
                 String fetchViewIndexes = "SELECT " + TENANT_ID + ", " + TABLE_SCHEM + ", " + TABLE_NAME + 
                         ", " + DATA_TABLE_NAME + " FROM " + SYSTEM_CATALOG_NAME + " WHERE " + VIEW_INDEX_ID
-                        + " IS NOT NULL AND " + INDEX_TYPE + "<>" + IndexType.LOCAL.getSerializedValue();
+                        + " IS NOT NULL";
                 String disableIndexDDL = "ALTER INDEX %s ON %s DISABLE"; 
                 try (ResultSet rs = globalConnection.createStatement().executeQuery(fetchViewIndexes)) {
                     while (rs.next()) {
@@ -502,6 +501,7 @@ public class UpgradeUtil {
                         String indexName = rs.getString(3);
                         String viewName = rs.getString(4);
                         String fullIndexName = SchemaUtil.getTableName(indexSchema, indexName);
+                        String fullViewName = SchemaUtil.getTableName(indexSchema, viewName);
                         PTable viewPTable = null;
                         // Disable the view index and truncate the underlying hbase table. 
                         // Users would need to rebuild the view indexes. 
@@ -510,8 +510,8 @@ public class UpgradeUtil {
                             newProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                             PTable indexPTable = null;
                             try (PhoenixConnection tenantConnection = new PhoenixConnection(globalConnection, globalConnection.getQueryServices(), newProps)) {
-                                viewPTable = PhoenixRuntime.getTable(tenantConnection, viewName);
-                                tenantConnection.createStatement().execute(String.format(disableIndexDDL, fullIndexName, viewName));
+                                viewPTable = PhoenixRuntime.getTable(tenantConnection, fullViewName);
+                                tenantConnection.createStatement().execute(String.format(disableIndexDDL, indexName, fullViewName));
                                 indexPTable = PhoenixRuntime.getTable(tenantConnection, fullIndexName);
                             }
 
@@ -588,8 +588,8 @@ public class UpgradeUtil {
                             }
                             globalConnection.commit();
                         } else {
-                            viewPTable = PhoenixRuntime.getTable(globalConnection, viewName);
-                            globalConnection.createStatement().execute(String.format(disableIndexDDL, fullIndexName, viewName));
+                            viewPTable = PhoenixRuntime.getTable(globalConnection, fullViewName);
+                            globalConnection.createStatement().execute(String.format(disableIndexDDL, indexName, fullViewName));
                         }
                         String indexPhysicalTableName = MetaDataUtil.getViewIndexTableName(viewPTable.getPhysicalName().getString());
                         if (physicalTables.add(indexPhysicalTableName)) {
