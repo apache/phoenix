@@ -20,7 +20,14 @@ package org.apache.phoenix.tracingwebapp.http;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.tracingwebapp.http.Main;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.mapreduce.v2.LogParams;
+
 
 
 
@@ -34,12 +41,15 @@ public class ConnectionFactory {
   private static Connection con;
   protected static String phoenixHome;
   protected static int phoenixPort;
+  protected static final Log LOG = LogFactory.getLog(ConnectionFactory.class);
   
+  public static void setConectionParameters(String home,int port){
+	  phoenixHome = home;
+	  phoenixPort = port;
+  }
   public static Connection getConnection() throws SQLException, ClassNotFoundException {
     if (con == null || con.isClosed()) {	
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
-      phoenixHome=Main.phoenixHome;
-      phoenixPort=Main.phoenixPort;
       con = DriverManager.getConnection("jdbc:phoenix:"+phoenixHome+":"+phoenixPort);
     }
     return con;

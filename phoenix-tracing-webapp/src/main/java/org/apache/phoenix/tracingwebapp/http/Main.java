@@ -49,7 +49,6 @@ public final class Main extends Configured implements Tool {
             "phoenix.traceserver.http.home";
     public static final String DEFAULT_HTTP_HOME = "/";
     
-
     public static void main(String[] args) throws Exception {
         int ret = ToolRunner.run(HBaseConfiguration.create(), new Main(), args);
         System.exit(ret);
@@ -64,7 +63,7 @@ public final class Main extends Configured implements Tool {
                 DEFAULT_DBSERVER_HOST);
         final int port = getConf().getInt(TRACE_SERVER_HTTP_PORT_KEY,
                 DEFAULT_HTTP_PORT);
-        BasicConfigurator.configure();
+        //BasicConfigurator.configure();
         final String home = getConf().get(TRACE_SERVER_HTTP_JETTY_HOME_KEY,
                 DEFAULT_HTTP_HOME);
         //setting up the embedded server
@@ -74,10 +73,11 @@ public final class Main extends Configured implements Tool {
         String webappDirLocation = location.toString().split("target")[0] +"src/main/webapp";
         Server server = new Server(port);
         WebAppContext root = new WebAppContext();
+        ConnectionFactory.setConectionParameters(phoenixHome, port);
 
         root.setContextPath(home);
         root.setDescriptor(webappDirLocation + "/WEB-INF/web.xml");
-        root.setResourceBase(webappDirLocation);
+        root.setResourceBase(webappDirLocation);        
         root.setParentLoaderPriority(true);
         server.setHandler(root);
 
