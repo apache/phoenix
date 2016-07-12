@@ -134,6 +134,10 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
                     assertTrue(rs.next());
                     assertEquals("Unexpected row count ", 2, rs.getInt(1));
                     assertFalse(rs.next());
+                    rs = conn2.createStatement().executeQuery("SELECT count(*) from "+fullTableName);
+                    assertTrue(rs.next());
+                    assertEquals("Unexpected row count ", 4, rs.getInt(1));
+                    assertFalse(rs.next());
                 }
             }
             

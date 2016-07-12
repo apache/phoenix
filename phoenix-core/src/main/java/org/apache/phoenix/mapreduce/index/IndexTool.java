@@ -248,10 +248,10 @@ public class IndexTool extends Configured implements Tool {
                     cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt()));
             } else {
                 configureRunnableJobUsingBulkLoad(job, outputPath);
+                // Without direct API, we need to update the index state to ACTIVE from client.
+                IndexToolUtil.updateIndexState(connection, qDataTable, indexTable,
+                        PIndexState.ACTIVE);
             }
-            // finally update the index state to ACTIVE.
-            IndexToolUtil.updateIndexState(connection, qDataTable, indexTable,
-                    PIndexState.ACTIVE);
             return 0;
         } catch (Exception ex) {
             LOG.error("An exception occurred while performing the indexing job: "
@@ -314,6 +314,7 @@ public class IndexTool extends Configured implements Tool {
     private void configureSubmittableJobUsingDirectApi(Job job, Path outputPath, boolean runForeground)
             throws Exception {
         job.setMapperClass(PhoenixIndexImportDirectMapper.class);
+        job.setReducerClass(PhoenixIndexImportDirectReducer.class);
         Configuration conf = job.getConfiguration();
         HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
         // Set the Physical Table name for use in DirectHTableWriter#write(Mutation)
