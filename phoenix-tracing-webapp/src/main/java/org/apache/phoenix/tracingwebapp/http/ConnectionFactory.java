@@ -20,6 +20,9 @@ package org.apache.phoenix.tracingwebapp.http;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import org.apache.phoenix.tracingwebapp.http.Main;
+
+
 
 /**
 *
@@ -29,15 +32,18 @@ import java.sql.SQLException;
 public class ConnectionFactory {
 
   private static Connection con;
-  //TODO : need to get port and host from configuration
-  protected static String PHOENIX_HOST = "localhost";
-  protected static int PHOENIX_PORT = 2181;
-
+  protected static String phoenixHome;
+  protected static int phoenixPort;
+  
   public static Connection getConnection() throws SQLException, ClassNotFoundException {
-    if (con == null || con.isClosed()) {
+    if (con == null || con.isClosed()) {	
       Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
-      con = DriverManager.getConnection("jdbc:phoenix:"+PHOENIX_HOST+":"+PHOENIX_PORT);
+      phoenixHome=Main.phoenixHome;
+      phoenixPort=Main.phoenixPort;
+      con = DriverManager.getConnection("jdbc:phoenix:"+phoenixHome+":"+phoenixPort);
     }
     return con;
   }
+  
+  
 }

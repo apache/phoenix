@@ -29,6 +29,7 @@ import org.apache.log4j.BasicConfigurator;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.webapp.WebAppContext;
 
+
 /**
  * tracing web app runner
  */
@@ -47,6 +48,7 @@ public final class Main extends Configured implements Tool {
     public static final String TRACE_SERVER_HTTP_JETTY_HOME_KEY =
             "phoenix.traceserver.http.home";
     public static final String DEFAULT_HTTP_HOME = "/";
+    
 
     public static void main(String[] args) throws Exception {
         int ret = ToolRunner.run(HBaseConfiguration.create(), new Main(), args);
@@ -56,12 +58,17 @@ public final class Main extends Configured implements Tool {
     @Override
     public int run(String[] arg0) throws Exception {
         // logProcessInfo(getConf());
+    	final int phoenixPort = getConf().getInt(PHONIX_DBSERVER_PORT_KEY,
+                DEFAULT_DBSERVER_PORT);
+    	final String phoenixHome = getConf().get(PHONIX_DBSERVER_HOST_KEY,
+                DEFAULT_DBSERVER_HOST);
         final int port = getConf().getInt(TRACE_SERVER_HTTP_PORT_KEY,
                 DEFAULT_HTTP_PORT);
         BasicConfigurator.configure();
         final String home = getConf().get(TRACE_SERVER_HTTP_JETTY_HOME_KEY,
                 DEFAULT_HTTP_HOME);
         //setting up the embedded server
+        
         ProtectionDomain domain = Main.class.getProtectionDomain();
         URL location = domain.getCodeSource().getLocation();
         String webappDirLocation = location.toString().split("target")[0] +"src/main/webapp";
@@ -76,6 +83,8 @@ public final class Main extends Configured implements Tool {
 
         server.start();
         server.join();
+   
         return 0;
     }
+
 }
