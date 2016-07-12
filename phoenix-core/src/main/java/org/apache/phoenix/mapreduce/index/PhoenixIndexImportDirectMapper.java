@@ -24,7 +24,6 @@ import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
-import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -159,10 +158,6 @@ public class PhoenixIndexImportDirectMapper extends
             if (mutationState != null) {
                 writeBatch(mutationState, context);
             }
-            // We are writing some dummy key-value as map output here so that we commit only one
-            // output to reducer.
-            context.write(new ImmutableBytesWritable(UUID.randomUUID().toString().getBytes()),
-                new IntWritable(0));
             super.cleanup(context);
         } catch (SQLException e) {
             LOG.error(" Error {}  while read/write of a record ", e.getMessage());

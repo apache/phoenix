@@ -126,12 +126,13 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             if (transactional) {
                 // insert two rows in another connection without committing so that they are not visible to other transactions
                 try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-                    PreparedStatement stmt2 = conn.prepareStatement(upsertQuery);
+                    conn2.setAutoCommit(false);
+                    PreparedStatement stmt2 = conn2.prepareStatement(upsertQuery);
                     upsertRow(stmt2, 5);
                     upsertRow(stmt2, 6);
                     ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) from "+fullTableName);
                     assertTrue(rs.next());
-                    assertEquals("Unexpected row count ", 4, rs.getInt(1));
+                    assertEquals("Unexpected row count ", 2, rs.getInt(1));
                     assertFalse(rs.next());
                 }
             }

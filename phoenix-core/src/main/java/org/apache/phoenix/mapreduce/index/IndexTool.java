@@ -244,16 +244,14 @@ public class IndexTool extends Configured implements Tool {
             
             boolean useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             if (useDirectApi) {
-                job.setMapperClass(PhoenixIndexImportDirectMapper.class);
                 configureSubmittableJobUsingDirectApi(job, outputPath,
                     cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt()));
             } else {
-                job.setMapperClass(PhoenixIndexImportMapper.class);
                 configureRunnableJobUsingBulkLoad(job, outputPath);
-                // finally update the index state to ACTIVE.
-                IndexToolUtil.updateIndexState(connection, qDataTable, indexTable,
-                    PIndexState.ACTIVE);
             }
+            // finally update the index state to ACTIVE.
+            IndexToolUtil.updateIndexState(connection, qDataTable, indexTable,
+                    PIndexState.ACTIVE);
             return 0;
         } catch (Exception ex) {
             LOG.error("An exception occurred while performing the indexing job: "
@@ -265,7 +263,7 @@ public class IndexTool extends Configured implements Tool {
                     connection.close();
                 }
             } catch (SQLException sqle) {
-                LOG.error(" Failed to close connection ", sqle.getMessage());
+                LOG.error("Failed to close connection ", sqle.getMessage());
                 throw new RuntimeException("Failed to close connection");
             }
         }
@@ -279,6 +277,7 @@ public class IndexTool extends Configured implements Tool {
      * @throws Exception
      */
     private void configureRunnableJobUsingBulkLoad(Job job, Path outputPath) throws Exception {
+        job.setMapperClass(PhoenixIndexImportMapper.class);
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
         job.setMapOutputValueClass(KeyValue.class);
         final Configuration configuration = job.getConfiguration();
@@ -288,7 +287,7 @@ public class IndexTool extends Configured implements Tool {
         HFileOutputFormat.configureIncrementalLoad(job, htable);
         boolean status = job.waitForCompletion(true);
         if (!status) {
-            LOG.error("Failed to run the IndexTool job.");
+            LOG.error("IndexTool job failed!");
             htable.close();
             throw new Exception("IndexTool job failed: " + job.toString());
         }
@@ -314,6 +313,7 @@ public class IndexTool extends Configured implements Tool {
      */
     private void configureSubmittableJobUsingDirectApi(Job job, Path outputPath, boolean runForeground)
             throws Exception {
+        job.setMapperClass(PhoenixIndexImportDirectMapper.class);
         Configuration conf = job.getConfiguration();
         HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
         // Set the Physical Table name for use in DirectHTableWriter#write(Mutation)
@@ -322,7 +322,6 @@ public class IndexTool extends Configured implements Tool {
         
         //Set the Output classes
         job.setMapOutputValueClass(IntWritable.class);
-        job.setReducerClass(PhoenixIndexToolReducer.class);
         job.setOutputKeyClass(NullWritable.class);
         job.setOutputValueClass(NullWritable.class);
         TableMapReduceUtil.addDependencyJars(job);
@@ -336,7 +335,7 @@ public class IndexTool extends Configured implements Tool {
         LOG.info("Running Index Build in Foreground. Waits for the build to complete. This may take a long time!.");
         boolean result = job.waitForCompletion(true);
         if (!result) {
-            LOG.error("Job execution failed!");
+            LOG.error("IndexTool job failed!");
             throw new Exception("IndexTool job failed: " + job.toString());
         }
         FileSystem.get(conf).delete(outputPath, true);
