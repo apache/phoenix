@@ -185,7 +185,7 @@ public class FromCompiler {
                     if (htable != null) Closeables.closeQuietly(htable);
                 }
                 tableNode = NamedTableNode.create(null, baseTable, statement.getColumnDefs());
-                return new SingleTableColumnResolver(connection, tableNode, e.getTimeStamp(), new HashMap<String, UDFParseNode>(1));
+                return new SingleTableColumnResolver(connection, tableNode, e.getTimeStamp(), new HashMap<String, UDFParseNode>(1), false);
             }
             throw e;
         }
@@ -332,7 +332,7 @@ public class FromCompiler {
     	private final String alias;
         private final List<PSchema> schemas;
 
-       public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, long timeStamp, Map<String, UDFParseNode> udfParseNodes) throws SQLException  {
+       public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode table, long timeStamp, Map<String, UDFParseNode> udfParseNodes, boolean isNamespaceMapped) throws SQLException  {
            super(connection, 0, false, udfParseNodes);
            List<PColumnFamily> families = Lists.newArrayListWithExpectedSize(table.getDynamicColumns().size());
            for (ColumnDef def : table.getDynamicColumns()) {
@@ -345,8 +345,8 @@ public class FromCompiler {
             if (connection.getSchema() != null) {
                 schema = schema != null ? schema : connection.getSchema();
             }
-            PTable theTable = new PTableImpl(connection.getTenantId(), schema, table.getName().getTableName(),
-                    scn == null ? HConstants.LATEST_TIMESTAMP : scn, families);
+           PTable theTable = new PTableImpl(connection.getTenantId(), schema, table.getName().getTableName(),
+                    scn == null ? HConstants.LATEST_TIMESTAMP : scn, families, isNamespaceMapped);
            theTable = this.addDynamicColumns(table.getDynamicColumns(), theTable);
            alias = null;
            tableRefs = ImmutableList.of(new TableRef(alias, theTable, timeStamp, !table.getDynamicColumns().isEmpty()));
