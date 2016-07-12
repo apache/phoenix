@@ -86,5 +86,4 @@ public interface QueryPlan extends StatementPlan {
      * @throws SQLException 
      */
     public boolean useRoundRobinIterator() throws SQLException;
-    
 }

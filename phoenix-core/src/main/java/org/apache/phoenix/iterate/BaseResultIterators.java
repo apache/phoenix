@@ -49,6 +49,7 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -76,7 +77,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -85,6 +85,7 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.LogUtil;
@@ -141,16 +142,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return plan.getTableRef().getTable();
     }
     
-    private boolean useStats() {
-        boolean isPointLookup = context.getScanRanges().isPointLookup();
+    protected boolean useStats() {
         /*
-         *  Don't use guide posts if:
-         *  1) We're doing a point lookup, as HBase is fast enough at those
-         *     to not need them to be further parallelized. TODO: perf test to verify
-         *  2) We're collecting stats, as in this case we need to scan entire
-         *     regions worth of data to track where to put the guide posts.
+         * Don't use guide posts:
+         * 1) If we're collecting stats, as in this case we need to scan entire
+         * regions worth of data to track where to put the guide posts.
+         * 2) If the query is going to be executed serially.
          */
-        if (isPointLookup || ScanUtil.isAnalyzeTable(scan)) {
+        if (ScanUtil.isAnalyzeTable(scan)) {
             return false;
         }
         return true;
@@ -362,7 +361,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (null == currentSCN) {
           currentSCN = HConstants.LATEST_TIMESTAMP;
         }
-        tableStats = useStats() ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN) : PTableStats.EMPTY_STATS;
+        tableStats = useStats() && StatisticsUtil.isStatsEnabled(TableName.valueOf(physicalTableName))
+                ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN)
+                : PTableStats.EMPTY_STATS;
         // Used to tie all the scans together during logging
         scanId = UUID.randomUUID().toString();
         
@@ -423,11 +424,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     }
 
     private GuidePostsInfo getGuidePosts(Set<byte[]> whereConditions) {
-        /*
-         * Don't use guide posts if: 1) We're doing a point lookup, as HBase is fast enough at those to not need them to
-         * be further parallelized. TODO: pref test to verify 2) We're collecting stats, as in this case we need to scan
-         * entire regions worth of data to track where to put the guide posts.
-         */
         if (!useStats()) { return GuidePostsInfo.NO_GUIDEPOST; }
 
         GuidePostsInfo gps = null;
@@ -492,7 +488,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private List<List<Scan>> getParallelScans() throws SQLException {
         // If the scan boundaries are not matching with scan in context that means we need to get
         // parallel scans for the chunk after split/merge.
-        if (!ScanUtil.isConextScan(scan, context)) {
+        if (!ScanUtil.isContextScan(scan, context)) {
             return getParallelScans(scan);
         }
         return getParallelScans(EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY);
@@ -629,7 +625,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 } catch (EOFException e) {}
             }
             byte[] currentKeyBytes = currentKey.copyBytes();
-    
             // Merge bisect with guideposts for all but the last region
             while (regionIndex <= stopIndex) {
                 HRegionLocation regionLocation = regionLocations.get(regionIndex);
@@ -646,19 +641,17 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     keyOffset = ScanUtil.getRowKeyOffset(regionInfo.getStartKey(), endRegionKey);
                 }
                 try {
-                    while (guideIndex < gpsSize && (currentGuidePost.compareTo(endKey) <= 0 || endKey.length == 0)) {
+                    while (guideIndex < gpsSize && (endKey.length == 0 || currentGuidePost.compareTo(endKey) <= 0)) {
                         Scan newScan = scanRanges.intersectScan(scan, currentKeyBytes, currentGuidePostBytes, keyOffset,
                                 false);
-                        if(newScan != null) {
+                        if (newScan != null) {
                             ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                                 regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
-                        }
-                        if (newScan != null) {
                             estimatedRows += gps.getRowCounts().get(guideIndex);
                             estimatedSize += gps.getByteCounts().get(guideIndex);
                         }
                         scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
-                        currentKeyBytes = currentGuidePost.copyBytes();
+                        currentKeyBytes = currentGuidePostBytes;
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();
                         guideIndex++;
@@ -673,12 +666,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 currentKeyBytes = endKey;
                 regionIndex++;
             }
-            if (hasGuidePosts) {
+            if (scanRanges.isPointLookup()) {
+                this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
+                this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
+            } else if (hasGuidePosts) {
                 this.estimatedRows = estimatedRows;
                 this.estimatedSize = estimatedSize;
-            } else if (scanRanges.isPointLookup()) {
-                this.estimatedRows = 1L;
-                this.estimatedSize = SchemaUtil.estimateRowSize(table);
             } else {
                 this.estimatedRows = null;
                 this.estimatedSize = null;
@@ -919,11 +912,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     	private final int outerListIndex;
     	private final int innerListIndex;
     	private final Scan scan;
+    	private final boolean isFirstScan;
+    	private final boolean isLastScan;
     	
-    	public ScanLocator(Scan scan, int outerListIndex, int innerListIndex) {
+    	public ScanLocator(Scan scan, int outerListIndex, int innerListIndex, boolean isFirstScan, boolean isLastScan) {
     		this.outerListIndex = outerListIndex;
     		this.innerListIndex = innerListIndex;
     		this.scan = scan;
+    		this.isFirstScan = isFirstScan;
+    		this.isLastScan = isLastScan;
     	}
     	public int getOuterListIndex() {
     		return outerListIndex;
@@ -933,6 +930,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     	}
     	public Scan getScan() {
     		return scan;
+    	}
+    	public boolean isFirstScan()  {
+    	    return isFirstScan;
+    	}
+    	public boolean isLastScan() {
+    	    return isLastScan;
     	}
     }
     

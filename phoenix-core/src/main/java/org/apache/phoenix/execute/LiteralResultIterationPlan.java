@@ -110,5 +110,4 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
         
         return scanner;
     }
-
 }

@@ -87,6 +87,7 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.tephra.Transaction;
@@ -1052,7 +1053,16 @@ public class MutationState implements SQLCloseable {
     private ServerCache setMetaDataOnMutations(TableRef tableRef, List<? extends Mutation> mutations,
             ImmutableBytesWritable indexMetaDataPtr) throws SQLException {
         PTable table = tableRef.getTable();
-        byte[] tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+        final byte[] tenantIdBytes;
+        if(table.isMultiTenant()) {
+            tenantIdBytes = connection.getTenantId() == null ? null :
+                    ScanUtil.getTenantIdBytes(
+                            table.getRowKeySchema(),
+                            table.getBucketNum() != null,
+                            connection.getTenantId(), table.getViewIndexId() != null);
+        } else {
+            tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
+        }
         ServerCache cache = null;
         byte[] attribValue = null;
         byte[] uuidValue = null;
@@ -1076,8 +1086,8 @@ public class MutationState implements SQLCloseable {
         // Either set the UUID to be able to access the index metadata from the cache
         // or set the index metadata directly on the Mutation
         for (Mutation mutation : mutations) {
-            if (tenantId != null) {
-                mutation.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            if (connection.getTenantId() != null) {
+                mutation.setAttribute(PhoenixRuntime.TENANT_ID_ATTRIB, tenantIdBytes);
             }
             mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
             if (attribValue != null) {

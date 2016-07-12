@@ -671,5 +671,4 @@ public class SortMergeJoinPlan implements QueryPlan {
     public Set<TableRef> getSourceRefs() {
         return tableRefs;
     }
-
 }

@@ -274,13 +274,11 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testSchemaMetadataScan() throws SQLException {
         long ts = nextTimestamp();
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
+        ensureTableCreated(getUrl(), PTSDB_NAME, null, ts);
         Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE SCHEMA " + CUSTOM_ENTITY_DATA_SCHEMA_NAME);
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
-        conn = DriverManager.getConnection(getUrl(), props);
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs;
         rs = dbmd.getSchemas(null, CUSTOM_ENTITY_DATA_SCHEMA_NAME);
@@ -289,9 +287,15 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(rs.getString(2),null);
         assertFalse(rs.next());
 
-        rs = dbmd.getSchemas();
+        rs = dbmd.getSchemas(null, null);
+        assertTrue(rs.next());
+        assertEquals(rs.getString("TABLE_SCHEM"),null);
+        assertEquals(rs.getString("TABLE_CATALOG"),null);
         assertTrue(rs.next());
         assertEquals(rs.getString("TABLE_SCHEM"),CUSTOM_ENTITY_DATA_SCHEMA_NAME);
+        assertEquals(rs.getString("TABLE_CATALOG"),null);
+        assertTrue(rs.next());
+        assertEquals(rs.getString("TABLE_SCHEM"),PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA);
         assertEquals(rs.getString("TABLE_CATALOG"),null);
         assertFalse(rs.next());
     }
@@ -568,6 +572,20 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         assertFalse(rs.next());
         
+        conn.createStatement().execute("CREATE TABLE SALTEDTABLE123 (k INTEGER PRIMARY KEY, v VARCHAR) SALT_BUCKETS=3");
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        dbmd = conn.getMetaData();
+        rs = dbmd.getPrimaryKeys(null, "", "SALTEDTABLE123");
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString("TABLE_SCHEM"));
+        assertEquals("SALTEDTABLE123", rs.getString("TABLE_NAME"));
+        assertEquals(null, rs.getString("TABLE_CAT"));
+        assertEquals("K", rs.getString("COLUMN_NAME"));
+        assertEquals(1, rs.getInt("KEY_SEQ"));
+        assertEquals(null, rs.getString("PK_NAME"));
+        assertFalse(rs.next());
     }
     
     @Test

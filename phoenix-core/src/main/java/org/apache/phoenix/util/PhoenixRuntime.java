@@ -211,16 +211,15 @@ public class PhoenixRuntime {
         PhoenixConnection conn = null;
         try {
             Properties props = new Properties();
+            if (execCmd.isLocalIndexUpgrade()) {
+                props.setProperty(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, "false");
+            }
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
             if (execCmd.isMapNamespace()) {
                 String srcTable = execCmd.getSrcTable();
                 System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
                 UpgradeUtil.upgradeTable(conn, srcTable);
-                Set<String> viewNames = MetaDataUtil.getViewNames(conn, srcTable);
-                System.out.println("upgrading following views:"+viewNames);
-                for (String viewName : viewNames) {
-                    UpgradeUtil.upgradeTable(conn, viewName);
-                }
+                UpgradeUtil.mapChildViewsToNamespace(conn, srcTable,props);
             } else if (execCmd.isUpgrade()) {
                 if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
                         "May not specify the CURRENT_SCN property when upgrading"); }
@@ -245,6 +244,8 @@ public class PhoenixRuntime {
                 } else {
                     UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles(), execCmd.isBypassUpgrade());
                 }
+            } else if(execCmd.isLocalIndexUpgrade()) {
+                UpgradeUtil.upgradeLocalIndexes(conn);
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
                     if (inputFile.endsWith(SQL_FILE_EXT)) {
@@ -597,6 +598,7 @@ public class PhoenixRuntime {
             }
 
             ExecutionCommand execCmd = new ExecutionCommand();
+            execCmd.connectionString = "";
             if(cmdLine.hasOption(mapNamespaceOption.getOpt())){
                 execCmd.mapNamespace = true;
                 execCmd.srcTable = validateTableName(cmdLine.getOptionValue(mapNamespaceOption.getOpt()));
@@ -640,23 +642,30 @@ public class PhoenixRuntime {
                 }
                 execCmd.isBypassUpgrade = true;
             }
-            execCmd.localIndexUpgrade = cmdLine.hasOption(localIndexUpgradeOption.getOpt());
+            if(cmdLine.hasOption(localIndexUpgradeOption.getOpt())) {
+                execCmd.localIndexUpgrade = true;
+            }
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
             if (argList.isEmpty()) {
-                usageError("Connection string to HBase must be supplied", options);
+                usageError("At least one input file must be supplied", options);
             }
-            execCmd.connectionString = argList.remove(0);
             List<String> inputFiles = Lists.newArrayList();
+            int i = 0;
             for (String arg : argList) {
                 if (execCmd.isUpgrade || arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
                     inputFiles.add(arg);
                 } else {
-                    usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    if (i == 0) {
+                        execCmd.connectionString = arg;
+                    } else {
+                        usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    }
                 }
+                i++;
             }
 
-            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace()) {
+            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace() && !execCmd.isLocalIndexUpgrade()) {
                 usageError("At least one input file must be supplied", options);
             }
 
@@ -696,6 +705,7 @@ public class PhoenixRuntime {
                             "<path-to-sql-or-csv-file>...",
                     options);
             System.out.println("Examples:\n" +
+                    "  psql my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql my_table.csv\n" +
                     "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +

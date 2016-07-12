@@ -679,7 +679,7 @@ public class ScanUtil {
          }
     }
 
-    public static boolean isConextScan(Scan scan, StatementContext context) {
+    public static boolean isContextScan(Scan scan, StatementContext context) {
         return Bytes.compareTo(context.getScan().getStartRow(), scan.getStartRow()) == 0 && Bytes
                 .compareTo(context.getScan().getStopRow(), scan.getStopRow()) == 0;
     }
