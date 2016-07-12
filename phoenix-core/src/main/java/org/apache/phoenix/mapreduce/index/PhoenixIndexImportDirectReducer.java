@@ -32,10 +32,10 @@ import org.slf4j.LoggerFactory;
 /**
  * Reducer class that does only one task and that is to update the index state of the table.
  */
-public class PhoenixIndexToolReducer extends
+public class PhoenixIndexImportDirectReducer extends
         Reducer<ImmutableBytesWritable, IntWritable, NullWritable, NullWritable> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexToolReducer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PhoenixIndexImportDirectReducer.class);
     private Configuration configuration;
 
     /**
