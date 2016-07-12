@@ -34,7 +34,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -63,13 +62,13 @@ import org.apache.phoenix.hbase.index.write.IndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
-import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
 import org.cloudera.htrace.TraceScope;
-
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import com.google.common.collect.Multimap;
 
 /**
@@ -152,11 +151,6 @@ public class Indexer extends BaseRegionObserver {
 
         // setup the actual index writer
         this.writer = new IndexWriter(env, serverName + "-index-writer");
-    
-        // setup the recovery writer that does retries on the failed edits
-        TrackingParallelWriterIndexCommitter recoveryCommmiter =
-            new TrackingParallelWriterIndexCommitter();
-    
         try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
           // here
@@ -165,10 +159,9 @@ public class Indexer extends BaseRegionObserver {
                 StoreFailuresInCachePolicy.class, IndexFailurePolicy.class);
           IndexFailurePolicy policy =
               policyClass.getConstructor(PerRegionIndexWriteCache.class).newInstance(failedIndexEdits);
-          LOG.debug("Setting up recovery writter with committer: " + recoveryCommmiter.getClass()
-              + " and failure policy: " + policy.getClass());
+          LOG.debug("Setting up recovery writter with failure policy: " + policy.getClass());
           recoveryWriter =
-              new IndexWriter(recoveryCommmiter, policy, env, serverName + "-recovery-writer");
+              new RecoveryIndexWriter(policy, env, serverName + "-recovery-writer");
         } catch (Exception ex) {
           throw new IOException("Could not instantiate recovery failure policy!", ex);
         }
