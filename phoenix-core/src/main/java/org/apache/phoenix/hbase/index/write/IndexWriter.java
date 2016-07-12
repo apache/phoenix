@@ -30,12 +30,12 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
-
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.Multimap;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Multimap;
 
 /**
  * Do the actual work of writing to the index tables. Ensures that if we do fail to write to the
@@ -171,11 +171,11 @@ public class IndexWriter implements Stoppable {
     	write(resolveTableReferences(toWrite), false);
     }
 
-    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates) throws IndexWriteException {
+    public void write(Collection<Pair<Mutation, byte[]>> toWrite, boolean allowLocalUpdates) throws IOException {
     	write(resolveTableReferences(toWrite), allowLocalUpdates);
     }
-
-  /**
+    
+    /**
    * see {@link #write(Collection)}
    * @param toWrite
    * @throws IndexWriteException
@@ -190,7 +190,7 @@ public class IndexWriter implements Stoppable {
    * @param indexUpdates from the index builder
    * @return pairs that can then be written by an {@link IndexWriter}.
    */
-  public static Multimap<HTableInterfaceReference, Mutation> resolveTableReferences(
+  protected Multimap<HTableInterfaceReference, Mutation> resolveTableReferences(
       Collection<Pair<Mutation, byte[]>> indexUpdates) {
     Multimap<HTableInterfaceReference, Mutation> updates = ArrayListMultimap
         .<HTableInterfaceReference, Mutation> create();

@@ -24,11 +24,8 @@ import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -38,7 +35,6 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -56,6 +52,9 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
@@ -65,15 +64,11 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.write.IndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
+import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
-import org.apache.phoenix.hbase.index.write.recovery.TrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
-import org.apache.phoenix.util.IndexUtil;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 
 import com.google.common.collect.Multimap;
 
@@ -157,11 +152,6 @@ public class Indexer extends BaseRegionObserver {
 
         // setup the actual index writer
         this.writer = new IndexWriter(env, serverName + "-index-writer");
-    
-        // setup the recovery writer that does retries on the failed edits
-        TrackingParallelWriterIndexCommitter recoveryCommmiter =
-            new TrackingParallelWriterIndexCommitter();
-    
         try {
           // get the specified failure policy. We only ever override it in tests, but we need to do it
           // here
@@ -170,10 +160,9 @@ public class Indexer extends BaseRegionObserver {
                 StoreFailuresInCachePolicy.class, IndexFailurePolicy.class);
           IndexFailurePolicy policy =
               policyClass.getConstructor(PerRegionIndexWriteCache.class).newInstance(failedIndexEdits);
-          LOG.debug("Setting up recovery writter with committer: " + recoveryCommmiter.getClass()
-              + " and failure policy: " + policy.getClass());
+          LOG.debug("Setting up recovery writter with failure policy: " + policy.getClass());
           recoveryWriter =
-              new IndexWriter(recoveryCommmiter, policy, env, serverName + "-recovery-writer");
+              new RecoveryIndexWriter(policy, env, serverName + "-recovery-writer");
         } catch (Exception ex) {
           throw new IOException("Could not instantiate recovery failure policy!", ex);
         }

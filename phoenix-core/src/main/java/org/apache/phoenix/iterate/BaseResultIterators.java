@@ -49,6 +49,7 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -80,11 +81,11 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.LogUtil;
@@ -360,7 +361,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (null == currentSCN) {
           currentSCN = HConstants.LATEST_TIMESTAMP;
         }
-        tableStats = useStats() && table.getType() != PTableType.SYSTEM
+        tableStats = useStats() && StatisticsUtil.isStatsEnabled(TableName.valueOf(physicalTableName))
                 ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN)
                 : PTableStats.EMPTY_STATS;
         // Used to tie all the scans together during logging

@@ -18,15 +18,9 @@
 package org.apache.phoenix.schema.stats;
 
 import java.io.IOException;
-import java.util.Set;
 
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.SchemaUtil;
-
-import com.google.common.collect.Sets;
 
 /**
  * Provides new {@link StatisticsCollector} instances based on configuration settings for a
@@ -56,19 +50,6 @@ public class StatisticsCollectorFactory {
         }
     }
 
-    // TODO: make this declarative through new DISABLE_STATS column on SYSTEM.CATALOG table.
-    // Also useful would be a USE_CURRENT_TIME_FOR_STATS column on SYSTEM.CATALOG table.
-    private static final Set<TableName> DISABLE_STATS = Sets.newHashSetWithExpectedSize(3);
-    static {
-        DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-        DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME));
-        DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME));
-        DISABLE_STATS.add(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME));
-        DISABLE_STATS.add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,true));
-        DISABLE_STATS.add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,true));
-        DISABLE_STATS.add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,true));
-        DISABLE_STATS.add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,true));
-    }
     
     /**
      * Determines if statistics are enabled (which is the default). This is done on the
@@ -78,7 +59,7 @@ public class StatisticsCollectorFactory {
      */
     private static boolean statisticsEnabled(RegionCoprocessorEnvironment env) {
         return env.getConfiguration().getBoolean(QueryServices.STATS_ENABLED_ATTRIB, true) &&
-                !DISABLE_STATS.contains(env.getRegionInfo().getTable());
+                StatisticsUtil.isStatsEnabled(env.getRegionInfo().getTable());
     }
 
 }
