@@ -80,6 +80,7 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
@@ -359,7 +360,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (null == currentSCN) {
           currentSCN = HConstants.LATEST_TIMESTAMP;
         }
-        tableStats = useStats() ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN) : PTableStats.EMPTY_STATS;
+        tableStats = useStats() && table.getType() != PTableType.SYSTEM
+                ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN)
+                : PTableStats.EMPTY_STATS;
         // Used to tie all the scans together during logging
         scanId = UUID.randomUUID().toString();
         
