@@ -117,7 +117,7 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
             }
             connection.rollback();
        } catch (SQLException e) {
-           LOG.error(" Error {}  while read/write of a record ",e.getMessage());
+           LOG.error("Error {}  while read/write of a record ",e.getMessage());
            context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
            throw new RuntimeException(e);
         } 
@@ -126,11 +126,12 @@ public class PhoenixIndexImportMapper extends Mapper<NullWritable, PhoenixIndexD
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
          super.cleanup(context);
-         if(connection != null) {
+         if (connection != null) {
              try {
                 connection.close();
             } catch (SQLException e) {
-                LOG.error("Error {} while closing connection in the PhoenixIndexMapper class ",e.getMessage());
+                LOG.error("Error {} while closing connection in the PhoenixIndexMapper class ",
+                        e.getMessage());
             }
          }
     }
