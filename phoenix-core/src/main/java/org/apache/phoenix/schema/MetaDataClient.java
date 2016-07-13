@@ -123,6 +123,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -273,8 +274,9 @@ public class MetaDataClient {
             TABLE_NAME + "," +
             COLUMN_FAMILY + "," +
             LINK_TYPE + "," +
-            TABLE_SEQ_NUM + // this is actually set to the parent table's sequence number
-            ") VALUES (?, ?, ?, ?, ?, ?)";
+            TABLE_SEQ_NUM +","+ // this is actually set to the parent table's sequence number
+            TABLE_TYPE +
+            ") VALUES (?, ?, ?, ?, ?, ?, ?)";
     private static final String CREATE_VIEW_LINK =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
             TENANT_ID + "," +
@@ -1708,6 +1710,7 @@ public class MetaDataClient {
                 linkStatement.setString(4, tableName);
                 linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
                 linkStatement.setLong(6, parent.getSequenceNumber());
+                linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
                 linkStatement.execute();
             }
 
@@ -1960,8 +1963,10 @@ public class MetaDataClient {
                             PTable physicalTable = connection.getTable(new PTableKey(null, physicalName.getString()
                                     .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR)));
                             linkStatement.setLong(6, physicalTable.getSequenceNumber());
+                            linkStatement.setString(7, null);
                         } else {
                             linkStatement.setLong(6, parent.getSequenceNumber());
+                            linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
                         }
                         linkStatement.execute();
                     }
@@ -2515,7 +2520,6 @@ public class MetaDataClient {
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
                 tableMetaData.add(linkDelete);
             }
-
             MetaDataMutationResult result = connection.getQueryServices().dropTable(tableMetaData, tableType, cascade);
             MutationCode code = result.getMutationCode();
             PTable table = result.getTable();
@@ -2556,24 +2560,29 @@ public class MetaDataClient {
                                     hasLocalIndexTable = true;
                                 } 
                             }
-                            hasViewIndexTable = true; // As there is no way to know whether table has views or not so
-                                                      // ensuring we delete sequence and cached object during drop
+                            hasViewIndexTable = true;// keeping always true for deletion of stats if view index present
+                                                     // or not
+                            MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(),
+                                    table.isNamespaceMapped());
+                            byte[] viewIndexPhysicalName = MetaDataUtil
+                                    .getViewIndexPhysicalName(table.getPhysicalName().getBytes());
+                            if (!dropMetaData) {
+                                // we need to drop rows only when actually view index exists
+                                try (HBaseAdmin admin = connection.getQueryServices().getAdmin()) {
+                                    hasViewIndexTable = admin.tableExists(viewIndexPhysicalName);
+                                } catch (IOException e1) {
+                                    // absorbing as it is not critical check
+                                }
+                            }
                         }
                         if (tableType == PTableType.TABLE
-                                && (table.isMultiTenant() || hasViewIndexTable || hasLocalIndexTable)) {
-    
-                            MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(), table.isNamespaceMapped());
+                                && (table.isMultiTenant() || hasViewIndexTable)) {
                             if (hasViewIndexTable) {
-                                String viewIndexSchemaName = null;
-                                String viewIndexTableName = null;
-                                if (schemaName != null) {
-                                    viewIndexSchemaName = MetaDataUtil.getViewIndexTableName(schemaName);
-                                    viewIndexTableName = tableName;
-                                } else {
-                                    viewIndexTableName = MetaDataUtil.getViewIndexTableName(tableName);
-                                }
-                                PTable viewIndexTable = new PTableImpl(null, viewIndexSchemaName, viewIndexTableName, ts,
-                                        table.getColumnFamilies());
+                                byte[] viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes());
+                                PTable viewIndexTable = new PTableImpl(null,
+                                        SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName),
+                                        SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName), ts,
+                                        table.getColumnFamilies(),table.isNamespaceMapped());
                                 tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
                             }
                         }
@@ -3137,10 +3146,12 @@ public class MetaDataClient {
                         if (!connection.getQueryServices().getProps().getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA)) {
                             Long scn = connection.getSCN();
                             long ts = (scn == null ? result.getMutationTime() : scn);
-                            String viewIndexSchemaName = MetaDataUtil.getViewIndexSchemaName(schemaName);
-                            String viewIndexTableName = MetaDataUtil.getViewIndexTableName(tableName);
-                            PTable viewIndexTable = new PTableImpl(null, viewIndexSchemaName, viewIndexTableName, ts,
-                                    table.getColumnFamilies());
+                            byte[] viewIndexPhysicalName = MetaDataUtil
+                                    .getViewIndexPhysicalName(table.getPhysicalName().getBytes());
+                            PTable viewIndexTable = new PTableImpl(null,
+                                    SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName),
+                                    SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName), ts,
+                                    table.getColumnFamilies(), table.isNamespaceMapped());
                             List<TableRef> tableRefs = Collections.singletonList(new TableRef(null, viewIndexTable, ts, false));
                             MutationPlan plan = new PostDDLCompiler(connection).compile(tableRefs, null, null,
                                     Collections.<PColumn> emptyList(), ts);

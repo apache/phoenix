@@ -572,6 +572,20 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         
         assertFalse(rs.next());
         
+        conn.createStatement().execute("CREATE TABLE SALTEDTABLE123 (k INTEGER PRIMARY KEY, v VARCHAR) SALT_BUCKETS=3");
+        conn.close();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        dbmd = conn.getMetaData();
+        rs = dbmd.getPrimaryKeys(null, "", "SALTEDTABLE123");
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString("TABLE_SCHEM"));
+        assertEquals("SALTEDTABLE123", rs.getString("TABLE_NAME"));
+        assertEquals(null, rs.getString("TABLE_CAT"));
+        assertEquals("K", rs.getString("COLUMN_NAME"));
+        assertEquals(1, rs.getInt("KEY_SEQ"));
+        assertEquals(null, rs.getString("PK_NAME"));
+        assertFalse(rs.next());
     }
     
     @Test

@@ -41,8 +41,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
@@ -2479,11 +2479,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0,
                                             PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA + " "
                                                     + PBoolean.INSTANCE.getSqlTypeName());
+                                        metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
                                         if(getProps().getBoolean(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB,
                                             QueryServicesOptions.DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)) {
                                             metaConnection = UpgradeUtil.upgradeLocalIndexes(metaConnection);
                                         }
-                                        metaConnection = UpgradeUtil.disableViewIndexes(metaConnection);
                                         ConnectionQueryServicesImpl.this.removeTable(null,
                                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
                                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
@@ -2615,7 +2615,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)) {
                             if (!admin.tableExists(mappedSystemTable)) {
                                 UpgradeUtil.mapTableToNamespace(admin, metatable,
-                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props, null, PTableType.SYSTEM);
+                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props, null, PTableType.SYSTEM,
+                                        null);
                                 ConnectionQueryServicesImpl.this.removeTable(null,
                                         PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
                                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
@@ -2623,7 +2624,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
                         }
                         for (String table : tableNames) {
-                            UpgradeUtil.mapTableToNamespace(admin, metatable, table, props, null, PTableType.SYSTEM);
+                            UpgradeUtil.mapTableToNamespace(admin, metatable, table, props, null, PTableType.SYSTEM,
+                                    null);
                             ConnectionQueryServicesImpl.this.removeTable(null, table, null,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
                         }

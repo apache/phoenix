@@ -19,11 +19,15 @@ package org.apache.phoenix.mapreduce.index;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +52,9 @@ public class IndexToolUtil {
 	public static void updateIndexState(Configuration configuration,PIndexState state) throws SQLException {
 		final String masterTable = PhoenixConfigurationUtil.getInputTableName(configuration);
 		final String indexTable = PhoenixConfigurationUtil.getOutputTableName(configuration);
-		final Connection connection = ConnectionUtil.getOutputConnection(configuration);
+		final Properties overrideProps = new Properties();
+		overrideProps.setProperty(QueryServices.TRANSACTIONS_ENABLED, configuration.get(QueryServices.TRANSACTIONS_ENABLED));
+		final Connection connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
 		try {
 			updateIndexState(connection, masterTable, indexTable , state);
 		} finally {

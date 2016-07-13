@@ -49,6 +49,7 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -76,7 +77,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -85,6 +85,7 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.LogUtil;
@@ -141,14 +142,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return plan.getTableRef().getTable();
     }
     
-    private boolean useStats() {
+    protected boolean useStats() {
         /*
          * Don't use guide posts:
          * 1) If we're collecting stats, as in this case we need to scan entire
          * regions worth of data to track where to put the guide posts.
          * 2) If the query is going to be executed serially.
          */
-        if (ScanUtil.isAnalyzeTable(scan) || plan.isSerial()) {
+        if (ScanUtil.isAnalyzeTable(scan)) {
             return false;
         }
         return true;
@@ -360,7 +361,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (null == currentSCN) {
           currentSCN = HConstants.LATEST_TIMESTAMP;
         }
-        tableStats = useStats() ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN) : PTableStats.EMPTY_STATS;
+        tableStats = useStats() && StatisticsUtil.isStatsEnabled(TableName.valueOf(physicalTableName))
+                ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN)
+                : PTableStats.EMPTY_STATS;
         // Used to tie all the scans together during logging
         scanId = UUID.randomUUID().toString();
         
@@ -664,8 +667,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 regionIndex++;
             }
             if (scanRanges.isPointLookup()) {
-                this.estimatedRows = 1L;
-                this.estimatedSize = SchemaUtil.estimateRowSize(table);
+                this.estimatedRows = Long.valueOf(scanRanges.getPointLookupCount());
+                this.estimatedSize = this.estimatedRows * SchemaUtil.estimateRowSize(table);
             } else if (hasGuidePosts) {
                 this.estimatedRows = estimatedRows;
                 this.estimatedSize = estimatedSize;
