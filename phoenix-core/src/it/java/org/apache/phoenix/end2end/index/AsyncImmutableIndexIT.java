@@ -23,36 +23,32 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.IndexToolIT;
-import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.StringUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
-
 public class AsyncImmutableIndexIT extends BaseOwnClusterHBaseManagedTimeIT {
+    private static final long MAX_WAIT_FOR_INDEX_BUILD_TIME_MS = 45000;
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
-        serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
-            QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        setUpRealDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-            ReadOnlyProps.EMPTY_PROPS);
+        Map<String, String> props = Collections.emptyMap();
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-    
+
     @Test
     public void testDeleteFromImmutable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -77,13 +73,22 @@ public class AsyncImmutableIndexIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.createStatement().execute("delete from TEST_TABLE where pk1 = 'a'");
             conn.commit();
 
-            // run the index MR job
-            final IndexTool indexingTool = new IndexTool();
-            indexingTool.setConf(new Configuration(getUtility().getConfiguration()));
-            final String[] cmdArgs =
-                    IndexToolIT.getArgValues(null, "TEST_TABLE", "TEST_INDEX", true);
-            int status = indexingTool.run(cmdArgs);
-            assertEquals(0, status);
+            DatabaseMetaData dbmd = conn.getMetaData();
+            String escapedTableName = StringUtil.escapeLike("TEST_INDEX");
+            String[] tableType = new String[] {PTableType.INDEX.toString()};
+            long startTime = System.currentTimeMillis();
+            boolean isIndexActive = false;
+            do {
+                ResultSet rs = dbmd.getTables("", "", escapedTableName, tableType);
+                assertTrue(rs.next());
+                if (PIndexState.valueOf(rs.getString("INDEX_STATE")) == PIndexState.ACTIVE) {
+                    isIndexActive = true;
+                    break;
+                }
+                Thread.sleep(3000);
+            } while (System.currentTimeMillis() - startTime < MAX_WAIT_FOR_INDEX_BUILD_TIME_MS);
+            
+            assertTrue(isIndexActive);
 
             // upsert two more rows
             conn.createStatement().execute(
@@ -97,8 +102,8 @@ public class AsyncImmutableIndexIT extends BaseOwnClusterHBaseManagedTimeIT {
             String query = "SELECT pk3 from TEST_TABLE ORDER BY pk3";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String expectedPlan =
-                    "CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER TEST_INDEX\n"
-                            + "    SERVER FILTER BY FIRST KEY ONLY";
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER TEST_INDEX\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY";
             assertEquals("Wrong plan ", expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
