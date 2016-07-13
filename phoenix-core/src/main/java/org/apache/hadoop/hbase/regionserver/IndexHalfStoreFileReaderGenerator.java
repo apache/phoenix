@@ -28,6 +28,7 @@ import java.util.NavigableSet;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -244,36 +245,70 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         if (store.getFamily().getNameAsString()
                 .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
                 && store.hasReferences()) {
-            long readPt = c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel());
-            boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
-            Collection<StoreFile> storeFiles = store.getStorefiles();
-            List<StoreFile> nonReferenceStoreFiles = new ArrayList<StoreFile>(store.getStorefiles().size());
-            List<StoreFile> referenceStoreFiles = new ArrayList<StoreFile>(store.getStorefiles().size());
-            List<KeyValueScanner> keyValueScanners = new ArrayList<KeyValueScanner>(store.getStorefiles().size()+1);
-            for(StoreFile storeFile : storeFiles) {
-                if (storeFile.isReference()) {
-                    referenceStoreFiles.add(storeFile);
-                } else {
-                    nonReferenceStoreFiles.add(storeFile);
-                }
-            } 
-            List<StoreFileScanner> scanners = StoreFileScanner.getScannersForStoreFiles(nonReferenceStoreFiles, scan.getCacheBlocks(), scanUsePread, readPt);
-            keyValueScanners.addAll(scanners);
-            for(StoreFile sf :  referenceStoreFiles) {
-                if(sf.getReader() instanceof IndexHalfStoreFileReader) {
-                    keyValueScanners.add(new LocalIndexStoreFileScanner(sf.getReader(), sf.getReader()
-                        .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
-                } else {
-                    keyValueScanners.add(new StoreFileScanner(sf.getReader(), sf.getReader()
-                        .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
-                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
-                }
+            final long readPt = c.getEnvironment().getRegion().getReadpoint(scan.getIsolationLevel
+                    ());
+            if (!scan.isReversed()) {
+                return new StoreScanner(store, store.getScanInfo(), scan,
+                        targetCols, readPt) {
+
+                    @Override
+                    protected List<KeyValueScanner> getScannersNoCompaction() throws IOException {
+                        if (store.hasReferences()) {
+                            return getLocalIndexScanners(c, store, scan, readPt);
+                        } else {
+                            return super.getScannersNoCompaction();
+                        }
+                    }
+                };
+            } else {
+                return new ReversedStoreScanner(store, store.getScanInfo(), scan,
+                        targetCols, readPt) {
+                    @Override
+                    protected List<KeyValueScanner> getScannersNoCompaction() throws IOException {
+                        if (store.hasReferences()) {
+                            return getLocalIndexScanners(c, store, scan, readPt);
+                        } else {
+                            return super.getScannersNoCompaction();
+                        }
+                    }
+                };
             }
-            keyValueScanners.addAll(((HStore)store).memstore.getScanners(readPt));
-            if(!scan.isReversed()) return new StoreScanner(scan, store.getScanInfo(), ScanType.USER_SCAN, targetCols, keyValueScanners);
-            return new ReversedStoreScanner(scan, store.getScanInfo(), ScanType.USER_SCAN, targetCols, keyValueScanners);
-        } 
+        }
         return s;
+    }
+
+    private List<KeyValueScanner> getLocalIndexScanners(final
+                                                ObserverContext<RegionCoprocessorEnvironment> c,
+                          final Store store, final Scan scan, final long readPt) throws IOException {
+
+        boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
+        Collection<StoreFile> storeFiles = store.getStorefiles();
+        List<StoreFile> nonReferenceStoreFiles = new ArrayList<>(store.getStorefiles().size());
+        List<StoreFile> referenceStoreFiles = new ArrayList<>(store.getStorefiles().size
+                ());
+        final List<KeyValueScanner> keyValueScanners = new ArrayList<>(store
+                .getStorefiles().size() + 1);
+        for (StoreFile storeFile : storeFiles) {
+            if (storeFile.isReference()) {
+                referenceStoreFiles.add(storeFile);
+            } else {
+                nonReferenceStoreFiles.add(storeFile);
+            }
+        }
+        final List<StoreFileScanner> scanners = StoreFileScanner.getScannersForStoreFiles(nonReferenceStoreFiles, scan.getCacheBlocks(), scanUsePread, readPt);
+        keyValueScanners.addAll(scanners);
+        for (StoreFile sf : referenceStoreFiles) {
+            if (sf.getReader() instanceof IndexHalfStoreFileReader) {
+                keyValueScanners.add(new LocalIndexStoreFileScanner(sf.getReader(), sf.getReader()
+                        .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
+                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
+            } else {
+                keyValueScanners.add(new StoreFileScanner(sf.getReader(), sf.getReader()
+                        .getScanner(scan.getCacheBlocks(), scanUsePread, false), true, sf
+                        .getReader().getHFileReader().hasMVCCInfo(), readPt));
+            }
+        }
+        keyValueScanners.addAll(((HStore) store).memstore.getScanners(readPt));
+        return keyValueScanners;
     }
 }
