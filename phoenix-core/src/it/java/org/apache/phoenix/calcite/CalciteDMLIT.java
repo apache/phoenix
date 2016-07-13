@@ -101,7 +101,6 @@ public class CalciteDMLIT extends BaseCalciteIT {
             .close();
     }
     
-    @Ignore // CALCITE-1278
     @Test public void testDelete() throws Exception {
         start(PROPS).sql("upsert into atable(organization_id, entity_id) values('1', '1')")
             .explainIs("PhoenixToEnumerableConverter\n" +

@@ -5,6 +5,7 @@ import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTrait;
 import org.apache.calcite.plan.RelTraitDef;
+import org.apache.calcite.plan.RelTraitSet;
 
 public enum PhoenixConvention implements Convention {
     
@@ -45,6 +46,17 @@ public enum PhoenixConvention implements Convention {
     @Override
     public String getName() {
         return "PHOENIX_" + this.name();
+    }
+
+    @Override
+    public boolean canConvertConvention(Convention toConvention) {
+      return false;
+    }
+
+    @Override
+    public boolean useAbstractConvertersForConversion(RelTraitSet fromTraits,
+        RelTraitSet toTraits) {
+      return false;
     }
 
 }

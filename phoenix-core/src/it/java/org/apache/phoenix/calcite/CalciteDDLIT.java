@@ -16,6 +16,14 @@ public class CalciteDDLIT extends BaseCalciteIT {
     }
 
     @Test public void testCreateTableWithPrimaryKeyConstraint() throws Exception {
-        start(PROPS).sql("create table t2(a bigint not null ROW_TIMESTAMP, b integer not null, c double, constraint pk primary key(a,b)) SPLIT ON('a','b')").execute();
+        start(PROPS).sql("create table t2(a bigint not null ROW_TIMESTAMP, b integer not null, c double constraint pk primary key(a,b)) SPLIT ON('a','b')").execute();
+    }
+
+    @Test public void testCreateTableWithTableOptions() throws Exception {
+        start(PROPS).sql("create table t3(a bigint not null ROW_TIMESTAMP, b integer not null, c double constraint pk primary key(a,b)) SALT_BUCKET=4").execute();
+    }
+
+    @Test public void testCreateTableWithTableOptionsAndSplits() throws Exception {
+        start(PROPS).sql("create table t4(a bigint not null ROW_TIMESTAMP, b integer not null, c double constraint pk primary key(a,b)) SALT_BUCKET=4,VERSIONS=5 SPLIT ON('a','b')").execute();
     }
 }

@@ -28,9 +28,6 @@ import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlWriter;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.phoenix.parse.ColumnDef;
-import org.apache.phoenix.parse.PrimaryKeyConstraint;
-
 import java.util.List;
 
 /**
@@ -40,25 +37,23 @@ public class SqlCreateTable extends SqlCall {
     public static final SqlOperator OPERATOR = new SqlDdlOperator("CREATE TABLE", SqlKind.CREATE_TABLE);
 
     public final SqlIdentifier tableName;
-    public  final SqlLiteral ifNotExists;
+    public final SqlLiteral ifNotExists;
     public final SqlNodeList columnDefs;
     public final SqlIdentifier pkConstraint;
     public final SqlNodeList pkConstraintColumnDefs;
-    public final SqlNodeList tableOptionsKeyList;
-    public final SqlNodeList tableOptionsValueList;
+    public final SqlNodeList tableOptions;
     public final SqlNodeList splitKeyList;
     
 
     /** Creates a CREATE TABLE. */
-    public SqlCreateTable(SqlParserPos pos, SqlIdentifier tableName, SqlLiteral ifNotExists, SqlNodeList columnDefs, SqlIdentifier pkConstraint, SqlNodeList pkConstraintColumnDefs, SqlNodeList tableOptionsKeyList, SqlNodeList tableOptionsValueList, SqlNodeList splitKeyList) {
+    public SqlCreateTable(SqlParserPos pos, SqlIdentifier tableName, SqlLiteral ifNotExists, SqlNodeList columnDefs, SqlIdentifier pkConstraint, SqlNodeList pkConstraintColumnDefs, SqlNodeList tableOptions, SqlNodeList splitKeyList) {
         super(pos);
         this.tableName = tableName;
         this.ifNotExists = ifNotExists;
         this.columnDefs = columnDefs;
         this.pkConstraint = pkConstraint;
         this.pkConstraintColumnDefs = pkConstraintColumnDefs;
-        this.tableOptionsKeyList = tableOptionsKeyList;
-        this.tableOptionsValueList = tableOptionsValueList;
+        this.tableOptions = tableOptions;
         this.splitKeyList = splitKeyList;
     }
 
@@ -67,26 +62,27 @@ public class SqlCreateTable extends SqlCall {
     }
 
     public List<SqlNode> getOperandList() {
-        return ImmutableList.of(tableName, ifNotExists, columnDefs, pkConstraint, pkConstraintColumnDefs, tableOptionsKeyList, tableOptionsValueList, splitKeyList);
+        return ImmutableList.of(tableName, ifNotExists, columnDefs, pkConstraint, pkConstraintColumnDefs, tableOptions, splitKeyList);
     }
 
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
         writer.keyword("CREATE TABLE");
-        if(ifNotExists != null) {
-        	writer.keyword("IF NOT");
-        	ifNotExists.unparse(writer, 0, 0);
+        if(SqlLiteral.value(ifNotExists).equals(Boolean.TRUE)) {
+        	writer.keyword("IF NOT EXISTS");
         }
         tableName.unparse(writer, 0, 0);
         ((SqlDdlOperator)getOperator()).unparseListClause(writer, columnDefs);
         if(pkConstraint != null) {
-        	writer.keyword(",");
         	writer.keyword("CONSTRANT");
         	pkConstraint.unparse(writer, 0, 0);
         	writer.keyword("PRIMARY KEY");
         	((SqlDdlOperator)getOperator()).unparseListClause(writer, pkConstraintColumnDefs);
         }
-        if(splitKeyList != null) {
+        if (SqlNodeList.isEmptyList(tableOptions)) {
+            ((SqlDdlOperator)getOperator()).unparseListClause(writer, tableOptions);            
+        }
+        if (SqlNodeList.isEmptyList(splitKeyList)) {
         	writer.keyword("SPLIT ON");
             ((SqlDdlOperator)getOperator()).unparseListClause(writer, splitKeyList);
         }

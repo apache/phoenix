@@ -69,79 +69,127 @@ SqlNode SqlCreateTable() :
 {
       SqlParserPos pos;
       SqlIdentifier tableName;
-	  SqlLiteral ifNotExists = SqlLiteral.createBoolean(false, SqlParserPos.ZERO);
+	  boolean ifNotExists;
       SqlNodeList columnDefs;
-      SqlIdentifier pkConstraint = null;
-      SqlNodeList pkConstraintColumnDefs = null;
-      SqlNodeList tableOptionsKeyList = null;
-      SqlNodeList tableOptionsValueList = null;
-      SqlNodeList splitKeyList = null;
+      SqlIdentifier pkConstraint;
+      SqlNodeList pkConstraintColumnDefs;
+      SqlNodeList tableOptions;
+      SqlNodeList splitKeys;
 }
 {
-	
-    <CREATE> { pos = getPos(); } <TABLE> tableName = CompoundIdentifier()
+    <CREATE> { pos = getPos(); } <TABLE>
     (
-    	<IF> <NOT> <EXISTS>
-    	{
-    		ifNotExists = SqlLiteral.createBoolean(false, getPos());
-    	}
-    )?
-    {
-    	List<SqlNode> coumnDefList = new ArrayList<SqlNode>();
-    	List<SqlNode> pkConstraintList = new ArrayList<SqlNode>();
-    	List<SqlNode> tableOptionKeys = new ArrayList<SqlNode>();
-    	List<SqlNode> tableOptionValues = new ArrayList<SqlNode>();
-    	List<SqlNode> splitKeys = new ArrayList<SqlNode>();
-    	SqlNode item;
-    }
+        <IF> <NOT> <EXISTS> { ifNotExists = true; }
+        |
+        {
+            ifNotExists = false;
+        }
+    )
+    tableName = CompoundIdentifier()
     <LPAREN>
-    	{
-    		item = SqlColumnDefNode();
-			coumnDefList.add(item);
-		}
-    	( 	
-    		<COMMA> <CONSTRAINT> {pkConstraint = SimpleIdentifier();} <PRIMARY> <KEY>
-    			<LPAREN>
-    				{	item = SqlColumnDefInPkConstraintNode();pkConstraintList.add(item);}
-    				( <COMMA> {item = SqlColumnDefInPkConstraintNode();pkConstraintList.add(item);} ) *
-    			<RPAREN>
-    		|
-    		<COMMA>
-    	  	{
-    			item = SqlColumnDefNode();
-    			coumnDefList.add(item);
-    		}
-    	
-    	) *
+    columnDefs = ColumnDefList()
+    (
+        <CONSTRAINT> pkConstraint = SimpleIdentifier() <PRIMARY> <KEY>
+        <LPAREN> pkConstraintColumnDefs = PkConstraintColumnDefList() <RPAREN>
+        |
+        {
+            pkConstraint = null;
+            pkConstraintColumnDefs = SqlNodeList.EMPTY;
+        }
+    )
     <RPAREN>
     (
-		{	item = CompoundIdentifier();tableOptionKeys.add(item);} <EQ> {	item = StringLiteral();tableOptionValues.add(item);} 
-		( <COMMA> {	item = CompoundIdentifier();tableOptionKeys.add(item);} <EQ> {	item = StringLiteral();tableOptionValues.add(item);} ) *
-    )?
+        tableOptions = TableOptionList()
+        |
+        {
+            tableOptions = SqlNodeList.EMPTY;
+        }
+    )
     (
-    	<SPLIT> <ON>
-    	<LPAREN>
-			{item = StringLiteral();splitKeys.add(item);}
-			( <COMMA> {item = StringLiteral();splitKeys.add(item);} ) *
-    	<RPAREN>
-    )?
+        <SPLIT> <ON>
+        <LPAREN> splitKeys = SplitKeyList() <RPAREN>
+        |
+        {
+            splitKeys = SqlNodeList.EMPTY;
+        }
+    )
     {
-		columnDefs = new SqlNodeList(coumnDefList, pos.plusAll(coumnDefList));
-		if(!pkConstraintList.isEmpty()) {
-		    	pkConstraintColumnDefs =  new SqlNodeList(pkConstraintList, pos.plusAll(pkConstraintList));
-		}
-		if(!tableOptionKeys.isEmpty()) {
-			tableOptionsKeyList = new SqlNodeList(tableOptionKeys, pos.plusAll(tableOptionKeys));
-			tableOptionsValueList = new SqlNodeList(tableOptionValues, pos.plusAll(tableOptionValues));
-		}
-		if(!splitKeys.isEmpty()) {
-			splitKeyList = new SqlNodeList(splitKeys, pos.plusAll(splitKeys));
-		}
-        return new SqlCreateTable(pos, tableName, ifNotExists, columnDefs, pkConstraint, pkConstraintColumnDefs, tableOptionsKeyList, tableOptionsValueList, splitKeyList);
+        return new SqlCreateTable(pos, tableName,
+            SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
+            columnDefs, pkConstraint, pkConstraintColumnDefs,
+            tableOptions, splitKeys);
     }
 }
 
-SqlColumnDefNode SqlColumnDefNode() :
+SqlNodeList ColumnDefList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> columnDefList;
+}
+{
+    { pos = getPos(); }
+    e = ColumnDef() { columnDefList = startList(e); }
+    (
+        <COMMA> e = ColumnDef() { columnDefList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(columnDefList, pos.plus(getPos()));
+    }
+}
+
+SqlNodeList PkConstraintColumnDefList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> pkConstraintColumnDefList;
+}
+{
+    { pos = getPos(); }
+    e = ColumnDefInPkConstraint() { pkConstraintColumnDefList = startList(e); }
+    (
+        <COMMA> e = ColumnDefInPkConstraint() { pkConstraintColumnDefList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(pkConstraintColumnDefList, pos.plus(getPos()));
+    }
+}
+
+SqlNodeList TableOptionList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> tableOptionList;
+}
+{
+    { pos = getPos(); }
+    e = TableOption() { tableOptionList = startList(e); }
+    (
+        <COMMA> e = TableOption() { tableOptionList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(tableOptionList, pos.plus(getPos()));
+    }
+}
+
+SqlNodeList SplitKeyList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> splitKeyList;
+}
+{
+    { pos = getPos(); }
+    e = StringLiteral() { splitKeyList = startList(e); }
+    (
+        <COMMA> e = StringLiteral() { splitKeyList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(splitKeyList, pos.plus(getPos()));
+    }
+}
+
+SqlColumnDefNode ColumnDef() :
 {
     SqlIdentifier columnName;
     SqlIdentifier dataType;
@@ -208,7 +256,7 @@ SqlColumnDefNode SqlColumnDefNode() :
     }
 }
 
-SqlColumnDefInPkConstraintNode SqlColumnDefInPkConstraintNode() :
+SqlColumnDefInPkConstraintNode ColumnDefInPkConstraint() :
 {
     SqlIdentifier columnName;
     SortOrder sortOrder = SortOrder.getDefault();
@@ -238,5 +286,21 @@ SqlColumnDefInPkConstraintNode SqlColumnDefInPkConstraintNode() :
     	}
     	ColumnDefInPkConstraint cd = new ColumnDefInPkConstraint(name, sortOrder, isRowTimestamp);
     	return new SqlColumnDefInPkConstraintNode(pos,cd);
+    }
+}
+
+SqlTableOptionNode TableOption() :
+{
+    SqlIdentifier key;
+    SqlNode value;
+    SqlParserPos pos;
+}
+{
+    key = CompoundIdentifier()
+    <EQ>
+    value = Literal()
+    {
+        pos = key.getParserPosition().plus(getPos());
+        return new SqlTableOptionNode(pos, key, (SqlLiteral) value);
     }
 }

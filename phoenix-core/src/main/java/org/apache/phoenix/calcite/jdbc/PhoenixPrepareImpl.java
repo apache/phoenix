@@ -23,11 +23,15 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
 import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlTableOptionNode;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
+import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
@@ -45,16 +49,21 @@ import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
 import org.apache.phoenix.calcite.rules.PhoenixTableScanColumnRefRule;
+import org.apache.phoenix.compile.CreateTableCompiler;
+import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.base.Function;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 
@@ -160,7 +169,6 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         try {
             final ParseNodeFactory nodeFactory = new ParseNodeFactory();
             final PhoenixConnection connection = getPhoenixConnection(context.getRootSchema().plus());
-            final MetaDataClient client = new MetaDataClient(connection);
             switch (node.getKind()) {
             case CREATE_VIEW:
                 final SqlCreateView cv = (SqlCreateView) node;
@@ -171,7 +179,29 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 final SqlIdentifier tableIdentifier = table.tableName;
                 final String schemaName = tableIdentifier.isSimple() ? null : tableIdentifier.skipLast(1).toString();
                 final String tableName = tableIdentifier.names.get(tableIdentifier.names.size() - 1);
-                final ListMultimap<String,org.apache.hadoop.hbase.util.Pair<String,Object>> props = null; // TODO
+                final ListMultimap<String, org.apache.hadoop.hbase.util.Pair<String, Object>> props;
+                if (SqlNodeList.isEmptyList(table.tableOptions)) {
+                    props = null;
+                } else {
+                    props = ArrayListMultimap.<String, org.apache.hadoop.hbase.util.Pair<String, Object>>create();
+                    for (SqlNode tableOption : table.tableOptions) {
+                        SqlTableOptionNode option = (SqlTableOptionNode) tableOption;
+                        final String famName;
+                        final String propName;
+                        if (option.key.isSimple()) {
+                            famName = "";
+                            propName = option.key.getSimple();
+                        } else {
+                            famName = option.key.names.get(0);
+                            propName = option.key.getComponent(1, option.key.names.size()).toString();
+                        }
+                        Object value = SqlLiteral.value(option.value);
+                        if (value instanceof NlsString) {
+                            value = ((NlsString) value).toString();
+                        }
+                        props.put(famName, new org.apache.hadoop.hbase.util.Pair<String, Object>(propName, value));
+                    }
+                }
                 final List<ColumnDef> columnDefs = Lists.newArrayList();
                 for (SqlNode columnDef : table.columnDefs) {
                     columnDefs.add(((SqlColumnDefNode) columnDef).getColumnDef());
@@ -186,14 +216,26 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     }
                     pkConstraint = nodeFactory.primaryKey(table.pkConstraint.getSimple(), pkColumns);
                 }
-                final byte[][] splits = new byte[0][]; //TODO
-
+                final List<ParseNode> splitNodes;
+                if (SqlNodeList.isEmptyList(table.splitKeyList)) {
+                    splitNodes = null;
+                } else {
+                    splitNodes = Lists.newArrayList();
+                    for (SqlNode splitKey : table.splitKeyList) {
+                        final SqlLiteral key = (SqlLiteral) splitKey;
+                        splitNodes.add(nodeFactory.literal(((NlsString) key.getValue()).toString()));
+                    }
+                }
                 final CreateTableStatement create = nodeFactory.createTable(
                         nodeFactory.table(schemaName, tableName),
                         props, columnDefs, pkConstraint,
-                        null, PTableType.TABLE, table.ifNotExists.booleanValue(),
+                        splitNodes, PTableType.TABLE, table.ifNotExists.booleanValue(),
                         null, null, 0);
-                client.createTable(create, splits, null, null, null, null, null);
+                try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
+                    final CreateTableCompiler compiler = new CreateTableCompiler(stmt, Operation.UPSERT);
+                    final MutationPlan plan = compiler.compile(create);
+                    plan.execute();
+                }
                 break;
             default:
                 throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());
