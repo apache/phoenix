@@ -71,7 +71,8 @@ public class PhoenixUtil {
         boolean exist = false;
         DatabaseMetaData dbMeta = conn.getMetaData();
 
-        try (ResultSet rs = dbMeta.getTables(null, null, tableName.toUpperCase(), null)) {
+        String[] schemaInfo = getTableSchema(tableName.toUpperCase());
+        try (ResultSet rs = dbMeta.getTables(null, schemaInfo[0], schemaInfo[1], null)) {
             exist = rs.next();
 
             if (LOG.isDebugEnabled()) {
@@ -91,7 +92,8 @@ public class PhoenixUtil {
         Map<Short, String> primaryKeyColumnInfoMap = Maps.newHashMap();
         DatabaseMetaData dbMeta = conn.getMetaData();
 
-        try (ResultSet rs = dbMeta.getPrimaryKeys(null, null, tableName.toUpperCase())) {
+        String[] schemaInfo = getTableSchema(tableName.toUpperCase());
+        try (ResultSet rs = dbMeta.getPrimaryKeys(null, schemaInfo[0], schemaInfo[1])) {
             while (rs.next()) {
                 primaryKeyColumnInfoMap.put(rs.getShort("KEY_SEQ"), rs.getString("COLUMN_NAME"));
             }
