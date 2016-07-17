@@ -139,7 +139,7 @@ public class PhoenixMetaHook implements HiveMetaHook {
                 ddl.append("  ").append(columnName).append(" ").append(columnType).append(",\n");
             }
         }
-        ddl.append("  ").append("constraint pk_").append(tableName).append(" primary key(")
+        ddl.append("  ").append("constraint pk_").append(PhoenixUtil.getTableSchema(tableName.toUpperCase())[1]).append(" primary key(")
                 .append(realRowKeys.deleteCharAt(realRowKeys.length() - 1)).append(")\n)\n");
 
         String tableOptions = tableParameterMap.get(PhoenixStorageHandlerConstants
