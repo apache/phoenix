@@ -43,6 +43,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -365,7 +366,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN)
                 : PTableStats.EMPTY_STATS;
         // Used to tie all the scans together during logging
-        scanId = UUID.randomUUID().toString();
+        scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
         
