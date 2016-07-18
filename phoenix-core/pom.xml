@@ -218,6 +218,16 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
+            <exclude>src/main/resources/java.sql.Driver</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 
