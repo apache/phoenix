@@ -131,6 +131,7 @@ import org.apache.phoenix.util.ByteUtil;
 public interface QueryConstants {
     public static final String NAME_SEPARATOR = ".";
     public static final String NAMESPACE_SEPARATOR = ":";
+    public static final String CHILD_VIEW_INDEX_NAME_SEPARATOR = "#";
     public static final byte[] NAMESPACE_SEPARATOR_BYTES = Bytes.toBytes(NAMESPACE_SEPARATOR);
     public static final byte NAMESPACE_SEPARATOR_BYTE = NAMESPACE_SEPARATOR_BYTES[0];
     public static final String NAME_SEPARATOR_REGEX = "\\" + NAME_SEPARATOR;
