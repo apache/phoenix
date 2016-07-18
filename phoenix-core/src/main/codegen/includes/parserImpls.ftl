@@ -192,8 +192,8 @@ SqlNodeList SplitKeyList() :
 SqlColumnDefNode ColumnDef() :
 {
     SqlIdentifier columnName;
-    SqlIdentifier dataType;
-    Boolean isNull = Boolean.TRUE;
+    SqlDataTypeNode dataType;
+    boolean isNull = true;
     Integer maxLength = null;
     Integer scale = null;
     boolean isPk = false;
@@ -206,53 +206,67 @@ SqlColumnDefNode ColumnDef() :
 }
 {
     columnName = CompoundIdentifier()
-    dataType = TypeName()
-    (
-    	<LPAREN>
-    		{maxLength = (Integer)UnsignedNumericLiteral().getValue();}
-	    	<COMMA>
-        	{scale = (Integer)UnsignedNumericLiteral().getValue();}
-    	<RPAREN>
-    )?
-    (
-	    <ARRAY>
-		{isArray = true;}
-    	<LBRACKET> 
-    		{arrSize = (Integer)UnsignedNumericLiteral().getValue();}		
-	    <RBRACKET>
-	)?
-		(
+    dataType = PhoenixDataType()
+    [
         <NOT> <NULL>
         {isNull = false;}
         |
         <NULL>
         {isNull = true;}
-	)?
-	(
+    ]
+    [
         <PRIMARY> <KEY>
         {isPk = true;}
-	)?
-	(
-		<ASC>
+    ]
+    [
+        <ASC>
+        {sortOrder = SortOrder.ASC;}
         |
         <DESC>
         {sortOrder = SortOrder.DESC;}
-	)?
-	(
-		<ROW_TIMESTAMP>
+    ]
+    [
+        <ROW_TIMESTAMP>
         {isRowTimestamp = true;}
-		
-	)?
+    ]
     {
-    	pos = columnName.getParserPosition().plus(getPos());
-    	ColumnName name;    	
-    	if(columnName.names.size()==2) {
-    		name = new ColumnName(columnName.names.get(0), columnName.names.get(0));
-    	} else{
-    		name = new ColumnName(columnName.names.get(0));
-    	}
-    	ColumnDef cd = new ColumnDef(name, dataType.names.get(0), isArray, arrSize, isNull, maxLength, scale, isPk, sortOrder, null, isRowTimestamp);
-    	return new SqlColumnDefNode(pos,cd);
+        pos = columnName.getParserPosition().plus(getPos());
+        return new SqlColumnDefNode(pos, columnName, dataType, isNull, isPk, sortOrder, null, isRowTimestamp);
+    }
+}
+
+SqlDataTypeNode PhoenixDataType() :
+{
+    SqlIdentifier typeName;
+    Integer maxLength = null;
+    Integer scale = null;
+    boolean isArray = false;
+    Integer arrSize = null;
+    SqlParserPos pos;
+}
+{
+    typeName = TypeName()
+    [
+        <LPAREN>
+        maxLength = UnsignedIntLiteral()
+        [
+            <COMMA>
+            scale = UnsignedIntLiteral()
+        ]
+        <RPAREN>
+    ]
+    [
+        <ARRAY>
+		{isArray = true;}
+		[
+            <LBRACKET> 
+                arrSize = UnsignedIntLiteral()		
+            <RBRACKET>
+        ]
+    ]
+    {
+        pos = typeName.getParserPosition().plus(getPos());
+        return new SqlDataTypeNode(pos, typeName, maxLength, scale, isArray, arrSize);
     }
 }
 
@@ -265,27 +279,20 @@ SqlColumnDefInPkConstraintNode ColumnDefInPkConstraint() :
 }
 {
     columnName = CompoundIdentifier()
-	(
-		<ASC>
+    [
+        <ASC>
+        {sortOrder = SortOrder.ASC;}
         |
         <DESC>
         {sortOrder = SortOrder.DESC;}
-	)?
-	(
-		<ROW_TIMESTAMP>
+    ]
+    [
+        <ROW_TIMESTAMP>
         {isRowTimestamp = true;}
-		
-	)?
+    ]
     {
-    	pos = columnName.getParserPosition().plus(getPos());
-    	ColumnName name;    	
-    	if(columnName.names.size()==2) {
-    		name = new ColumnName(columnName.names.get(0), columnName.names.get(0));
-    	} else{
-    		name = new ColumnName(columnName.names.get(0));
-    	}
-    	ColumnDefInPkConstraint cd = new ColumnDefInPkConstraint(name, sortOrder, isRowTimestamp);
-    	return new SqlColumnDefInPkConstraintNode(pos,cd);
+        pos = columnName.getParserPosition().plus(getPos());
+        return new SqlColumnDefInPkConstraintNode(pos, columnName, sortOrder, isRowTimestamp);
     }
 }
 

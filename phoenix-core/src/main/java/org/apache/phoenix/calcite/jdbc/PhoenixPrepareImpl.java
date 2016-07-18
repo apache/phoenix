@@ -186,25 +186,12 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     props = ArrayListMultimap.<String, org.apache.hadoop.hbase.util.Pair<String, Object>>create();
                     for (SqlNode tableOption : table.tableOptions) {
                         SqlTableOptionNode option = (SqlTableOptionNode) tableOption;
-                        final String famName;
-                        final String propName;
-                        if (option.key.isSimple()) {
-                            famName = "";
-                            propName = option.key.getSimple();
-                        } else {
-                            famName = option.key.names.get(0);
-                            propName = option.key.getComponent(1, option.key.names.size()).toString();
-                        }
-                        Object value = SqlLiteral.value(option.value);
-                        if (value instanceof NlsString) {
-                            value = ((NlsString) value).toString();
-                        }
-                        props.put(famName, new org.apache.hadoop.hbase.util.Pair<String, Object>(propName, value));
+                        props.put(option.familyName, new org.apache.hadoop.hbase.util.Pair<String, Object>(option.propertyName, option.value));
                     }
                 }
                 final List<ColumnDef> columnDefs = Lists.newArrayList();
                 for (SqlNode columnDef : table.columnDefs) {
-                    columnDefs.add(((SqlColumnDefNode) columnDef).getColumnDef());
+                    columnDefs.add(((SqlColumnDefNode) columnDef).columnDef);
                 }
                 final PrimaryKeyConstraint pkConstraint;
                 if (table.pkConstraint == null) {
@@ -212,7 +199,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 } else {
                     final List<ColumnDefInPkConstraint> pkColumns = Lists.newArrayList();
                     for (SqlNode pkColumn : table.pkConstraintColumnDefs) {
-                        pkColumns.add(((SqlColumnDefInPkConstraintNode) pkColumn).getPkConstraint());
+                        pkColumns.add(((SqlColumnDefInPkConstraintNode) pkColumn).pkConstraint);
                     }
                     pkConstraint = nodeFactory.primaryKey(table.pkConstraint.getSimple(), pkColumns);
                 }

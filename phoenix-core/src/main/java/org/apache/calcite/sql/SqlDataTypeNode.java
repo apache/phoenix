@@ -22,30 +22,31 @@ import org.apache.calcite.sql.util.SqlVisitor;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.util.Litmus;
-import org.apache.calcite.util.NlsString;
 
-public class SqlTableOptionNode extends SqlNode {
-    public final String familyName;
-    public final String propertyName;
-    public final Object value;
+public class SqlDataTypeNode extends SqlNode {
+    public final String typeName;
+    public final Integer maxLength;
+    public final Integer scale;
+    public final boolean isArray;
+    public final Integer arraySize;
 
-    public SqlTableOptionNode(SqlParserPos pos, SqlIdentifier key, SqlLiteral literal) {
+    public SqlDataTypeNode(
+            SqlParserPos pos,
+            SqlIdentifier typeName,
+            Integer maxLength,
+            Integer scale,
+            boolean isArray,
+            Integer arraySize) {
         super(pos);
-        if (key.isSimple()) {
-            familyName = "";
-            propertyName = key.getSimple();
-        } else if (key.names.size() == 2) {
-            familyName = key.names.get(0);
-            propertyName = key.names.get(1);
+        if (typeName.isSimple()) {
+            this.typeName = typeName.getSimple();
         } else {
-            throw new RuntimeException("Invalid table property name: " + key);
+            throw new RuntimeException("Invalid data type name: " + typeName);
         }
-        final Object v = SqlLiteral.value(literal);
-        if (v instanceof NlsString) {
-            value = ((NlsString) v).toString();
-        } else {
-            value = v;
-        }
+        this.maxLength = maxLength;
+        this.scale = scale;
+        this.isArray = isArray;
+        this.arraySize = arraySize;
     }
 
     @Override

@@ -25,33 +25,55 @@ import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.util.Litmus;
 import org.apache.phoenix.parse.ColumnDef;
+import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.schema.SortOrder;
 
 public class SqlColumnDefNode extends SqlNode{
-	private final ColumnDef columnDef;
-	public SqlColumnDefNode(SqlParserPos pos, ColumnDef columnDef) {
-		super(pos);
-		this.columnDef = columnDef;
-	}
-	
-	public ColumnDef getColumnDef() {
-		return columnDef;
-	}
+    public final ColumnDef columnDef;
 
-	@Override
-	public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-	}
+    public SqlColumnDefNode(
+            SqlParserPos pos,
+            SqlIdentifier columnName,
+            SqlDataTypeNode dataType,
+            boolean isNullable,
+            boolean isPk,
+            SortOrder sortOrder,
+            String expressionStr,
+            boolean isRowTimestamp) {
+        super(pos);
+        final ColumnName name;
+        if (columnName.isSimple()) {
+            name = new ColumnName(columnName.getSimple());
+        } else if (columnName.names.size() == 2) {
+            name = new ColumnName(columnName.names.get(0), columnName.names.get(1));
+        } else {
+            throw new RuntimeException("Invalid column name: " + columnName);
+        }
+        this.columnDef = new ColumnDef(name, dataType.typeName,
+                dataType.isArray, dataType.arraySize, isNullable,
+                dataType.maxLength, dataType.scale, isPk,
+                sortOrder, expressionStr, isRowTimestamp);
+    }
 
-	@Override
-	public void validate(SqlValidator validator, SqlValidatorScope scope) {
-	}
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        // TODO Auto-generated method stub
+    }
 
-	@Override
-	public <R> R accept(SqlVisitor<R> visitor) {
-		return null;
-	}
+    @Override
+    public void validate(SqlValidator validator, SqlValidatorScope scope) {
+        // TODO Auto-generated method stub
+    }
 
-	@Override
-	public boolean equalsDeep(SqlNode node, Litmus litmus) {
-		return false;
-	}
+    @Override
+    public <R> R accept(SqlVisitor<R> visitor) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public boolean equalsDeep(SqlNode node, Litmus litmus) {
+        // TODO Auto-generated method stub
+        return false;
+    }
 }

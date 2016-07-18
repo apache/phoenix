@@ -25,40 +25,48 @@ import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.util.Litmus;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
+import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.schema.SortOrder;
 
 public class SqlColumnDefInPkConstraintNode extends SqlNode{
-	private final ColumnDefInPkConstraint pkConstraint;
-	
-	public SqlColumnDefInPkConstraintNode(SqlParserPos pos, ColumnDefInPkConstraint pkConstraint) {
-		super(pos);
-		this.pkConstraint = pkConstraint;
-	}
+    public final ColumnDefInPkConstraint pkConstraint;
 
-	public ColumnDefInPkConstraint getPkConstraint() {
-		return pkConstraint;
-	}
+    public SqlColumnDefInPkConstraintNode(
+            SqlParserPos pos,
+            SqlIdentifier columnName,
+            SortOrder sortOrder,
+            boolean isRowTimestamp) {
+        super(pos);
+        final ColumnName name;
+        if (columnName.isSimple()) {
+            name = new ColumnName(columnName.getSimple());
+        } else if (columnName.names.size() == 2) {
+            name = new ColumnName(columnName.names.get(0), columnName.names.get(1));
+        } else {
+            throw new RuntimeException("Invalid column name: " + columnName);
+        }
+        this.pkConstraint = new ColumnDefInPkConstraint(name, sortOrder, isRowTimestamp);
+    }
 
-	@Override
-	public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-		// TODO Auto-generated method stub
-		
-	}
+    @Override
+    public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
+        // TODO Auto-generated method stub
+    }
 
-	@Override
-	public void validate(SqlValidator validator, SqlValidatorScope scope) {
-		// TODO Auto-generated method stub
-		
-	}
+    @Override
+    public void validate(SqlValidator validator, SqlValidatorScope scope) {
+        // TODO Auto-generated method stub
+    }
 
-	@Override
-	public <R> R accept(SqlVisitor<R> visitor) {
-		// TODO Auto-generated method stub
-		return null;
-	}
+    @Override
+    public <R> R accept(SqlVisitor<R> visitor) {
+        // TODO Auto-generated method stub
+        return null;
+    }
 
-	@Override
-	public boolean equalsDeep(SqlNode node, Litmus litmus) {
-		// TODO Auto-generated method stub
-		return false;
-	}
+    @Override
+    public boolean equalsDeep(SqlNode node, Litmus litmus) {
+        // TODO Auto-generated method stub
+        return false;
+    }
 }

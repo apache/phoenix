@@ -28,6 +28,7 @@
     "org.apache.phoenix.parse.ColumnDefInPkConstraint",
     "org.apache.calcite.sql.SqlColumnDefNode"
     "org.apache.calcite.sql.SqlColumnDefInPkConstraintNode"
+    "org.apache.calcite.sql.SqlDataTypeNode"
     "org.apache.calcite.sql.SqlTableOptionNode"
     "java.util.*"
   ]

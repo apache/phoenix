@@ -12,7 +12,8 @@ public class CalciteDDLIT extends BaseCalciteIT {
     }
 
     @Test public void testCreateTable() throws Exception {
-        start(PROPS).sql("create table t1(a varchar not null primary key, b integer)").execute();
+        start(PROPS).sql("create table t1(a varchar(20) not null primary key, b integer, c decimal(10, 2), d integer array, e varchar array[5])").execute();
+        start(PROPS).sql("create table if not exists t1(a varchar not null primary key, b integer)").execute();
     }
 
     @Test public void testCreateTableWithPrimaryKeyConstraint() throws Exception {
