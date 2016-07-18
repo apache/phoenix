@@ -114,7 +114,6 @@
     
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
-    <maven.rat.version>0.8</maven.rat.version>
 
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
@@ -180,38 +179,8 @@
         <plugin>
           <groupId>org.apache.rat</groupId>
           <artifactId>apache-rat-plugin</artifactId>
-          <version>${maven.rat.version}</version>
-          <configuration>
-            <excludes>
-              <exclude>CHANGES</exclude>
-              <exclude>README.md</exclude>
-              <exclude>README</exclude>
-	          <exclude>dev/phoenix.importorder</exclude>
-              <exclude>dev/release_files/**</exclude>
-              <exclude>**/target/**</exclude>
-              <exclude>**/*.versionsBackup</exclude>
-              <!-- properties files need no license -->
-              <exclude>**/*.properties</exclude>
-              <!-- exclude docs -->
-              <exclude>docs/**</exclude>
-              <!-- exclude examples -->
-              <exclude>examples/**</exclude>
-              <!-- exclude source control files -->
-              <exclude>.gitignore</exclude>
-              <exclude>.git/**</exclude>
-              <!-- exclude IDE files -->
-              <exclude>**/.idea/**</exclude>
-              <exclude>**/*.iml</exclude>
-              <exclude>.project</exclude>
-              <exclude>.classpath</exclude>
-              <exclude>.settings/**</exclude>
-              <exclude>**/java.sql.Driver</exclude>
-              <!-- exclude protobuf files -->
-              <exclude>**/generated/**</exclude>
-              <!-- exclude pre-commit testing work directory -->
-              <exclude>**/patchprocess/**</exclude>
-            </excludes>
-          </configuration>
+          <!-- Avoid defining exclusions in pluginManagement as they are global.
+               We already inherit some from the ASF parent pom. -->
         </plugin>
         <!-- We put slow-running tests into src/it and run them during the
             integration-test phase using the failsafe plugin. This way
@@ -453,6 +422,27 @@
               <version>2.5.2</version>
             </plugin>
           </reportPlugins>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <!-- Header on changelog isn't normal -->
+            <exclude>CHANGES</exclude>
+            <!-- IDE configuration -->
+	          <exclude>dev/phoenix.importorder</exclude>
+            <!-- Release L&N -->
+            <exclude>dev/release_files/LICENSE</exclude>
+            <exclude>dev/release_files/NOTICE</exclude>
+            <!-- Exclude data files for examples -->
+            <exclude>docs/*.csv</exclude>
+            <exclude>examples/*.csv</exclude>
+            <exclude>examples/pig/testdata</exclude>
+            <!-- precommit? -->
+            <exclude>**/patchprocess/**</exclude>
+          </excludes>
         </configuration>
       </plugin>
     </plugins>
