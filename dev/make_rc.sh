@@ -30,10 +30,10 @@ DIR_ROOT="$(cd $(dirname $0);pwd)/.."
 cd $DIR_ROOT
 PHOENIX="$(xmllint --xpath "//*[local-name()='project']/*[local-name()='version']/text()" pom.xml)"
 DIR_REL_BASE=$DIR_ROOT/release
-DIR_REL_ROOT=$DIR_REL_BASE/phoenix-$PHOENIX
-DIR_REL_BIN=phoenix-$PHOENIX-bin
+DIR_REL_ROOT=$DIR_REL_BASE/apache-phoenix-$PHOENIX
+DIR_REL_BIN=apache-phoenix-$PHOENIX-bin
 DIR_REL_BIN_PATH=$DIR_REL_ROOT/$DIR_REL_BIN
-REL_SRC=phoenix-$PHOENIX-src
+REL_SRC=apache-phoenix-$PHOENIX-src
 DIR_REL_SRC_TAR_PATH=$DIR_REL_ROOT/src
 DIR_REL_BIN_TAR_PATH=$DIR_REL_ROOT/bin
 DIR_BIN=$DIR_REL_BIN_PATH/bin
@@ -88,7 +88,7 @@ cp $DIR_DOCS/* $DIR_REL_BIN_PATH;
 cp -r examples/* $DIR_EXAMPLES
 
 # Generate bin tar
-tar cvzf $DIR_REL_BIN_TAR_PATH/$DIR_REL_BIN.tar.gz -C $DIR_REL_ROOT phoenix-$PHOENIX-bin;
+tar cvzf $DIR_REL_BIN_TAR_PATH/$DIR_REL_BIN.tar.gz -C $DIR_REL_ROOT apache-phoenix-$PHOENIX-bin;
 rm -rf $DIR_REL_BIN_PATH;
 
 echo "DONE generating binary and source tars in release directory."
@@ -96,7 +96,7 @@ echo "Now signing source and binary tars"
 
 # Sign
 function_sign() {
-  phoenix_tar=$(find phoenix-*.gz);
+  phoenix_tar=$(find apache-phoenix-*.gz);
   gpg --armor --output $phoenix_tar.asc --detach-sig $phoenix_tar;
   md5sum -b $phoenix_tar > $phoenix_tar.md5;
   sha512sum -b $phoenix_tar > $phoenix_tar.sha;
