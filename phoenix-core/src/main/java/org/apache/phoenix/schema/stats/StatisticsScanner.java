@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 
@@ -48,12 +49,14 @@ public class StatisticsScanner implements InternalScanner {
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
     private final Configuration config;
+    private final RegionServerServices regionServerServices;
 
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter statsWriter, RegionCoprocessorEnvironment env,
             InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
         this.statsWriter = statsWriter;
         this.delegate = delegate;
+        this.regionServerServices = env.getRegionServerServices();
         this.region = env.getRegion();
         this.config = env.getConfiguration();
         this.family = family;
@@ -86,12 +89,61 @@ public class StatisticsScanner implements InternalScanner {
         }
     }
 
-    private class StatisticsScannerCallable implements Callable<Void> {
+    @Override
+    public void close() throws IOException {
+        boolean async = getConfig().getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
+        StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
+        StatisticsScannerCallable callable = createCallable();
+        if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
+            LOG.debug("Not updating table statistics because the server is stopping/stopped");
+            return;
+        }
+        if (!async) {
+            callable.call();
+        } else {
+            collectionTracker.runTask(callable);
+        }
+    }
+
+    // VisibleForTesting
+    StatisticsCollectionRunTracker getStatsCollectionRunTracker(Configuration c) {
+        return StatisticsCollectionRunTracker.getInstance(c);
+    }
+
+    Configuration getConfig() {
+        return config;
+    }
+
+    StatisticsWriter getStatisticsWriter() {
+        return statsWriter;
+    }
+
+    RegionServerServices getRegionServerServices() {
+        return regionServerServices;
+    }
+
+    HRegion getRegion() {
+        return region;
+    }
+
+    StatisticsScannerCallable createCallable() {
+        return new StatisticsScannerCallable();
+    }
+
+    StatisticsCollector getTracker() {
+        return tracker;
+    }
+
+    InternalScanner getDelegate() {
+        return delegate;
+    }
+
+    class StatisticsScannerCallable implements Callable<Void> {
         @Override
         public Void call() throws IOException {
             IOException toThrow = null;
-            StatisticsCollectionRunTracker statsRunState =
-                    StatisticsCollectionRunTracker.getInstance(config);
+            StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
+            final HRegion region = getRegion();
             try {
                 // update the statistics table
                 // Just verify if this if fine
@@ -100,32 +152,36 @@ public class StatisticsScanner implements InternalScanner {
                     LOG.debug("Deleting the stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
                 }
-                statsWriter.deleteStats(region, tracker, family, mutations);
+                getStatisticsWriter().deleteStats(region, tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
                 }
-                statsWriter.addStats(tracker, family, mutations);
+                getStatisticsWriter().addStats(tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Committing new stats for the region " + region.getRegionNameAsString()
                         + " as part of major compaction");
                 }
-                statsWriter.commitStats(mutations, tracker);
+                getStatisticsWriter().commitStats(mutations, tracker);
             } catch (IOException e) {
-                LOG.error("Failed to update statistics table!", e);
-                toThrow = e;
+                if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
+                    LOG.debug("Ignoring error updating statistics because region is closing/closed");
+                } else {
+                    LOG.error("Failed to update statistics table!", e);
+                    toThrow = e;
+                }
             } finally {
                 try {
-                    statsRunState.removeCompactingRegion(region.getRegionInfo());
-                    statsWriter.close();
-                    tracker.close();// close the tracker
+                    collectionTracker.removeCompactingRegion(region.getRegionInfo());
+                    getStatisticsWriter().close();// close the writer
+                    getTracker().close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
                     LOG.error("Error while closing the stats table", e);
                 } finally {
                     // close the delegate scanner
                     try {
-                        delegate.close();
+                        getDelegate().close();
                     } catch (IOException e) {
                         if (toThrow == null) toThrow = e;
                         LOG.error("Error while closing the scanner", e);
@@ -135,17 +191,6 @@ public class StatisticsScanner implements InternalScanner {
                 }
             }
             return null;
-        }
-    }
-    
-        @Override
-    public void close() throws IOException {
-        boolean async = config.getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
-        StatisticsScannerCallable callable = new StatisticsScannerCallable();
-        if (!async) {
-            callable.call();
-        } else {
-            StatisticsCollectionRunTracker.getInstance(config).runTask(callable);
         }
     }
 }
