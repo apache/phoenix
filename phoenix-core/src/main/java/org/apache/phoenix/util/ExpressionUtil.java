@@ -10,34 +10,21 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
-import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.expression.function.CurrentDateFunction;
-import org.apache.phoenix.expression.function.CurrentTimeFunction;
-import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.schema.types.PDataType;
 
-import com.google.common.collect.Lists;
-
 public class ExpressionUtil {
-
-	@SuppressWarnings("unchecked")
-	private static final List<Class<? extends FunctionExpression>> OVERRIDE_LITERAL_FUNCTIONS = Lists
-			.<Class<? extends FunctionExpression>> newArrayList(
-					CurrentDateFunction.class, CurrentTimeFunction.class);
 
 	private ExpressionUtil() {
 	}
 
 	public static boolean isConstant(Expression expression) {
 		return (expression.isStateless() && (expression.getDeterminism() == Determinism.ALWAYS
-				|| expression.getDeterminism() == Determinism.PER_STATEMENT 
-				// TODO remove this in 3.4/4.4 (need to support clients on 3.1/4.1)
-				|| OVERRIDE_LITERAL_FUNCTIONS.contains(expression.getClass())));
+				|| expression.getDeterminism() == Determinism.PER_STATEMENT));
 	}
 
     public static LiteralExpression getConstantExpression(Expression expression, ImmutableBytesWritable ptr)
