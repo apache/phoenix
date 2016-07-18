@@ -44,10 +44,8 @@ public class SqlColumnDefNode extends SqlNode{
         final ColumnName name;
         if (columnName.isSimple()) {
             name = new ColumnName(columnName.getSimple());
-        } else if (columnName.names.size() == 2) {
-            name = new ColumnName(columnName.names.get(0), columnName.names.get(1));
         } else {
-            throw new RuntimeException("Invalid column name: " + columnName);
+            name = new ColumnName(columnName.names.get(0), columnName.names.get(1));
         }
         this.columnDef = new ColumnDef(name, dataType.typeName,
                 dataType.isArray, dataType.arraySize, isNullable,

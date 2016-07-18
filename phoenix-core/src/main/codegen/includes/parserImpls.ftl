@@ -46,35 +46,76 @@ public String originalSql() {
 SqlNode SqlCreateView() :
 {
     SqlParserPos pos;
-    SqlIdentifier name;
-    SqlNode query;
+    SqlParserPos queryPos;
+    SqlIdentifier tableName;
+    boolean ifNotExists;
+    SqlNodeList columnDefs;
+    SqlIdentifier baseTableName;
+    SqlNode where;
+    String viewStatementString;
+    SqlNodeList tableOptions;
 }
 {
-    <CREATE> { pos = getPos(); } <VIEW> name = CompoundIdentifier()
-    <AS>
-    query = OrderedQueryOrExpr(ExprContext.ACCEPT_QUERY)
+    <CREATE> { pos = getPos(); } <VIEW>
+    (
+        <IF> <NOT> <EXISTS> { ifNotExists = true; }
+        |
+        {
+            ifNotExists = false;
+        }
+    )
+    tableName = DualIdentifier()
+    (
+        <LPAREN>
+        columnDefs = ColumnDefList()
+        <RPAREN>
+        |
+        {
+            columnDefs = SqlNodeList.EMPTY;
+        }
+    )
+    (
+        <AS> <SELECT> { queryPos = getPos(); } <STAR> <FROM>
+        baseTableName = DualIdentifier()
+        where = WhereOpt()
+        {
+            queryPos = queryPos.plus(getPos());
+            String sql = originalSql();
+            int start = SqlParserUtil.lineColToIndex(sql, queryPos.getLineNum(), queryPos.getColumnNum());
+            int end = SqlParserUtil.lineColToIndex(sql, queryPos.getEndLineNum(), queryPos.getEndColumnNum());
+            viewStatementString = sql.substring(start, end + 1);            
+        }
+        |
+        {
+            baseTableName = null;
+            where = null;
+            viewStatementString = null;
+        }
+    )
+    (
+        tableOptions = TableOptionList()
+        |
+        {
+            tableOptions = SqlNodeList.EMPTY;
+        }
+    )
     {
-        String sql = originalSql();
-        SqlParserPos pos2 = query.getParserPosition();
-        SqlParserPos pos3 = getPos();
-        int start = SqlParserUtil.lineColToIndex(sql, pos2.getLineNum(), pos2.getColumnNum());
-        int end = SqlParserUtil.lineColToIndex(sql, pos3.getEndLineNum(), pos3.getEndColumnNum());
-        String queryString = sql.substring(start, end + 1);
-        System.out.println("[" + queryString + "]");
-        return new SqlCreateView(pos.plus(pos3), name, query, queryString);
+        return new SqlCreateTable(pos.plus(getPos()), tableName,
+            SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
+            columnDefs, baseTableName, where, viewStatementString, tableOptions);
     }
 }
 
 SqlNode SqlCreateTable() :
 {
-      SqlParserPos pos;
-      SqlIdentifier tableName;
-	  boolean ifNotExists;
-      SqlNodeList columnDefs;
-      SqlIdentifier pkConstraint;
-      SqlNodeList pkConstraintColumnDefs;
-      SqlNodeList tableOptions;
-      SqlNodeList splitKeys;
+    SqlParserPos pos;
+    SqlIdentifier tableName;
+    boolean ifNotExists;
+    SqlNodeList columnDefs;
+    SqlIdentifier pkConstraint;
+    SqlNodeList pkConstraintColumnDefs;
+    SqlNodeList tableOptions;
+    SqlNodeList splitKeys;
 }
 {
     <CREATE> { pos = getPos(); } <TABLE>
@@ -85,7 +126,7 @@ SqlNode SqlCreateTable() :
             ifNotExists = false;
         }
     )
-    tableName = CompoundIdentifier()
+    tableName = DualIdentifier()
     <LPAREN>
     columnDefs = ColumnDefList()
     (
@@ -114,7 +155,7 @@ SqlNode SqlCreateTable() :
         }
     )
     {
-        return new SqlCreateTable(pos, tableName,
+        return new SqlCreateTable(pos.plus(getPos()), tableName,
             SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
             columnDefs, pkConstraint, pkConstraintColumnDefs,
             tableOptions, splitKeys);
@@ -205,7 +246,7 @@ SqlColumnDefNode ColumnDef() :
     SqlParserPos pos;
 }
 {
-    columnName = CompoundIdentifier()
+    columnName = DualIdentifier()
     dataType = PhoenixDataType()
     [
         <NOT> <NULL>
@@ -278,7 +319,7 @@ SqlColumnDefInPkConstraintNode ColumnDefInPkConstraint() :
     SqlParserPos pos;
 }
 {
-    columnName = CompoundIdentifier()
+    columnName = DualIdentifier()
     [
         <ASC>
         {sortOrder = SortOrder.ASC;}
@@ -303,11 +344,36 @@ SqlTableOptionNode TableOption() :
     SqlParserPos pos;
 }
 {
-    key = CompoundIdentifier()
+    key = DualIdentifier()
     <EQ>
     value = Literal()
     {
         pos = key.getParserPosition().plus(getPos());
         return new SqlTableOptionNode(pos, key, (SqlLiteral) value);
+    }
+}
+
+SqlIdentifier DualIdentifier() :
+{
+    List<String> list = new ArrayList<String>();
+    List<SqlParserPos> posList = new ArrayList<SqlParserPos>();
+    String p;
+}
+{
+    p = Identifier()
+    {
+        posList.add(getPos());
+        list.add(p);
+    }
+    [
+        <DOT>
+            p = Identifier() {
+                list.add(p);
+                posList.add(getPos());
+            }
+    ]
+    {
+        SqlParserPos pos = SqlParserPos.sum(posList);
+        return new SqlIdentifier(list, null, pos, posList);
     }
 }

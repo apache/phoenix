@@ -34,11 +34,9 @@ public class SqlTableOptionNode extends SqlNode {
         if (key.isSimple()) {
             familyName = "";
             propertyName = key.getSimple();
-        } else if (key.names.size() == 2) {
+        } else {
             familyName = key.names.get(0);
             propertyName = key.names.get(1);
-        } else {
-            throw new RuntimeException("Invalid table property name: " + key);
         }
         final Object v = SqlLiteral.value(literal);
         if (v instanceof NlsString) {

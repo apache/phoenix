@@ -22,7 +22,7 @@ import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
-import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
@@ -35,7 +35,6 @@ import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
-import org.apache.phoenix.calcite.parse.SqlCreateView;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
@@ -60,6 +59,8 @@ import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.base.Function;
@@ -170,15 +171,16 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             final ParseNodeFactory nodeFactory = new ParseNodeFactory();
             final PhoenixConnection connection = getPhoenixConnection(context.getRootSchema().plus());
             switch (node.getKind()) {
-            case CREATE_VIEW:
-                final SqlCreateView cv = (SqlCreateView) node;
-                System.out.println("Create view: " + cv.name);
-                break;
             case CREATE_TABLE:
+            case CREATE_VIEW:
                 final SqlCreateTable table = (SqlCreateTable) node;
-                final SqlIdentifier tableIdentifier = table.tableName;
-                final String schemaName = tableIdentifier.isSimple() ? null : tableIdentifier.skipLast(1).toString();
-                final String tableName = tableIdentifier.names.get(tableIdentifier.names.size() - 1);
+                final PTableType tableType = table.getKind() == SqlKind.CREATE_TABLE ? PTableType.TABLE : PTableType.VIEW;
+                final TableName name;
+                if (table.tableName.isSimple()) {
+                    name = nodeFactory.table(null, table.tableName.getSimple());
+                } else {
+                    name = nodeFactory.table(table.tableName.names.get(0), table.tableName.names.get(1));
+                }
                 final ListMultimap<String, org.apache.hadoop.hbase.util.Pair<String, Object>> props;
                 if (SqlNodeList.isEmptyList(table.tableOptions)) {
                     props = null;
@@ -203,6 +205,23 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     }
                     pkConstraint = nodeFactory.primaryKey(table.pkConstraint.getSimple(), pkColumns);
                 }
+                final TableName baseTableName;
+                final ParseNode where;
+                if (table.baseTableName == null) {
+                    baseTableName = tableType == PTableType.TABLE ? null : name;
+                    where = null;
+                } else {
+                    if (table.baseTableName.isSimple()) {
+                        baseTableName = nodeFactory.table(null, table.baseTableName.getSimple());
+                    } else {
+                        baseTableName = nodeFactory.table(table.baseTableName.names.get(0), table.baseTableName.names.get(1));
+                    }
+                    if (table.whereNode == null) {
+                        where = null;
+                    } else {
+                        where = new SQLParser(table.viewStatementString).parseQuery().getWhere();
+                    }
+                }
                 final List<ParseNode> splitNodes;
                 if (SqlNodeList.isEmptyList(table.splitKeyList)) {
                     splitNodes = null;
@@ -214,10 +233,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     }
                 }
                 final CreateTableStatement create = nodeFactory.createTable(
-                        nodeFactory.table(schemaName, tableName),
-                        props, columnDefs, pkConstraint,
-                        splitNodes, PTableType.TABLE, table.ifNotExists.booleanValue(),
-                        null, null, 0);
+                        name, props, columnDefs, pkConstraint,
+                        splitNodes, tableType, table.ifNotExists.booleanValue(),
+                        baseTableName, where, 0);
                 try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
                     final CreateTableCompiler compiler = new CreateTableCompiler(stmt, Operation.UPSERT);
                     final MutationPlan plan = compiler.compile(create);

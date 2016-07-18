@@ -8,7 +8,9 @@ public class CalciteDDLIT extends BaseCalciteIT {
     private static final Properties PROPS = new Properties();
     
     @Test public void testCreateView() throws Exception {
-        start(PROPS).sql("create view v as select * from (values (1, 'a'), (2, 'b')) as t(x, y)").execute();
+        start(PROPS).sql("create table t0(a varchar(20) not null primary key, b integer)").execute();
+        start(PROPS).sql("create view v1 as select * from t0").execute();
+        start(PROPS).sql("create view v2 as select * from t0 where a = 'x'").execute();
     }
 
     @Test public void testCreateTable() throws Exception {
