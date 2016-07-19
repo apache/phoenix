@@ -1411,5 +1411,87 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
 			conn.close();
 		}
 	}
+	
+	@Test
+    public void testImmutableTableGlobalIndexExpressionWithJoin() throws Exception {
+        helpTestIndexExpressionWithJoin(false, false);
+    }
+	
+	@Test
+    public void testImmutableTableLocalIndexExpressionWithJoin() throws Exception {
+        helpTestIndexExpressionWithJoin(false, true);
+    }
+	
+	@Test
+    public void testMutableTableGlobalIndexExpressionWithJoin() throws Exception {
+        helpTestIndexExpressionWithJoin(true, false);
+    }
+	
+	@Test
+    public void testMutableTableLocalIndexExpressionWithJoin() throws Exception {
+	    helpTestIndexExpressionWithJoin(true, true);
+    }
+
+    public void helpTestIndexExpressionWithJoin(boolean mutable,
+            boolean localIndex) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String nameSuffix = "T" + (mutable ? "MUTABLE" : "_IMMUTABLE") + (localIndex ? "_LOCAL" : "_GLOBAL");
+        String tableName = "T" + nameSuffix;
+        String indexName = "IDX" + nameSuffix;
+        try {
+            conn.createStatement().execute(
+                        "CREATE TABLE "
+                                + tableName
+                                + "( c_customer_sk varchar primary key, c_first_name varchar, c_last_name varchar )"
+                                + (!mutable ? "IMMUTABLE_ROWS=true" : ""));
+            String query = "SELECT * FROM " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+            
+            conn.createStatement().execute(
+                "CREATE " + (localIndex ? "LOCAL" : "")
+                + " INDEX " + indexName + " ON " + tableName + " (c_customer_sk || c_first_name asc)");
+            query = "SELECT * FROM " + indexName;
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+            
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
+            stmt.setString(1, "1");
+            stmt.setString(2, "David");
+            stmt.setString(3, "Smith");
+            stmt.execute();
+            conn.commit();
+            
+            query = "select c.c_customer_sk from  " + tableName + " c "
+                    + "left outer join " + tableName + " c2 on c.c_customer_sk = c2.c_customer_sk "
+                    + "where c.c_customer_sk || c.c_first_name = '1David'";
+            rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            if (localIndex) {
+            	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'1David']\n" + 
+                        "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "CLIENT MERGE SORT\n" +
+                        "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n" +
+                        "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" + 
+                        "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "        CLIENT MERGE SORT", explainPlan);
+            }
+            else {
+            	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + " ['1David']\n" + 
+                        "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                        "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n" +
+                        "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n" + 
+                        "            SERVER FILTER BY FIRST KEY ONLY", explainPlan);
+            }
+            
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("1", rs.getString(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+	}
 
 }

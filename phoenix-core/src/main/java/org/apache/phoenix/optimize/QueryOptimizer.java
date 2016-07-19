@@ -230,7 +230,7 @@ public class QueryOptimizer {
         if (PIndexState.ACTIVE.equals(resolver.getTables().get(0).getTable().getIndexState())) {
             try {
             	// translate nodes that match expressions that are indexed to the associated column parse node
-                indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, statement.getConnection(), indexSelect.getUdfParseNodes()));
+                indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
                 QueryCompiler compiler = new QueryCompiler(statement, indexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected);
                 
                 QueryPlan plan = compiler.compile();

@@ -51,12 +51,14 @@ import org.apache.phoenix.parse.DerivedTableNode;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.JoinTableNode;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.ParseNodeRewriter;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.TableName;
@@ -102,7 +104,6 @@ import com.google.common.collect.Sets;
 public class JoinCompiler {
 
     public enum ColumnRefType {
-        PREFILTER,
         JOINLOCAL,
         GENERAL,
     }
@@ -160,10 +161,6 @@ public class JoinCompiler {
         for (ColumnRef ref : joinLocalRefVisitor.getColumnRefMap().keySet()) {
             if (!compiler.columnRefs.containsKey(ref))
                 compiler.columnRefs.put(ref, ColumnRefType.JOINLOCAL);
-        }
-        for (ColumnRef ref : prefilterRefVisitor.getColumnRefMap().keySet()) {
-            if (!compiler.columnRefs.containsKey(ref))
-                compiler.columnRefs.put(ref, ColumnRefType.PREFILTER);
         }
 
         return joinTable;
@@ -740,8 +737,7 @@ public class JoinCompiler {
             } else {
                 for (Map.Entry<ColumnRef, ColumnRefType> e : columnRefs.entrySet()) {
                     ColumnRef columnRef = e.getKey();
-                    if (e.getValue() != ColumnRefType.PREFILTER
-                            && columnRef.getTableRef().equals(tableRef)
+                    if (columnRef.getTableRef().equals(tableRef)
                             && (!retainPKColumns || !SchemaUtil.isPKColumn(columnRef.getColumn()))) {
                         if (columnRef instanceof LocalIndexColumnRef) {
                             sourceColumns.add(new LocalIndexDataColumnRef(context, IndexUtil.getIndexColumnName(columnRef.getColumn())));
@@ -1248,7 +1244,12 @@ public class JoinCompiler {
             }
         });
 
-        return IndexStatementRewriter.translate(NODE_FACTORY.select(select, newFrom), resolver, replacement);
+        SelectStatement indexSelect = IndexStatementRewriter.translate(NODE_FACTORY.select(select, newFrom), resolver, replacement);
+        for ( TableRef indexTableRef : replacement.values()) {
+            // replace expressions with corresponding matching columns for functional indexes
+            indexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(indexTableRef.getTable(), indexTableRef.getTableAlias(), statement.getConnection(), indexSelect.getUdfParseNodes()));
+        }
+        return indexSelect;
     }
 
     private static SelectStatement getSubqueryForOptimizedPlan(HintNode hintNode, List<ColumnDef> dynamicCols, TableRef tableRef, Map<ColumnRef, ColumnRefType> columnRefs, ParseNode where, List<ParseNode> groupBy,
