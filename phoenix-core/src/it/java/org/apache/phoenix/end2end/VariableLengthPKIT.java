@@ -85,7 +85,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     }
 
     protected static void initTableValues(byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB_NAME, splits, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, splits, ts-2);
 
         // Insert all rows at ts
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
@@ -106,7 +106,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.setBigDecimal(4, new BigDecimal(.5));
         stmt.execute();
 
-        ensureTableCreated(getUrl(),BTABLE_NAME, splits, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, splits, ts-2);
         conn.setAutoCommit(false);
 
         // Insert all rows at ts

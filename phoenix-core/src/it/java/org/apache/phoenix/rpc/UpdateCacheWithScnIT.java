@@ -30,7 +30,7 @@ public class UpdateCacheWithScnIT extends BaseClientManagedTimeIT {
 	public void testUpdateCacheWithScn() throws Exception {
         long ts = nextTimestamp();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
-        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE, ts);
+        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE, MUTABLE_INDEX_DATA_TABLE, ts);
         // FIXME: given that the scn is advancing in the test, why aren't there more RPCs?
 		UpdateCacheIT.helpTestUpdateCache(fullTableName, ts+2, new int[] {1, 1});
 	}

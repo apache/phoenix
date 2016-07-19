@@ -296,11 +296,16 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
     }    
     
     protected void initTableValues() throws Exception {
-        ensureTableCreated(getUrl(), JOIN_CUSTOMER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_ITEM_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_SUPPLIER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_ORDER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_COITEM_TABLE_FULL_NAME);
+        String tableName_CustomerTableFullName = generateRandomString();
+        String tableName_ItemTableFullName = generateRandomString();
+        String tableName_SupplierTableFullName = generateRandomString();
+        String tableName_OrderTableFullName = generateRandomString();
+        String tableName_CoitemTableFullName = generateRandomString();
+        ensureTableCreated(getUrl(), tableName_CustomerTableFullName, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), tableName_ItemTableFullName, JOIN_ITEM_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), tableName_SupplierTableFullName, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), tableName_OrderTableFullName, JOIN_ORDER_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), tableName_CoitemTableFullName,JOIN_COITEM_TABLE_FULL_NAME);
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -308,7 +313,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
             conn.createStatement().execute("CREATE SEQUENCE my.seq");
             // Insert into customer table
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_CUSTOMER_TABLE_FULL_NAME +
+                    "upsert into " + tableName_CustomerTableFullName +
                     "   (\"customer_id\", " +
                     "    NAME, " +
                     "    PHONE, " +
@@ -366,7 +371,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
             
             // Insert into item table
             stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ITEM_TABLE_FULL_NAME +
+                    "upsert into " + tableName_ItemTableFullName +
                     "   (\"item_id\", " +
                     "    NAME, " +
                     "    PRICE, " +
@@ -440,7 +445,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
 
             // Insert into supplier table
             stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_SUPPLIER_TABLE_FULL_NAME +
+                    "upsert into " + tableName_SupplierTableFullName +
                     "   (\"supplier_id\", " +
                     "    NAME, " +
                     "    PHONE, " +
@@ -491,7 +496,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
 
             // Insert into order table
             stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ORDER_TABLE_FULL_NAME +
+                    "upsert into " + tableName_OrderTableFullName +
                     "   (\"order_id\", " +
                     "    \"customer_id\", " +
                     "    \"item_id\", " +
@@ -543,7 +548,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
 
             // Insert into coitem table
             stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_COITEM_TABLE_FULL_NAME + 
+                    "upsert into " + tableName_CoitemTableFullName+
                     "   (item_id, " + 
                     "    item_name, " + 
                     "    co_item_id, " + 

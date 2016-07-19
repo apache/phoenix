@@ -122,7 +122,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE);
+            ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE, MUTABLE_INDEX_DATA_TABLE);
             String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE
                     + " (varchar_col1 ASC, varchar_col2 ASC, int_pk DESC)"
                     + " INCLUDE (int_col1, int_col2)";
@@ -296,7 +296,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
+            ensureTableCreated(getUrl(), INDEX_DATA_TABLE, INDEX_DATA_TABLE);
             String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
                     + " (char_col1 ASC, int_col2 ASC, long_col2 DESC)"
                     + " INCLUDE (int_col1)";
@@ -355,7 +355,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
         String indexName = "\"lowerCaseIndex\"";
         try {
-            ensureTableCreated(getUrl(), INDEX_DATA_TABLE);
+            ensureTableCreated(getUrl(), INDEX_DATA_TABLE, INDEX_DATA_TABLE);
             String ddl = "CREATE INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
                     + " (char_col1 ASC, int_col2 ASC, long_col2 DESC)"
                     + " INCLUDE (int_col1)";
@@ -388,7 +388,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            ensureTableCreated(getUrl(), TestUtil.INDEX_DATA_TABLE);
+            ensureTableCreated(getUrl(), TestUtil.INDEX_DATA_TABLE, TestUtil.INDEX_DATA_TABLE);
             String ddl = "CREATE INDEX IDX ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE
             		+ " (a.int_col1, a.long_col1, b.int_col2, b.long_col2)"
             		+ " INCLUDE(int_col1, int_col2)";
