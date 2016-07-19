@@ -34,6 +34,7 @@ import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.SequenceResultIterator;
+import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -63,8 +64,12 @@ public class ClientScanPlan extends ClientProcessingPlan {
         if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), thresholdBytes, limit,
-                    offset, projector.getEstimatedRowByteSize());
+            String spoolDirectory = context.getConnection().getQueryServices().getProps().get(
+                    QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY);
+            MemoryManager memoryManager = context.getConnection().getQueryServices().getMemoryManager();
+            iterator = new OrderedResultIterator(iterator, orderBy.getOrderByExpressions(), thresholdBytes,
+                    memoryManager, spoolDirectory, limit,  offset, projector.getEstimatedRowByteSize());
+
         } else {
             if (offset != null) {
                 iterator = new OffsetResultIterator(iterator, offset);

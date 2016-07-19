@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SizedUtil;
@@ -48,6 +49,8 @@ import com.google.common.collect.Ordering;
  * @since 0.1
  */
 public class OrderedResultIterator implements PeekingResultIterator {
+    private MemoryManager memoryManager;
+    private String spoolDirectory;
 
     /** A container that holds pointers to a {@link Result} and its sort keys. */
     protected static class ResultEntry {
@@ -103,23 +106,27 @@ public class OrderedResultIterator implements PeekingResultIterator {
     protected ResultIterator getDelegate() {
         return delegate;
     }
-    
+
     public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
-            int thresholdBytes, Integer limit, Integer offset) {
-        this(delegate, orderByExpressions, thresholdBytes, limit, offset, 0);
+                                 int thresholdBytes, MemoryManager memoryManager,
+                                 String spoolDirectory, Integer limit, Integer offset) {
+        this(delegate, orderByExpressions, thresholdBytes, memoryManager, spoolDirectory, limit, offset, 0);
     }
 
     public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
-            int thresholdBytes) throws SQLException {
-        this(delegate, orderByExpressions, thresholdBytes, null, null);
+                                 int thresholdBytes,  MemoryManager memoryManager, String spoolDirectory) throws SQLException {
+        this(delegate, orderByExpressions, thresholdBytes, memoryManager, spoolDirectory, null, null);
     }
 
-    public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions, 
-            int thresholdBytes, Integer limit, Integer offset,int estimatedRowSize) {
+    public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
+                                 int thresholdBytes, MemoryManager memoryManager, String spoolDirectory,
+                                 Integer limit, Integer offset,int estimatedRowSize) {
         checkArgument(!orderByExpressions.isEmpty());
         this.delegate = delegate;
         this.orderByExpressions = orderByExpressions;
         this.thresholdBytes = thresholdBytes;
+        this.memoryManager = memoryManager;
+        this.spoolDirectory = spoolDirectory;
         this.offset = offset == null ? 0 : offset;
         if (limit != null) {
             this.limit = limit + this.offset;
@@ -207,8 +214,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
         List<Expression> expressions = Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
         final Comparator<ResultEntry> comparator = buildComparator(orderByExpressions);
         try{
-            final MappedByteBufferSortedQueue queueEntries = new MappedByteBufferSortedQueue(comparator, limit,
-                    thresholdBytes);
+            final DeferredByteBufferSortedQueue queueEntries = new DeferredByteBufferSortedQueue(comparator, limit,
+                    memoryManager, thresholdBytes, spoolDirectory);
             resultIterator = new PeekingResultIterator() {
                 int count = 0;
 
