@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 
 import com.google.common.collect.ImmutableList;
+import org.apache.hadoop.security.UserGroupInformation;
 
 public class DelegateRegionObserver implements RegionObserver {
 
@@ -133,38 +134,48 @@ public class DelegateRegionObserver implements RegionObserver {
     @Override    
     public void preCompactSelection(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final List<StoreFile> candidates, final CompactionRequest request) throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.preCompactSelection(c, store, candidates, request);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.preCompactSelection(c, store, candidates, request);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void preCompactSelection(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final List<StoreFile> candidates) throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.preCompactSelection(c, store, candidates);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.preCompactSelection(c, store, candidates);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void postCompactSelection(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final ImmutableList<StoreFile> selected, final CompactionRequest request) {
         try {
-            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
                 @Override
                 public Void run() throws Exception {
                     delegate.postCompactSelection(c, store, selected, request);
                     return null;
                 }
             });
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -174,13 +185,15 @@ public class DelegateRegionObserver implements RegionObserver {
     public void postCompactSelection(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final ImmutableList<StoreFile> selected) {
         try {
-            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
                 @Override
                 public Void run() throws Exception {
                     delegate.postCompactSelection(c, store, selected);
                     return null;
                 }
             });
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -190,155 +203,207 @@ public class DelegateRegionObserver implements RegionObserver {
     public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final InternalScanner scanner, final ScanType scanType, final CompactionRequest request)
             throws IOException {
-        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-            @Override
-            public InternalScanner run() throws Exception {
-                return delegate.preCompact(c, store, scanner, scanType, request);
-            }
-        });
+        try {
+            return UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override
+                public InternalScanner run() throws Exception {
+                    return delegate.preCompact(c, store, scanner, scanType, request);
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final InternalScanner scanner, final ScanType scanType) throws IOException {
-        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-            @Override
-            public InternalScanner run() throws Exception {
-                return delegate.preCompact(c, store, scanner, scanType);
-            }
-        });
+        try {
+            return UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override
+                public InternalScanner run() throws Exception {
+                    return delegate.preCompact(c, store, scanner, scanType);
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public InternalScanner preCompactScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
             final Store store, final List<? extends KeyValueScanner> scanners, final ScanType scanType,
             final long earliestPutTs, final InternalScanner s, final CompactionRequest request) throws IOException {
-        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-            @Override
-            public InternalScanner run() throws Exception {
-                return delegate.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s,
-                  request);
-            }
-        });
+        try {
+            return UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override
+                public InternalScanner run() throws Exception {
+                    return delegate.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s,
+                            request);
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public InternalScanner preCompactScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
             final Store store, final List<? extends KeyValueScanner> scanners, final ScanType scanType,
             final long earliestPutTs, final InternalScanner s) throws IOException {
-        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-            @Override
-            public InternalScanner run() throws Exception {
-                return delegate.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s);
-            }
-        });
+        try {
+            return UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override
+                public InternalScanner run() throws Exception {
+                    return delegate.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s);
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final StoreFile resultFile, final CompactionRequest request) throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-              delegate.postCompact(c, store, resultFile, request);
-              return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.postCompact(c, store, resultFile, request);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void postCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final StoreFile resultFile) throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.postCompact(c, store, resultFile);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.postCompact(c, store, resultFile);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void preSplit(final ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.preSplit(c);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.preSplit(c);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void preSplit(final ObserverContext<RegionCoprocessorEnvironment> c, final byte[] splitRow)
             throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.preSplit(c, splitRow);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.preSplit(c, splitRow);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void postSplit(final ObserverContext<RegionCoprocessorEnvironment> c, final HRegion l, final HRegion r)
             throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.postSplit(c, l, r);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.postSplit(c, l, r);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void preSplitBeforePONR(final ObserverContext<RegionCoprocessorEnvironment> ctx,
             final byte[] splitKey, final List<Mutation> metaEntries) throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.preSplitBeforePONR(ctx, splitKey, metaEntries);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.preSplitBeforePONR(ctx, splitKey, metaEntries);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void preSplitAfterPONR(final ObserverContext<RegionCoprocessorEnvironment> ctx)
             throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.preSplitAfterPONR(ctx);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.preSplitAfterPONR(ctx);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void preRollBackSplit(final ObserverContext<RegionCoprocessorEnvironment> ctx)
             throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.preRollBackSplit(ctx);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.preRollBackSplit(ctx);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
     public void postRollBackSplit(final ObserverContext<RegionCoprocessorEnvironment> ctx)
             throws IOException {
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.postRollBackSplit(ctx);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.postRollBackSplit(ctx);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override
@@ -347,13 +412,17 @@ public class DelegateRegionObserver implements RegionObserver {
         // NOTE: This one is an exception and doesn't need a context change. Should
         // be infrequent and overhead is low, so let's ensure we have the right context
         // anyway to avoid potential surprise.
-        User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-            @Override
-            public Void run() throws Exception {
-                delegate.postCompleteSplit(ctx);
-                return null;
-            }
-        });
+        try {
+            UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<Void>() {
+                @Override
+                public Void run() throws Exception {
+                    delegate.postCompleteSplit(ctx);
+                    return null;
+                }
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     @Override

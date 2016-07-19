@@ -260,7 +260,8 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         // the existing index rows.
         Transaction tx = indexMetaData.getTransaction();
         if (tx == null) {
-            throw new NullPointerException("Expected to find transaction in metadata for " + env.getRegionInfo().getTable().getNameAsString());
+            throw new NullPointerException("Expected to find transaction in metadata for " +
+                    env.getRegion().getRegionInfo().getTable().getNameAsString());
         }
         List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
         Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(indexMaintainers.size() * 10);
