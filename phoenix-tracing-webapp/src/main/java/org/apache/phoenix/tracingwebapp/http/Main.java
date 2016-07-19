@@ -73,7 +73,7 @@ public final class Main extends Configured implements Tool {
         String webappDirLocation = location.toString().split("target")[0] +"src/main/webapp";
         Server server = new Server(port);
         WebAppContext root = new WebAppContext();
-        ConnectionFactory.setConectionParameters(phoenixHome, port);
+        ConnectionFactory.setConectionParameters(phoenixHome, phoenixPort);
 
         root.setContextPath(home);
         root.setDescriptor(webappDirLocation + "/WEB-INF/web.xml");
