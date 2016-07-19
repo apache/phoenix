@@ -48,10 +48,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
@@ -2344,6 +2342,45 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(rowProj.getColumnProjector(3).getExpression().getDataType()
                 instanceof PDecimal);
             assertTrue(rowProj.getColumnProjector(3).getExpression().getScale() == 2);
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testFuncIndexUsage() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t1(k INTEGER PRIMARY KEY,"+
+                    " col1 VARCHAR, col2 VARCHAR)");
+            conn.createStatement().execute("CREATE TABLE t2(k INTEGER PRIMARY KEY," +
+                    " col1 VARCHAR, col2 VARCHAR)");
+            conn.createStatement().execute("CREATE TABLE t3(j INTEGER PRIMARY KEY," +
+                    " col3 VARCHAR, col4 VARCHAR)");
+            conn.createStatement().execute("CREATE INDEX idx ON t1 (col1 || col2)");
+            String query = "SELECT a.k from t1 a where a.col1 || a.col2 = 'foobar'";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY",explainPlan);
+            query = "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'";
+            rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T3\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    PARALLEL INNER-JOIN TABLE 0\n" + 
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")",explainPlan);
+            query = "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'";
+            rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T2\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    PARALLEL INNER-JOIN TABLE 0\n" + 
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")",explainPlan);
         } finally {
             conn.close();
         }
