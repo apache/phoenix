@@ -28,6 +28,8 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlTableOptionNode;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.parser.SqlParserUtil;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
@@ -219,7 +221,12 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     if (table.whereNode == null) {
                         where = null;
                     } else {
-                        where = new SQLParser(table.viewStatementString).parseQuery().getWhere();
+                        String sql = THREAD_SQL_STRING.get();
+                        SqlParserPos wherePos = table.whereNode.getParserPosition();
+                        int start = SqlParserUtil.lineColToIndex(sql, wherePos.getLineNum(), wherePos.getColumnNum());
+                        int end = SqlParserUtil.lineColToIndex(sql, wherePos.getEndLineNum(), wherePos.getEndColumnNum());
+                        String whereString = sql.substring(start, end + 1);
+                        where = new SQLParser(whereString).parseExpression();
                     }
                 }
                 final List<ParseNode> splitNodes;

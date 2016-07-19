@@ -35,24 +35,14 @@ SqlNode SqlCommit() :
     }
 }
 
-// Remove when
-//  [CALCITE-851] Add original SQL string as a field in the parser
-// is fixed.
-JAVACODE
-public String originalSql() {
-   return org.apache.phoenix.calcite.jdbc.PhoenixPrepareImpl.THREAD_SQL_STRING.get();
-}
-
 SqlNode SqlCreateView() :
 {
     SqlParserPos pos;
-    SqlParserPos queryPos;
     SqlIdentifier tableName;
     boolean ifNotExists;
     SqlNodeList columnDefs;
     SqlIdentifier baseTableName;
     SqlNode where;
-    String viewStatementString;
     SqlNodeList tableOptions;
 }
 {
@@ -75,21 +65,12 @@ SqlNode SqlCreateView() :
         }
     )
     (
-        <AS> <SELECT> { queryPos = getPos(); } <STAR> <FROM>
-        baseTableName = DualIdentifier()
+        <AS> <SELECT> <STAR> <FROM> baseTableName = DualIdentifier()
         where = WhereOpt()
-        {
-            queryPos = queryPos.plus(getPos());
-            String sql = originalSql();
-            int start = SqlParserUtil.lineColToIndex(sql, queryPos.getLineNum(), queryPos.getColumnNum());
-            int end = SqlParserUtil.lineColToIndex(sql, queryPos.getEndLineNum(), queryPos.getEndColumnNum());
-            viewStatementString = sql.substring(start, end + 1);            
-        }
         |
         {
             baseTableName = null;
             where = null;
-            viewStatementString = null;
         }
     )
     (
@@ -102,7 +83,7 @@ SqlNode SqlCreateView() :
     {
         return new SqlCreateTable(pos.plus(getPos()), tableName,
             SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
-            columnDefs, baseTableName, where, viewStatementString, tableOptions);
+            columnDefs, baseTableName, where, tableOptions);
     }
 }
 

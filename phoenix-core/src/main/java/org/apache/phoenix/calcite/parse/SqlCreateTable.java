@@ -43,7 +43,6 @@ public class SqlCreateTable extends SqlCall {
     public final SqlNodeList pkConstraintColumnDefs;
     public final SqlIdentifier baseTableName;
     public final SqlNode whereNode;
-    public final String viewStatementString;
     public final SqlNodeList tableOptions;
     public final SqlNodeList splitKeyList;
     
@@ -67,7 +66,6 @@ public class SqlCreateTable extends SqlCall {
         this.pkConstraintColumnDefs = pkConstraintColumnDefs;
         this.baseTableName = null;
         this.whereNode = null;
-        this.viewStatementString = null;
         this.tableOptions = tableOptions;
         this.splitKeyList = splitKeyList;
     }
@@ -80,7 +78,6 @@ public class SqlCreateTable extends SqlCall {
             SqlNodeList columnDefs,
             SqlIdentifier baseTableName,
             SqlNode whereNode,
-            String viewStatementString,
             SqlNodeList tableOptions) {
         super(pos);
         this.operator = new SqlDdlOperator("CREATE VIEW", SqlKind.CREATE_VIEW);
@@ -91,7 +88,6 @@ public class SqlCreateTable extends SqlCall {
         this.pkConstraintColumnDefs = SqlNodeList.EMPTY;
         this.baseTableName = baseTableName;
         this.whereNode = whereNode;
-        this.viewStatementString = viewStatementString;
         this.tableOptions = tableOptions;
         this.splitKeyList = SqlNodeList.EMPTY;
     }
