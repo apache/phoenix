@@ -439,6 +439,9 @@
             <!-- Exclude data files for examples -->
             <exclude>docs/*.csv</exclude>
             <exclude>examples/*.csv</exclude>
+            <!-- Exclude SQL files from rat. Sqlline 1.1.9 doesn't work with
+                 comments on the first line of a file. -->
+            <exclude>examples/*.sql</exclude>
             <exclude>examples/pig/testdata</exclude>
             <!-- precommit? -->
             <exclude>**/patchprocess/**</exclude>
