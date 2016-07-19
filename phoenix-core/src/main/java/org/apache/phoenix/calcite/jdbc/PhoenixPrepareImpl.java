@@ -37,6 +37,7 @@ import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
+import org.apache.phoenix.calcite.parse.SqlDropTable;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
@@ -58,11 +59,13 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTableType;
 
 import com.google.common.base.Function;
@@ -174,7 +177,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             final PhoenixConnection connection = getPhoenixConnection(context.getRootSchema().plus());
             switch (node.getKind()) {
             case CREATE_TABLE:
-            case CREATE_VIEW:
+            case CREATE_VIEW: {
                 final SqlCreateTable table = (SqlCreateTable) node;
                 final PTableType tableType = table.getKind() == SqlKind.CREATE_TABLE ? PTableType.TABLE : PTableType.VIEW;
                 final TableName name;
@@ -249,6 +252,23 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     plan.execute();
                 }
                 break;
+            }
+            case DROP_TABLE:
+            case DROP_VIEW: {
+                final SqlDropTable table = (SqlDropTable) node;
+                final PTableType tableType = table.getKind() == SqlKind.DROP_TABLE ? PTableType.TABLE : PTableType.VIEW;
+                final TableName name;
+                if (table.tableName.isSimple()) {
+                    name = nodeFactory.table(null, table.tableName.getSimple());
+                } else {
+                    name = nodeFactory.table(table.tableName.names.get(0), table.tableName.names.get(1));
+                }
+                final DropTableStatement drop = nodeFactory.dropTable(
+                        name, tableType, table.ifExists.booleanValue(), table.cascade.booleanValue());
+                MetaDataClient client = new MetaDataClient(connection);
+                client.dropTable(drop);
+                break;
+            }
             default:
                 throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());
             }

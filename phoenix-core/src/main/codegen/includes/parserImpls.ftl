@@ -35,6 +35,10 @@ SqlNode SqlCommit() :
     }
 }
 
+/**
+ * Parses statement
+ *   CREATE VIEW
+ */
 SqlNode SqlCreateView() :
 {
     SqlParserPos pos;
@@ -87,6 +91,10 @@ SqlNode SqlCreateView() :
     }
 }
 
+/**
+ * Parses statement
+ *   CREATE TABLE
+ */
 SqlNode SqlCreateTable() :
 {
     SqlParserPos pos;
@@ -140,6 +148,47 @@ SqlNode SqlCreateTable() :
             SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
             columnDefs, pkConstraint, pkConstraintColumnDefs,
             tableOptions, splitKeys);
+    }
+}
+
+/**
+ * Parses statement
+ *   DROP TABLE
+ */
+SqlNode SqlDropTableOrDropView() :
+{
+    SqlParserPos pos;
+    boolean isDropTable;
+    SqlIdentifier tableName;
+    boolean ifExists;
+    boolean cascade;
+}
+{
+    <DROP> { pos = getPos(); }
+    (
+        <TABLE> { isDropTable = true; }
+        |
+        <VIEW> { isDropTable = false; }
+    )
+    (
+        <IF> <EXISTS> { ifExists = true; }
+        |
+        {
+            ifExists = false;
+        }
+    )
+    tableName = DualIdentifier()
+    (
+        <CASCADE> { cascade = true; }
+        |
+        {
+            cascade = false;
+        }
+    )
+    {
+        return new SqlDropTable(pos.plus(getPos()), isDropTable, tableName,
+            SqlLiteral.createBoolean(ifExists, SqlParserPos.ZERO),
+            SqlLiteral.createBoolean(cascade, SqlParserPos.ZERO));
     }
 }
 
