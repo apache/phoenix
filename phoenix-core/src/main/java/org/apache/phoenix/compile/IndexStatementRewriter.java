@@ -43,10 +43,12 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     
     private Map<TableRef, TableRef> multiTableRewriteMap;
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    private final boolean setTableAlias;
     
-    public IndexStatementRewriter(ColumnResolver dataResolver, Map<TableRef, TableRef> multiTableRewriteMap) {
+    public IndexStatementRewriter(ColumnResolver dataResolver, Map<TableRef, TableRef> multiTableRewriteMap, boolean setTableAlias) {
         super(dataResolver);
         this.multiTableRewriteMap = multiTableRewriteMap;
+        this.setTableAlias = setTableAlias;
     }
     
     /**
@@ -58,7 +60,7 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
      * @throws SQLException 
      */
     public static ParseNode translate(ParseNode node, ColumnResolver dataResolver) throws SQLException {
-        return rewrite(node, new IndexStatementRewriter(dataResolver, null));
+        return rewrite(node, new IndexStatementRewriter(dataResolver, null, false));
     }
     
     /**
@@ -83,7 +85,7 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
      * @throws SQLException 
      */
     public static SelectStatement translate(SelectStatement statement, ColumnResolver dataResolver, Map<TableRef, TableRef> multiTableRewriteMap) throws SQLException {
-        return rewrite(statement, new IndexStatementRewriter(dataResolver, multiTableRewriteMap));
+        return rewrite(statement, new IndexStatementRewriter(dataResolver, multiTableRewriteMap, false));
     }
 
     @Override
@@ -142,6 +144,10 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
     }
     
     private TableName getReplacedTableName(TableRef origRef) {
+        // if the setTableAlias flag is true and the original table has an alias we use that as the table name
+        if (setTableAlias && origRef.getTableAlias() != null) 
+            return TableName.create(null, origRef.getTableAlias());
+        
         if (multiTableRewriteMap == null)
             return null;
         

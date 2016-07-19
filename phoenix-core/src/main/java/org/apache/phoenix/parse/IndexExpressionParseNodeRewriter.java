@@ -37,14 +37,14 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
 
     private final Map<ParseNode, ParseNode> indexedParseNodeToColumnParseNodeMap;
     
-    public IndexExpressionParseNodeRewriter(PTable index, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+    public IndexExpressionParseNodeRewriter(PTable index, String alias, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
         indexedParseNodeToColumnParseNodeMap = Maps.newHashMapWithExpectedSize(index.getColumns().size());
-        NamedTableNode tableNode = NamedTableNode.create(null,
+        NamedTableNode tableNode = NamedTableNode.create(alias,
                 TableName.create(index.getParentSchemaName().getString(), index.getParentTableName().getString()),
                 Collections.<ColumnDef> emptyList());
         ColumnResolver dataResolver = FromCompiler.getResolver(tableNode, connection, udfParseNodes);
         StatementContext context = new StatementContext(new PhoenixStatement(connection), dataResolver);
-        IndexStatementRewriter rewriter = new IndexStatementRewriter(dataResolver, null);
+        IndexStatementRewriter rewriter = new IndexStatementRewriter(dataResolver, null, true);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         int indexPosOffset = (index.getBucketNum() == null ? 0 : 1) + (index.isMultiTenant() ? 1 : 0) + (index.getViewIndexId() == null ? 0 : 1);
         List<PColumn> pkColumns = index.getPKColumns();
@@ -57,7 +57,7 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
             PDataType expressionDataType = dataExpression.getDataType();
             ParseNode indexedParseNode = expressionParseNode.accept(rewriter);
             PDataType indexColType = IndexUtil.getIndexColumnDataType(dataExpression.isNullable(), expressionDataType);
-            ParseNode columnParseNode = new ColumnParseNode(null, colName, null);
+            ParseNode columnParseNode = new ColumnParseNode(alias!=null ? TableName.create(null, alias) : null, colName, null);
             if ( indexColType != expressionDataType) {
                 columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
             }
