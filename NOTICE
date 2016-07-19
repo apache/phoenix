@@ -1,28 +1,10 @@
+Apache Phoenix
+Copyright 2013-2016 The Apache Software Foundation
+
 This product includes software developed by The Apache Software
 Foundation (http://www.apache.org/).
 
-It includes software from other Apache Software Foundation projects,
-including, but not limited to:
-  - Apache HBase
-  - Apache Hadoop
-  - Apache Commons
-
-In addition, this product includes/uses software developed by:
-
-JLine (http://jline.sourceforge.net/),
-Copyright (c) 2002-2006, Marc Prud'hommeaux <mwp1@cornell.edu>.
-
-SQLLine ((http://jline.sourceforge.net/),
-Copyright (c) 2002-2006, Marc Prud'hommeaux <mwp1@cornell.edu>.
-
-SLF4J (http://www.slf4j.org/),
-Copyright (c) 2004-2008 QOS.ch
-
-ANTLR (http://www.antlr.org/),
-Copyright (c) 2003-2008, Terrence Parr.
-
-JUnit (http://www.junit.org/) included under the Common Public License v1.0.
-See the full text here: http://junit.sourceforge.net/cpl-v10.html
+This also includes:
 
 The phoenix-spark module has been adapted from the phoenix-spark library
 distributed under the terms of the Apache 2 license. Original source copyright:
@@ -30,8 +12,7 @@ Copyright 2014 Simply Measured, Inc.
 Copyright 2015 Interset Software Inc.
 
 The file bin/daemon.py is based on the file of the same name in python-daemon 2.0.5
-(https://pypi.python.org/pypi/python-daemon/) distributed under the terms of
-the Apache 2 license. Original source copyright:
+(https://pypi.python.org/pypi/python-daemon/). Original source copyright:
 # Copyright © 2008–2015 Ben Finney <ben+python@benfinney.id.au>
 # Copyright © 2007–2008 Robert Niederreiter, Jens Klein
 # Copyright © 2004–2005 Chad J. Schroeder
