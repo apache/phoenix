@@ -182,9 +182,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 final PTableType tableType = table.getKind() == SqlKind.CREATE_TABLE ? PTableType.TABLE : PTableType.VIEW;
                 final TableName name;
                 if (table.tableName.isSimple()) {
-                    name = nodeFactory.table(null, table.tableName.getSimple());
+                    name = TableName.create(null, table.tableName.getSimple());
                 } else {
-                    name = nodeFactory.table(table.tableName.names.get(0), table.tableName.names.get(1));
+                    name = TableName.create(table.tableName.names.get(0), table.tableName.names.get(1));
                 }
                 final ListMultimap<String, org.apache.hadoop.hbase.util.Pair<String, Object>> props;
                 if (SqlNodeList.isEmptyList(table.tableOptions)) {
@@ -217,9 +217,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     where = null;
                 } else {
                     if (table.baseTableName.isSimple()) {
-                        baseTableName = nodeFactory.table(null, table.baseTableName.getSimple());
+                        baseTableName = TableName.create(null, table.baseTableName.getSimple());
                     } else {
-                        baseTableName = nodeFactory.table(table.baseTableName.names.get(0), table.baseTableName.names.get(1));
+                        baseTableName = TableName.create(table.baseTableName.names.get(0), table.baseTableName.names.get(1));
                     }
                     if (table.whereNode == null) {
                         where = null;
@@ -259,9 +259,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 final PTableType tableType = table.getKind() == SqlKind.DROP_TABLE ? PTableType.TABLE : PTableType.VIEW;
                 final TableName name;
                 if (table.tableName.isSimple()) {
-                    name = nodeFactory.table(null, table.tableName.getSimple());
+                    name = TableName.create(null, table.tableName.getSimple());
                 } else {
-                    name = nodeFactory.table(table.tableName.names.get(0), table.tableName.names.get(1));
+                    name = TableName.create(table.tableName.names.get(0), table.tableName.names.get(1));
                 }
                 final DropTableStatement drop = nodeFactory.dropTable(
                         name, tableType, table.ifExists.booleanValue(), table.cascade.booleanValue());

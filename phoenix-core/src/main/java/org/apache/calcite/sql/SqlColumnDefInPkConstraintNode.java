@@ -39,9 +39,9 @@ public class SqlColumnDefInPkConstraintNode extends SqlNode{
         super(pos);
         final ColumnName name;
         if (columnName.isSimple()) {
-            name = new ColumnName(columnName.getSimple());
+            name = ColumnName.caseSensitiveColumnName(columnName.getSimple());
         } else {
-            name = new ColumnName(columnName.names.get(0), columnName.names.get(1));
+            name = ColumnName.caseSensitiveColumnName(columnName.names.get(0), columnName.names.get(1));
         }
         this.pkConstraint = new ColumnDefInPkConstraint(name, sortOrder, isRowTimestamp);
     }
