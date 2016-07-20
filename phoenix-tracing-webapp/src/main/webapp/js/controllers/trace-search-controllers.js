@@ -12,7 +12,6 @@ $scope.page = {
 $scope.rootId = "";
 var sqlQuery = null;
 var rootId = null;
-$scope.distributionChartObject = {};
 $scope.tabs = [{
             title: 'List',
             url: 'one.tpl.html'
@@ -58,7 +57,7 @@ $scope.tabs = [{
             $scope.traces = data;
             $scope.chartObject = getTimeLineChart(data);
             $scope.dependencyTreeObject = getTreeData(data);
-            $scope.distributionChartObject = GenerateDistributionService.loadData(data);
+            $scope.distributionChartObject = getDistData(data);
         });
     };
 
@@ -137,6 +136,13 @@ $scope.tabs = [{
     return dependencyChart;
   };
 
+  $scope.setChartType = function(type) {
+    $scope.distributionChartObject.type = type;
+  };
+
+function getDistData(data) {
+  return GenerateDistributionService.loadData(data);
+};
 
 
 });
