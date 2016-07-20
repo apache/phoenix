@@ -46,11 +46,6 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.jfree</groupId>
-			<artifactId>jfreechart</artifactId>
-			<version>1.0.19</version>
-		</dependency>
-		<dependency>
 			<groupId>com.googlecode.java-diff-utils</groupId>
 			<artifactId>diffutils</artifactId>
 			<version>1.2.1</version>
@@ -221,7 +216,6 @@
 						<artifactSet>
 							<includes>
 								<include>org.apache.phoenix:phoenix-pherf</include>
-								<include>org.jfree:*</include>
 								<include>com.googlecode.java-diff-utils:diffutils</include>
 								<include>org.apache.commons:commons-lang3</include>
 								<include>org.apache.commons:commons-math3</include>
