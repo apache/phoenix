@@ -47,7 +47,7 @@ public class RuntimeContextImpl implements RuntimeContext {
 
     @Override
     public void setBindParameterValues(Map<String, Object> values) {
-        this.parameters = ImmutableMap.copyOf(values);
+        this.parameters = values;
     }
 
     @Override
