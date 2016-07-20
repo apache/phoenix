@@ -13,8 +13,11 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.execute.TupleProjectionPlan;
+import org.apache.phoenix.execute.TupleProjector;
 
 public class PhoenixServerSort extends PhoenixAbstractSort {
     
@@ -40,7 +43,8 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
     @Override
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.SERVER)
-                && !getInput().getConvention().satisfies(PhoenixConvention.SERVERJOIN))
+                && !getInput().getConvention().satisfies(PhoenixConvention.SERVERJOIN)
+                && !getInput().getConvention().satisfies(PhoenixConvention.SERVERAGG))
             return planner.getCostFactory().makeInfiniteCost();
         
         return super.computeSelfCost(planner, mq)
@@ -54,10 +58,19 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
             throw new UnsupportedOperationException();
             
         QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
-        assert (plan instanceof ScanPlan 
-                    || plan instanceof HashJoinPlan) 
-                && plan.getLimit() == null;
         
+        if (getInput().getConvention().satisfies(PhoenixConvention.SERVERAGG)) {
+            return sortOverAgg(implementor, plan);
+        }
+        
+        return sortOverScan(implementor, plan);
+    }
+    
+    private QueryPlan sortOverScan(PhoenixRelImplementor implementor, QueryPlan plan) {
+        assert (plan instanceof ScanPlan 
+                || plan instanceof HashJoinPlan) 
+        && plan.getLimit() == null;
+
         ScanPlan basePlan;
         HashJoinPlan hashJoinPlan = null;
         if (plan instanceof ScanPlan) {
@@ -68,7 +81,7 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
             assert delegate instanceof ScanPlan;
             basePlan = (ScanPlan) delegate;
         }
-        
+
         OrderBy orderBy = super.getOrderBy(getCollation(), implementor, null);
         QueryPlan newPlan;
         try {
@@ -76,11 +89,45 @@ public class PhoenixServerSort extends PhoenixAbstractSort {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        
+
         if (hashJoinPlan != null) {        
             newPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), newPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
         }
         return newPlan;
     }
-
+    
+    private QueryPlan sortOverAgg(PhoenixRelImplementor implementor, QueryPlan plan) {
+        assert plan instanceof TupleProjectionPlan;
+        
+        // PhoenixServerAggregate wraps the AggregatePlan with a TupleProjectionPlan,
+        // so we need to unwrap the TupleProjectionPlan.
+        TupleProjectionPlan tupleProjectionPlan = (TupleProjectionPlan) plan;
+        assert tupleProjectionPlan.getPostFilter() == null;
+        QueryPlan innerPlan = tupleProjectionPlan.getDelegate();
+        TupleProjector tupleProjector = tupleProjectionPlan.getTupleProjector();
+        assert (innerPlan instanceof AggregatePlan 
+                    || innerPlan instanceof HashJoinPlan)
+                && innerPlan.getLimit() == null; 
+        
+        AggregatePlan basePlan;
+        HashJoinPlan hashJoinPlan = null;
+        if (innerPlan instanceof AggregatePlan) {
+            basePlan = (AggregatePlan) innerPlan;
+        } else {
+            hashJoinPlan = (HashJoinPlan) innerPlan;
+            QueryPlan delegate = hashJoinPlan.getDelegate();
+            assert delegate instanceof AggregatePlan;
+            basePlan = (AggregatePlan) delegate;
+        }
+        
+        OrderBy orderBy = super.getOrderBy(getCollation(), implementor, tupleProjector);
+        QueryPlan newPlan = AggregatePlan.create((AggregatePlan) basePlan, orderBy);
+        
+        if (hashJoinPlan != null) {        
+            newPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), newPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
+        }
+        // Recover the wrapping of TupleProjectionPlan
+        newPlan = new TupleProjectionPlan(newPlan, tupleProjector, null);
+        return newPlan;        
+    }
 }

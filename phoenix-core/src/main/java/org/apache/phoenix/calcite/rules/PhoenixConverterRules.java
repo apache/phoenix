@@ -75,11 +75,13 @@ public class PhoenixConverterRules {
     public static final RelOptRule[] RULES = {
         PhoenixToEnumerableConverterRule.SERVER,
         PhoenixToEnumerableConverterRule.SERVERJOIN,
+        PhoenixToEnumerableConverterRule.SERVERAGG,
         PhoenixToEnumerableConverterRule.CLIENT,
         PhoenixToEnumerableConverterRule.MUTATION,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
+        PhoenixServerSortRule.SERVERAGG,
         PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.INSTANCE,
         PhoenixClientProjectRule.INSTANCE,
@@ -101,11 +103,13 @@ public class PhoenixConverterRules {
     public static final RelOptRule[] CONVERTIBLE_RULES = {
         PhoenixToEnumerableConverterRule.SERVER,
         PhoenixToEnumerableConverterRule.SERVERJOIN,
+        PhoenixToEnumerableConverterRule.SERVERAGG,
         PhoenixToEnumerableConverterRule.CLIENT,
         PhoenixToEnumerableConverterRule.MUTATION,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
+        PhoenixServerSortRule.SERVERAGG,
         PhoenixLimitRule.INSTANCE,
         PhoenixFilterRule.CONVERTIBLE,
         PhoenixClientProjectRule.CONVERTIBLE,
@@ -198,6 +202,7 @@ public class PhoenixConverterRules {
         
         public static final PhoenixServerSortRule SERVER = new PhoenixServerSortRule(PhoenixConvention.SERVER);
         public static final PhoenixServerSortRule SERVERJOIN = new PhoenixServerSortRule(PhoenixConvention.SERVERJOIN);
+        public static final PhoenixServerSortRule SERVERAGG = new PhoenixServerSortRule(PhoenixConvention.SERVERAGG);
 
         private final Convention inputConvention;
 
@@ -422,7 +427,7 @@ public class PhoenixConverterRules {
 
         private PhoenixServerAggregateRule(Predicate<LogicalAggregate> predicate, Convention inputConvention) {
             super(LogicalAggregate.class, predicate, Convention.NONE, 
-                    PhoenixConvention.CLIENT, "PhoenixServerAggregateRule:" + inputConvention.getName());
+                    PhoenixConvention.SERVERAGG, "PhoenixServerAggregateRule:" + inputConvention.getName());
             this.inputConvention = inputConvention;
         }
 
@@ -872,6 +877,8 @@ public class PhoenixConverterRules {
                 new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVER);
         public static final ConverterRule SERVERJOIN =
                 new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERJOIN);
+        public static final ConverterRule SERVERAGG =
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERAGG);
         public static final ConverterRule CLIENT =
                 new PhoenixToEnumerableConverterRule(PhoenixConvention.CLIENT);
         public static final ConverterRule MUTATION =

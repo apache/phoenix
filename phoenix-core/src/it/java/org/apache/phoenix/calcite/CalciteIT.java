@@ -559,7 +559,7 @@ public class CalciteIT extends BaseCalciteIT {
         start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
-                           "    PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
+                           "    PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
@@ -570,7 +570,7 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
+                           "  PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "    PhoenixServerAggregate(group=[{1}], EXPR$1=[COUNT()], isOrdered=[false])\n" +
                            "      PhoenixServerJoin(condition=[=($0, $2)], joinType=[inner])\n" +
                            "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
@@ -675,7 +675,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "    PhoenixLimit(fetch=[2])\n" +
-                           "      PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
+                           "      PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "        PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
@@ -686,7 +686,7 @@ public class CalciteIT extends BaseCalciteIT {
         start(false, 1000f).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[3])\n" +
-                           "    PhoenixCompactClientSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
+                           "    PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "      PhoenixServerAggregate(group=[{1}], EXPR$1=[COUNT()], isOrdered=[false])\n" +
                            "        PhoenixServerJoin(condition=[=($0, $2)], joinType=[inner])\n" +
                            "          PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +

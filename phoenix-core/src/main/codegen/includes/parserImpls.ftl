@@ -352,13 +352,14 @@ SqlDataTypeNode PhoenixDataType() :
         <RPAREN>
     ]
     [
-        <ARRAY>
-		{isArray = true;}
-		[
-            <LBRACKET> 
-                arrSize = UnsignedIntLiteral()		
-            <RBRACKET>
-        ]
+        <ARRAY> { isArray = true; }
+    ]
+    [
+        <LBRACKET> { isArray = true; }
+        [
+            arrSize = UnsignedIntLiteral()
+        ]	
+        <RBRACKET>
     ]
     {
         pos = typeName.getParserPosition().plus(getPos());

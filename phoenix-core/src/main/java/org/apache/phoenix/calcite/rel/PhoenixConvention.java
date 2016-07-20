@@ -18,6 +18,9 @@ public enum PhoenixConvention implements Convention {
     /** Server join convention*/
     SERVERJOIN,
     
+    /** Server join convention*/
+    SERVERAGG,
+    
     /** Client convention*/
     CLIENT,
     

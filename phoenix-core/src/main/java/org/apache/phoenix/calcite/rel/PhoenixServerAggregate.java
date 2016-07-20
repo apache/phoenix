@@ -26,7 +26,7 @@ public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
             ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, 
             List<AggregateCall> aggCalls) {
         RelOptCluster cluster = input.getCluster();
-        RelTraitSet traits = cluster.traitSetOf(PhoenixConvention.CLIENT);
+        RelTraitSet traits = cluster.traitSetOf(PhoenixConvention.SERVERAGG);
         return new PhoenixServerAggregate(cluster, traits, input, indicator, 
                 groupSet, groupSets, aggCalls);
     }
