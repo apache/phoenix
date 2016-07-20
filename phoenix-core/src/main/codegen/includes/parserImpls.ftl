@@ -36,6 +36,31 @@ SqlNode SqlCommit() :
 }
 
 /**
+ * Parses an EXPLAIN statement.
+ * Phoenix equivalent for EXPLAIN PLAN statement.
+ */
+SqlNode SqlPhoenixExplain() :
+{
+    SqlNode stmt;
+    SqlExplainLevel detailLevel = SqlExplainLevel.EXPPLAN_ATTRIBUTES;
+    SqlExplain.Depth depth = SqlExplain.Depth.PHYSICAL;
+    SqlParserPos pos;
+    boolean asXml = false;
+}
+{
+    <EXPLAIN>
+    stmt = SqlQueryOrDml() {
+        pos = getPos();
+        return new SqlExplain(pos,
+            stmt,
+            detailLevel.symbol(SqlParserPos.ZERO),
+            depth.symbol(SqlParserPos.ZERO),
+            SqlLiteral.createBoolean(asXml, SqlParserPos.ZERO),
+            nDynamicParams);
+    }
+}
+
+/**
  * Parses statement
  *   CREATE VIEW
  */

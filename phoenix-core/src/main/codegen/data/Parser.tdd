@@ -47,9 +47,10 @@
   # List of methods for parsing custom SQL statements.
   statementParserMethods: [
     "SqlCommit()",
-    "SqlCreateView()"
-    "SqlCreateTable()"
-    "SqlDropTableOrDropView()"
+    "SqlPhoenixExplain()",
+    "SqlCreateView()",
+    "SqlCreateTable()",
+    "SqlDropTableOrDropView()",
   ]
 
   # List of methods for parsing custom literals.
