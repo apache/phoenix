@@ -551,19 +551,6 @@ Apache HBase (hbase-server)
   This project bundles a derivative image for our Orca Logo. This image is
   available under the Creative Commons By Attribution 3.0 License.
 
-    Creative Commons Legal Code
-
-    Attribution 3.0 Unported
-
-        CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
-        LEGAL SERVICES. DISTRIBUTION OF THIS LICENSE DOES NOT CREATE AN
-        ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
-        INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
-        REGARDING THE INFORMATION PROVIDED, AND DISCLAIMS LIABILITY FOR
-        DAMAGES RESULTING FROM ITS USE.
-
-  See below for full CCPL License.
-
 ---
 
 Full license texts
@@ -1691,3 +1678,16 @@ COMMON DEVELOPMENT AND DISTRIBUTION LICENSE (CDDL) Version 1.0
   
   NOTICE PURSUANT TO SECTION 9 OF THE COMMON DEVELOPMENT AND DISTRIBUTION LICENSE (CDDL)
   The GlassFish code released under the CDDL shall be governed by the laws of the State of California (excluding conflict-of-law provisions). Any litigation relating to this License shall be subject to the jurisdiction of the Federal Courts of the Northern District of California and the state courts of the State of California, with venue lying in Santa Clara County, California.
+
+---
+
+Creative Commons By Attribution 3.0 License.
+
+    Attribution 3.0 Unported
+
+        CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
+        LEGAL SERVICES. DISTRIBUTION OF THIS LICENSE DOES NOT CREATE AN
+        ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
+        INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
+        REGARDING THE INFORMATION PROVIDED, AND DISCLAIMS LIABILITY FOR
+        DAMAGES RESULTING FROM ITS USE.
