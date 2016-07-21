@@ -51,6 +51,7 @@ import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
@@ -519,12 +520,16 @@ public class Indexer extends BaseRegionObserver {
       // the login user. Switch to the login user context to ensure we have the expected
       // security context.
       // NOTE: Not necessary here at this time but leave in place to document this critical detail.
-      return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-          @Override
-          public InternalScanner run() throws Exception {
-              return Indexer.super.preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s);
-          }
-      });
+      try {
+          return UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<InternalScanner>() {
+              @Override public InternalScanner run() throws Exception {
+                  return Indexer.super
+                          .preCompactScannerOpen(c, store, scanners, scanType, earliestPutTs, s);
+              }
+          });
+      } catch (InterruptedException e) {
+          throw new IOException(e);
+      }
   }
 
   /**

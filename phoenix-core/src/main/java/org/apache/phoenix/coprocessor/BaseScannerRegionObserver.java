@@ -298,7 +298,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
         return new RegionScanner() {
 
             private boolean hasReferences = checkForReferenceFiles();
-            private HRegionInfo regionInfo = c.getEnvironment().getRegionInfo();
+            private HRegionInfo regionInfo = c.getEnvironment().getRegion().getRegionInfo();
             private byte[] actualStartKey = getActualStartKey();
 
             // If there are any reference files after local index region merge some cases we might

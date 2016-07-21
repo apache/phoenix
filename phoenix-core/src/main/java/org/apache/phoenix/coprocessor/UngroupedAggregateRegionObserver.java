@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
@@ -593,29 +594,33 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         // This will lead to failure of cross cluster RPC if the effective user is not
         // the login user. Switch to the login user context to ensure we have the expected
         // security context.
-        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-            @Override
-            public InternalScanner run() throws Exception {
-                TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-                InternalScanner internalScanner = scanner;
-                if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-                    try {
-                        long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
-                        StatisticsCollector stats = StatisticsCollectorFactory.createStatisticsCollector(
-                            c.getEnvironment(), table.getNameAsString(), clientTimeStamp,
-                            store.getFamily().getName());
-                        internalScanner = stats.createCompactionScanner(c.getEnvironment(), store, scanner);
-                    } catch (IOException e) {
-                        // If we can't reach the stats table, don't interrupt the normal
-                        // compaction operation, just log a warning.
-                      if(logger.isWarnEnabled()) {
-                          logger.warn("Unable to collect stats for " + table, e);
-                      }
+        try {
+            return UserGroupInformation.getLoginUser().doAs(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override public InternalScanner run() throws Exception {
+                    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+                    InternalScanner internalScanner = scanner;
+                    if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
+                        try {
+                            long clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
+                            StatisticsCollector stats = StatisticsCollectorFactory
+                                    .createStatisticsCollector(c.getEnvironment(), table.getNameAsString(),
+                                            clientTimeStamp, store.getFamily().getName());
+                            internalScanner =
+                                    stats.createCompactionScanner(c.getEnvironment(), store, scanner);
+                        } catch (IOException e) {
+                            // If we can't reach the stats table, don't interrupt the normal
+                            // compaction operation, just log a warning.
+                            if (logger.isWarnEnabled()) {
+                                logger.warn("Unable to collect stats for " + table, e);
+                            }
+                        }
                     }
+                    return internalScanner;
                 }
-                return internalScanner;
-            }
-        });
+            });
+        } catch (InterruptedException e) {
+            throw new IOException(e);
+        }
     }
 
     private static PTable deserializeTable(byte[] b) {
