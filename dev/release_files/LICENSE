@@ -306,12 +306,6 @@ BeanShell (http://www.beanshell.org)
 
 ---
 
-This product contains the following products which are in the Public Domain.
-
-Aopalliance 1.0 (http://aopalliance.sourceforge.net/)
-
----
-
 This product contains the following products which are licensed under the Common
 Development and Distribution License (CDDL) 1.1.
 
@@ -375,6 +369,8 @@ jamon-runtime (https://svn.code.sf.net/p/jamon/code/releases/jamon-runtime/jamon
 ---
 
 This product includes the following products which are in the public domain
+
+Aopalliance 1.0 (http://aopalliance.sourceforge.net/)
 
 Tukaani XZ for Java (http://tukaani.org/xz/java.html)
 
