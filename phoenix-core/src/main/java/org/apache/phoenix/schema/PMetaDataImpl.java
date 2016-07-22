@@ -28,7 +28,10 @@ import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.MinMaxPriorityQueue;
@@ -43,7 +46,8 @@ import com.google.common.primitives.Longs;
  *
  */
 public class PMetaDataImpl implements PMetaData {
-        private static class PMetaDataCache implements Cloneable {
+    private static final Logger logger = LoggerFactory.getLogger(PMetaDataImpl.class);
+        static class PMetaDataCache implements Cloneable {
             private static final int MIN_REMOVAL_SIZE = 3;
             private static final Comparator<PTableRef> COMPARATOR = new Comparator<PTableRef>() {
                 @Override
@@ -239,7 +243,12 @@ public class PMetaDataImpl implements PMetaData {
             }
         }
             
-    private final PMetaDataCache metaData;
+    private PMetaDataCache metaData;
+    
+    @VisibleForTesting
+    public PMetaDataCache getMetaData() {
+        return metaData;
+    }
     
     public PMetaDataImpl(int initialCapacity, long maxByteSize) {
         this.metaData = new PMetaDataCache(initialCapacity, maxByteSize, TimeKeeper.SYSTEM);
@@ -250,12 +259,12 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     private PMetaDataImpl(PMetaDataCache metaData) {
-        this.metaData = metaData.clone();
+        this.metaData = metaData;
     }
     
     @Override
     public PMetaDataImpl clone() {
-        return new PMetaDataImpl(this.metaData);
+        return new PMetaDataImpl(new PMetaDataCache(this.metaData));
     }
     
     @Override
@@ -282,14 +291,12 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
-    	PMetaDataCache clone = metaData.clone();
-    	clone.putDuplicate(table.getKey(), table, resolvedTimestamp);
-    	return new PMetaDataImpl(clone);
+    public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
+    	metaData.putDuplicate(table.getKey(), table, resolvedTimestamp);
     }
 
     @Override
-    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+    public void addTable(PTable table, long resolvedTime) throws SQLException {
         int netGain = 0;
         PTableKey key = table.getKey();
         PTableRef oldTableRef = metaData.get(key);
@@ -323,28 +330,27 @@ public class PMetaDataImpl implements PMetaData {
             netGain += table.getEstimatedSize();
         }
         long overage = metaData.getCurrentSize() + netGain - metaData.getMaxSize();
-        PMetaDataCache newMetaData = overage <= 0 ? metaData.clone() : metaData.cloneMinusOverage(overage);
+        metaData = overage <= 0 ? metaData : metaData.cloneMinusOverage(overage);
         
         if (newParentTable != null) { // Upsert new index table into parent data table list
-            newMetaData.put(newParentTable.getKey(), newParentTable, parentResolvedTimestamp);
-            newMetaData.putDuplicate(table.getKey(), table, resolvedTime);
+            metaData.put(newParentTable.getKey(), newParentTable, parentResolvedTimestamp);
+            metaData.putDuplicate(table.getKey(), table, resolvedTime);
         } else {
-            newMetaData.put(table.getKey(), table, resolvedTime);
+            metaData.put(table.getKey(), table, resolvedTime);
         }
         for (PTable index : table.getIndexes()) {
-            newMetaData.putDuplicate(index.getKey(), index, resolvedTime);
+            metaData.putDuplicate(index.getKey(), index, resolvedTime);
         }
-        return new PMetaDataImpl(newMetaData);
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp,
+    public void addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp,
             long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
             boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
                     throws SQLException {
         PTableRef oldTableRef = metaData.get(new PTableKey(tenantId, tableName));
         if (oldTableRef == null) {
-            return this;
+            return;
         }
         List<PColumn> oldColumns = PTableImpl.getColumnsToClone(oldTableRef.getTable());
         List<PColumn> newColumns;
@@ -358,12 +364,11 @@ public class PMetaDataImpl implements PMetaData {
         PTable newTable = PTableImpl.makePTable(oldTableRef.getTable(), tableTimeStamp, tableSeqNum, newColumns,
                 isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency,
                 isNamespaceMapped);
-        return addTable(newTable, resolvedTime);
+        addTable(newTable, resolvedTime);
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
-        PMetaDataCache tables = null;
+    public void removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
         PTableRef parentTableRef = null;
         PTableKey key = new PTableKey(tenantId, tableName);
         if (metaData.get(key) == null) {
@@ -371,16 +376,15 @@ public class PMetaDataImpl implements PMetaData {
                 parentTableRef = metaData.get(new PTableKey(tenantId, parentTableName));
             }
             if (parentTableRef == null) {
-                return this;
+                return;
             }
         } else {
-            tables = metaData.clone();
-            PTable table = tables.remove(key);
+            PTable table = metaData.remove(key);
             for (PTable index : table.getIndexes()) {
-                tables.remove(index.getKey());
+                metaData.remove(index.getKey());
             }
             if (table.getParentName() != null) {
-                parentTableRef = tables.get(new PTableKey(tenantId, table.getParentName().getString()));
+                parentTableRef = metaData.get(new PTableKey(tenantId, table.getParentName().getString()));
             }
         }
         // also remove its reference from parent table
@@ -397,26 +401,22 @@ public class PMetaDataImpl implements PMetaData {
                                 parentTableRef.getTable(),
                                 tableTimeStamp == HConstants.LATEST_TIMESTAMP ? parentTableRef.getTable().getTimeStamp() : tableTimeStamp,
                                 newIndexes);
-                        if (tables == null) { 
-                            tables = metaData.clone();
-                        }
-                        tables.put(parentTable.getKey(), parentTable, parentTableRef.getResolvedTimeStamp());
+                        metaData.put(parentTable.getKey(), parentTable, parentTableRef.getResolvedTimeStamp());
                         break;
                     }
                 }
             }
         }
-        return tables == null ? this : new PMetaDataImpl(tables);
     }
     
     @Override
-    public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp, long tableSeqNum, long resolvedTime) throws SQLException {
+    public void removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp, long tableSeqNum, long resolvedTime) throws SQLException {
         PTableRef tableRef = metaData.get(new PTableKey(tenantId, tableName));
         if (tableRef == null) {
-            return this;
+            return;
         }
         PTable table = tableRef.getTable();
-        PMetaDataCache tables = metaData.clone();
+        PMetaDataCache tables = metaData;
         for (PColumn columnToRemove : columnsToRemove) {
             PColumn column;
             String familyName = columnToRemove.getFamilyName().getString();
@@ -445,25 +445,21 @@ public class PMetaDataImpl implements PMetaData {
             table = PTableImpl.makePTable(table, tableTimeStamp, tableSeqNum, columns);
         }
         tables.put(table.getKey(), table, resolvedTime);
-        return new PMetaDataImpl(tables);
     }
 
     @Override
-    public PMetaData pruneTables(Pruner pruner) {
+    public void pruneTables(Pruner pruner) {
         List<PTableKey> keysToPrune = Lists.newArrayListWithExpectedSize(this.size());
         for (PTable table : this) {
             if (pruner.prune(table)) {
                 keysToPrune.add(table.getKey());
             }
         }
-        if (keysToPrune.isEmpty()) {
-            return this;
+        if (!keysToPrune.isEmpty()) {
+            for (PTableKey key : keysToPrune) {
+                metaData.remove(key);
+            }
         }
-        PMetaDataCache tables = metaData.clone();
-        for (PTableKey key : keysToPrune) {
-            tables.remove(key);
-        }
-        return new PMetaDataImpl(tables);
     }
 
     @Override
@@ -472,35 +468,29 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PMetaData addFunction(PFunction function) throws SQLException {
+    public void addFunction(PFunction function) throws SQLException {
         this.metaData.functions.put(function.getKey(), function);
-        return this;
     }
 
     @Override
-    public PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp)
+    public void removeFunction(PName tenantId, String function, long functionTimeStamp)
             throws SQLException {
         this.metaData.functions.remove(new PTableKey(tenantId, function));
-        return this;
     }
 
     @Override
-    public PMetaData pruneFunctions(Pruner pruner) {
+    public void pruneFunctions(Pruner pruner) {
         List<PTableKey> keysToPrune = Lists.newArrayListWithExpectedSize(this.size());
         for (PFunction function : this.metaData.functions.values()) {
             if (pruner.prune(function)) {
                 keysToPrune.add(function.getKey());
             }
         }
-        if (keysToPrune.isEmpty()) {
-            return this;
+        if (!keysToPrune.isEmpty()) {
+            for (PTableKey key : keysToPrune) {
+                metaData.functions.remove(key);
+            }
         }
-        PMetaDataCache clone = metaData.clone();
-        for (PTableKey key : keysToPrune) {
-            clone.functions.remove(key);
-        }
-        return new PMetaDataImpl(clone);
-    
     }
 
     @Override
@@ -509,9 +499,8 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PMetaData addSchema(PSchema schema) throws SQLException {
+    public void addSchema(PSchema schema) throws SQLException {
         this.metaData.schemas.put(schema.getSchemaKey(), schema);
-        return this;
     }
 
     @Override
@@ -522,8 +511,8 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public PMetaData removeSchema(PSchema schema, long schemaTimeStamp) {
+    public void removeSchema(PSchema schema, long schemaTimeStamp) {
         this.metaData.schemas.remove(SchemaUtil.getSchemaKey(schema.getSchemaName()));
-        return this;
     }
+
 }

@@ -54,7 +54,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
@@ -143,11 +142,11 @@ public class CreateTableCompiler {
                             // on our connection.
                             new DelegateConnectionQueryServices(connection.getQueryServices()) {
                                 @Override
-                                public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
-                                    return connection.addTable(table, resolvedTime);
+                                public void addTable(PTable table, long resolvedTime) throws SQLException {
+                                    connection.addTable(table, resolvedTime);
                                 }
                             },
-                            connection, tableRef.getTimeStamp());
+                            connection, tableRef.getTimeStamp()+1);
                     viewColumnConstantsToBe = new byte[nColumns][];
                     ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
                     where.accept(visitor);
