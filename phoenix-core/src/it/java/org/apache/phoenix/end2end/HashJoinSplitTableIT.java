@@ -43,7 +43,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class HashJoinSplitTableIT extends BaseHBaseManagedTimeIT {
+public class HashJoinSplitTableIT extends BaseOwnClusterHBaseManagedTimeIT  {
     
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
