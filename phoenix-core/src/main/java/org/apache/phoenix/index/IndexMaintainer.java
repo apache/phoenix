@@ -436,7 +436,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 PName dataTableFamily = column.getFamilyName();
                 this.coveredColumns.add(new ColumnReference(dataTableFamily.getBytes(), column.getName().getBytes()));
                 if(isLocalIndex) {
-                    this.dataTableLocalIndexFamilyMap.put(new ImmutableBytesPtr(dataTableFamily.getBytes()), new ImmutableBytesPtr(Bytes.toBytes(IndexUtil.getLocalIndexColumnFamily(dataTableFamily.getString()))));
+                    this.dataTableLocalIndexFamilyMap.put(new ImmutableBytesPtr(dataTableFamily.getBytes()), new ImmutableBytesWritable(Bytes.toBytes(IndexUtil.getLocalIndexColumnFamily(dataTableFamily.getString()))));
                 }
             }
         }
@@ -1058,7 +1058,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             ColumnReference ref = new ColumnReference(cf,cq);
             coveredColumns.add(ref);
             if(isLocalIndex) {
-                dataTableLocalIndexFamilyMap.put(ref.getFamilyWritable(), new ImmutableBytesPtr(Bytes.toBytes(IndexUtil.getLocalIndexColumnFamily(Bytes.toString(cf)))));
+                dataTableLocalIndexFamilyMap.put(ref.getFamilyWritable(), new ImmutableBytesWritable(Bytes.toBytes(IndexUtil.getLocalIndexColumnFamily(Bytes.toString(cf)))));
             }
         }
         // Hack to serialize whether the index row key is optimizable
