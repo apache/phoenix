@@ -1,49 +1,279 @@
-Apache Phoenix 
-Copyright 2014 The Apache Software Foundation
+Apache Phoenix
+Copyright 2013-2016 The Apache Software Foundation
 
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
 
---------------------------------------------------------
-This product includes software developed at
-Sqlline, https://github.com/julianhyde/sqlline/
-sqlline - Shell for issuing SQL to relational databases via JDBC
+This also includes:
 
-Copyright (c) 2002,2003,2004,2005,2006,2007 Marc Prud'hommeaux
-Copyright (c) 2004-2010 The Eigenbase Project
-Copyright (c) 2013-2014 Julian Hyde
-All rights reserved.
+The phoenix-spark module has been adapted from the phoenix-spark library.
+  Copyright 2014 Simply Measured, Inc.
+  Copyright 2015 Interset Software Inc.
 
-Licensed under the Modified BSD License (the "License"); you may not
-use this file except in compliance with the License. You may obtain a
-copy of the License at:
+Apache Batik
 
-http://opensource.org/licenses/BSD-3-Clause
+  batik-css, batik-util
 
-Redistribution and use in source and binary forms,
-with or without modification, are permitted provided
-that the following conditions are met:
+  This software contains code from the World Wide Web Consortium (W3C) for the
+  Document Object Model API (DOM API) and SVG Document Type Definition (DTD).
 
-(1) Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
+  This software contains code from the International Organisation for
+  Standardization for the definition of character entities used in the software's
+  documentation.
 
-(2) Redistributions in binary form must reproduce the above copyright
-    notice, this list of conditions and the following disclaimer in the
-    documentation and/or other materials provided with the
-    distribution.
+  This product includes images from the Tango Desktop Project
+  (http://tango.freedesktop.org/).
 
-(3) The name of the author may not be used to endorse or promote
-    products derived from this software without specific prior written
-    permission.
+  This product includes images from the Pasodoble Icon Theme
+  (http://www.jesusda.com/projects/pasodoble).
 
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+Yammer Metrics
+
+  Copyright 2010-2012 Coda Hale and Yammer, Inc.
+
+  This product includes software developed by Coda Hale and Yammer, Inc.
+
+  This product includes code derived from the JSR-166 project (ThreadLocalRandom), which was released
+  with the following comments:
+
+      Written by Doug Lea with assistance from members of JCP JSR-166
+      Expert Group and released to the public domain, as explained at
+      http://creativecommons.org/publicdomain/zero/1.0/
+
+Google Gson
+
+  Copyright 2008 Google Inc.
+
+Google Guice
+
+  Copyright (C) 2006 Google Inc.
+
+java-xmlbuilder
+
+  Copyright 2008-2014 James Murty (www.jamesmurty.com)
+
+LMAX Disruptor
+
+  Copyright 2011-2014 LMAX Ltd.
+
+Dropwizard Metrics
+
+  Copyright 2010-2013 Coda Hale and Yammer, Inc.
+
+  This product includes software developed by Coda Hale and Yammer, Inc.
+
+  This product includes code derived from the JSR-166 project (ThreadLocalRandom, Striped64,
+  LongAdder), which was released with the following comments:
+
+      Written by Doug Lea with assistance from members of JCP JSR-166
+      Expert Group and released to the public domain, as explained at
+  http://creativecommons.org/publicdomain/zero/1.0/
+
+Netty
+
+  Copyright 2011 The Netty Project
+
+fastutil
+
+  Copyright (C) 2003-2016 Paolo Boldi and Sebastiano Vigna
+
+javax.inject
+
+  Copyright (C) 2009 The JSR-330 Expert Group
+
+joda-time
+
+  Copyright 2001-2014 Stephen Colebourne
+  This product includes software developed by Joda.org (http://www.joda.org/).
+
+jets3t
+
+  Copyright 2008 James Murty
+
+  This product includes software developed by:
+
+  The Apache Software Foundation (http://www.apache.org/).
+
+  The ExoLab Project (http://www.exolab.org/)
+
+  Sun Microsystems (http://www.sun.com/)
+
+  Codehaus (http://castor.codehaus.org)
+
+  Tatu Saloranta (http://wiki.fasterxml.com/TatuSaloranta)
+
+Neko HTML
+
+  Copyright 2002-2013, Andy Clark, Marc Guillemot.
+
+Apache Commons Lang
+
+  This product includes software from the Spring Framework,
+  under the Apache License 2.0 (see: StringUtils.containsWhitespace())
+
+Apache Commons Math3 3.1.1
+
+  ===============================================================================
+
+  The BracketFinder (package org.apache.commons.math3.optimization.univariate)
+  and PowellOptimizer (package org.apache.commons.math3.optimization.general)
+  classes are based on the Python code in module "optimize.py" (version 0.5)
+  developed by Travis E. Oliphant for the SciPy library (http://www.scipy.org/)
+  Copyright © 2003-2009 SciPy Developers.
+  ===============================================================================
+
+  The LinearConstraint, LinearObjectiveFunction, LinearOptimizer,
+  RelationShip, SimplexSolver and SimplexTableau classes in package
+  org.apache.commons.math3.optimization.linear include software developed by
+  Benjamin McCann (http://www.benmccann.com) and distributed with
+  the following copyright: Copyright 2009 Google Inc.
+  ===============================================================================
+
+  This product includes software developed by the
+  University of Chicago, as Operator of Argonne National
+  Laboratory.
+  The LevenbergMarquardtOptimizer class in package
+  org.apache.commons.math3.optimization.general includes software
+  translated from the lmder, lmpar and qrsolv Fortran routines
+  from the Minpack package
+  Minpack Copyright Notice (1999) University of Chicago.  All rights reserved
+  ===============================================================================
+
+  The GraggBulirschStoerIntegrator class in package
+  org.apache.commons.math3.ode.nonstiff includes software translated
+  from the odex Fortran routine developed by E. Hairer and G. Wanner.
+  Original source copyright:
+  Copyright (c) 2004, Ernst Hairer
+  ===============================================================================
+
+  The MersenneTwister class in package org.apache.commons.math3.random
+  includes software translated from the 2002-01-26 version of
+  the Mersenne-Twister generator written in C by Makoto Matsumoto and Takuji
+  Nishimura. Original source copyright:
+  Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
+  All rights reserved
+  ===============================================================================
+
+  The HermiteInterpolator class and its corresponding test have been imported from
+  the orekit library distributed under the terms of the Apache 2 licence. Original
+  source copyright:
+  Copyright 2010-2012 CS Systèmes d'Information
+  ===============================================================================
+
+  The creation of the package "o.a.c.m.analysis.integration.gauss" was inspired
+  by an original code donated by Sébastien Brisard.
+  ===============================================================================
+
+Apache Commons Math 3.3 not already covered by 3.1.1
+
+  The inverse error function implementation in the Erf class is based on CUDA
+  code developed by Mike Giles, Oxford-Man Institute of Quantitative Finance,
+  and published in GPU Computing Gems, volume 2, 2010.
+  ===============================================================================
+
+  The BracketFinder (package org.apache.commons.math3.optimization.univariate)
+  and PowellOptimizer (package org.apache.commons.math3.optimization.general)
+  classes are based on the Python code in module "optimize.py" (version 0.5)
+  developed by Travis E. Oliphant for the SciPy library (http://www.scipy.org/)
+  Copyright © 2003-2009 SciPy Developers.
+  ===============================================================================
+
+  The LinearConstraint, LinearObjectiveFunction, LinearOptimizer,
+  RelationShip, SimplexSolver and SimplexTableau classes in package
+  org.apache.commons.math3.optimization.linear include software developed by
+  Benjamin McCann (http://www.benmccann.com) and distributed with
+  the following copyright: Copyright 2009 Google Inc.
+  ===============================================================================
+
+Apache HBase
+
+  HBase-Common
+
+  This product includes portions of the Guava project v14, specifically
+  'hbase-common/src/main/java/org/apache/hadoop/hbase/io/LimitInputStream.java'
+
+  Copyright (C) 2007 The Guava Authors
+
+  Licensed under the Apache License, Version 2.0
+
+  HBase-Server
+
+  Our Orca logo we got here: http://www.vectorfree.com/jumping-orca
+  It is (c) 2012 by Vector Free user OverSurge
+
+  It is licensed Creative Commons Attribution 3.0.
+
+  We changed the logo by stripping the colored background, inverting
+  it and then rotating it some.
+
+  Later we found that vectorfree.com image is not properly licensed.
+  The original is owned by vectorportal.com. The original was
+  relicensed so we could use it as Creative Commons Attribution 3.0.
+  The license is bundled with the download available here:
+  http://www.vectorportal.com/subcategory/205/KILLER-WHALE-FREE-VECTOR.eps/ifile/9136/detailtest.asp
+  --
+  This product includes portions of the Bootstrap project v3.0.0
+
+  Copyright 2013 Twitter, Inc.
+
+  Licensed under the Apache License v2.0
+
+  This product uses the Glyphicons Halflings icon set.
+
+  http://glyphicons.com/
+
+  Copyright Jan Kovařík
+
+  Licensed under the Apache License v2.0 as a part of the Bootstrap project.
+
+Apache HttpComponents Client - HttpClient
+
+  This project contains annotations derived from JCIP-ANNOTATIONS
+  Copyright (c) 2005 Brian Goetz and Tim Peierls. See http://www.jcip.net
+
+"Eclipse" Jetty
+
+  The UnixCrypt.java code implements the one way cryptography used by
+  Unix systems for simple password protection.  Copyright 1996 Aki Yoshida,
+  modified April 2001  by Iris Van den Broeke, Daniel Deville.
+  Permission to use, copy, modify and distribute UnixCrypt
+  for non-commercial or commercial purposes and without fee is
+  granted provided that the copyright notice appears in all copies.
+
+"Mort Bay" Jetty
+
+  Copyright 2004-2008 Mort Bay Consulting Pty. Ltd.
+
+Xalan-Java
+
+  Portions of this software was originally based on the following:
+
+   - software copyright (c) 1999-2002, Lotus Development Corporation., http://www.lotus.com.
+   - software copyright (c) 2001-2002, Sun Microsystems., http://www.sun.com.
+   - software copyright (c) 2003, IBM Corporation., http://www.ibm.com.
+   - voluntary contributions made by Ovidiu Predescu (ovidiu@cup.hp.com) on behalf of the
+     Apache Software Foundation and was originally developed at Hewlett Packard Company.
+
+Apache Xerces Java
+
+  Portions of this software were originally based on the following:
+    - software copyright (c) 1999, IBM Corporation., http://www.ibm.com.
+    - software copyright (c) 1999, Sun Microsystems., http://www.sun.com.
+    - voluntary contributions made by Paul Eng on behalf of the
+      Apache Software Foundation that were originally developed at iClick, Inc.,
+      software copyright (c) 1999.
+
+Apache XML Commons XML APIs
+
+  Portions of this software were originally based on the following:
+    - software copyright (c) 1999, IBM Corporation., http://www.ibm.com.
+    - software copyright (c) 1999, Sun Microsystems., http://www.sun.com.
+    - software copyright (c) 2000 World Wide Web Consortium, http://www.w3.org
+
+jcip-annotations
+
+  Copyright 2013 Stephen Connolly.
+
+findbugs-annotations
+
+  Copyright Stephen Connolly.
