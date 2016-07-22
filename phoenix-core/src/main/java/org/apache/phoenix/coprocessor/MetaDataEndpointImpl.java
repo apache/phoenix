@@ -3115,7 +3115,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 invalidateList.add(new ImmutableBytesPtr(indexKey));
             }
             // If the dropped column is a covered index column, invalidate the index
-            else if (indexMaintainer.getCoverededColumns().contains(
+            else if (indexMaintainer.getCoveredColumns().contains(
                 new ColumnReference(columnToDelete.getFamilyName().getBytes(), columnToDelete
                         .getName().getBytes()))) {
                 invalidateList.add(new ImmutableBytesPtr(indexKey));

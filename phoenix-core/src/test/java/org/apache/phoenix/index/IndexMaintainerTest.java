@@ -144,7 +144,7 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             byte[] mutablelndexRowKey = im1.buildRowKey(valueGetter, ptr, null, null);
             byte[] immutableIndexRowKey = indexKeyPtr.copyBytes();
             assertArrayEquals(immutableIndexRowKey, mutablelndexRowKey);
-            for (ColumnReference ref : im1.getCoverededColumns()) {
+            for (ColumnReference ref : im1.getCoveredColumns()) {
                 valueMap.get(ref);
             }
             byte[] dataRowKey = im1.buildDataRowKey(indexKeyPtr, null);
