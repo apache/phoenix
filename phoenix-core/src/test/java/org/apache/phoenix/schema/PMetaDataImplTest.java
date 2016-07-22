@@ -31,17 +31,15 @@ import com.google.common.collect.Sets;
 
 public class PMetaDataImplTest {
     
-    private static PMetaData addToTable(PMetaData metaData, String name, int size, TestTimeKeeper timeKeeper) throws SQLException {
+    private static void addToTable(PMetaData metaData, String name, int size, TestTimeKeeper timeKeeper) throws SQLException {
         PTable table = new PSizedTable(new PTableKey(null,name), size);
-        PMetaData newMetaData = metaData.addTable(table, System.currentTimeMillis());
+        metaData.addTable(table, System.currentTimeMillis());
         timeKeeper.incrementTime();
-        return newMetaData;
     }
     
-    private static PMetaData removeFromTable(PMetaData metaData, String name, TestTimeKeeper timeKeeper) throws SQLException {
-        PMetaData newMetaData =  metaData.removeTable(null, name, null, HConstants.LATEST_TIMESTAMP);
+    private static void removeFromTable(PMetaData metaData, String name, TestTimeKeeper timeKeeper) throws SQLException {
+        metaData.removeTable(null, name, null, HConstants.LATEST_TIMESTAMP);
         timeKeeper.incrementTime();
-        return newMetaData;
     }
     
     private static PTable getFromTable(PMetaData metaData, String name, TestTimeKeeper timeKeeper) throws TableNotFoundException {
@@ -77,41 +75,41 @@ public class PMetaDataImplTest {
         long maxSize = 10;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
         PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
-        metaData = addToTable(metaData, "a", 5, timeKeeper);
+        addToTable(metaData, "a", 5, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "b", 4, timeKeeper);
+        addToTable(metaData, "b", 4, timeKeeper);
         assertEquals(2, metaData.size());
-        metaData = addToTable(metaData, "c", 3, timeKeeper);
+        addToTable(metaData, "c", 3, timeKeeper);
         assertEquals(2, metaData.size());
         assertNames(metaData, "b","c");
 
-        metaData = addToTable(metaData, "b", 8, timeKeeper);
+        addToTable(metaData, "b", 8, timeKeeper);
         assertEquals(1, metaData.size());
         assertNames(metaData, "b");
 
-        metaData = addToTable(metaData, "d", 11, timeKeeper);
+        addToTable(metaData, "d", 11, timeKeeper);
         assertEquals(1, metaData.size());
         assertNames(metaData, "d");
         
-        metaData = removeFromTable(metaData, "d", timeKeeper);
+        removeFromTable(metaData, "d", timeKeeper);
         assertNames(metaData);
         
-        metaData = addToTable(metaData, "a", 4, timeKeeper);
+        addToTable(metaData, "a", 4, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "b", 3, timeKeeper);
+        addToTable(metaData, "b", 3, timeKeeper);
         assertEquals(2, metaData.size());
-        metaData = addToTable(metaData, "c", 2, timeKeeper);
+        addToTable(metaData, "c", 2, timeKeeper);
         assertEquals(3, metaData.size());
         assertNames(metaData, "a", "b","c");
         
         getFromTable(metaData, "a", timeKeeper);
-        metaData = addToTable(metaData, "d", 3, timeKeeper);
+        addToTable(metaData, "d", 3, timeKeeper);
         assertEquals(3, metaData.size());
         assertNames(metaData, "c", "a","d");
         
         // Clone maintains insert order
         metaData = metaData.clone();
-        metaData = addToTable(metaData, "e", 6, timeKeeper);
+        addToTable(metaData, "e", 6, timeKeeper);
         assertEquals(2, metaData.size());
         assertNames(metaData, "d","e");
     }
@@ -121,17 +119,17 @@ public class PMetaDataImplTest {
         long maxSize = 5;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
         PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
-        metaData = addToTable(metaData, "a", 1, timeKeeper);
+        addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "b", 1, timeKeeper);
+        addToTable(metaData, "b", 1, timeKeeper);
         assertEquals(2, metaData.size());
         assertNames(metaData, "a", "b");
-        metaData = addToTable(metaData, "c", 3, timeKeeper);
+        addToTable(metaData, "c", 3, timeKeeper);
         assertEquals(3, metaData.size());
         assertNames(metaData, "a", "b", "c");
         getFromTable(metaData, "a", timeKeeper);
         getFromTable(metaData, "b", timeKeeper);
-        metaData = addToTable(metaData, "d", 3, timeKeeper);
+        addToTable(metaData, "d", 3, timeKeeper);
         assertEquals(3, metaData.size());
         assertNames(metaData, "a", "b", "d");
     }
@@ -141,18 +139,18 @@ public class PMetaDataImplTest {
         long maxSize = 5;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
         PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
-        metaData = addToTable(metaData, "a", 1, timeKeeper);
+        addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "b", 1, timeKeeper);
+        addToTable(metaData, "b", 1, timeKeeper);
         assertEquals(2, metaData.size());
-        metaData = addToTable(metaData, "c", 5, timeKeeper);
+        addToTable(metaData, "c", 5, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "d", 20, timeKeeper);
+        addToTable(metaData, "d", 20, timeKeeper);
         assertEquals(1, metaData.size());
         assertNames(metaData, "d");
-        metaData = addToTable(metaData, "e", 1, timeKeeper);
+        addToTable(metaData, "e", 1, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "f", 2, timeKeeper);
+        addToTable(metaData, "f", 2, timeKeeper);
         assertEquals(2, metaData.size());
         assertNames(metaData, "e", "f");
     }
@@ -162,18 +160,18 @@ public class PMetaDataImplTest {
         long maxSize = 0;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
         PMetaData metaData = new PMetaDataImpl(0, maxSize, timeKeeper);
-        metaData = addToTable(metaData, "a", 1, timeKeeper);
+        addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "b", 1, timeKeeper);
+        addToTable(metaData, "b", 1, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "c", 5, timeKeeper);
+        addToTable(metaData, "c", 5, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "d", 20, timeKeeper);
+        addToTable(metaData, "d", 20, timeKeeper);
         assertEquals(1, metaData.size());
         assertNames(metaData, "d");
-        metaData = addToTable(metaData, "e", 1, timeKeeper);
+        addToTable(metaData, "e", 1, timeKeeper);
         assertEquals(1, metaData.size());
-        metaData = addToTable(metaData, "f", 2, timeKeeper);
+        addToTable(metaData, "f", 2, timeKeeper);
         assertEquals(1, metaData.size());
         assertNames(metaData, "f");
     }
@@ -184,12 +182,12 @@ public class PMetaDataImplTest {
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
         PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
         String tableName = "a";
-        metaData = addToTable(metaData, tableName, 1, timeKeeper);
+        addToTable(metaData, tableName, 1, timeKeeper);
         PTableRef aTableRef = metaData.getTableRef(new PTableKey(null,tableName));
         assertNotNull(aTableRef);
         assertEquals(1, metaData.getAge(aTableRef));
         tableName = "b";
-        metaData = addToTable(metaData, tableName, 1, timeKeeper);
+        addToTable(metaData, tableName, 1, timeKeeper);
         PTableRef bTableRef = metaData.getTableRef(new PTableKey(null,tableName));
         assertNotNull(bTableRef);
         assertEquals(1, metaData.getAge(bTableRef));

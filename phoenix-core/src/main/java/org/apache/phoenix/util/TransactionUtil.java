@@ -65,9 +65,9 @@ public class TransactionUtil {
             .build().buildException();
     }
     
-    public static TransactionAwareHTable getTransactionAwareHTable(HTableInterface htable, PTable table) {
+    public static TransactionAwareHTable getTransactionAwareHTable(HTableInterface htable, boolean isImmutableRows) {
     	// Conflict detection is not needed for tables with write-once/append-only data
-    	return new TransactionAwareHTable(htable, table.isImmutableRows() ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+    	return new TransactionAwareHTable(htable, isImmutableRows ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
     }
     
     // we resolve transactional tables at the txn read pointer

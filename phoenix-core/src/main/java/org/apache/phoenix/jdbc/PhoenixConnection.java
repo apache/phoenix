@@ -112,8 +112,9 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
-
 import org.apache.tephra.TransactionContext;
+import org.cloudera.htrace.Sampler;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
@@ -280,20 +281,21 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                 long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
                 return (table.getType() != PTableType.SYSTEM && 
                         (  table.getTimeStamp() >= maxTimestamp || 
-                         ! Objects.equal(tenantId, table.getTenantId())) );
+                         (table.getTenantId()!=null && ! Objects.equal(tenantId, table.getTenantId()))));
             }
             
             @Override
             public boolean prune(PFunction function) {
                 long maxTimestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
                 return ( function.getTimeStamp() >= maxTimestamp ||
-                         ! Objects.equal(tenantId, function.getTenantId()));
+                        (function.getTenantId()!=null && ! Objects.equal(tenantId, function.getTenantId())));
             }
         };
         this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info, this.services.getProps());
         this.mutationState = mutationState == null ? newMutationState(maxSize) : new MutationState(mutationState);
-        this.metaData = metaData.pruneTables(pruner);
-        this.metaData = metaData.pruneFunctions(pruner);
+        this.metaData = metaData;
+        this.metaData.pruneTables(pruner);
+        this.metaData.pruneFunctions(pruner);
         this.services.addConnection(this);
 
         // setup tracing, if its enabled
@@ -900,79 +902,71 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
     
     @Override
-    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
-        metaData = metaData.addTable(table, resolvedTime);
+    public void addTable(PTable table, long resolvedTime) throws SQLException {
+        metaData.addTable(table, resolvedTime);
         //Cascade through to connectionQueryServices too
         getQueryServices().addTable(table, resolvedTime);
-        return metaData;
     }
     
     @Override
-    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTime) throws SQLException {
-    	metaData = metaData.updateResolvedTimestamp(table, resolvedTime);
+    public void updateResolvedTimestamp(PTable table, long resolvedTime) throws SQLException {
+    	metaData.updateResolvedTimestamp(table, resolvedTime);
     	//Cascade through to connectionQueryServices too
         getQueryServices().updateResolvedTimestamp(table, resolvedTime);
-        return metaData;
     }
     
     @Override
-    public PMetaData addFunction(PFunction function) throws SQLException {
+    public void addFunction(PFunction function) throws SQLException {
         // TODO: since a connection is only used by one thread at a time,
         // we could modify this metadata in place since it's not shared.
         if (scn == null || scn > function.getTimeStamp()) {
-            metaData = metaData.addFunction(function);
+            metaData.addFunction(function);
         }
         //Cascade through to connectionQueryServices too
         getQueryServices().addFunction(function);
-        return metaData;
     }
 
     @Override
-    public PMetaData addSchema(PSchema schema) throws SQLException {
-        metaData = metaData.addSchema(schema);
+    public void addSchema(PSchema schema) throws SQLException {
+        metaData.addSchema(schema);
         // Cascade through to connectionQueryServices too
         getQueryServices().addSchema(schema);
-        return metaData;
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
+    public void addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
             long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
             boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
                     throws SQLException {
-        metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
+        metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
                 isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
                 resolvedTime);
         // Cascade through to connectionQueryServices too
         getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
                 isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
                 resolvedTime);
-        return metaData;
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
-        metaData = metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
+    public void removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
+        metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
         //Cascade through to connectionQueryServices too
         getQueryServices().removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
-        return metaData;
     }
 
     @Override
-    public PMetaData removeFunction(PName tenantId, String functionName, long tableTimeStamp) throws SQLException {
-        metaData = metaData.removeFunction(tenantId, functionName, tableTimeStamp);
+    public void removeFunction(PName tenantId, String functionName, long tableTimeStamp) throws SQLException {
+        metaData.removeFunction(tenantId, functionName, tableTimeStamp);
         //Cascade through to connectionQueryServices too
         getQueryServices().removeFunction(tenantId, functionName, tableTimeStamp);
-        return metaData;
     }
 
     @Override
-    public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
+    public void removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
             long tableSeqNum, long resolvedTime) throws SQLException {
-        metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
+        metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
         //Cascade through to connectionQueryServices too
         getQueryServices().removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
-        return metaData;
     }
 
     protected boolean removeStatement(PhoenixStatement statement) throws SQLException {
@@ -1072,11 +1066,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     @Override
-    public PMetaData removeSchema(PSchema schema, long schemaTimeStamp) {
-        metaData = metaData.removeSchema(schema, schemaTimeStamp);
+    public void removeSchema(PSchema schema, long schemaTimeStamp) {
+        metaData.removeSchema(schema, schemaTimeStamp);
         // Cascade through to connectionQueryServices too
         getQueryServices().removeSchema(schema, schemaTimeStamp);
-        return metaData;
 
     }
 }

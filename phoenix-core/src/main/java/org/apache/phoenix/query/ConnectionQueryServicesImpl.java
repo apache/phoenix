@@ -31,8 +31,6 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -84,7 +82,6 @@ import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
-import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -159,8 +156,8 @@ import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PMetaDataImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PSynchronizedMetaData;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
@@ -181,7 +178,6 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -288,7 +284,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private PMetaData newEmptyMetaData() {
         long maxSizeBytes = props.getLong(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE);
-        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, maxSizeBytes);
+        return new PSynchronizedMetaData(new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, maxSizeBytes));
     }
     
     /**
@@ -554,7 +550,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
+    public void addTable(PTable table, long resolvedTime) throws SQLException {
         synchronized (latestMetaDataLock) {
             try {
                 throwConnectionClosedIfNullMetaData();
@@ -562,26 +558,25 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // If a client opens a connection at an earlier timestamp, this can happen
                 PTable existingTable = latestMetaData.getTableRef(new PTableKey(table.getTenantId(), table.getName().getString())).getTable();
                 if (existingTable.getTimeStamp() >= table.getTimeStamp()) {
-                    return latestMetaData;
+                    return;
                 }
             } catch (TableNotFoundException e) {}
-            latestMetaData = latestMetaData.addTable(table, resolvedTime);
+            latestMetaData.addTable(table, resolvedTime);
             latestMetaDataLock.notifyAll();
-            return latestMetaData;
         }
     }
     
-    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTime) throws SQLException {
-    	synchronized (latestMetaDataLock) {
+    @Override
+    public void updateResolvedTimestamp(PTable table, long resolvedTime) throws SQLException {
+        synchronized (latestMetaDataLock) {
             throwConnectionClosedIfNullMetaData();
-            latestMetaData = latestMetaData.updateResolvedTimestamp(table, resolvedTime);
+            latestMetaData.updateResolvedTimestamp(table, resolvedTime);
             latestMetaDataLock.notifyAll();
-            return latestMetaData;
         }
     }
 
     private static interface Mutator {
-        PMetaData mutate(PMetaData metaData) throws SQLException;
+        void mutate(PMetaData metaData) throws SQLException;
     }
 
     /**
@@ -604,7 +599,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                          */
                         if (table.getSequenceNumber() + 1 == tableSeqNum) {
                             // TODO: assert that timeStamp is bigger that table timeStamp?
-                            metaData = mutator.mutate(metaData);
+                            mutator.mutate(metaData);
                             break;
                         } else if (table.getSequenceNumber() >= tableSeqNum) {
                             logger.warn("Attempt to cache older version of " + tableName + ": current= " + table.getSequenceNumber() + ", new=" + tableSeqNum);
@@ -619,7 +614,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         logger.warn("Unable to update meta data repo within " + (DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS/1000) + " seconds for " + tableName);
                         // There will never be a parentTableName here, as that would only
                         // be non null for an index an we never add/remove columns from an index.
-                        metaData = metaData.removeTable(tenantId, tableName, null, HConstants.LATEST_TIMESTAMP);
+                        metaData.removeTable(tenantId, tableName, null, HConstants.LATEST_TIMESTAMP);
                         break;
                     }
                     latestMetaDataLock.wait(waitTime);
@@ -637,46 +632,43 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      }
 
 	@Override
-    public PMetaData addColumn(final PName tenantId, final String tableName, final List<PColumn> columns,
+    public void addColumn(final PName tenantId, final String tableName, final List<PColumn> columns,
             final long tableTimeStamp, final long tableSeqNum, final boolean isImmutableRows,
             final boolean isWalDisabled, final boolean isMultitenant, final boolean storeNulls,
             final boolean isTransactional, final long updateCacheFrequency, final boolean isNamespaceMapped,
             final long resolvedTime) throws SQLException {
-	    return metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
+	    metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
             @Override
-            public PMetaData mutate(PMetaData metaData) throws SQLException {
+            public void mutate(PMetaData metaData) throws SQLException {
                 try {
-                    return metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum,
+                    metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum,
                             isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional,
                             updateCacheFrequency, isNamespaceMapped, resolvedTime);
                 } catch (TableNotFoundException e) {
                     // The DROP TABLE may have been processed first, so just ignore.
-                    return metaData;
                 }
             }
         });
      }
 
     @Override
-    public PMetaData removeTable(PName tenantId, final String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
+    public void removeTable(PName tenantId, final String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
         synchronized (latestMetaDataLock) {
             throwConnectionClosedIfNullMetaData();
-            latestMetaData = latestMetaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
+            latestMetaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
             latestMetaDataLock.notifyAll();
-            return latestMetaData;
         }
     }
 
     @Override
-    public PMetaData removeColumn(final PName tenantId, final String tableName, final List<PColumn> columnsToRemove, final long tableTimeStamp, final long tableSeqNum, final long resolvedTime) throws SQLException {
-        return metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
+    public void removeColumn(final PName tenantId, final String tableName, final List<PColumn> columnsToRemove, final long tableTimeStamp, final long tableSeqNum, final long resolvedTime) throws SQLException {
+        metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
             @Override
-            public PMetaData mutate(PMetaData metaData) throws SQLException {
+            public void mutate(PMetaData metaData) throws SQLException {
                 try {
-                    return metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
+                    metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
                 } catch (TableNotFoundException e) {
                     // The DROP TABLE may have been processed first, so just ignore.
-                    return metaData;
                 }
             }
         });
@@ -687,10 +679,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
         checkClosed();
         PMetaData metadata = latestMetaData;
-        if (metadata == null) {
-            throwConnectionClosedException();
-        }
-
+        throwConnectionClosedIfNullMetaData();
+        metadata = metadata.clone();
         return new PhoenixConnection(this, url, info, metadata);
     }
 
@@ -1643,9 +1633,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         PTable table;
         try {
             PMetaData metadata = latestMetaData;
-            if (metadata == null) {
-                throwConnectionClosedException();
-            }
+            throwConnectionClosedIfNullMetaData();
             table = metadata.getTableRef(new PTableKey(tenantId, fullTableName)).getTable();
             if (table.getTimeStamp() >= timestamp) { // Table in cache is newer than client timestamp which shouldn't be
                                                      // the case
@@ -2164,14 +2152,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             .build().buildException();
         }
     }
-    
+
     private HashSet<String> existingColumnFamiliesForBaseTable(PName baseTableName) throws TableNotFoundException {
-        synchronized (latestMetaDataLock) {
-            throwConnectionClosedIfNullMetaData();
-            PTable table = latestMetaData.getTableRef(new PTableKey(null, baseTableName.getString())).getTable();
-            latestMetaDataLock.notifyAll();
-            return existingColumnFamilies(table);
-        }
+        throwConnectionClosedIfNullMetaData();
+        PTable table = latestMetaData.getTableRef(new PTableKey(null, baseTableName.getString())).getTable();
+        return existingColumnFamilies(table);
     }
     
     private HashSet<String> existingColumnFamilies(PTable table) {
@@ -3362,7 +3347,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public PMetaData addFunction(PFunction function) throws SQLException {
+    public void addFunction(PFunction function) throws SQLException {
         synchronized (latestMetaDataLock) {
             try {
                 throwConnectionClosedIfNullMetaData();
@@ -3370,23 +3355,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // If a client opens a connection at an earlier timestamp, this can happen
                 PFunction existingFunction = latestMetaData.getFunction(new PTableKey(function.getTenantId(), function.getFunctionName()));
                 if (existingFunction.getTimeStamp() >= function.getTimeStamp()) {
-                    return latestMetaData;
+                    return;
                 }
             } catch (FunctionNotFoundException e) {}
-            latestMetaData = latestMetaData.addFunction(function);
+            latestMetaData.addFunction(function);
             latestMetaDataLock.notifyAll();
-            return latestMetaData;
         }
     }
 
     @Override
-    public PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp)
+    public void removeFunction(PName tenantId, String function, long functionTimeStamp)
             throws SQLException {
         synchronized (latestMetaDataLock) {
             throwConnectionClosedIfNullMetaData();
-            latestMetaData = latestMetaData.removeFunction(tenantId, function, functionTimeStamp);
+            latestMetaData.removeFunction(tenantId, function, functionTimeStamp);
             latestMetaDataLock.notifyAll();
-            return latestMetaData;
         }
     }
 
@@ -3642,13 +3625,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public PMetaData addSchema(PSchema schema) throws SQLException {
-        return latestMetaData = latestMetaData.addSchema(schema);
+    public void addSchema(PSchema schema) throws SQLException {
+        latestMetaData.addSchema(schema);
     }
 
     @Override
-    public PMetaData removeSchema(PSchema schema, long schemaTimeStamp) {
-        return latestMetaData = latestMetaData.removeSchema(schema, schemaTimeStamp);
+    public void removeSchema(PSchema schema, long schemaTimeStamp) {
+        latestMetaData.removeSchema(schema, schemaTimeStamp);
     }
 
     @Override
