@@ -22,7 +22,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.ReadOnlyImmutableBytesPtr;
 
 /**
  * 
@@ -46,15 +45,15 @@ public class ColumnReference implements Comparable<ColumnReference> {
     private final ImmutableBytesPtr qualifierPtr;
 
     public ColumnReference(byte[] family, byte[] qualifier) {
-        this.familyPtr = new ReadOnlyImmutableBytesPtr(family);
-        this.qualifierPtr = new ReadOnlyImmutableBytesPtr(qualifier);
+        this.familyPtr = new ImmutableBytesPtr(family);
+        this.qualifierPtr = new ImmutableBytesPtr(qualifier);
         this.hashCode = calcHashCode(this.familyPtr, this.qualifierPtr);
     }
 
     public ColumnReference(byte[] family, int familyOffset, int familyLength, byte[] qualifier,
             int qualifierOffset, int qualifierLength) {
-        this.familyPtr = new ReadOnlyImmutableBytesPtr(family, familyOffset, familyLength);
-        this.qualifierPtr = new ReadOnlyImmutableBytesPtr(qualifier, qualifierOffset, qualifierLength);
+        this.familyPtr = new ImmutableBytesPtr(family, familyOffset, familyLength);
+        this.qualifierPtr = new ImmutableBytesPtr(qualifier, qualifierOffset, qualifierLength);
         this.hashCode = calcHashCode(this.familyPtr, this.qualifierPtr);
     }
   

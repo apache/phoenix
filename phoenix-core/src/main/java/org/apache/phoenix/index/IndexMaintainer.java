@@ -71,6 +71,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
@@ -274,7 +275,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     // columns required to evaluate all expressions in indexedExpressions (this does not include columns in the data row key)
     private Set<ColumnReference> indexedColumns;
     private Set<ColumnReference> coveredColumns;
-    private Map<ColumnReference, ColumnReference> coveredColumnsMap;
+    // Map used to cache column family of data table and the corresponding column family for the local index
+    private Map<ImmutableBytesPtr, ImmutableBytesWritable> dataTableLocalIndexFamilyMap;
     // columns required to create index row i.e. indexedColumns + coveredColumns  (this does not include columns in the data row key)
     private Set<ColumnReference> allColumns;
     // TODO remove this in the next major release
@@ -364,7 +366,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.indexedColumnTypes = Lists.<PDataType>newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.indexedExpressions = Lists.newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.coveredColumns = Sets.newLinkedHashSetWithExpectedSize(nIndexColumns-nIndexPKColumns);
-        this.coveredColumnsMap = Maps.newHashMapWithExpectedSize(nIndexColumns-nIndexPKColumns);
+        this.dataTableLocalIndexFamilyMap = Maps.newHashMapWithExpectedSize(nIndexColumns-nIndexPKColumns);
         this.nIndexSaltBuckets  = nIndexSaltBuckets == null ? 0 : nIndexSaltBuckets;
         this.dataEmptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(dataTable);
         this.emptyKeyValueCFPtr = SchemaUtil.getEmptyColumnFamilyPtr(index);
@@ -431,14 +433,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             PColumnFamily family = index.getColumnFamilies().get(i);
             for (PColumn indexColumn : family.getColumns()) {
                 PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
-                this.coveredColumns.add(new ColumnReference(column.getFamilyName().getBytes(), column.getName().getBytes()));
+                PName dataTableFamily = column.getFamilyName();
+                this.coveredColumns.add(new ColumnReference(dataTableFamily.getBytes(), column.getName().getBytes()));
                 if(isLocalIndex) {
-                    this.coveredColumnsMap.put(
-                        new ColumnReference(column.getFamilyName().getBytes(), column.getName()
-                                .getBytes()),
-                        new ColumnReference(isLocalIndex ? Bytes.toBytes(IndexUtil
-                                .getLocalIndexColumnFamily(column.getFamilyName().getString()))
-                                : column.getFamilyName().getBytes(), column.getName().getBytes()));
+                    this.dataTableLocalIndexFamilyMap.put(new ImmutableBytesPtr(dataTableFamily.getBytes()), new ImmutableBytesPtr(Bytes.toBytes(IndexUtil.getLocalIndexColumnFamily(dataTableFamily.getString()))));
                 }
             }
         }
@@ -762,7 +760,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // same for all rows in this index)
             if (!viewConstantColumnBitSet.get(i)) {
                 int pos = rowKeyMetaData.getIndexPkPosition(i-dataPosOffset);
-                Field dataField = dataRowKeySchema.getField(i);
                 indexFields[pos] = 
                         dataRowKeySchema.getField(i);
             } 
@@ -862,7 +859,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             put.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
         }
         int i = 0;
-        for (ColumnReference ref : this.getCoverededColumns()) {
+        for (ColumnReference ref : this.getCoveredColumns()) {
             ImmutableBytesPtr cq = this.indexQualifiers.get(i++);
             ImmutableBytesWritable value = valueGetter.getLatestValue(ref);
             byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey);
@@ -874,8 +871,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
                 //this is a little bit of extra work for installations that are running <0.94.14, but that should be rare and is a short-term set of wrappers - it shouldn't kill GC
                 if(this.isLocalIndex) {
-                    ColumnReference columnReference = this.coveredColumnsMap.get(ref);
-					put.add(kvBuilder.buildPut(rowKey, columnReference.getFamilyWritable(), cq, ts, value));
+                    ImmutableBytesWritable localIndexColFamily = this.dataTableLocalIndexFamilyMap.get(ref.getFamilyWritable());
+                    put.add(kvBuilder.buildPut(rowKey, localIndexColFamily, cq, ts, value));
                 } else {
                     put.add(kvBuilder.buildPut(rowKey, ref.getFamilyWritable(), cq, ts, value));
                 }
@@ -963,22 +960,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         if (oldState == null || (deleteType=getDeleteTypeOrNull(pendingUpdates)) != null || hasIndexedColumnChanged(oldState, pendingUpdates)) { // Deleting the entire row
             byte[] emptyCF = emptyKeyValueCFPtr.copyBytesIfNecessary();
             Delete delete = new Delete(indexRowKey);
-            // If table delete was single version, then index delete should be as well
-            if (deleteType == DeleteType.SINGLE_VERSION) {
-                for (ColumnReference ref : getCoverededColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
-                    if(this.isLocalIndex) {
-						ref = this.coveredColumnsMap.get(ref);
-                    }
-                    delete.deleteFamilyVersion(ref.getFamily(), ts);
+            
+            for (ColumnReference ref : getCoveredColumns()) {
+                byte[] family = ref.getFamily();
+                if (this.isLocalIndex) {
+                    family = this.dataTableLocalIndexFamilyMap.get(ref.getFamilyWritable()).get();
                 }
+                // If table delete was single version, then index delete should be as well
+                if (deleteType == DeleteType.SINGLE_VERSION) {
+                    delete.deleteFamilyVersion(family, ts);
+                } else {
+                    delete.deleteFamily(family, ts);
+                }
+            }
+            if (deleteType == DeleteType.SINGLE_VERSION) {
                 delete.deleteFamilyVersion(emptyCF, ts);
             } else {
-                for (ColumnReference ref : getCoverededColumns()) { // FIXME: Keep Set<byte[]> for index CFs?
-                    if(this.isLocalIndex) {
-						ref = this.coveredColumnsMap.get(ref);
-                    }
-                    delete.deleteFamily(ref.getFamily(), ts);
-                }
                 delete.deleteFamily(emptyCF, ts);
             }
             delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
@@ -994,15 +991,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         delete = new Delete(indexRowKey);                    
                         delete.setDurability(!indexWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
                     }
-                    ColumnReference columnReference = ref;
-                    if(this.isLocalIndex) {
-                        columnReference = this.coveredColumnsMap.get(ref);
-                    }
+                    byte[] family = this.isLocalIndex ? this.dataTableLocalIndexFamilyMap.get(ref.getFamilyWritable()).get() : ref.getFamily();
                     // If point delete for data table, then use point delete for index as well
                     if (kv.getTypeByte() == KeyValue.Type.Delete.getCode()) {
-                        delete.deleteColumn(columnReference.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
+                        delete.deleteColumn(family, IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
                     } else {
-                        delete.deleteColumns(columnReference.getFamily(), IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
+                        delete.deleteColumns(family, IndexUtil.getIndexColumnName(ref.getFamily(), ref.getQualifier()), ts);
                     }
                 }
             }
@@ -1014,7 +1008,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return indexTableName;
     }
     
-    public Set<ColumnReference> getCoverededColumns() {
+    public Set<ColumnReference> getCoveredColumns() {
         return coveredColumns;
     }
 
@@ -1057,14 +1051,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         isLocalIndex = encodedCoveredolumnsAndLocalIndex < 0;
         int nCoveredColumns = Math.abs(encodedCoveredolumnsAndLocalIndex) - 1;
         coveredColumns = Sets.newLinkedHashSetWithExpectedSize(nCoveredColumns);
-        coveredColumnsMap = Maps.newHashMapWithExpectedSize(nCoveredColumns);
+        dataTableLocalIndexFamilyMap = Maps.newHashMapWithExpectedSize(nCoveredColumns);
         for (int i = 0; i < nCoveredColumns; i++) {
             byte[] cf = Bytes.readByteArray(input);
             byte[] cq = Bytes.readByteArray(input);
             ColumnReference ref = new ColumnReference(cf,cq);
             coveredColumns.add(ref);
             if(isLocalIndex) {
-                coveredColumnsMap.put(ref, new ColumnReference(Bytes.toBytes(IndexUtil.getLocalIndexColumnFamily(Bytes.toString(cf))), cq));
+                dataTableLocalIndexFamilyMap.put(ref.getFamilyWritable(), new ImmutableBytesPtr(Bytes.toBytes(IndexUtil.getLocalIndexColumnFamily(Bytes.toString(cf)))));
             }
         }
         // Hack to serialize whether the index row key is optimizable

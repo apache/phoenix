@@ -3304,7 +3304,7 @@ public class MetaDataClient {
                     // get the columns required for the index pk
                     Set<ColumnReference> indexColumns = indexMaintainer.getIndexedColumns();
                     // get the covered columns 
-                    Set<ColumnReference> coveredColumns = indexMaintainer.getCoverededColumns();
+                    Set<ColumnReference> coveredColumns = indexMaintainer.getCoveredColumns();
                     List<PColumn> indexColumnsToDrop = Lists.newArrayListWithExpectedSize(columnRefs.size());
                     for(PColumn columnToDrop : tableColumnsToDrop) {
                         ColumnReference columnToDropRef = new ColumnReference(columnToDrop.getFamilyName().getBytes(), columnToDrop.getName().getBytes());
