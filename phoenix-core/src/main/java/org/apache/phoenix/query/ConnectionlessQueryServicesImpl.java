@@ -24,8 +24,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 
@@ -86,13 +86,12 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
-
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-
 import org.apache.tephra.TransactionManager;
 import org.apache.tephra.TransactionSystemClient;
 import org.apache.tephra.inmemory.InMemoryTxSystemClient;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
 /**
@@ -172,41 +171,41 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
-        return metaData = metaData.addTable(table, resolvedTime);
+    public void addTable(PTable table, long resolvedTime) throws SQLException {
+        metaData.addTable(table, resolvedTime);
     }
     
     @Override
-    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
-        return metaData = metaData.updateResolvedTimestamp(table, resolvedTimestamp);
+    public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
+        metaData.updateResolvedTimestamp(table, resolvedTimestamp);
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
+    public void addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
             long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
             boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
                     throws SQLException {
-        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
+        metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
                 isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
                 resolvedTime);
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp)
+    public void removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp)
             throws SQLException {
-        return metaData = metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
+        metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
     }
 
     @Override
-    public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
+    public void removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
             long tableSeqNum, long resolvedTime) throws SQLException {
-        return metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
+        metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
     }
 
     
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
-        return new PhoenixConnection(this, url, info, metaData);
+        return new PhoenixConnection(this, url, info, metaData.clone());
     }
 
     @Override
@@ -549,14 +548,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addFunction(PFunction function) throws SQLException {
-        return metaData = this.metaData.addFunction(function);
+    public void addFunction(PFunction function) throws SQLException {
+        this.metaData.addFunction(function);
     }
 
     @Override
-    public PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp)
+    public void removeFunction(PName tenantId, String function, long functionTimeStamp)
             throws SQLException {
-        return metaData = this.metaData.removeFunction(tenantId, function, functionTimeStamp);
+        this.metaData.removeFunction(tenantId, function, functionTimeStamp);
     }
 
     @Override
@@ -615,8 +614,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addSchema(PSchema schema) throws SQLException {
-        return metaData = this.metaData.addSchema(schema);
+    public void addSchema(PSchema schema) throws SQLException {
+        this.metaData.addSchema(schema);
     }
 
     @Override
@@ -629,8 +628,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData removeSchema(PSchema schema, long schemaTimeStamp) {
-        return metaData = metaData.removeSchema(schema, schemaTimeStamp);
+    public void removeSchema(PSchema schema, long schemaTimeStamp) {
+        metaData.removeSchema(schema, schemaTimeStamp);
     }
 
     @Override

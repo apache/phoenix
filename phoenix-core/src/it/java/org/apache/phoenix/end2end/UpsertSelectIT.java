@@ -1022,7 +1022,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
             // Upsert data with scn set on the connection. The timestamp of the put will be the value of the row_timestamp column.
             long rowTimestamp1 = 100;
             Date rowTimestampDate = new Date(rowTimestamp1);
-            try (Connection conn = getConnection(ts)) {
+            try (Connection conn = getConnection(ts+1)) {
                 PreparedStatement stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " (PK1, PK2, PK3, KV1) VALUES(?, ?, ?, ?)");
                 stmt.setInt(1, 1);
                 stmt.setDate(2, rowTimestampDate);
