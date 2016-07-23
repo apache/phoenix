@@ -143,7 +143,7 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         expectedPlan = indexSaltBuckets == null ? 
              "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [~'y']\n" + 
              "    SERVER FILTER BY FIRST KEY ONLY" : 
-            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [0,~'y']\n" + 
+            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [0,~'y'] - ["+(indexSaltBuckets.intValue()-1)+",~'y']\n" + 
              "    SERVER FILTER BY FIRST KEY ONLY\n" +
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
@@ -164,7 +164,7 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         expectedPlan = indexSaltBuckets == null ? 
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [*] - [~'x']\n"
           + "    SERVER FILTER BY FIRST KEY ONLY" :
-            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [0,*] - [0,~'x']\n"
+            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [0,*] - ["+(indexSaltBuckets.intValue()-1)+",~'x']\n"
            + "    SERVER FILTER BY FIRST KEY ONLY\n" + 
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));

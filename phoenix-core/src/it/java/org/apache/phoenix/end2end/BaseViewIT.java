@@ -210,7 +210,7 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
         } else {
             assertEquals(saltBuckets == null
                     ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName +" [" + Short.MIN_VALUE + ",51]"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T" + (transactional ? "_TXN" : "") + " [0," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER _IDX_T" + (transactional ? "_TXN" : "") + " [0," + Short.MIN_VALUE + ",51] - ["+(saltBuckets.intValue()-1)+"," + Short.MIN_VALUE + ",51]\nCLIENT MERGE SORT",
                             queryPlan);
         }
 
@@ -251,7 +251,7 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertEquals(saltBuckets == null
                     ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + htableName +" [" + (Short.MIN_VALUE+1) + ",'foo']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY"
-                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + htableName + " [0," + (Short.MIN_VALUE+1) + ",'foo']\n"
+                            : "CLIENT PARALLEL " + saltBuckets + "-WAY RANGE SCAN OVER " + htableName + " [0," + (Short.MIN_VALUE+1) + ",'foo'] - ["+(saltBuckets.intValue()-1)+"," + (Short.MIN_VALUE+1) + ",'foo']\n"
                                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                     + "CLIENT MERGE SORT",
                             QueryUtil.getExplainPlan(rs));
