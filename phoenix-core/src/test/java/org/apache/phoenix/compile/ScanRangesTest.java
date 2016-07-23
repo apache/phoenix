@@ -24,12 +24,12 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PDatum;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -73,7 +73,7 @@ public class ScanRangesTest {
             // incrementing the key too much.
             upperExclusiveKey = ByteUtil.nextKey(upperExclusiveKey);
         }
-        assertEquals(expectedResult, scanRanges.intersects(lowerInclusiveKey,upperExclusiveKey,0, true));
+        assertEquals(expectedResult, scanRanges.intersectRegion(lowerInclusiveKey,upperExclusiveKey,false));
     }
 
     @Parameters(name="{0} {2}")
