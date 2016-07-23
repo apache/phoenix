@@ -41,6 +41,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
@@ -48,6 +49,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
@@ -2385,4 +2387,60 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testSaltTableJoinErrorIT() throws Exception
+    {
+        PhoenixConnection conn = (PhoenixConnection)DriverManager.getConnection(getUrl());
+        
+        //1.create LHS  SALT_TEST table
+        conn.createStatement().execute("drop table if exists SALT_TEST2900");
+
+        conn.createStatement().execute(
+                "create table SALT_TEST2900"+
+                "("+
+                "id UNSIGNED_INT not null primary key,"+
+                "appId VARCHAR"+
+                ")SALT_BUCKETS=2");
+        
+    
+      
+            
+        //5.create RHS RIGHT_TEST table
+        conn.createStatement().execute("drop table if exists RIGHT_TEST2900 ");
+        conn.createStatement().execute(
+                "create table RIGHT_TEST2900"+
+                "("+
+                "appId VARCHAR not null primary key,"+
+                "createTime VARCHAR"+
+                ")");
+              
+        //7.do join,throw exception
+        String sql="select * from SALT_TEST2900 a inner join RIGHT_TEST2900 b on a.appId=b.appId where a.id>=3 and a.id<=5";
+        
+        
+        
+        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+        HashJoinPlan plan = (HashJoinPlan)statement.compileQuery(sql);
+        ScanRanges ranges=plan.getContext().getScanRanges();
+        
+        List<HRegionLocation> regionLocations=
+            conn.getQueryServices().getAllTableRegions(Bytes.toBytes("SALT_TEST2900"));
+        for(HRegionLocation regionLocation:regionLocations)
+        {
+            assertTrue(
+                    ranges.intersects(regionLocation.getRegionInfo().getStartKey(), 
+                    regionLocation.getRegionInfo().getEndKey(), 
+                    0, 
+                    true));
+            
+            assertTrue(
+                ranges.intersects(regionLocation.getRegionInfo().getStartKey(), 
+                regionLocation.getRegionInfo().getEndKey(), 
+                0, 
+                false));
+        };
+    }
+    
+    
 }
