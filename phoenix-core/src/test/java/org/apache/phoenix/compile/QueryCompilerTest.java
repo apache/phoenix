@@ -2389,11 +2389,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
-    public void testSaltTableJoinErrorIT() throws Exception
+    public void testSaltTableJoin() throws Exception
     {
         PhoenixConnection conn = (PhoenixConnection)DriverManager.getConnection(getUrl());
         
-        //1.create LHS  SALT_TEST table
+      
         conn.createStatement().execute("drop table if exists SALT_TEST2900");
 
         conn.createStatement().execute(
@@ -2403,10 +2403,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 "appId VARCHAR"+
                 ")SALT_BUCKETS=2");
         
-    
-      
-            
-        //5.create RHS RIGHT_TEST table
+   
+  
         conn.createStatement().execute("drop table if exists RIGHT_TEST2900 ");
         conn.createStatement().execute(
                 "create table RIGHT_TEST2900"+
@@ -2415,7 +2413,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 "createTime VARCHAR"+
                 ")");
               
-        //7.do join,throw exception
         String sql="select * from SALT_TEST2900 a inner join RIGHT_TEST2900 b on a.appId=b.appId where a.id>=3 and a.id<=5";
         
         
