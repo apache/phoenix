@@ -2414,18 +2414,16 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
             
             String sql="select * from SALT_TEST2900 a inner join RIGHT_TEST2900 b on a.appId=b.appId where a.id>=3 and a.id<=5";
-            PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
-            HashJoinPlan plan = (HashJoinPlan)statement.compileQuery(sql);
+            HashJoinPlan plan = (HashJoinPlan)getQueryPlan(sql, Collections.emptyList());
             ScanRanges ranges=plan.getContext().getScanRanges();
 
             List<HRegionLocation> regionLocations=
                     conn.getQueryServices().getAllTableRegions(Bytes.toBytes("SALT_TEST2900"));
             for (HRegionLocation regionLocation : regionLocations) {
-                assertTrue(ranges.intersects(regionLocation.getRegionInfo().getStartKey(),
-                    regionLocation.getRegionInfo().getEndKey(), 0, true));
+                assertTrue(ranges.intersectRegion(regionLocation.getRegionInfo().getStartKey(),
+                    regionLocation.getRegionInfo().getEndKey(), false));
 
-                assertTrue(ranges.intersects(regionLocation.getRegionInfo().getStartKey(),
-                    regionLocation.getRegionInfo().getEndKey(), 0, false));
+           
             }
         } finally {
             conn.close();
