@@ -151,6 +151,14 @@ public class SaltedScanRangesTest {
                     KeyRange.getKeyRange(ByteUtil.concat(new byte[]{1}, Bytes.toBytes("f")), ByteUtil.concat(new byte[]{1}, Bytes.toBytes("g"))),
                     true,
                     false));
+        testCases.addAll(
+                foreach(new KeyRange[][]{{
+                        PVarchar.INSTANCE.getKeyRange(Bytes.toBytes("c"), true, KeyRange.UNBOUND, false),
+                    }},
+                    new int[] {1},
+                    KeyRange.getKeyRange(new byte[]{1,0},new byte[]{2,0}),
+                    false,
+                    true));
         return testCases;
     }
 
