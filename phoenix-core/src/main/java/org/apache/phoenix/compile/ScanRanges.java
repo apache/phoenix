@@ -419,7 +419,10 @@ public class ScanRanges {
             return true;
         }
         
-        return intersectScan(null, regionStartKey, regionEndKey, 0, false) == HAS_INTERSECTION;
+        boolean crossesSaltBoundary = isSalted && ScanUtil.crossesPrefixBoundary(regionEndKey,
+                ScanUtil.getPrefix(regionStartKey, SaltingUtil.NUM_SALTING_BYTES), 
+                SaltingUtil.NUM_SALTING_BYTES);        
+        return intersectScan(null, regionStartKey, regionEndKey, 0, crossesSaltBoundary) == HAS_INTERSECTION;
     }
     
     public SkipScanFilter getSkipScanFilter() {
