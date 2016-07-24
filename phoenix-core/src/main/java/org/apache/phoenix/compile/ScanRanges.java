@@ -175,7 +175,6 @@ public class ScanRanges {
         this.minMaxRange = minMaxRange;
         this.rowTimestampRange = rowTimestampRange;
         
-
         if (isSalted && !isPointLookup) {
             ranges.set(0, SaltingUtil.generateAllSaltingRanges(bucketNum));
         }
