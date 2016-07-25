@@ -84,6 +84,23 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
         return changedKv;
     }
 
+    /**
+     * Enforce seek all the time for local index store file scanner otherwise some times hbase
+     * might return fake kvs not in physical files.
+     */
+    @Override
+    public boolean requestSeek(KeyValue kv, boolean forward, boolean useBloom) throws IOException {
+        boolean requestSeek = super.requestSeek(kv, forward, useBloom);
+        if(requestSeek) {
+            Cell peek = super.peek();
+            if (Bytes.compareTo(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
+                peek.getRowArray(), peek.getRowOffset(), peek.getRowLength()) == 0) {
+                return forward ? reseek(kv): seek(kv);
+            }
+        }
+        return requestSeek;
+    }
+
     @Override
     public boolean seek(KeyValue key) throws IOException {
         return seekOrReseek(key, true);
