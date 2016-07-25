@@ -2422,13 +2422,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             for (HRegionLocation regionLocation : regionLocations) {
                 assertTrue(ranges.intersectRegion(regionLocation.getRegionInfo().getStartKey(),
                     regionLocation.getRegionInfo().getEndKey(), false));
-
-           
             }
         } finally {
             conn.close();
         }
     }
-    
-    
+
 }
