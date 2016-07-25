@@ -2427,5 +2427,4 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
-
 }
