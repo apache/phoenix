@@ -172,17 +172,20 @@ public interface QueryConstants {
     public static final byte[] TRUE = new byte[] {1};
     
     public static final String ASYNC_INDEX_INFO_QUERY = "SELECT "
-            + DATA_TABLE_NAME + ", " + TABLE_SCHEM + ", "
-            + TABLE_NAME + ", " + ASYNC_CREATED_DATE 
-            + " FROM " + SYSTEM_CATALOG_SCHEMA + ".\""
-            + SYSTEM_CATALOG_TABLE + "\""
-            + " (" + ASYNC_CREATED_DATE + " "
-            + PDate.INSTANCE.getSqlTypeName() + ") " + " WHERE "
-            + COLUMN_NAME + " IS NULL and " + COLUMN_FAMILY + " IS NULL  and "
+            + INDEX_TYPE + ","
+            + DATA_TABLE_NAME + ", "
+            + TABLE_SCHEM + ", "
+            + TABLE_NAME + ", "
+            + ASYNC_CREATED_DATE 
+            + " FROM "
+            + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\""
+            + " (" + ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") "
+            + " WHERE "
+            + COLUMN_NAME + " IS NULL and "
+            + COLUMN_FAMILY + " IS NULL  and "
             + ASYNC_CREATED_DATE + " IS NOT NULL and "
-            + TABLE_TYPE + " = '" + PTableType.INDEX.getSerializedValue()
-            + "' and " + PhoenixDatabaseMetaData.INDEX_STATE + " = '"
-            + PIndexState.BUILDING.getSerializedValue() + "'";
+            + TABLE_TYPE + " = '" + PTableType.INDEX.getSerializedValue() + "' and "
+            + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + PIndexState.BUILDING.getSerializedValue() + "'";
     
     /**
      * Separator used between variable length keys for a composite key.
