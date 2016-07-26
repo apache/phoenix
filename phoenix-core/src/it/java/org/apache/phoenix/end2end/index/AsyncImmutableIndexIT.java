@@ -26,28 +26,18 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.util.Collections;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.StringUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class AsyncImmutableIndexIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class AsyncImmutableIndexIT extends BaseHBaseManagedTimeIT {
     private static final long MAX_WAIT_FOR_INDEX_BUILD_TIME_MS = 45000;
-    
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String, String> props = Collections.emptyMap();
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
 
     @Test
     public void testDeleteFromImmutable() throws Exception {
@@ -117,3 +107,4 @@ public class AsyncImmutableIndexIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
 
 }
+
