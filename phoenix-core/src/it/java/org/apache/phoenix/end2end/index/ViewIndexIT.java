@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -55,15 +56,12 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class ViewIndexIT extends BaseHBaseManagedTimeIT {
+public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
-    private String VIEW_NAME = "MY_VIEW";
+
     private String schemaName="TEST";
     private boolean isNamespaceMapped;
-    private String tableName = schemaName + ".T";
-    private String indexName = "I";
-    private String viewIndexPhysicalTableName;
-    private TableName physicalTableName;
+
 
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
@@ -116,16 +114,20 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
     
     public ViewIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
-        this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.viewIndexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
 
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String VIEW_NAME = "VIEW_" + generateRandomString();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String viewIndexPhysicalTableName = physicalTableName.getNameAsString();
+        String viewName = schemaName + "." + VIEW_NAME;
+
         createBaseTable(tableName, false, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
-        String viewName = schemaName + "." + VIEW_NAME;
         conn1.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
         conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + " (v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
@@ -154,10 +156,13 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testMultiTenantViewLocalIndex() throws Exception {
-        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, true, null, null);
+        String tableName =  generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String VIEW_NAME = "VIEW_" + generateRandomString();
+        createBaseTable(tableName, true, null, null);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
-                "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME
+                "UPSERT INTO " + tableName
                 + " VALUES(?,?,?,?,?)");
         stmt.setString(1, "10");
         stmt.setString(2, "a");
@@ -178,16 +183,16 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
         props.setProperty("TenantId", "10");
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME
-                + " AS select * from " + TestUtil.DEFAULT_DATA_TABLE_NAME);
+                + " AS select * from " + tableName);
         conn1.createStatement().execute("CREATE LOCAL INDEX "
-                + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON "
+                + indexName + " ON "
                 + VIEW_NAME + "(v2)");
         conn1.commit();
         
         String sql = "SELECT * FROM " + VIEW_NAME + " WHERE v2 = 100";
         ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [1,'10',100]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'10',100]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         rs = conn1.prepareStatement(sql).executeQuery();
@@ -197,9 +202,9 @@ public class ViewIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testCreatingIndexOnGlobalView() throws Exception {
-        String baseTable = "testCreatingIndexOnGlobalView".toUpperCase();
-        String globalView = "globalView".toUpperCase();
-        String globalViewIdx = "globalView_idx".toUpperCase();
+        String baseTable =  generateRandomString();
+        String globalView = generateRandomString();
+        String globalViewIdx =  generateRandomString();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
             conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);

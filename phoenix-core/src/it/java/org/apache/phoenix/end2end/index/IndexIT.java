@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -67,16 +68,13 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class IndexIT extends BaseHBaseManagedTimeIT {
+public class IndexIT extends BaseHBaseManagedTimeTableReuseIT {
 	
 	private final boolean localIndex;
     private final boolean transactional;
     private final boolean mutable;
 	private final String tableDDLOptions;
-	private final String tableName;
-    private final String indexName;
-    private final String fullTableName;
-    private final String fullIndexName;
+
 	
 	public IndexIT(boolean localIndex, boolean mutable, boolean transactional) {
 		this.localIndex = localIndex;
@@ -91,10 +89,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 			optionBuilder.append(" TRANSACTIONAL=true ");
 		}
 		this.tableDDLOptions = optionBuilder.toString();
-		this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + ( transactional ?  "_TXN" : "");
-        this.indexName = "IDX" + ( transactional ?  "_TXN" : "");
-        this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-        this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+		//this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + ( transactional ?  "_TXN" : "");
+        //this.indexName = "IDX" + ( transactional ?  "_TXN" : "");
+        //this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        //this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	}
 	
 	@BeforeClass
@@ -116,6 +114,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	@Test
     public void testIndexWithNullableFixedWithCols() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
@@ -172,6 +174,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testDeleteFromAllPKColumnIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
@@ -226,6 +232,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testCreateIndexAfterUpsertStarted() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         testCreateIndexAfterUpsertStarted(false, fullTableName + "1", fullIndexName + "1");
         if (transactional) {
             testCreateIndexAfterUpsertStarted(true, fullTableName + "2", fullIndexName + "2");
@@ -323,6 +333,11 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testDeleteFromNonPKColumnIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
         String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
@@ -373,6 +388,9 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testGroupByCount() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
     	try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
@@ -391,6 +409,9 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectDistinctOnTableWithSecondaryImmutableIndex() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
     	try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
@@ -414,6 +435,9 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testInClauseWithIndexOnColumnOfUsignedIntType() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
     	try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
@@ -436,6 +460,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void createIndexOnTableWithSpecifiedDefaultCF() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -474,6 +502,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testIndexWithNullableDateCol() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
@@ -530,6 +562,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectAllAndAliasWithIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -605,6 +641,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectCF() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -662,6 +702,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testUpsertAfterIndexDrop() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -722,7 +766,12 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMultipleUpdatesAcrossRegions() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-    	String testTable = fullTableName+"_MULTIPLE_UPDATES";
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        String testTable = fullTableName+"_MULTIPLE_UPDATES";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -810,6 +859,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testIndexWithCaseSensitiveCols() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -893,6 +946,9 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testInFilterOnIndexedTable() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -911,6 +967,10 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testIndexWithDecimalCol() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
