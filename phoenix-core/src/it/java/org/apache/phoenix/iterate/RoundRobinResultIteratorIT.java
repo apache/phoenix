@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -58,7 +59,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
+public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final int NUM_SALT_BUCKETS = 4; 
 
@@ -78,7 +79,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testRoundRobinAfterTableSplit() throws Exception {
-        String tableName = "ROUNDROBINSPLIT";
+        String tableName = generateRandomString();
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         int numRows = setupTableForSplit(tableName);
         Connection conn = DriverManager.getConnection(getUrl());
@@ -128,7 +129,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
     }
 
     private void testSelectAllRowsWithDifferentFetchSizes(boolean salted) throws Exception {
-        String tableName = "ALLROWS" + (salted ? "_SALTED" : "_UNSALTED");
+        String tableName = generateRandomString();
         int numRows = 9;
         Set<String> expectedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, numRows, salted, false));
         Connection conn = DriverManager.getConnection(getUrl());
@@ -152,7 +153,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
     }
 
     private void testSelectRowsWithFilterAndDifferentFetchSizes(boolean salted) throws Exception {
-        String tableName = "ROWSWITHFILTER" + (salted ? "_SALTED" : "_UNSALTED");
+        String tableName = generateRandomString();
         int numRows = 6;
         Set<String> insertedKeys = createTableAndInsertRows(tableName, numRows, salted, false);
         Connection conn = DriverManager.getConnection(getUrl());
@@ -205,7 +206,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testFetchSizesAndRVCExpression() throws Exception {
-        String tableName = "RVCTest";
+        String tableName = generateRandomString();
         Set<String> insertedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, 4, false, false));
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement("SELECT K FROM " + tableName + " WHERE (K, V)  > (?, ?)");
