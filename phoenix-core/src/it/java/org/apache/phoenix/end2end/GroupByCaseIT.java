@@ -60,7 +60,7 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
     private static int id;
 
     private static void initData(Connection conn) throws SQLException {
-        ensureTableCreated(getUrl(), GROUPBYTEST_NAME);
+        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, GROUPBYTEST_NAME);
         insertRow(conn, "Report1", 10);
         insertRow(conn, "Report2", 10);
         insertRow(conn, "Report3", 30);

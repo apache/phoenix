@@ -81,7 +81,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Before
     public void setUp() throws SQLException {
-        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
+        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE, TRANSACTIONAL_DATA_TABLE);
     }
     
     @BeforeClass

@@ -322,7 +322,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
     
     
     protected void initCoItemTableValues() throws Exception {
-        ensureTableCreated(getUrl(), JOIN_COITEM_TABLE_FULL_NAME);
+        ensureTableCreated(getUrl(), JOIN_COITEM_TABLE_FULL_NAME, JOIN_COITEM_TABLE_FULL_NAME);
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

@@ -116,7 +116,7 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testServerNameOnScan() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
         byte[][] splits = new byte[][] { K3, K9, KR };
-        ensureTableCreated(getUrl(), STABLE_NAME, splits);
+        ensureTableCreated(getUrl(), STABLE_NAME, STABLE_NAME, splits);
         
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         ResultSet rs = stmt.executeQuery("SELECT * FROM " + STABLE_NAME + " LIMIT 1");
@@ -138,7 +138,7 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testGuidePostsLifeCycle() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
         byte[][] splits = new byte[][] { K3, K9, KR };
-        ensureTableCreated(getUrl(), STABLE_NAME, splits);
+        ensureTableCreated(getUrl(), STABLE_NAME, STABLE_NAME, splits);
         // create index
         conn.createStatement().execute("CREATE INDEX " + STABLE_INDEX + " ON " + STABLE_NAME + "( \"value\")");
         // before upserting
@@ -206,7 +206,7 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     private static void initTableValues(Connection conn) throws Exception {
         byte[][] splits = new byte[][] {K3,K4,K9,K11};
-        ensureTableCreated(getUrl(),STABLE_NAME,splits);
+        ensureTableCreated(getUrl(),STABLE_NAME, STABLE_NAME, splits);
         PreparedStatement stmt = conn.prepareStatement("upsert into " + STABLE_NAME + " VALUES (?, ?)");
         stmt.setString(1, new String(KMIN));
         stmt.setInt(2, 1);

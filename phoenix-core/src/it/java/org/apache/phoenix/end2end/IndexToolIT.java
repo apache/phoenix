@@ -37,6 +37,7 @@ import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -126,10 +127,15 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             if (transactional) {
                 // insert two rows in another connection without committing so that they are not visible to other transactions
                 try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-                    PreparedStatement stmt2 = conn.prepareStatement(upsertQuery);
+                    conn2.setAutoCommit(false);
+                    PreparedStatement stmt2 = conn2.prepareStatement(upsertQuery);
                     upsertRow(stmt2, 5);
                     upsertRow(stmt2, 6);
                     ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) from "+fullTableName);
+                    assertTrue(rs.next());
+                    assertEquals("Unexpected row count ", 2, rs.getInt(1));
+                    assertFalse(rs.next());
+                    rs = conn2.createStatement().executeQuery("SELECT count(*) from "+fullTableName);
                     assertTrue(rs.next());
                     assertEquals("Unexpected row count ", 4, rs.getInt(1));
                     assertFalse(rs.next());
@@ -156,8 +162,10 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
            
             //run the index MR job.
             final IndexTool indexingTool = new IndexTool();
-            indexingTool.setConf(new Configuration(getUtility().getConfiguration()));
-            
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+            indexingTool.setConf(conf);
+
             final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable, directApi);
             int status = indexingTool.run(cmdArgs);
             assertEquals(0, status);

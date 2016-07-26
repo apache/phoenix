@@ -44,7 +44,7 @@ import org.junit.Test;
 /*
  * since 4.8
  */
-public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
+public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeTableReuseIT {
     /**
      * Tests that when: There is a table created with older version of phoenix and a table created with newer version
      * having {@code QueryServices#IS_NAMESPACE_MAPPING_ENABLED} true, then there is only a flag
@@ -57,7 +57,7 @@ public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeIT {
 
         String namespace = "TEST_SCHEMA";
         String schemaName = namespace;
-        String tableName = "TEST";
+        String tableName = generateRandomString();
 
         String phoenixFullTableName = schemaName + "." + tableName;
         String hbaseFullTableName = schemaName + ":" + tableName;

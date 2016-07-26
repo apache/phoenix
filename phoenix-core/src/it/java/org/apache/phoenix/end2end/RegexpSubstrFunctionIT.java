@@ -39,7 +39,7 @@ public class RegexpSubstrFunctionIT extends BaseHBaseManagedTimeIT {
 
     @Before
     public void doBeforeTestSetup() throws Exception {
-        ensureTableCreated(getUrl(), GROUPBYTEST_NAME);
+        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, GROUPBYTEST_NAME);
         Connection conn = DriverManager.getConnection(getUrl());
         insertRow(conn, "Report1?1", 10);
         insertRow(conn, "Report1?2", 10);
