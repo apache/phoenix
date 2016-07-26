@@ -22,6 +22,7 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -82,6 +83,23 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
                     next.getValueArray(), next.getValueOffset(), next.getValueLength(),
                     next.getTagsArray(), next.getTagsOffset(), next.getTagsLength());
         return changedKv;
+    }
+
+    /**
+     * Enforce seek all the time for local index store file scanner otherwise some times hbase
+     * might return fake kvs not in physical files.
+     */
+    @Override
+    public boolean requestSeek(Cell kv, boolean forward, boolean useBloom) throws IOException {
+        boolean requestSeek = super.requestSeek(kv, forward, useBloom);
+        if(requestSeek) {
+            Cell peek = super.peek();
+            if (Bytes.compareTo(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
+                peek.getRowArray(), peek.getRowOffset(), peek.getRowLength()) == 0) {
+                return forward ? reseek(kv): seek(kv);
+            }
+        }
+        return requestSeek;
     }
 
     @Override

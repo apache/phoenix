@@ -17,15 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_CREATED_DATE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
+import static org.apache.phoenix.query.QueryConstants.ASYNC_INDEX_INFO_QUERY;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -39,12 +31,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.Test;
@@ -57,19 +45,9 @@ public class AsyncIndexIT extends BaseTest {
     private static final String PERSON_TABLE_NAME_WITH_SCHEMA = "TEST.PERSON";
     private static final String TEST_SCHEMA = "TEST";
 
-    private static final String PERSON_TABLE_ASYNC_INDEX_INFO_QUERY = "SELECT "
-            + DATA_TABLE_NAME + ", " + TABLE_SCHEM + ", "
-            + TABLE_NAME + " FROM " + SYSTEM_CATALOG_SCHEMA + ".\""
-            + SYSTEM_CATALOG_TABLE + "\""
-            + " (" + ASYNC_CREATED_DATE + " "
-            + PDate.INSTANCE.getSqlTypeName() + ") " + " WHERE "
-            + COLUMN_NAME + " IS NULL and " + COLUMN_FAMILY + " IS NULL  and "
-            + ASYNC_CREATED_DATE + " IS NOT NULL and "
-            + TABLE_TYPE + " = '" + PTableType.INDEX.getSerializedValue()
-            + "' and DATA_TABLE_NAME='" + PERSON_TABLE_NAME 
-            + "' and TABLE_SCHEM='" + TEST_SCHEMA + "' and "
-            + PhoenixDatabaseMetaData.INDEX_STATE + " = '" 
-            + PIndexState.BUILDING.getSerializedValue() + "'";
+    private static final String PERSON_TABLE_ASYNC_INDEX_INFO_QUERY = 
+            ASYNC_INDEX_INFO_QUERY + " and DATA_TABLE_NAME='" + PERSON_TABLE_NAME 
+            + "' and TABLE_SCHEM='" + TEST_SCHEMA + "'";
 
     private void dropTable(Statement stmt) throws SQLException, IOException {
         stmt.execute("DROP TABLE IF EXISTS " + PERSON_TABLE_NAME_WITH_SCHEMA);
