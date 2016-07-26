@@ -30,7 +30,7 @@ import java.util.Properties;
 import org.junit.Test;
 
 
-public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
+public class UpsertBigValuesIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final long INTEGER_MIN_MINUS_ONE = (long)Integer.MIN_VALUE - 1;
     private static final long INTEGER_MAX_PLUS_ONE = (long)Integer.MAX_VALUE + 1;
@@ -62,7 +62,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(testNumbers.length, rs.getInt(1));
         assertFalse(rs.next());
-        select = "SELECT pk FROM PKIntValueTest where pk >= " + Integer.MIN_VALUE + 
+        select = "SELECT pk FROM PKIntValueTest where pk >= " + Integer.MIN_VALUE +
                 " GROUP BY pk ORDER BY pk ASC NULLS LAST";
         rs = conn.createStatement().executeQuery(select);
         for (int i = 0; i < testNumbers.length; i++) {
@@ -78,7 +78,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(testNumbers.length, rs.getInt(1));
         assertFalse(rs.next());
-        select = "SELECT pk FROM PKIntValueTest where pk <= " + Integer.MAX_VALUE + 
+        select = "SELECT pk FROM PKIntValueTest where pk <= " + Integer.MAX_VALUE +
                 " GROUP BY pk ORDER BY pk DESC NULLS LAST";
         rs = conn.createStatement().executeQuery(select);
         for (int i = testNumbers.length - 1; i >= 0; i--) {
@@ -93,7 +93,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(testNumbers.length, rs.getInt(1));
         assertFalse(rs.next());
-        select = "SELECT pk FROM PKIntValueTest where pk >= " + INTEGER_MIN_MINUS_ONE + 
+        select = "SELECT pk FROM PKIntValueTest where pk >= " + INTEGER_MIN_MINUS_ONE +
                 " GROUP BY pk ORDER BY pk ASC NULLS LAST ";
         rs = conn.createStatement().executeQuery(select);
         for (int i = 0; i < testNumbers.length; i++) {
@@ -108,7 +108,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(testNumbers.length, rs.getInt(1));
         assertFalse(rs.next());
-        select = "SELECT pk FROM PKIntValueTest where pk <= " + INTEGER_MAX_PLUS_ONE + 
+        select = "SELECT pk FROM PKIntValueTest where pk <= " + INTEGER_MAX_PLUS_ONE +
                 " GROUP BY pk ORDER BY pk DESC NULLS LAST";
         rs = conn.createStatement().executeQuery(select);
         for (int i = testNumbers.length - 1; i >= 0; i--) {
@@ -162,7 +162,7 @@ public class UpsertBigValuesIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(testNumbers.length, rs.getInt(1));
         assertFalse(rs.next());
-        select = "SELECT pk FROM PKBigIntValueTest WHERE pk <= " + Long.MAX_VALUE + 
+        select = "SELECT pk FROM PKBigIntValueTest WHERE pk <= " + Long.MAX_VALUE +
                 " GROUP BY pk ORDER BY pk DESC NULLS LAST";
         rs = conn.createStatement().executeQuery(select);
         for (int i = testNumbers.length - 1; i >= 0; i--) {

@@ -193,6 +193,7 @@ import org.apache.tephra.persist.InMemoryTransactionStateStorage;
  * make sure to shutdown the mini cluster in a method annotated by @AfterClass.  
  *
  */
+
 public abstract class BaseTest {
     protected static final String TEST_TABLE_SCHEMA = "(" +
             "   varchar_pk VARCHAR NOT NULL, " +
@@ -803,24 +804,31 @@ public abstract class BaseTest {
     }
 
     protected static void ensureTableCreated(String url, String tableName) throws SQLException {
-        ensureTableCreated(url, tableName, null, null);
+        ensureTableCreated(url, tableName, tableName, null, null);
     }
 
-    public static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
-        ensureTableCreated(url, tableName, splits, null);
+    protected static void ensureTableCreated(String url, String tableName, String tableDDLType) throws SQLException {
+        ensureTableCreated(url, tableName, tableDDLType, null, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, Long ts) throws SQLException {
-        ensureTableCreated(url, tableName, null, ts);
+    public static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits) throws SQLException {
+        ensureTableCreated(url, tableName, tableDDLType, splits, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, byte[][] splits, Long ts) throws SQLException {
-        String ddl = tableDDLMap.get(tableName);
+    protected static void ensureTableCreated(String url, String tableName, String tableDDLType, Long ts) throws SQLException {
+        ensureTableCreated(url, tableName, tableDDLType, null, ts);
+    }
+
+    protected static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits, Long ts) throws SQLException {
+        String ddl = tableDDLMap.get(tableDDLType);
+        if(!tableDDLType.equals(tableName)) {
+           ddl =  ddl.replace(tableDDLType, tableName);
+        }
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
     }
 
-    protected static String generateRandomString() {
+    public static String generateRandomString() {
       return RandomStringUtils.randomAlphabetic(20).toUpperCase();
     }
 
@@ -1052,16 +1060,17 @@ public abstract class BaseTest {
         }
         rs.close();
     }
-    
+
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
-        ensureTableCreated(url, "SumDoubleTest", splits);
+        String tableName = generateRandomString();
+        ensureTableCreated(url, tableName, "SumDoubleTest", splits);
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(url, props);
         try {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                    "SumDoubleTest(" +
+                    "upsert into " + tableName +
+                    "(" +
                     "    id, " +
                     "    d, " +
                     "    f, " +
@@ -1109,21 +1118,21 @@ public abstract class BaseTest {
         }
     }
     
-    protected static void initATableValues(String tenantId, byte[][] splits, String url) throws Exception {
-        initATableValues(tenantId, splits, null, url);
+    protected static String initATableValues(String tenantId, byte[][] splits, String url) throws Exception {
+        return initATableValues(tenantId, splits, null, url);
     }
     
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
-        initATableValues(tenantId, splits, date, null, url);
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
+        return initATableValues(tenantId, splits, date, null, url);
     }
     
-    
-    
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+        String tableName = generateRandomString();
+        String tableDDLType = ATABLE_NAME;
         if (ts == null) {
-            ensureTableCreated(url, ATABLE_NAME, splits);
+            ensureTableCreated(url, tableName, tableDDLType, splits);
         } else {
-            ensureTableCreated(url, ATABLE_NAME, splits, ts-5);
+            ensureTableCreated(url, tableName, tableDDLType, splits, ts-5);
         }
         
         Properties props = new Properties();
@@ -1134,8 +1143,8 @@ public abstract class BaseTest {
         try {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                    "ATABLE(" +
+                    "upsert into " + tableName +
+                    "(" +
                     "    ORGANIZATION_ID, " +
                     "    ENTITY_ID, " +
                     "    A_STRING, " +
@@ -1322,11 +1331,12 @@ public abstract class BaseTest {
             conn.commit();
         } finally {
             conn.close();
+            return tableName;
         }
     }
     
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        initATableValues(tenantId, splits, date, ts, getUrl());
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+       return initATableValues(tenantId, splits, date, ts, getUrl());
     }
     
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
@@ -1347,9 +1357,9 @@ public abstract class BaseTest {
     
     private static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits);
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits, ts-2);
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits, ts-2);
         }
         
         Properties props = new Properties();
@@ -1451,9 +1461,9 @@ public abstract class BaseTest {
     
     protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, splits);
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2);
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2);
         }
         
         Properties props = new Properties();
@@ -1555,15 +1565,15 @@ public abstract class BaseTest {
     
     protected static void initJoinTableValues(String url, byte[][] splits, Long ts) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
         } else {
-            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
         }
         
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");

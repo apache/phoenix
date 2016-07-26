@@ -276,7 +276,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
     }
 
     private void populateDataTable(Connection conn, String dataTable) throws SQLException {
-        ensureTableCreated(getUrl(), dataTable);
+        ensureTableCreated(getUrl(), dataTable, dataTable);
         String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         PreparedStatement stmt1 = conn.prepareStatement(upsert);
@@ -314,7 +314,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            ensureTableCreated(getUrl(), dataTableName);
+            ensureTableCreated(getUrl(), dataTableName, dataTableName);
             populateDataTable(conn, dataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName
                     + " (2*long_col2)";
@@ -387,7 +387,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            ensureTableCreated(getUrl(), dataTableName);
+            ensureTableCreated(getUrl(), dataTableName, dataTableName);
             populateDataTable(conn, dataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IDX ON " + fullDataTableName
                     + " (long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) )" + " INCLUDE (long_col1, long_col2)";

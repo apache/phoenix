@@ -40,7 +40,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
-public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
+public class SkipScanQueryIT extends BaseHBaseManagedTimeTableReuseIT {
     
     private void initIntInTable(Connection conn, List<Integer> data) throws SQLException {
         String ddl = "CREATE TABLE IF NOT EXISTS inTest (" + 
@@ -57,13 +57,14 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
         conn.commit();
     }
     
-    private void initVarCharCrossProductInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
-        String ddl = "CREATE TABLE IF NOT EXISTS inVarTest (" + 
+    private String initVarCharCrossProductInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (" +
                      "  s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (s1,s2))";
         conn.createStatement().executeUpdate(ddl);
         
         // Test upsert correct values 
-        String query = "UPSERT INTO inVarTest VALUES(?,?)";
+        String query = "UPSERT INTO " + tableName + " VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(query);
         for (String s1 : c1) {
             for (String s2 : c2) {
@@ -73,6 +74,7 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             }
         }
         conn.commit();
+        return tableName;
     }
     
     private void initVarCharParallelListInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
@@ -111,10 +113,10 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSkipScanFilterQuery() throws Exception {
-        String createTableDDL = "CREATE TABLE test" + "(col1 VARCHAR," + "col2 VARCHAR," + "col3 VARCHAR,"
+        String createTableDDL = "CREATE TABLE test1" + "(col1 VARCHAR," + "col2 VARCHAR," + "col3 VARCHAR,"
              + "col4 VARCHAR," + "CONSTRAINT pk  " + "PRIMARY KEY (col1,col2,col3,col4))";
-        String upsertQuery = "upsert into test values(?,?,?,?)";
-        String query = "SELECT col1, col2, col3, col4 FROM test WHERE col1 IN ('a','e','f') AND col2 = 'b' AND col4 = '1' ";
+        String upsertQuery = "upsert into test1 values(?,?,?,?)";
+        String query = "SELECT col1, col2, col3, col4 FROM test1 WHERE col1 IN ('a','e','f') AND col2 = 'b' AND col4 = '1' ";
         String[] col1Values = { "a", "e.f", "f" };
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         createTestTable(getUrl(), createTableDDL);
@@ -199,10 +201,10 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testVarCharXInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(false);
-        initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
+        String tableName = initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
             String query;
-            query = "SELECT s1,s2 FROM inVarTest WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z')";
+            query = "SELECT s1,s2 FROM " + tableName + " WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z')";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("da", rs.getString(1));
@@ -226,11 +228,11 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testVarCharXIntInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(false);
-        initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
+        String tableName = initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
             String query;
-            query = "SELECT s1,s2 FROM inVarTest " +
-                    "WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z') " +
+            query = "SELECT s1,s2 FROM " + tableName +
+                    " WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z') " +
                     "AND s1 > 'd' AND s1 < 'db' AND s2 > 'm'";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -246,15 +248,15 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testPreSplitCompositeFixedKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
+            conn.createStatement().execute("create table test2(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
             conn.setAutoCommit(true);
-            conn.createStatement().execute("upsert into test values('000','aaaa','value_1')");
-            conn.createStatement().execute("upsert into test values('000','aabb','value_2')");
-            conn.createStatement().execute("upsert into test values('100','aacc','value_3')");
-            conn.createStatement().execute("upsert into test values('100','aadd','value_4')");
-            conn.createStatement().execute("upsert into test values('200','aaee','value_5')");
-            conn.createStatement().execute("upsert into test values('201','aaff','value_6')");
-            ResultSet rs = conn.createStatement().executeQuery("select * from test where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
+            conn.createStatement().execute("upsert into test2 values('000','aaaa','value_1')");
+            conn.createStatement().execute("upsert into test2 values('000','aabb','value_2')");
+            conn.createStatement().execute("upsert into test2 values('100','aacc','value_3')");
+            conn.createStatement().execute("upsert into test2 values('100','aadd','value_4')");
+            conn.createStatement().execute("upsert into test2 values('200','aaee','value_5')");
+            conn.createStatement().execute("upsert into test2 values('201','aaff','value_6')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from test2 where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
             assertTrue(rs.next());
             assertEquals("000", rs.getString(1));
             assertEquals("aabb", rs.getString(2));
@@ -274,15 +276,15 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testInWithDescKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2 desc))");
+            conn.createStatement().execute("create table test3(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2 desc))");
             conn.setAutoCommit(true);
-            conn.createStatement().execute("upsert into test values('000','aaaa','value_1')");
-            conn.createStatement().execute("upsert into test values('000','aabb','value_2')");
-            conn.createStatement().execute("upsert into test values('100','aacc','value_3')");
-            conn.createStatement().execute("upsert into test values('100','aadd','value_4')");
-            conn.createStatement().execute("upsert into test values('200','aaee','value_5')");
-            conn.createStatement().execute("upsert into test values('201','aaff','value_6')");
-            ResultSet rs = conn.createStatement().executeQuery("select * from test where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
+            conn.createStatement().execute("upsert into test3 values('000','aaaa','value_1')");
+            conn.createStatement().execute("upsert into test3 values('000','aabb','value_2')");
+            conn.createStatement().execute("upsert into test3 values('100','aacc','value_3')");
+            conn.createStatement().execute("upsert into test3 values('100','aadd','value_4')");
+            conn.createStatement().execute("upsert into test3 values('200','aaee','value_5')");
+            conn.createStatement().execute("upsert into test3 values('201','aaff','value_6')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from test3 where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
             assertTrue(rs.next());
             assertEquals("000", rs.getString(1));
             assertEquals("aabb", rs.getString(2));
@@ -293,7 +295,7 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals("value_3", rs.getString(3));
             assertFalse(rs.next());
 
-            rs = conn.createStatement().executeQuery("select * from test where (key_1,key_2) in (('100','aacc'),('100','aadd'))");
+            rs = conn.createStatement().executeQuery("select * from test3 where (key_1,key_2) in (('100','aacc'),('100','aadd'))");
             assertTrue(rs.next());
             assertEquals("100", rs.getString(1));
             assertEquals("aadd", rs.getString(2));

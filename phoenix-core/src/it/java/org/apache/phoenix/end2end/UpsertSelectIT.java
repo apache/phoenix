@@ -89,7 +89,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
         String indexName = "IDX1";
         if (createIndex) {
             Properties props = new Properties();
@@ -209,7 +209,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(getUrl(), PTSDB_NAME, ts-1);
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts-1);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -385,7 +385,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(getUrl(), PTSDB_NAME, ts-1);
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts-1);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -460,7 +460,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
                 PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),"IntKeyTest",splits, ts-2);
+        ensureTableCreated(getUrl(),"IntKeyTest", "IntKeyTest", splits, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -600,7 +600,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
                 PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),"IntKeyTest",splits,ts-2);
+        ensureTableCreated(getUrl(),"IntKeyTest", "IntKeyTest", splits,ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);

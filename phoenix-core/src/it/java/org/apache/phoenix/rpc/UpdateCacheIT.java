@@ -84,14 +84,14 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testUpdateCacheForTxnTable() throws Exception {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
-        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
+        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE, TRANSACTIONAL_DATA_TABLE);
         helpTestUpdateCache(fullTableName, null, new int[] {1, 1});
     }
     
     @Test
     public void testUpdateCacheForNonTxnTable() throws Exception {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
-        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE);
+        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE, MUTABLE_INDEX_DATA_TABLE);
         helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
     }
 	
@@ -105,7 +105,7 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testUpdateCacheForNeverUpdatedTable() throws Exception {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE;
-        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE);
+        ensureTableCreated(getUrl(), MUTABLE_INDEX_DATA_TABLE, MUTABLE_INDEX_DATA_TABLE);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(

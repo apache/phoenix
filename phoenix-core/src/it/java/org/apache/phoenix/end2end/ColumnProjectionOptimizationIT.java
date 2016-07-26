@@ -316,7 +316,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
     
     private static void initMultiCFTable(long ts) throws Exception {
         String url = getUrl();
-        ensureTableCreated(url, MULTI_CF_NAME, ts);
+        ensureTableCreated(url, MULTI_CF_NAME, MULTI_CF_NAME, ts);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
