@@ -34,7 +34,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -95,9 +94,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(2);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
+    private boolean autoAsyncIndexBuild = QueryServicesOptions.DEFAULT_ASYNC_INDEX_AUTO_BUILD; 
     private boolean blockWriteRebuildIndex = false;
-    private final String HBASE_CLUSTER_DISTRIBUTED_CONFIG = "true";
-    private final String MAPRED_FRAMEWORK_YARN_CONFIG = "yarn";
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -124,6 +122,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD);
         rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, 
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
+        autoAsyncIndexBuild = env.getConfiguration().getBoolean(QueryServices.ASYNC_INDEX_AUTO_BUILD_ATTRIB, 
+                QueryServicesOptions.DEFAULT_ASYNC_INDEX_AUTO_BUILD);
         blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE,
         	QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
     }
@@ -177,13 +177,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             LOG.error("Phoenix Driver class is not found. Fix the classpath.", ex);
         }
          
-        Configuration conf = env.getConfiguration();
-        String hbaseClusterDistributedMode = conf.get(QueryServices.HBASE_CLUSTER_DISTRIBUTED_ATTRIB);
-        String mapredFrameworkName = conf.get(QueryServices.MAPRED_FRAMEWORK_NAME); 
-
-        // In case of non-distributed mode of hbase service or local mode of map reduce service, add timer task to rebuild the async indexes  
-        if ((hbaseClusterDistributedMode != null && !hbaseClusterDistributedMode.equals(HBASE_CLUSTER_DISTRIBUTED_CONFIG)) || 
-            (mapredFrameworkName != null && !mapredFrameworkName.equals(MAPRED_FRAMEWORK_YARN_CONFIG)))
+        // Enable async index rebuilder when autoAsyncIndexBuild is set to true 
+        if (autoAsyncIndexBuild)
         {
             LOG.info("Enabling Async Index rebuilder");
             AsyncIndexRebuilderTask asyncIndexRebuilderTask = new AsyncIndexRebuilderTask(e.getEnvironment());
@@ -237,7 +232,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     try {
                         final Properties props = new Properties();
-                        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(maxTimeRange));
+                        if (!pindexTable.isTransactional())
+                            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(maxTimeRange));
                         alterIndexConnection = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
 
                         // Alter index query for rebuilding async indexes
