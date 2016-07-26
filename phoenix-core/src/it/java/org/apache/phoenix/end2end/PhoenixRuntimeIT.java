@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -54,7 +55,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
-public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
+public class PhoenixRuntimeIT extends BaseHBaseManagedTimeTableReuseIT {
     private static void assertTenantIds(Expression e, HTableInterface htable, Filter filter, String[] tenantIds) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         Scan scan = new Scan();
@@ -97,8 +98,8 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
     private void testGetTenantIdExpression(boolean isSalted) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        String tableName = generateRandomString() + "FOO_" + (isSalted ? "SALTED" : "UNSALTED");
-        String sequenceName = generateRandomString() + "_S";
+        String tableName = generateRandomString() ;
+        String sequenceName = generateRandomString() ;
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true" + (isSalted ? ",SALT_BUCKETS=3" : ""));
         conn.createStatement().execute("CREATE SEQUENCE "  + sequenceName);
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
@@ -146,7 +147,9 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
         Expression e7 = PhoenixRuntime.getFirstPKColumnExpression(conn, tableName);
         HTableInterface htable7 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
-        
+
+        //Have to metaData tables because BaseHBaseManagedTimeTableReuseIT doesn't delete them after each test case , and tenant list will create issues between test cases
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
     }
     
 }

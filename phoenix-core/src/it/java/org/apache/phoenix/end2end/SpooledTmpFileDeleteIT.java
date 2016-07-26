@@ -38,11 +38,12 @@ import com.google.common.io.Files;
 
 
 
-public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
+public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeTableReuseIT {
 	
     private Connection conn = null;
     private Properties props = null;
     private File spoolDir;
+	private String tableName;
 
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
@@ -56,16 +57,17 @@ public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
 	
 	@Before 
 	public void setup() throws SQLException {
+		tableName = generateRandomString();
 		props = new Properties();
 		spoolDir =  Files.createTempDir();
 		props.put(QueryServices.SPOOL_DIRECTORY, spoolDir.getPath());
         props.setProperty(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1));
         conn = DriverManager.getConnection(getUrl(), props);
 		Statement stmt = conn.createStatement();
-		stmt.execute("CREATE TABLE test (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");
-		stmt.execute("UPSERT INTO test VALUES ('AA')");
-		stmt.execute("UPSERT INTO test VALUES ('EB')");    
-		stmt.execute("UPSERT INTO test VALUES ('FA')");    
+		stmt.execute("CREATE TABLE " + tableName + " (ID varchar NOT NULL PRIMARY KEY) SPLIT ON ('EA','EZ')");
+		stmt.execute("UPSERT INTO " + tableName + " VALUES ('AA')");
+		stmt.execute("UPSERT INTO " + tableName + " VALUES ('EB')");
+		stmt.execute("UPSERT INTO " + tableName + " VALUES ('FA')");
 		stmt.close();
 		conn.commit();
 	}
@@ -98,7 +100,7 @@ public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
 			file.delete();
 		}
 
-		String query = "select * from TEST";
+		String query = "select * from " + tableName + "";
 		Statement statement = conn.createStatement();
 		ResultSet rs = statement.executeQuery(query);
 		assertTrue(rs.next());
@@ -109,7 +111,7 @@ public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
 			fileNames.add(file.getName());
 		}
 
-		String preparedQuery = "select * from test where id = ?";
+		String preparedQuery = "select * from " + tableName + " where id = ?";
 		PreparedStatement pstmt = conn.prepareStatement(preparedQuery);
 		pstmt.setString(1, "EB");
 		ResultSet prs = pstmt.executeQuery(preparedQuery);
@@ -121,14 +123,14 @@ public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeIT {
 		}
 
 		Connection conn2 = DriverManager.getConnection(getUrl(), props);
-		String query2 = "select * from TEST";
+		String query2 = "select * from " + tableName + "";
 		Statement statement2 = conn2.createStatement();
 		ResultSet rs2 = statement2.executeQuery(query2);
 		assertTrue(rs2.next());
 		files = dir.listFiles(fnameFilter);
 		assertTrue(files.length > 0);
 
-		String preparedQuery2 = "select * from test where id = ?";
+		String preparedQuery2 = "select * from " + tableName + " where id = ?";
 		PreparedStatement pstmt2 = conn2.prepareStatement(preparedQuery2);
 		pstmt2.setString(1, "EB");
 		ResultSet prs2 = pstmt2.executeQuery(preparedQuery2);
