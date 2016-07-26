@@ -28,6 +28,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -42,7 +43,7 @@ import org.junit.BeforeClass;
 
 import com.google.common.collect.Maps;
 
-public class BasePigIT extends BaseHBaseManagedTimeIT {
+public class BasePigIT extends BaseHBaseManagedTimeTableReuseIT {
     protected TupleFactory tupleFactory;
     protected String zkQuorum;
     protected Connection conn;
