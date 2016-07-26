@@ -48,7 +48,8 @@ public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
 	@Test
 	public void testPKOrNotPKInOREvaluation() throws SQLException {
 	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-	    Connection conn = DriverManager.getConnection(getUrl(), props);	    
+	    Connection conn = DriverManager.getConnection(getUrl(), props);
+        
 	    conn.setAutoCommit(false);
 	    
             String create = "CREATE TABLE DIE ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50))";
