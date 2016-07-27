@@ -5,8 +5,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.Properties;
 
 import org.junit.Before;
@@ -120,6 +123,31 @@ public class CalciteDMLIT extends BaseCalciteIT {
             .close();
         start(PROPS).sql("select * from aTable where organization_id = '1'")
             .resultIs(new Object[][] {})
+            .close();
+    }
+    
+    @Test public void testDateTimeTimestampAsBindVariables() throws Exception {
+        start(PROPS).sql("create table t0(a date not null, b time not null, c timestamp constraint pk primary key(a, b))").execute().close();
+        Sql sql = start(PROPS).sql("upsert into t0 values(?, ?, ?)");
+        PreparedStatement stmt = sql.prepareStatement();
+        stmt.setDate(1, Date.valueOf("2016-07-12"));
+        stmt.setTime(2, Time.valueOf("12:30:28"));
+        stmt.setTimestamp(3, Timestamp.valueOf("2016-7-12 12:30:28"));
+        stmt.executeUpdate();
+        stmt.setDate(1, Date.valueOf("2016-07-12"));
+        stmt.setTime(2, Time.valueOf("12:34:09"));
+        stmt.setTimestamp(3, Timestamp.valueOf("2016-7-12 12:34:09"));
+        stmt.executeUpdate();
+        stmt.setDate(1, Date.valueOf("2016-07-16"));
+        stmt.setTime(2, Time.valueOf("09:20:08"));
+        stmt.setTimestamp(3, Timestamp.valueOf("2016-7-16 09:20:08"));
+        stmt.executeUpdate();
+        sql.close();
+        start(PROPS).sql("select * from t0")
+            .resultIs(new Object[][]{
+                {Date.valueOf("2016-07-12"), Time.valueOf("12:30:28"), Timestamp.valueOf("2016-7-12 12:30:28")},
+                {Date.valueOf("2016-07-12"), Time.valueOf("12:34:09"), Timestamp.valueOf("2016-7-12 12:34:09")},
+                {Date.valueOf("2016-07-16"), Time.valueOf("09:20:08"), Timestamp.valueOf("2016-7-16 09:20:08")}})
             .close();
     }
 }

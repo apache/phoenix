@@ -7,6 +7,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLXML;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -117,8 +118,9 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             AvaticaStatement statement = lookupStatement(handle);
             final List<TypedValue> parameterValues =
                     TROJAN.getParameterValues(statement);
+            final Calendar calendar = Calendar.getInstance();
             for (Ord<TypedValue> o : Ord.zip(parameterValues)) {
-                map.put("?" + o.i, o.e.toLocal());
+                map.put("?" + o.i, o.e.toJdbc(calendar));
             }
             ImmutableList<RuntimeContext> ctxList = runtimeContextMap.get(handle);
             if (ctxList == null) {

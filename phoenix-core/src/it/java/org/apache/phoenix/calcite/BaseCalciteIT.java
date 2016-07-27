@@ -27,13 +27,15 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.text.DecimalFormat;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -305,7 +307,19 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             }
             
             if (obj.getClass().isArray()) {
-                return Arrays.toString((Object[]) obj);
+                final StringBuilder buf = new StringBuilder("[");
+                for (Object o : (Object[]) obj) {
+                    if (buf.length() > 1) {
+                        buf.append(", ");
+                    }
+                    String s = o.toString();
+                    // Remove nano suffix
+                    if (o instanceof Timestamp) {
+                        s = s.substring(0, s.lastIndexOf('.'));
+                    }
+                    buf.append(s);
+                }
+                return buf.append("]").toString();
             }
             
             return obj;
@@ -399,21 +413,30 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + SCORES_TABLE_NAME
-                    + "(student_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, scores INTEGER[] CONSTRAINT pk PRIMARY KEY (student_id, subject_id))");
+                    + "(student_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, scores INTEGER[], exam_date DATE[], exam_time TIME[], exam_timestamp TIMESTAMP[] CONSTRAINT pk PRIMARY KEY (student_id, subject_id))");
             PreparedStatement stmt = conn.prepareStatement(
                     "UPSERT INTO " + SCORES_TABLE_NAME
-                    + " VALUES(?, ?, ?)");
+                    + " VALUES(?, ?, ?, ?, ?, ?)");
             stmt.setInt(1, 1);
             stmt.setInt(2, 1);
             stmt.setArray(3, conn.createArrayOf("INTEGER", new Integer[] {85, 80, 82}));
+            stmt.setArray(4, conn.createArrayOf("DATE", new Date[] {Date.valueOf("2016-3-22"), Date.valueOf("2016-5-23"), Date.valueOf("2016-7-24")}));
+            stmt.setArray(5, conn.createArrayOf("TIME", new Time[] {Time.valueOf("15:30:28"), Time.valueOf("13:26:50"), Time.valueOf("16:20:00")}));
+            stmt.setArray(6, conn.createArrayOf("TIMESTAMP", new Timestamp[] {Timestamp.valueOf("2016-3-22 15:30:28"), Timestamp.valueOf("2016-5-23 13:26:50"), Timestamp.valueOf("2016-7-24 16:20:00")}));
             stmt.execute();
             stmt.setInt(1, 2);
             stmt.setInt(2, 1);
             stmt.setArray(3, null);
+            stmt.setArray(4, null);
+            stmt.setArray(5, null);
+            stmt.setArray(6, null);
             stmt.execute();
             stmt.setInt(1, 3);
             stmt.setInt(2, 2);
             stmt.setArray(3, conn.createArrayOf("INTEGER", new Integer[] {87, 88, 80}));
+            stmt.setArray(4, conn.createArrayOf("DATE", new Date[] {Date.valueOf("2016-3-22"), Date.valueOf("2016-5-23"), Date.valueOf("2016-7-24")}));
+            stmt.setArray(5, conn.createArrayOf("TIME", new Time[] {Time.valueOf("15:30:16"), Time.valueOf("13:26:52"), Time.valueOf("16:20:40")}));
+            stmt.setArray(6, conn.createArrayOf("TIMESTAMP", new Timestamp[] {Timestamp.valueOf("2016-3-22 15:30:16"), Timestamp.valueOf("2016-5-23 13:26:52"), Timestamp.valueOf("2016-7-24 16:20:40")}));
             stmt.execute();
             conn.commit();
         } catch (TableAlreadyExistsException e) {

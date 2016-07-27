@@ -23,7 +23,9 @@ import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Properties;
@@ -72,17 +74,21 @@ public class CalciteIT extends BaseCalciteIT {
                           {"00D300000000XHP", "00A423122312312", "a"}})
                 .close();
         
-        // FIXME: Should be 14:22:56 instead. Wrong due to time zone.
         start(false, 1000f).sql("select \"DATE\" from " + JOIN_ORDER_TABLE_FULL_NAME + " where \"order_id\" = '000000000000001'")
                 .resultIs(0, new Object[][]{
-                        {new Timestamp(format.parse("2013-11-22 19:22:56").getTime())}})
+                        {new Timestamp(format.parse("2013-11-22 14:22:56").getTime())}})
                 .close();
         
-        start(false, 1000f).sql("select student_id, scores from " + SCORES_TABLE_NAME)
+        start(false, 1000f).sql("select \"DATE\" from " + JOIN_CUSTOMER_TABLE_FULL_NAME + " where \"customer_id\" = '0000000001'")
+                .resultIs(0, new Object[][]{
+                        {Date.valueOf("2013-11-01")}})
+                .close();
+        
+        start(false, 1000f).sql("select student_id, scores, exam_date, exam_time, exam_timestamp from " + SCORES_TABLE_NAME)
                 .resultIs(0, new Object[][] {
-                        {1, new Integer[] {85, 80, 82}},
-                        {2, null},
-                        {3, new Integer[] {87, 88, 80}}})
+                        {1, new Integer[] {85, 80, 82}, new Date[] {Date.valueOf("2016-3-22"), Date.valueOf("2016-5-23"), Date.valueOf("2016-7-24")}, new Time[] {Time.valueOf("15:30:28"), Time.valueOf("13:26:50"), Time.valueOf("16:20:00")}, new Timestamp[] {Timestamp.valueOf("2016-3-22 15:30:28"), Timestamp.valueOf("2016-5-23 13:26:50"), Timestamp.valueOf("2016-7-24 16:20:00")}},
+                        {2, null, null, null, null},
+                        {3, new Integer[] {87, 88, 80}, new Date[] {Date.valueOf("2016-3-22"), Date.valueOf("2016-5-23"), Date.valueOf("2016-7-24")}, new Time[] {Time.valueOf("15:30:16"), Time.valueOf("13:26:52"), Time.valueOf("16:20:40")}, new Timestamp[] {Timestamp.valueOf("2016-3-22 15:30:16"), Timestamp.valueOf("2016-5-23 13:26:52"), Timestamp.valueOf("2016-7-24 16:20:40")}}})
                 .close();
     }
     
@@ -933,7 +939,7 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
         start(false, 1000f).sql("SELECT s.student_id, t.score FROM " + SCORES_TABLE_NAME + " s, UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + " s2 where s.student_id = s2.student_id)) AS t(score)")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(STUDENT_ID=[$0], SCORE=[$3])\n" +
+                           "  PhoenixClientProject(STUDENT_ID=[$0], SCORE=[$6])\n" +
                            "    PhoenixCorrelate(correlation=[$cor0], joinType=[INNER], requiredColumns=[{0}])\n" +
                            "      PhoenixTableScan(table=[[phoenix, SCORES]])\n" +
                            "      PhoenixUncollect\n" +
