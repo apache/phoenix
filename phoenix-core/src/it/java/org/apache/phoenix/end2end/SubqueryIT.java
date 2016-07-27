@@ -67,6 +67,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
     
     private String[] indexDDL;
     private String[] plans;
+    private String itemTableFullName;
     
     public SubqueryIT(String[] indexDDL, String[] plans) {
         this.indexDDL = indexDDL;

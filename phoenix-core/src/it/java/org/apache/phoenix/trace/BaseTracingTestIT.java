@@ -37,6 +37,7 @@ import org.apache.hadoop.metrics2.impl.ExposedMetricCounterLong;
 import org.apache.hadoop.metrics2.impl.ExposedMetricsRecordImpl;
 import org.apache.hadoop.metrics2.lib.ExposedMetricsInfoImpl;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -51,7 +52,7 @@ import org.junit.Before;
  * connections, as well as any supporting utils.
  */
 
-public class BaseTracingTestIT extends BaseHBaseManagedTimeIT {
+public class BaseTracingTestIT extends BaseHBaseManagedTimeTableReuseIT {
     @Before
     public void resetTracingTableIfExists() throws Exception {
         Connection conn = getConnectionWithoutTracing();

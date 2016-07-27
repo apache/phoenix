@@ -77,19 +77,13 @@ import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
-
-    private String schemaName="TEST";
     private boolean isNamespaceMapped;
-    private String tableName = schemaName + ".T";
-    private String indexTableName = schemaName + ".I";
-    private String indexName = "I";
-    private String indexPhysicalTableName;
-    private TableName physicalTableName;
+    String schemaName="TEST";
 
     public LocalIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
-        this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.indexPhysicalTableName = this.physicalTableName.getNameAsString();
+        //this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        //this.indexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
     
     @BeforeClass 
@@ -126,6 +120,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexRoundTrip() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
@@ -146,6 +144,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexCreationWithSplitsShouldFail() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
@@ -162,6 +163,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexCreationWithSaltingShouldFail() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
@@ -178,6 +182,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexTableRegionSplitPolicyAndSplitKeys() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null,"('e','i','o')");
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
@@ -205,6 +214,8 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testDropLocalIndexTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
         createBaseTable(tableName, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
@@ -220,6 +231,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testPutsToLocalIndexTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
@@ -254,6 +271,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testBuildIndexWhenUserTableAlreadyHasData() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
@@ -288,6 +311,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexScan() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
@@ -420,6 +449,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexScanJoinColumnsFromDataTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         try{
@@ -554,6 +589,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testIndexPlanSelectionIfBothGlobalAndLocalIndexesHasSameColumnsAndOrder() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
@@ -573,6 +612,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testDropLocalIndexShouldDeleteDataFromLocalIndexTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
@@ -615,6 +657,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexRowsShouldBeDeletedWhenUserTableRowsDeleted() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
@@ -637,6 +683,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testScanWhenATableHasMultipleLocalIndexes() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
@@ -659,6 +708,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexesOnTableWithImmutableRows() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         try {
@@ -702,6 +754,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexScanWithInList() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
@@ -732,12 +788,13 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
             Statement statement = conn1.createStatement();
-            statement.execute("create table example (id integer not null,fn varchar,"
+            String tableName = generateRandomString();
+            statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
                     + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
-            statement.execute("upsert into example values(1,'fn','ln')");
+            statement.execute("upsert into " + tableName + "  values(1,'fn','ln')");
             statement
-                    .execute("create local index my_idx on example (fn)");
-            statement.execute("upsert into example values(2,'fn1','ln1')");
+                    .execute("create local index my_idx on " + tableName + "  (fn)");
+            statement.execute("upsert into " + tableName + "  values(2,'fn1','ln1')");
             ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM my_idx");
             assertTrue(rs.next());
        } finally {
@@ -747,6 +804,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexScanAfterRegionSplit() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         if (isNamespaceMapped) { return; }
         createBaseTable(tableName, null, "('e','j','o')");
         Connection conn1 = getConnection();
@@ -839,6 +901,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexScanWithSmallChunks() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, 3, null);
         Properties props = new Properties();
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "2");
@@ -882,6 +947,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLocalIndexScanAfterRegionsMerge() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         if (isNamespaceMapped) { return; }
         createBaseTable(tableName, null, "('e','j','o')");
         Connection conn1 = getConnection();
