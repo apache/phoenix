@@ -24,38 +24,35 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class AsyncIndexTestUtil {
-    private static final String PERSON_TABLE_NAME = "PERSON";
-    private static final String PERSON_TABLE_NAME_WITH_SCHEMA = "TEST.PERSON";
-    private static final String TEST_SCHEMA = "TEST";
-
-    public static final String PERSON_TABLE_ASYNC_INDEX_INFO_QUERY = 
-            ASYNC_INDEX_INFO_QUERY + " and DATA_TABLE_NAME='" + PERSON_TABLE_NAME 
-            + "' and TABLE_SCHEM='" + TEST_SCHEMA + "'";
-
-    public static void createTableAndLoadData(Statement stmt) throws SQLException {
-        String ddl = "CREATE TABLE " + PERSON_TABLE_NAME_WITH_SCHEMA + " (ID INTEGER NOT NULL PRIMARY KEY, " +
+    public static void createTableAndLoadData(Statement stmt, String tableName) throws SQLException {
+        String ddl = "CREATE TABLE " + tableName + " (ID INTEGER NOT NULL PRIMARY KEY, " +
                      "FNAME VARCHAR, LNAME VARCHAR)";
         
         stmt.execute(ddl);
-        stmt.execute("UPSERT INTO " + PERSON_TABLE_NAME_WITH_SCHEMA + " values(1, 'FIRST', 'F')");
-        stmt.execute("UPSERT INTO " + PERSON_TABLE_NAME_WITH_SCHEMA + " values(2, 'SECOND', 'S')");
+        stmt.execute("UPSERT INTO " + tableName + " values(1, 'FIRST', 'F')");
+        stmt.execute("UPSERT INTO " + tableName + " values(2, 'SECOND', 'S')");
     }
 
-    public static void createAsyncIndex(Statement stmt) throws SQLException {
-        stmt.execute("CREATE INDEX FNAME_INDEX ON " + PERSON_TABLE_NAME_WITH_SCHEMA + "(FNAME) ASYNC");
+    public static void createAsyncIndex(Statement stmt, String indexName, String tableName) throws SQLException {
+        stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + "(FNAME) ASYNC");
     }
 
-    public static void retryWithSleep(int maxRetries, int sleepInSecs, Statement stmt) throws Exception {
-        ResultSet rs = stmt.executeQuery(PERSON_TABLE_ASYNC_INDEX_INFO_QUERY);
+    public static void retryWithSleep(String tableName, int maxRetries, int sleepInSecs, Statement stmt) throws Exception {
+        String personTableAsyncIndexInfoQuery = getPersonTableAsyncIndexInfoQuery(tableName);
+        ResultSet rs = stmt.executeQuery(personTableAsyncIndexInfoQuery);
         // Wait for max of 5 retries with each retry of 5 sec sleep
         int retries = 0;
         while(retries <= maxRetries) {
             Thread.sleep(sleepInSecs * 1000);
-            rs = stmt.executeQuery(PERSON_TABLE_ASYNC_INDEX_INFO_QUERY);
+            rs = stmt.executeQuery(personTableAsyncIndexInfoQuery);
             if (!rs.next()) {
                 break;
             }
             retries++;
         }
+    }
+    
+    public static String getPersonTableAsyncIndexInfoQuery(String tableName) {
+        return ASYNC_INDEX_INFO_QUERY + " and DATA_TABLE_NAME='" + tableName + "'";
     }
 }

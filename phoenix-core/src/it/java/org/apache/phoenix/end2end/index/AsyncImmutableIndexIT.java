@@ -28,7 +28,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -36,14 +36,16 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 
-public class AsyncImmutableIndexIT extends BaseHBaseManagedTimeIT {
+public class AsyncImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     private static final long MAX_WAIT_FOR_INDEX_BUILD_TIME_MS = 45000;
 
     @Test
     public void testDeleteFromImmutable() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.createStatement().execute("CREATE TABLE TEST_TABLE (\n" + 
+            conn.createStatement().execute("CREATE TABLE " + tableName + " (\n" + 
                     "        pk1 VARCHAR NOT NULL,\n" + 
                     "        pk2 VARCHAR NOT NULL,\n" + 
                     "        pk3 VARCHAR\n" + 
@@ -54,17 +56,17 @@ public class AsyncImmutableIndexIT extends BaseHBaseManagedTimeIT {
                     "        pk3\n" + 
                     "        )\n" + 
                     "        ) IMMUTABLE_ROWS=true");
-            conn.createStatement().execute("upsert into TEST_TABLE (pk1, pk2, pk3) values ('a', '1', '1')");
-            conn.createStatement().execute("upsert into TEST_TABLE (pk1, pk2, pk3) values ('b', '2', '2')");
+            conn.createStatement().execute("upsert into " + tableName + " (pk1, pk2, pk3) values ('a', '1', '1')");
+            conn.createStatement().execute("upsert into " + tableName + " (pk1, pk2, pk3) values ('b', '2', '2')");
             conn.commit();
-            conn.createStatement().execute("CREATE INDEX TEST_INDEX ON TEST_TABLE (pk3, pk2) ASYNC");
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (pk3, pk2) ASYNC");
             
             // this delete will be issued at a timestamp later than the above timestamp of the index table
-            conn.createStatement().execute("delete from TEST_TABLE where pk1 = 'a'");
+            conn.createStatement().execute("delete from " + tableName + " where pk1 = 'a'");
             conn.commit();
 
             DatabaseMetaData dbmd = conn.getMetaData();
-            String escapedTableName = StringUtil.escapeLike("TEST_INDEX");
+            String escapedTableName = StringUtil.escapeLike(indexName);
             String[] tableType = new String[] {PTableType.INDEX.toString()};
             long startTime = System.currentTimeMillis();
             boolean isIndexActive = false;
@@ -77,22 +79,21 @@ public class AsyncImmutableIndexIT extends BaseHBaseManagedTimeIT {
                 }
                 Thread.sleep(3000);
             } while (System.currentTimeMillis() - startTime < MAX_WAIT_FOR_INDEX_BUILD_TIME_MS);
-            
             assertTrue(isIndexActive);
 
             // upsert two more rows
             conn.createStatement().execute(
-                "upsert into TEST_TABLE (pk1, pk2, pk3) values ('a', '3', '3')");
+                "upsert into " + tableName + " (pk1, pk2, pk3) values ('a', '3', '3')");
             conn.createStatement().execute(
-                "upsert into TEST_TABLE (pk1, pk2, pk3) values ('b', '4', '4')");
+                "upsert into " + tableName + " (pk1, pk2, pk3) values ('b', '4', '4')");
             conn.commit();
 
             // validate that delete markers were issued correctly and only ('a', '1', 'value1') was
             // deleted
-            String query = "SELECT pk3 from TEST_TABLE ORDER BY pk3";
+            String query = "SELECT pk3 from " + tableName + " ORDER BY pk3";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String expectedPlan =
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER TEST_INDEX\n" + 
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n" + 
                     "    SERVER FILTER BY FIRST KEY ONLY";
             assertEquals("Wrong plan ", expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(query);

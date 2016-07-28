@@ -204,7 +204,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
      */
     public static class AsyncIndexRebuilderTask extends TimerTask {
         RegionCoprocessorEnvironment env;
-        PhoenixConnection conn = null;
 
         public AsyncIndexRebuilderTask(RegionCoprocessorEnvironment env) {
             this.env = env;
@@ -212,10 +211,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
         @Override
         public void run() {
+            PhoenixConnection conn = null;
             try {
-                if (conn == null) {
-                   conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
-                }
+                conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
                 Statement s = conn.createStatement();
                 ResultSet rs = s.executeQuery(ASYNC_INDEX_INFO_QUERY);
 
