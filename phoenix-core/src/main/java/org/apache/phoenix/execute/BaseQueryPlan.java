@@ -236,8 +236,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             ScanUtil.setReversed(scan);
-            // Hack for working around PHOENIX-3121 (reverse scans fail when limit is a multiple of scanner cache size).
-            //TODO: remove once PHOENIX-3121 is fixed.
+            // Hack for working around PHOENIX-3121 and HBASE-16296.
+            // TODO: remove once PHOENIX-3121 and/or HBASE-16296 are fixed.
             int scannerCacheSize = context.getStatement().getFetchSize();
             if (limit != null && limit % scannerCacheSize == 0) {
                 scan.setCaching(scannerCacheSize + 1);
