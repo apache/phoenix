@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -60,6 +61,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -312,32 +314,18 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
 
         if (success) {
             if (hasLocalIndexes) {
-                byte[][] splitKeysAfterJob = null;
                 try {
                     table = new HTable(job.getConfiguration(), qualifiedTableName);
-                    splitKeysAfterJob = table.getRegionLocator().getStartKeys();
+                    if(!IndexUtil.matchingSplitKeys(splitKeysBeforeJob, table.getRegionLocator().getStartKeys())) {
+                        LOG.error("The table "
+                                + qualifiedTableName
+                                + " has local indexes and there is split key mismatch before and"
+                                + " after running bulkload job. Please rerun the job otherwise"
+                                + " there may be inconsistencies between actual data and index data.");
+                        return -1;
+                    }
                 } finally {
                     if (table != null) table.close();
-                }
-                boolean matchingSplitKeys = true;
-                if (splitKeysBeforeJob != null && splitKeysAfterJob != null
-                        && splitKeysBeforeJob.length == splitKeysAfterJob.length) {
-                    for (int i = 0; i < splitKeysBeforeJob.length; i++) {
-                        if (Bytes.compareTo(splitKeysBeforeJob[i], splitKeysAfterJob[i]) != 0) {
-                            matchingSplitKeys = false;
-                            break;
-                        }
-                    }
-                } else {
-                    matchingSplitKeys = false;
-                }
-                if(!matchingSplitKeys) {
-                    LOG.error("The table "
-                            + qualifiedTableName
-                            + " has local indexes and there is split key mismatch before and"
-                            + " after running bulkload job. Please rerun the job otherwise"
-                            + " there may be inconsistencies between actual data and index data.");
-                    return -1;
                 }
             }
             LOG.info("Loading HFiles from {}", outputPath);
