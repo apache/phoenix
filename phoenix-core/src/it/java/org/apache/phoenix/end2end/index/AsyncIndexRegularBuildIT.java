@@ -45,15 +45,18 @@ public class AsyncIndexRegularBuildIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testAsyncIndexRegularBuild() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         Statement stmt = conn.createStatement();
-        AsyncIndexTestUtil.createTableAndLoadData(stmt);
-        AsyncIndexTestUtil.createAsyncIndex(stmt);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        AsyncIndexTestUtil.createTableAndLoadData(stmt, tableName);
+        AsyncIndexTestUtil.createAsyncIndex(stmt, indexName, tableName);
 
-        ResultSet rs = stmt.executeQuery(AsyncIndexTestUtil.PERSON_TABLE_ASYNC_INDEX_INFO_QUERY);
+        String personTableAsyncIndexInfoQuery = AsyncIndexTestUtil.getPersonTableAsyncIndexInfoQuery(tableName);
+        ResultSet rs = stmt.executeQuery(personTableAsyncIndexInfoQuery);
         assertTrue(rs.next());
 
-        AsyncIndexTestUtil.retryWithSleep(4, 5, stmt);
+        AsyncIndexTestUtil.retryWithSleep(tableName, 4, 5, stmt);
 
-        rs = stmt.executeQuery(AsyncIndexTestUtil.PERSON_TABLE_ASYNC_INDEX_INFO_QUERY);
+        rs = stmt.executeQuery(personTableAsyncIndexInfoQuery);
         assertTrue(rs.next());
     }
 }
