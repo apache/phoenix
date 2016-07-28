@@ -25,24 +25,27 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.junit.Test;
 
-public class AsyncIndexAutoBuildIT extends BaseHBaseManagedTimeIT {
+public class AsyncIndexAutoBuildIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testAsyncIndexAutoBuild() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         Statement stmt = conn.createStatement();
-        AsyncIndexTestUtil.createTableAndLoadData(stmt);
-        AsyncIndexTestUtil.createAsyncIndex(stmt);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        AsyncIndexTestUtil.createTableAndLoadData(stmt, tableName);
+        AsyncIndexTestUtil.createAsyncIndex(stmt, indexName, tableName);
 
-        ResultSet rs = stmt.executeQuery(AsyncIndexTestUtil.PERSON_TABLE_ASYNC_INDEX_INFO_QUERY);
+        String personTableAsyncIndexInfoQuery = AsyncIndexTestUtil.getPersonTableAsyncIndexInfoQuery(tableName);
+        ResultSet rs = stmt.executeQuery(personTableAsyncIndexInfoQuery);
         assertTrue(rs.next());
+        
+        AsyncIndexTestUtil.retryWithSleep(tableName, 4, 5, stmt);
 
-        AsyncIndexTestUtil.retryWithSleep(4, 5, stmt);
-
-        rs = stmt.executeQuery(AsyncIndexTestUtil.PERSON_TABLE_ASYNC_INDEX_INFO_QUERY);
+        rs = stmt.executeQuery(personTableAsyncIndexInfoQuery);
         assertFalse(rs.next());
     }
 }
