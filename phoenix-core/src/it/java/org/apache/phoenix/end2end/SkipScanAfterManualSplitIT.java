@@ -62,7 +62,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
     private static final int MAX_CHAR = 'z';
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         // needed for 64 region parallelization due to splitting

@@ -56,7 +56,7 @@ public class ReverseScanIT extends BaseHBaseManagedTimeTableReuseIT {
     protected static final String ATABLE_INDEX_NAME = generateRandomString();
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
