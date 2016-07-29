@@ -72,6 +72,7 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
@@ -216,37 +217,36 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
                 Statement s = conn.createStatement();
                 ResultSet rs = s.executeQuery(ASYNC_INDEX_INFO_QUERY);
-
-                PhoenixConnection alterIndexConnection = null;
+                PhoenixConnection metaDataClientConn = conn;
                 while (rs.next()) {
                     String tableName = rs.getString(PhoenixDatabaseMetaData.DATA_TABLE_NAME);
                     String tableSchema = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
                     String indexName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
-                    String tableNameWithSchema = SchemaUtil.getTableName(tableSchema, tableName);
                     
-                    final PTable pindexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(tableSchema, indexName));
+                    final PTable indexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(tableSchema, indexName));
+                    final PTable dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(tableSchema, tableName));
                     // this is set to ensure index tables remains consistent post population.
-                    long maxTimeRange = pindexTable.getTimeStamp()+1;
+                    long maxTimeRange = indexTable.getTimeStamp()+1;
 
                     try {
                         final Properties props = new Properties();
-                        if (!pindexTable.isTransactional())
+                        Long txnScn = null;
+                        if (!indexTable.isTransactional()) {
                             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(maxTimeRange));
-                        alterIndexConnection = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
-
-                        // Alter index query for rebuilding async indexes
-                        String alterIndexQuery = String.format("ALTER INDEX IF EXISTS %s ON %s REBUILD", indexName, tableNameWithSchema);
-    
-                        LOG.info("Executing Rebuild Index Query:" + alterIndexQuery);
-                        alterIndexConnection.createStatement().execute(alterIndexQuery);
+                            metaDataClientConn = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
+                            txnScn = maxTimeRange;
+                        }
+                        MetaDataClient client = new MetaDataClient(conn);
+                        LOG.info("Building Index " + SchemaUtil.getTableName(tableSchema, indexName));
+                        client.buildIndex(indexTable, new TableRef(dataTable), txnScn);
                     } catch (Throwable t) {
-                        LOG.error("AsyncIndexRebuilderTask failed during rebuilding index!", t);
+                        LOG.error("AsyncIndexRebuilderTask failed while building index!", t);
                     } finally {
-                        if (alterIndexConnection != null) {
+                        if (metaDataClientConn != null) {
                             try {
-                                alterIndexConnection.close();
+                                metaDataClientConn.close();
                             } catch (SQLException ignored) {
-                                LOG.debug("AsyncIndexRebuilderTask can't close alterIndexConnection", ignored);
+                                LOG.debug("AsyncIndexRebuilderTask can't close metaDataClientConn", ignored);
                             }
                         }
                     }
