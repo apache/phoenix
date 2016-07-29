@@ -68,6 +68,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -212,6 +213,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         return DriverManager.getConnection(getUrl(),props);
     }
 
+    @Ignore
     @Test
     public void testDropLocalIndexTable() throws Exception {
         String tableName = schemaName + "." + generateRandomString();
@@ -610,6 +612,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         conn1.close();
     }
 
+    @Ignore
     @Test
     public void testDropLocalIndexShouldDeleteDataFromLocalIndexTable() throws Exception {
         String tableName = schemaName + "." + generateRandomString();
@@ -789,13 +792,14 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         try{
             Statement statement = conn1.createStatement();
             String tableName = generateRandomString();
+            String indexName = generateRandomString();
             statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
                     + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
             statement.execute("upsert into " + tableName + "  values(1,'fn','ln')");
             statement
-                    .execute("create local index my_idx on " + tableName + "  (fn)");
+                    .execute("create local index " + indexName + " on " + tableName + "  (fn)");
             statement.execute("upsert into " + tableName + "  values(2,'fn1','ln1')");
-            ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM my_idx");
+            ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName );
             assertTrue(rs.next());
        } finally {
             conn1.close();

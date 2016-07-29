@@ -256,6 +256,7 @@
           <artifactId>maven-failsafe-plugin</artifactId>
           <version>${maven-failsafe-plugin.version}</version>
           <executions>
+            <!--
             <execution>
                <id>ClientManagedTimeTests</id>
                  <configuration>
@@ -274,6 +275,7 @@
                  <goal>verify</goal>
                </goals>
             </execution>
+
             <execution>
                <id>HBaseManagedTimeTests</id>
                  <configuration>
@@ -292,6 +294,8 @@
                  <goal>verify</goal>
                </goals>
             </execution>
+-->
+
             <execution>
               <id>HBaseManagedTimeTableReuseTest</id>
               <configuration>
@@ -310,6 +314,7 @@
                 <goal>verify</goal>
               </goals>
             </execution>
+            <!--
 	        <execution>
                <id>NeedTheirOwnClusterTests</id>
                  <configuration>
@@ -328,6 +333,7 @@
                  <goal>verify</goal>
                </goals>
             </execution>
+-->
           </executions>
         </plugin>
         <plugin>

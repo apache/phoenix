@@ -39,7 +39,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeIT {
+public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @BeforeClass
     @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
@@ -53,8 +53,8 @@ public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testJoinOverSaltedTables() throws Exception {
-        String tempTableNoSalting = "TEMP_TABLE_NO_SALTING";
-        String tempTableWithSalting = "TEMP_TABLE_WITH_SALTING";
+        String tempTableNoSalting = "TEMP_TABLE_NO_SALTING"  + generateRandomString();
+        String tempTableWithSalting = "TEMP_TABLE_WITH_SALTING" + generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -191,8 +191,8 @@ public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testJoinOnDynamicColumns() throws Exception {
-        String tableA = "tableA";
-        String tableB = "tableB";
+        String tableA =  generateRandomString();
+        String tableB =  generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -210,7 +210,7 @@ public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             stmt.close();
 
-            String upsertA = "UPSERT INTO TABLEA (pkA, colA1, colA2) VALUES(?, ?, ?)";
+            String upsertA = "UPSERT INTO " + tableA + " (pkA, colA1, colA2) VALUES(?, ?, ?)";
             stmt = conn.prepareStatement(upsertA);
             int i = 0;
             for (i = 0; i < 5; i++) {
@@ -224,8 +224,8 @@ public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeIT {
 
             // upsert select dynamic columns in tableB
             conn.createStatement().execute("CREATE SEQUENCE SEQB");
-            String upsertBSelectA = "UPSERT INTO TABLEB (pkB, pkA INTEGER)"
-                    + "SELECT NEXT VALUE FOR SEQB, pkA FROM TABLEA";
+            String upsertBSelectA = "UPSERT INTO " + tableB + " (pkB, pkA INTEGER)"
+                    + "SELECT NEXT VALUE FOR SEQB, pkA FROM " + tableA ;
             stmt = conn.prepareStatement(upsertBSelectA);
             stmt.executeUpdate();
             stmt.close();
@@ -234,7 +234,7 @@ public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeIT {
 
             // perform a join between tableB and tableA by joining on the dynamic column that we upserted in
             // tableB. This join should return all the rows from table A.
-            String joinSql = "SELECT /*+ USE_SORT_MERGE_JOIN*/ A.pkA, A.COLA1, A.colA2 FROM TABLEB B(pkA INTEGER) JOIN TABLEA A ON a.pkA = b.pkA";
+            String joinSql = "SELECT /*+ USE_SORT_MERGE_JOIN*/ A.pkA, A.COLA1, A.colA2 FROM " + tableB + " B(pkA INTEGER) JOIN " + tableA + " A ON a.pkA = b.pkA";
             stmt = conn.prepareStatement(joinSql);
             ResultSet rs = stmt.executeQuery();
             i = 0;

@@ -1062,7 +1062,10 @@ public abstract class BaseTest {
     }
 
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
-        String tableName = generateRandomString();
+        initSumDoubleValues("SumDoubleTest", splits, url);
+    }
+
+    protected static void initSumDoubleValues(String tableName, byte[][] splits, String url) throws Exception {
         ensureTableCreated(url, tableName, "SumDoubleTest", splits);
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(url, props);
@@ -1566,14 +1569,14 @@ public abstract class BaseTest {
     protected static void initJoinTableValues(String url, byte[][] splits, Long ts) throws Exception {
         if (ts == null) {
             ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_ITEM_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_SUPPLIER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_ORDER_TABLE_FULL_NAME, splits);
         } else {
             ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_ITEM_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_SUPPLIER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_ORDER_TABLE_FULL_NAME, splits, ts - 2);
         }
         
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");

@@ -96,6 +96,9 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeTableReuseIT {
     }
     
     private void testGetTenantIdExpression(boolean isSalted) throws Exception {
+        //Have to metaData tables because BaseHBaseManagedTimeTableReuseIT doesn't delete them after each test case , and tenant list will create issues between test cases
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
+
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
         String tableName = generateRandomString() ;
@@ -148,8 +151,7 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeTableReuseIT {
         HTableInterface htable7 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
 
-        //Have to metaData tables because BaseHBaseManagedTimeTableReuseIT doesn't delete them after each test case , and tenant list will create issues between test cases
-        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
+
     }
     
 }

@@ -67,7 +67,7 @@ public class StringIT extends BaseHBaseManagedTimeTableReuseIT {
         for (int id = 0; id < fillStringList.size(); ++id) {
             String fillString = fillStringList.get(id);
             String lPadExpr = fillString != null ? "LPAD(%s,?,?)" : "LPAD(%s,?)";
-            String sql = String.format("SELECT " + lPadExpr + " FROM " + tableName + "%s WHERE id=?", colName, sortOrder);
+            String sql = String.format("SELECT " + lPadExpr + " FROM " + tableName + "_%s WHERE id=?", colName, sortOrder);
             PreparedStatement stmt = conn.prepareStatement(sql);
             int index = 1;
             stmt.setInt(index++, length);

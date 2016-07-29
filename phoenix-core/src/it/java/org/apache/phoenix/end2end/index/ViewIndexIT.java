@@ -48,6 +48,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -116,6 +117,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         this.isNamespaceMapped = isNamespaceMapped;
     }
 
+    @Ignore
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
         String tableName = schemaName + "." + generateRandomString();

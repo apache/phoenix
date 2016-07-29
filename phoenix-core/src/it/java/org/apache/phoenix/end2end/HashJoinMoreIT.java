@@ -43,7 +43,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
+public class HashJoinMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     private final String[] plans = new String[] {
             /*
              * testJoinWithKeyRangeOptimization()

@@ -45,15 +45,15 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
-public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
+public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final String DATATYPE_TABLE = "DATATYPE";
     private static final String DATATYPES_CSV_VALUES = "CKEY, CVARCHAR, CCHAR, CINTEGER, CDECIMAL, CUNSIGNED_INT, CBOOLEAN, CBIGINT, CUNSIGNED_LONG, CTIME, CDATE\n"
             + "KEY1,A,A,2147483647,1.1,0,TRUE,9223372036854775807,0,1990-12-31 10:59:59,1999-12-31 23:59:59\n"
             + "KEY2,B,B,-2147483648,-1.1,2147483647,FALSE,-9223372036854775808,9223372036854775807,2000-01-01 00:00:01,2012-02-29 23:59:59\n"
             + "KEY3,,,,,,,,,,\n";
-    private static final String STOCK_TABLE = "STOCK_SYMBOL";
-    private static final String STOCK_TABLE_MULTI = "STOCK_SYMBOL_MULTI";
+    //private static final String stockTableName = "STOCK_SYMBOL";
+    //private static final String stockTableMultiName = "STOCK_SYMBOL_MULTI";
     private static final String STOCK_CSV_VALUES = "AAPL,APPLE Inc.\n"
             + "CRM,SALESFORCE\n" + "GOOG,Google\n"
             + "HOG,Harlet-Davidson Inc.\n" + "HPQ,Hewlett Packard\n"
@@ -105,9 +105,9 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-
+            String stockTableName = generateRandomString();
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl()).unwrap(
                     PhoenixConnection.class);
@@ -115,14 +115,14 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     Collections.<String> emptyList(), true);
             csvUtil.upsert(new StringReader(STOCK_CSV_VALUES_WITH_HEADER));
 
             // Compare Phoenix ResultSet with CSV file content
             PreparedStatement statement = conn
                     .prepareStatement("SELECT SYMBOL, COMPANY FROM "
-                            + STOCK_TABLE);
+                            + stockTableName);
             ResultSet phoenixResultSet = statement.executeQuery();
             parser = new CSVParser(new StringReader(
                     STOCK_CSV_VALUES_WITH_HEADER), csvUtil.getFormat());
@@ -149,9 +149,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         PhoenixConnection globalConn = null;
         PhoenixConnection tenantConn = null;
         try {
+            String stockTableMultiName = generateRandomString();
 
             // Create table using the global connection
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE_MULTI
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableMultiName
                     + "(TENANT_ID VARCHAR NOT NULL, SYMBOL VARCHAR NOT NULL, COMPANY VARCHAR," +
                     " CONSTRAINT PK PRIMARY KEY(TENANT_ID,SYMBOL)) MULTI_TENANT = true;";
             globalConn = DriverManager.getConnection(getUrl()).unwrap(
@@ -164,14 +165,14 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     PhoenixConnection.class);
 
             // Upsert CSV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(tenantConn, STOCK_TABLE_MULTI,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(tenantConn, stockTableMultiName,
                     Collections.<String> emptyList(), true);
             csvUtil.upsert(new StringReader(STOCK_CSV_VALUES_WITH_HEADER));
 
             // Compare Phoenix ResultSet with CSV file content
             PreparedStatement statement = tenantConn
                     .prepareStatement("SELECT SYMBOL, COMPANY FROM "
-                            + STOCK_TABLE_MULTI);
+                            + stockTableMultiName);
             ResultSet phoenixResultSet = statement.executeQuery();
             parser = new CSVParser(new StringReader(
                     STOCK_CSV_VALUES_WITH_HEADER), csvUtil.getFormat());
@@ -197,9 +198,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
 
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl()).unwrap(
                     PhoenixConnection.class);
@@ -207,14 +209,14 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert TDV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,Collections.<String> emptyList()
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,Collections.<String> emptyList()
                     , true, '\t', '"', null, CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
             csvUtil.upsert(new StringReader(STOCK_TDV_VALUES_WITH_HEADER));
 
             // Compare Phoenix ResultSet with CSV file content
             PreparedStatement statement = conn
                     .prepareStatement("SELECT SYMBOL, COMPANY FROM "
-                            + STOCK_TABLE);
+                            + stockTableName);
             ResultSet phoenixResultSet = statement.executeQuery();
             parser = new CSVParser(new StringReader(
                     STOCK_TDV_VALUES_WITH_HEADER), csvUtil.getFormat());
@@ -240,8 +242,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
+
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl()).unwrap(
                     PhoenixConnection.class);
@@ -249,7 +253,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     Arrays.<String> asList(STOCK_COLUMNS), true,
                     '1', '2', '3', CSVCommonsLoader.DEFAULT_ARRAY_ELEMENT_SEPARATOR);
             csvUtil.upsert(new StringReader(STOCK_CSV_VALUES_WITH_DELIMITER));
@@ -257,7 +261,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
             // Compare Phoenix ResultSet with CSV file content
             PreparedStatement statement = conn
                     .prepareStatement("SELECT SYMBOL, COMPANY FROM "
-                            + STOCK_TABLE);
+                            + stockTableName);
             ResultSet phoenixResultSet = statement.executeQuery();
             parser = new CSVParser(new StringReader(
                     STOCK_CSV_VALUES_WITH_DELIMITER), csvUtil.getFormat());
@@ -283,8 +287,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
+
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl())
                     .unwrap(PhoenixConnection.class);
@@ -292,7 +298,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     Arrays.<String> asList(STOCK_COLUMNS), true);
             // no header
             csvUtil.upsert(new StringReader(STOCK_CSV_VALUES));
@@ -300,7 +306,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
             // Compare Phoenix ResultSet with CSV file content
             PreparedStatement statement = conn
                     .prepareStatement("SELECT SYMBOL, COMPANY FROM "
-                            + STOCK_TABLE);
+                            + stockTableName);
             ResultSet phoenixResultSet = statement.executeQuery();
             parser = new CSVParser(new StringReader(
                     STOCK_CSV_VALUES), csvUtil.getFormat());
@@ -327,8 +333,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
+
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl())
                     .unwrap(PhoenixConnection.class);
@@ -336,14 +344,14 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     null, true);
             csvUtil.upsert(new StringReader(STOCK_CSV_VALUES));
 
             // Compare Phoenix ResultSet with CSV file content
             PreparedStatement statement = conn
                     .prepareStatement("SELECT SYMBOL, COMPANY FROM "
-                            + STOCK_TABLE);
+                            + stockTableName);
             ResultSet phoenixResultSet = statement.executeQuery();
             parser = new CSVParser(new StringReader(
                     STOCK_CSV_VALUES), csvUtil.getFormat());
@@ -370,8 +378,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
+
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl())
                     .unwrap(PhoenixConnection.class);
@@ -379,14 +389,14 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file, not strict
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     Arrays.asList(STOCK_COLUMNS_WITH_BOGUS), false);
             csvUtil.upsert(new StringReader(STOCK_CSV_VALUES));
 
             // Compare Phoenix ResultSet with CSV file content
             PreparedStatement statement = conn
                     .prepareStatement("SELECT SYMBOL, COMPANY FROM "
-                            + STOCK_TABLE);
+                            + stockTableName);
             ResultSet phoenixResultSet = statement.executeQuery();
             parser = new CSVParser(new StringReader(STOCK_CSV_VALUES),
                     csvUtil.getFormat());
@@ -412,8 +422,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
+
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY_ID BIGINT);";
             conn = DriverManager.getConnection(getUrl())
                     .unwrap(PhoenixConnection.class);
@@ -421,7 +433,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file in strict mode
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     Arrays.asList("SYMBOL", "COMPANY_ID"), true);
             try {
                 csvUtil.upsert(new StringReader(STOCK_CSV_VALUES));
@@ -444,8 +456,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
+
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl())
                     .unwrap(PhoenixConnection.class);
@@ -453,7 +467,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     Arrays.asList("FOO", "BAR"), false);
 
             try {
@@ -464,7 +478,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                         e.getMessage(),
                         e.getMessage()
                                 .contains(
-                                        "ERROR 504 (42703): Undefined column. columnName=STOCK_SYMBOL.[FOO, BAR]"));
+                                        "ERROR 504 (42703): Undefined column. columnName=" + stockTableName + ".[FOO, BAR]"));
             }
         } finally {
             if (parser != null)
@@ -479,8 +493,10 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
+            String stockTableName = generateRandomString();
+
             // Create table
-            String statements = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE
+            String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
             conn = DriverManager.getConnection(getUrl())
                     .unwrap(PhoenixConnection.class);
@@ -488,7 +504,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                     new StringReader(statements), null);
 
             // Upsert CSV file
-            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, STOCK_TABLE,
+            CSVCommonsLoader csvUtil = new CSVCommonsLoader(conn, stockTableName,
                     Arrays.asList(STOCK_COLUMNS_WITH_BOGUS), true);
             try {
                 csvUtil.upsert(new StringReader(STOCK_CSV_VALUES));
@@ -498,7 +514,7 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeIT {
                         e.getMessage(),
                         e.getMessage()
                                 .contains(
-                                        "ERROR 504 (42703): Undefined column. columnName=STOCK_SYMBOL.BOGUS"));
+                                        "ERROR 504 (42703): Undefined column. columnName=" + stockTableName + ".BOGUS"));
             }
         } finally {
             if (parser != null)
