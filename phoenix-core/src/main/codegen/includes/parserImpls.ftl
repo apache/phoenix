@@ -178,6 +178,60 @@ SqlNode SqlCreateTable() :
 
 /**
  * Parses statement
+ *   CREATE SEQUENCE
+ */
+SqlNode SqlCreateSequence() :
+{
+    SqlParserPos pos;
+    SqlIdentifier sequenceName;
+    boolean ifNotExists = false;
+    SqlLiteral startWith = null;
+    SqlLiteral incrementBy = null;
+    SqlLiteral minValue = null;
+    SqlLiteral maxValue = null;
+    boolean cycle = false;
+    SqlLiteral cache = null;
+    Integer v;
+}
+{
+    <CREATE> { pos = getPos(); } <SEQUENCE>
+    [
+        <IF> <NOT> <EXISTS> { ifNotExists = true; }
+    ]
+    sequenceName = DualIdentifier()
+    [
+        <START> [ <WITH> ]
+        v = UnsignedIntLiteral() { startWith = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
+    ]
+    [
+        <INCREMENT> [ <BY> ]
+        v = UnsignedIntLiteral() { incrementBy = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
+    ]
+    [
+        <MINVALUE>
+        v = UnsignedIntLiteral() { minValue = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
+    ]
+    [
+        <MAXVALUE>
+        v = UnsignedIntLiteral() { maxValue = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
+    ]
+    [
+        <CYCLE> { cycle = true; }
+    ]
+    [
+        <CACHE>
+        v = UnsignedIntLiteral() { cache = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
+    ]
+    {
+        return new SqlCreateSequence(pos.plus(getPos()), sequenceName,
+            SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
+            startWith, incrementBy, minValue, maxValue,
+            SqlLiteral.createBoolean(cycle, SqlParserPos.ZERO), cache);
+    }
+}
+
+/**
+ * Parses statement
  *   DROP TABLE
  */
 SqlNode SqlDropTableOrDropView() :
@@ -290,13 +344,8 @@ SqlColumnDefNode ColumnDef() :
     SqlIdentifier columnName;
     SqlDataTypeNode dataType;
     boolean isNull = true;
-    Integer maxLength = null;
-    Integer scale = null;
     boolean isPk = false;
     SortOrder sortOrder = SortOrder.getDefault();
-    boolean isArray = false;
-    Integer arrSize = null;
-    String expressionStr = null;
     boolean isRowTimestamp = false;
     SqlParserPos pos;
 }

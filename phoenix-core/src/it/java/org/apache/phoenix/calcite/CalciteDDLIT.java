@@ -30,6 +30,10 @@ public class CalciteDDLIT extends BaseCalciteIT {
         start(PROPS).sql("create table t4(a bigint not null ROW_TIMESTAMP, b integer not null, c double constraint pk primary key(a,b)) SALT_BUCKET=4,VERSIONS=5 SPLIT ON('a','b')").execute();
     }
     
+    @Test public void testCreateSequence() throws Exception {
+        start(PROPS).sql("create sequence if not exists s0 start with 2 increment 3 minvalue 2 maxvalue 90 cycle cache 3").execute().close();
+    }
+    
     @Test public void testDropTable() throws Exception {
         start(PROPS).sql("create table t5(a varchar not null primary key, b varchar)").execute();
         start(PROPS).sql("drop table t5").execute();

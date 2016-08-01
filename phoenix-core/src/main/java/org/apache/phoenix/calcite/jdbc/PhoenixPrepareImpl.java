@@ -36,6 +36,7 @@ import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.calcite.parse.SqlCreateSequence;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
 import org.apache.phoenix.calcite.parse.SqlDropTable;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
@@ -50,6 +51,7 @@ import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
 import org.apache.phoenix.calcite.rules.PhoenixTableScanColumnRefRule;
+import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -57,6 +59,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
+import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ParseNode;
@@ -246,6 +249,27 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                         baseTableName, where, 0);
                 try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
                     final CreateTableCompiler compiler = new CreateTableCompiler(stmt, Operation.UPSERT);
+                    final MutationPlan plan = compiler.compile(create);
+                    plan.execute();
+                }
+                break;
+            }
+            case CREATE_SEQUENCE: {
+                final SqlCreateSequence sequence = (SqlCreateSequence) node;
+                final TableName name;
+                if (sequence.sequenceName.isSimple()) {
+                    name = TableName.create(null, sequence.sequenceName.getSimple());
+                } else {
+                    name = TableName.create(sequence.sequenceName.names.get(0), sequence.sequenceName.names.get(1));
+                }
+                final ParseNode startWith = nodeFactory.literal(sequence.startWith.intValue(true));
+                final ParseNode incrementBy = nodeFactory.literal(sequence.incrementBy.intValue(true));
+                final ParseNode minValue = nodeFactory.literal(sequence.minValue.intValue(true));
+                final ParseNode maxValue = nodeFactory.literal(sequence.maxValue.intValue(true));
+                final ParseNode cache = nodeFactory.literal(sequence.cache.intValue(true));
+                final CreateSequenceStatement create = nodeFactory.createSequence(name, startWith, incrementBy, cache, minValue, maxValue, sequence.cycle.booleanValue(), sequence.ifNotExists.booleanValue(), 0);
+                try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
+                    final CreateSequenceCompiler compiler = new CreateSequenceCompiler(stmt, Operation.UPSERT);
                     final MutationPlan plan = compiler.compile(create);
                     plan.execute();
                 }

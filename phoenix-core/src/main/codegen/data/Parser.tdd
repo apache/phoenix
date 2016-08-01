@@ -38,6 +38,7 @@
   	"IF"
   	"ROW_TIMESTAMP"
   	"SPLIT"
+  	"CACHE"
   ]
 
   # List of keywords from "keywords" section that are not reserved.
@@ -50,6 +51,7 @@
     "SqlPhoenixExplain()",
     "SqlCreateView()",
     "SqlCreateTable()",
+    "SqlCreateSequence()",
     "SqlDropTableOrDropView()",
   ]
 
