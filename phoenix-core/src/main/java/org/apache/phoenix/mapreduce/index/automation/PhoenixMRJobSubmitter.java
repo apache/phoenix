@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.mapreduce.index.automation;
 
-import static org.apache.phoenix.query.QueryConstants.ASYNC_INDEX_INFO_QUERY;
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -52,6 +50,7 @@ import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.PhoenixMRJobUtil;
 import org.apache.phoenix.util.PhoenixMRJobUtil.MR_SCHEDULER_TYPE;
 import org.apache.phoenix.util.ZKBasedMasterElectionUtil;
@@ -62,6 +61,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
+
 public class PhoenixMRJobSubmitter {
 
     // Lock to elect a master node that submits the Phoenix Secondary Index MR Jobs
@@ -69,6 +69,22 @@ public class PhoenixMRJobSubmitter {
             "/phoenix/automated-mr-index-build-leader-election";
     private static final String AUTO_INDEX_BUILD_LOCK_NAME = "ActiveStandbyElectorLock";
 
+    public static final String CANDIDATE_INDEX_INFO_QUERY = "SELECT "
+            + PhoenixDatabaseMetaData.INDEX_TYPE + ","
+            + PhoenixDatabaseMetaData.DATA_TABLE_NAME + ", "
+            + PhoenixDatabaseMetaData.TABLE_SCHEM + ", "
+            + PhoenixDatabaseMetaData.TABLE_NAME + ", "
+            + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE 
+            + " FROM "
+            + PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + ".\"" + PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE + "\""
+            + " (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") "
+            + " WHERE "
+            + PhoenixDatabaseMetaData.COLUMN_NAME + " IS NULL and "
+            + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NULL  and "
+            + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " IS NOT NULL and "
+            + PhoenixDatabaseMetaData.TABLE_TYPE + " = '" + PTableType.INDEX.getSerializedValue() + "' and "
+            + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + PIndexState.BUILDING.getSerializedValue() + "'";
+    
     // TODO - Move this to a property?
     private static final int JOB_SUBMIT_POOL_TIMEOUT = 5;
     private Configuration conf;
@@ -144,7 +160,7 @@ public class PhoenixMRJobSubmitter {
     public Map<String, PhoenixAsyncIndex> getCandidateJobs() throws SQLException {
         Connection con = DriverManager.getConnection("jdbc:phoenix:" + zkQuorum);
         Statement s = con.createStatement();
-        ResultSet rs = s.executeQuery(ASYNC_INDEX_INFO_QUERY);
+        ResultSet rs = s.executeQuery(CANDIDATE_INDEX_INFO_QUERY);
         Map<String, PhoenixAsyncIndex> candidateIndexes = new HashMap<String, PhoenixAsyncIndex>();
         while (rs.next()) {
             PhoenixAsyncIndex indexInfo = new PhoenixAsyncIndex();

@@ -21,7 +21,6 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BUFFER_LENGTH;
@@ -116,12 +115,9 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
-import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.ByteUtil;
 
 
@@ -171,22 +167,7 @@ public interface QueryConstants {
 
     public static final byte[] TRUE = new byte[] {1};
     
-    public static final String ASYNC_INDEX_INFO_QUERY = "SELECT "
-            + INDEX_TYPE + ","
-            + DATA_TABLE_NAME + ", "
-            + TABLE_SCHEM + ", "
-            + TABLE_NAME + ", "
-            + ASYNC_CREATED_DATE 
-            + " FROM "
-            + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\""
-            + " (" + ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") "
-            + " WHERE "
-            + COLUMN_NAME + " IS NULL and "
-            + COLUMN_FAMILY + " IS NULL  and "
-            + ASYNC_CREATED_DATE + " IS NOT NULL and "
-            + TABLE_TYPE + " = '" + PTableType.INDEX.getSerializedValue() + "' and "
-            + PhoenixDatabaseMetaData.INDEX_STATE + " = '" + PIndexState.BUILDING.getSerializedValue() + "'";
-    
+
     /**
      * Separator used between variable length keys for a composite key.
      * Variable length data types may not use this byte value.

@@ -58,7 +58,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
     private static final boolean DEFAULT_RUN_UPDATE_STATS_ASYNC = false;
     private static final boolean DEFAULT_COMMIT_STATS_ASYNC = false;
-    private static final boolean DEFAULT_ASYNC_INDEX_AUTO_BUILD = true;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 5;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 5;
     public static final int DEFAULT_HCONNECTION_POOL_CORE_SIZE = 10;
@@ -112,8 +111,7 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
                 .setHConnectionPoolCoreSize(DEFAULT_HCONNECTION_POOL_CORE_SIZE)
                 .setHConnectionPoolMaxSize(DEFAULT_HCONNECTION_POOL_MAX_SIZE)
                 .setMaxThreadsPerHTable(DEFAULT_HTABLE_MAX_THREADS)
-                .setDefaultIndexPopulationWaitTime(DEFAULT_INDEX_POPULATION_WAIT_TIME)
-                .setAsyncIndexAutoBuild(DEFAULT_ASYNC_INDEX_AUTO_BUILD);
+                .setDefaultIndexPopulationWaitTime(DEFAULT_INDEX_POPULATION_WAIT_TIME);
     }
     
     public QueryServicesTestImpl(ReadOnlyProps defaultProps, ReadOnlyProps overrideProps) {
