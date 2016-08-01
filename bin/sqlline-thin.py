@@ -32,7 +32,7 @@ def cleanup_url(url):
     p = urlparse.urlparse(url)
     scheme = p.scheme if p.scheme else 'http'
     netloc = p.netloc if ':' in p.netloc else p.netloc + '8765'
-    url = '{scheme}://{netloc}'.format(scheme, netloc)
+    url = '{scheme}://{netloc}'.format(scheme=scheme, netloc=netloc)
     return url
 
 
@@ -132,7 +132,6 @@ def main():
         java_home = hbase_env['JAVA_HOME']
 
     java = os.path.join(java_home, 'bin', 'java') if java_home else 'java'
-    print ('java is ', java)
     conf_dir = os.path.join(phoenix_utils.hbase_conf_dir,
                             phoenix_utils.phoenix_thin_client_jar)
     class_paths = os.pathsep.join(
