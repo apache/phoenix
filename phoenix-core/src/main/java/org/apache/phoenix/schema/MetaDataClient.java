@@ -1095,7 +1095,7 @@ public class MetaDataClient {
         boolean success = false;
         SQLException sqlException = null;
         try {
-            MutationState state = newClientAtNextTimeStamp.buildIndex(index, tableRef, null);
+            MutationState state = newClientAtNextTimeStamp.buildIndex(index, tableRef);
             success = true;
             return state;
         } catch (SQLException e) {
@@ -1121,7 +1121,7 @@ public class MetaDataClient {
         throw new IllegalStateException(); // impossible
     }
 
-    public MutationState buildIndex(PTable index, TableRef dataTableRef, Long txnScn) throws SQLException {
+    private MutationState buildIndex(PTable index, TableRef dataTableRef) throws SQLException {
         AlterIndexStatement indexStatement = null;
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
@@ -1138,9 +1138,6 @@ public class MetaDataClient {
             Scan scan = mutationPlan.getContext().getScan();
             Long scn = connection.getSCN();
             try {
-                if (txnScn!=null) {
-                    scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScn)));
-                }
                 if (ScanUtil.isDefaultTimeRange(scan.getTimeRange())) {
                     if (scn == null) {
                         scn = mutationPlan.getContext().getCurrentTime();
@@ -1449,8 +1446,11 @@ public class MetaDataClient {
         }
 
         if (logger.isInfoEnabled()) logger.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
+        boolean asyncIndexBuildEnabled = connection.getQueryServices().getProps().getBoolean(
+            QueryServices.INDEX_ASYNC_BUILD_ENABLED,
+            QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
         // In async process, we return immediately as the MR job needs to be triggered .
-        if(statement.isAsync()) {
+        if(statement.isAsync() && asyncIndexBuildEnabled) {
             return new MutationState(0, connection);
         }
         
@@ -1459,7 +1459,7 @@ public class MetaDataClient {
         if (connection.getSCN() != null) {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
-        return buildIndex(table, tableRef, null);
+        return buildIndex(table, tableRef);
     }
 
     public MutationState dropSequence(DropSequenceStatement statement) throws SQLException {
@@ -3550,7 +3550,7 @@ public class MetaDataClient {
                     return buildIndexAtTimeStamp(index, dataTableNode);
                 }
                 TableRef dataTableRef = FromCompiler.getResolver(dataTableNode, connection).getTables().get(0);
-                return buildIndex(index, dataTableRef, null);
+                return buildIndex(index, dataTableRef);
             }
             return new MutationState(1, connection);
         } catch (TableNotFoundException e) {
