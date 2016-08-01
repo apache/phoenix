@@ -38,6 +38,7 @@ import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
+import org.apache.phoenix.calcite.parse.SqlDropSequence;
 import org.apache.phoenix.calcite.parse.SqlDropTable;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
@@ -61,6 +62,7 @@ import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -290,6 +292,19 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 MetaDataClient client = new MetaDataClient(connection);
                 client.dropTable(drop);
                 break;
+            }
+            case DROP_SEQUENCE: {
+                final SqlDropSequence sequence = (SqlDropSequence) node;
+                final TableName name;
+                if (sequence.sequenceName.isSimple()) {
+                    name = TableName.create(null, sequence.sequenceName.getSimple());
+                } else {
+                    name = TableName.create(sequence.sequenceName.names.get(0), sequence.sequenceName.names.get(1));
+                }
+                final DropSequenceStatement drop = nodeFactory.dropSequence(name, sequence.ifExists.booleanValue(), 0);
+                MetaDataClient client = new MetaDataClient(connection);
+                client.dropSequence(drop);
+                break;                
             }
             default:
                 throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());

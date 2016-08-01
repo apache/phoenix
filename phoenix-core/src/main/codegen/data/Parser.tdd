@@ -53,6 +53,7 @@
     "SqlCreateTable()",
     "SqlCreateSequence()",
     "SqlDropTableOrDropView()",
+    "SqlDropSequence()",
   ]
 
   # List of methods for parsing custom literals.

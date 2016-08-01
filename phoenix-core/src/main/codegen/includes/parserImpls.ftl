@@ -271,6 +271,32 @@ SqlNode SqlDropTableOrDropView() :
     }
 }
 
+/**
+ * Parses statement
+ *   DROP SEQUENCE
+ */
+SqlNode SqlDropSequence() :
+{
+    SqlParserPos pos;
+    SqlIdentifier sequenceName;
+    boolean ifExists;
+}
+{
+    <DROP> { pos = getPos(); } <SEQUENCE>
+    (
+        <IF> <EXISTS> { ifExists = true; }
+        |
+        {
+            ifExists = false;
+        }
+    )
+    sequenceName = DualIdentifier()
+    {
+        return new SqlDropSequence(pos.plus(getPos()), sequenceName,
+            SqlLiteral.createBoolean(ifExists, SqlParserPos.ZERO));
+    }
+}
+
 SqlNodeList ColumnDefList() :
 {
     SqlParserPos pos;
