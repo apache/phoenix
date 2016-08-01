@@ -17,12 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.query.QueryConstants.ASYNC_INDEX_INFO_QUERY;
-
 import java.io.IOException;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -72,7 +68,6 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
@@ -92,10 +87,9 @@ import com.google.common.collect.Lists;
  */
 public class MetaDataRegionObserver extends BaseRegionObserver {
     public static final Log LOG = LogFactory.getLog(MetaDataRegionObserver.class);
-    protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(2);
+    protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
-    private boolean autoAsyncIndexBuild = QueryServicesOptions.DEFAULT_ASYNC_INDEX_AUTO_BUILD; 
     private boolean blockWriteRebuildIndex = false;
 
     @Override
@@ -123,8 +117,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD);
         rebuildIndexTimeInterval = env.getConfiguration().getLong(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, 
             QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL);
-        autoAsyncIndexBuild = env.getConfiguration().getBoolean(QueryServices.ASYNC_INDEX_AUTO_BUILD_ATTRIB, 
-                QueryServicesOptions.DEFAULT_ASYNC_INDEX_AUTO_BUILD);
         blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE,
         	QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
     }
@@ -166,102 +158,23 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         };
         (new Thread(r)).start();
 
+        if (!enableRebuildIndex && !blockWriteRebuildIndex) {
+            LOG.info("Failure Index Rebuild is skipped by configuration.");
+            return;
+        }
         // turn off verbose deprecation logging
         Logger deprecationLogger = Logger.getLogger("org.apache.hadoop.conf.Configuration.deprecation");
         if (deprecationLogger != null) {
             deprecationLogger.setLevel(Level.WARN);
         }
-
         try {
             Class.forName(PhoenixDriver.class.getName());
+            // starts index rebuild schedule work
+            BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
+            // run scheduled task every 10 secs
+            executor.scheduleAtFixedRate(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
         } catch (ClassNotFoundException ex) {
-            LOG.error("Phoenix Driver class is not found. Fix the classpath.", ex);
-        }
-         
-        // Enable async index rebuilder when autoAsyncIndexBuild is set to true 
-        if (autoAsyncIndexBuild)
-        {
-            LOG.info("Enabling Async Index rebuilder");
-            AsyncIndexRebuilderTask asyncIndexRebuilderTask = new AsyncIndexRebuilderTask(e.getEnvironment());
-            // run async index rebuilder task every 10 secs to rebuild any newly created async indexes
-            executor.scheduleAtFixedRate(asyncIndexRebuilderTask, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
-        }
-
-        if (!enableRebuildIndex && !blockWriteRebuildIndex) {
-            LOG.info("Failure Index Rebuild is skipped by configuration.");
-            return;
-        }
-
-        // starts index rebuild schedule work
-        BuildIndexScheduleTask task = new BuildIndexScheduleTask(e.getEnvironment());
-        // run scheduled task every 10 secs
-        executor.scheduleAtFixedRate(task, 10000, rebuildIndexTimeInterval, TimeUnit.MILLISECONDS);
-    }
-    
-    /**
-     * Task runs periodically to re-build async indexes when hbase is running in non-distributed mode or 
-     * when mapreduce is running in local mode
-     *
-     */
-    public static class AsyncIndexRebuilderTask extends TimerTask {
-        RegionCoprocessorEnvironment env;
-
-        public AsyncIndexRebuilderTask(RegionCoprocessorEnvironment env) {
-            this.env = env;
-        }
-
-        @Override
-        public void run() {
-            PhoenixConnection conn = null;
-            try {
-                conn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
-                Statement s = conn.createStatement();
-                ResultSet rs = s.executeQuery(ASYNC_INDEX_INFO_QUERY);
-                PhoenixConnection metaDataClientConn = conn;
-                while (rs.next()) {
-                    String tableName = rs.getString(PhoenixDatabaseMetaData.DATA_TABLE_NAME);
-                    String tableSchema = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
-                    String indexName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
-                    
-                    final PTable indexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(tableSchema, indexName));
-                    final PTable dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(tableSchema, tableName));
-                    // this is set to ensure index tables remains consistent post population.
-                    long maxTimeRange = indexTable.getTimeStamp()+1;
-
-                    try {
-                        final Properties props = new Properties();
-                        Long txnScn = null;
-                        if (!indexTable.isTransactional()) {
-                            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(maxTimeRange));
-                            metaDataClientConn = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
-                            txnScn = maxTimeRange;
-                        }
-                        MetaDataClient client = new MetaDataClient(conn);
-                        LOG.info("Building Index " + SchemaUtil.getTableName(tableSchema, indexName));
-                        client.buildIndex(indexTable, new TableRef(dataTable), txnScn);
-                    } catch (Throwable t) {
-                        LOG.error("AsyncIndexRebuilderTask failed while building index!", t);
-                    } finally {
-                        if (metaDataClientConn != null) {
-                            try {
-                                metaDataClientConn.close();
-                            } catch (SQLException ignored) {
-                                LOG.debug("AsyncIndexRebuilderTask can't close metaDataClientConn", ignored);
-                            }
-                        }
-                    }
-                }
-            } catch (Throwable t) {
-                LOG.error("AsyncIndexRebuilderTask failed!", t);
-            } finally {
-                if (conn != null) {
-                    try {
-                        conn.close();
-                    } catch (SQLException ignored) {
-                        LOG.debug("AsyncIndexRebuilderTask can't close connection", ignored);
-                    }
-                }
-            }
+            LOG.error("BuildIndexScheduleTask cannot start!", ex);
         }
     }
     

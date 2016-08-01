@@ -116,8 +116,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheTimeToLiveMs";
     public static final String MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheSize";
     public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB = "phoenix.client.maxMetaDataCacheSize";
-    public static final String HBASE_CLUSTER_DISTRIBUTED_ATTRIB = "hbase.cluster.distributed";
-    public static final String MAPRED_FRAMEWORK_NAME = "mapreduce.framework.name";
 
     public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
     // Mainly for testing to force spilling
@@ -220,9 +218,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB = "phoenix.client.localIndexUpgrade";
     public static final String LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.limited.query.serial.threshold";
 
-    // A master switch to enable auto rebuild an async secondary index 
-    public static final String ASYNC_INDEX_AUTO_BUILD_ATTRIB = "phoenix.async.index.automatic.build";
-
+    public static final String INDEX_ASYNC_BUILD_ENABLED = "phoenix.index.async.build.enabled";
     /**
      * Get executor service used for parallel scans
      */
