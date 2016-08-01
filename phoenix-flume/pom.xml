@@ -170,6 +170,17 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <!-- To work with json data using flume -->
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20160212</version>
+    </dependency>
+    <dependency>
+      <groupId>com.jayway.jsonpath</groupId>
+      <artifactId>json-path</artifactId>
+      <version>2.2.0</version>
+    </dependency>
   </dependencies>
 
   <build>

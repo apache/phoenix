@@ -157,7 +157,9 @@ public abstract class BaseEventSerializer implements EventSerializer {
             while (rs.next()) {
                 cf = rs.getString(QueryUtil.COLUMN_FAMILY_POSITION);
                 cq = rs.getString(QueryUtil.COLUMN_NAME_POSITION);
-                dt = rs.getInt(QueryUtil.DATA_TYPE_POSITION);
+                // TODO: Fix this .. change `DATA_TYPE_POSITION` value 5 to 26
+                // dt = rs.getInt(QueryUtil.DATA_TYPE_POSITION);
+                dt = rs.getInt(26);
                 if(Strings.isNullOrEmpty(cf)) {
                     rowkey = cq; // this is required only when row key is auto generated
                 } else {
