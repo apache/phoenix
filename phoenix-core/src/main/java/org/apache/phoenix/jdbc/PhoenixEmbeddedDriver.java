@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverPropertyInfo;
@@ -35,6 +36,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -340,6 +342,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final boolean isConnectionless;
         private final String principal;
         private final String keytab;
+        private final User user;
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
             this.zookeeperQuorum = zookeeperQuorum;
@@ -348,6 +351,14 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             this.isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(zookeeperQuorum);
             this.principal = principal;
             this.keytab = keytab;
+            try {
+                this.user = User.getCurrent();
+            } catch (IOException e) {
+                throw new RuntimeException("Couldn't get the current user!!");
+            }
+            if (null == this.user) {
+                throw new RuntimeException("Acquired null user which should never happen");
+            }
         }
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
@@ -406,6 +417,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             result = prime * result + ((rootNode == null) ? 0 : rootNode.hashCode());
             result = prime * result + ((principal == null) ? 0 : principal.hashCode());
             result = prime * result + ((keytab == null) ? 0 : keytab.hashCode());
+            // `user` is guaranteed to be non-null
+            result = prime * result + user.hashCode();
             return result;
         }
 
@@ -415,6 +428,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (obj == null) return false;
             if (getClass() != obj.getClass()) return false;
             ConnectionInfo other = (ConnectionInfo) obj;
+            // `user` is guaranteed to be non-null
+            if (!other.user.equals(user)) return false;
             if (zookeeperQuorum == null) {
                 if (other.zookeeperQuorum != null) return false;
             } else if (!zookeeperQuorum.equals(other.zookeeperQuorum)) return false;
