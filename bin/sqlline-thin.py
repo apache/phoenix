@@ -21,6 +21,7 @@
 from __future__ import print_function
 import os
 import phoenix_utils
+import signal
 import subprocess
 import sys
 import urlparse
@@ -153,8 +154,13 @@ org.apache.phoenix.queryserver.client.SqllineWrapper \
 --isolation=TRANSACTION_READ_COMMITTED {sql}
 """.format(java=java, cp=class_paths, l4j=log4j_props,
                url=url, ser=serialization, color=color_setting, sql=sqlopt)
-    exitcode = subprocess.call(java_cmd, shell=True)
-    sys.exit(exitcode)
+    proc = subprocess.Popen(java_cmd, stdout=subprocess.PIPE,
+                            shell=True, preexec_fn=os.setsid)
+    (output, error) = proc.communicate()
+    returncode = proc.returncode
+    if returncode != 0:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    sys.exit(returncode)
 
 
 if __name__ == '__main__':

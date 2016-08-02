@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+"""sqlline.py"""
 ############################################################################
 #
 # Licensed to the Apache Software Foundation (ASF) under one
@@ -19,107 +20,117 @@
 #
 ############################################################################
 
+from __future__ import print_function
 import os
-import subprocess
-import sys
 import phoenix_utils
-import atexit
-
-global childProc
-childProc = None
-def kill_child():
-    if childProc is not None:
-        childProc.terminate()
-        childProc.kill()
-        if os.name != 'nt':
-            os.system("reset")
-atexit.register(kill_child)
+import subprocess
+import signal
+import sys
 
 phoenix_utils.setPath()
 
-def printUsage():
-    print "\nUsage: sqlline.py [zookeeper] \
-[optional_sql_file] \nExample: \n 1. sqlline.py \n \
-2. sqlline.py localhost:2181:/hbase \n 3. sqlline.py \
-localhost:2181:/hbase ../examples/stock_symbol.sql \n \
-4. sqlline.py ../examples/stock_symbol.sql"
+
+def print_usage():
+    print('''Usage: sqlline.py [zookeeper] [optional_sql_file]
+Example:
+    1. sqlline.py
+    2. sqlline.py localhost:2181:/hbase
+    3. sqlline.py localhost:2181:/hbase ../examples/stock_symbol.sql
+    4. sqlline.py ../examples/stock_symbol.sql
+''')
     sys.exit(-1)
 
-if len(sys.argv) > 3:
-    printUsage()
 
-sqlfile = ""
-zookeeper = ""
+def main():
+    sqlfile = ""
+    zookeeper = ""
 
-# HBase configuration folder path (where hbase-site.xml reside) for
-# HBase/Phoenix client side property override
-hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.current_dir)
+    if len(sys.argv) > 3:
+        print_usage()
 
-if len(sys.argv) == 2:
-    if os.path.isfile(sys.argv[1]):
-        sqlfile = sys.argv[1]
-    else:
-        zookeeper = sys.argv[1]
+    if len(sys.argv) == 2:
+        if os.path.isfile(sys.argv[1]):
+            sqlfile = sys.argv[1]
+        else:
+            zookeeper = sys.argv[1]
 
-if len(sys.argv) == 3:
-    if os.path.isfile(sys.argv[1]):
-        printUsage()
-    else:
-        zookeeper = sys.argv[1]
-        sqlfile = sys.argv[2]
+    if len(sys.argv) == 3:
+        if os.path.isfile(sys.argv[1]):
+            print_usage()
+        else:
+            zookeeper = sys.argv[1]
+            sqlfile = sys.argv[2]
 
-if sqlfile:
-    sqlfile = "--run=" + phoenix_utils.shell_quote([sqlfile])
+    if sqlfile:
+        sqlfile = "--run=" + phoenix_utils.shell_quote([sqlfile])
 
-java_home = os.getenv('JAVA_HOME')
+    java_home = os.getenv('JAVA_HOME')
+    # HBase configuration folder path (where hbase-site.xml reside) for
+    # HBase/Phoenix client side property override
+    hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.current_dir)
+    # load hbase-env.??? to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
+    hbase_env_path = None
+    hbase_env_cmd = None
+    if os.name == 'posix':
+        hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
+        hbase_env_cmd = ['bash', '-c', 'source %s && env' % hbase_env_path]
+    elif os.name == 'nt':
+        hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
+        hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
+    if not hbase_env_path or not hbase_env_cmd:
+        print("hbase-env script unknown on platform %s" % (os.name, ),
+              file=sys.stderr)
+        sys.exit(-1)
 
-# load hbase-env.??? to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
-hbase_env_path = None
-hbase_env_cmd  = None
-if os.name == 'posix':
-    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
-    hbase_env_cmd = ['bash', '-c', 'source %s && env' % hbase_env_path]
-elif os.name == 'nt':
-    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
-    hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
-if not hbase_env_path or not hbase_env_cmd:
-    print >> sys.stderr, "hbase-env file unknown on platform %s" % os.name
-    sys.exit(-1)
+    hbase_env = {}
+    if os.path.isfile(hbase_env_path):
+        p = subprocess.Popen(hbase_env_cmd, stdout=subprocess.PIPE)
+        for x in p.stdout:
+            (k, _, v) = x.partition('=')
+            hbase_env[k.strip()] = v.strip()
 
-hbase_env = {}
-if os.path.isfile(hbase_env_path):
-    p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
-    for x in p.stdout:
-        (k, _, v) = x.partition('=')
-        hbase_env[k.strip()] = v.strip()
+    if 'JAVA_HOME' in hbase_env:
+        java_home = hbase_env['JAVA_HOME']
 
-if hbase_env.has_key('JAVA_HOME'):
-    java_home = hbase_env['JAVA_HOME']
+    java = os.path.join(java_home, 'bin', 'java') if java_home else 'java'
+    # disable color setting for windows OS
+    color_setting = 'false' if os.name == 'nt' else 'true'
+    java = os.path.join(java_home, 'bin', 'java') if java_home else 'java'
+    conf_dir = os.path.join(phoenix_utils.hbase_conf_dir,
+                            phoenix_utils.phoenix_thin_client_jar)
+    class_paths = os.pathsep.join(
+        [hbase_config_path, conf_dir, phoenix_utils.hadoop_conf,
+         phoenix_utils.hadoop_classpath])
+    log4j_props = os.path.join(phoenix_utils.current_dir, "log4j.properties")
+    sqlopt = '--run=' + sqlfile if sqlfile else sqlfile
 
-if java_home:
-    java = os.path.join(java_home, 'bin', 'java')
-else:
-    java = 'java'
-
-colorSetting = "true"
-# disable color setting for windows OS
-if os.name == 'nt':
-    colorSetting = "false"
-
-java_cmd = java + ' $PHOENIX_OPTS ' + \
-    ' -cp "' + hbase_config_path + os.pathsep + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.hadoop_common_jar + os.pathsep + phoenix_utils.hadoop_hdfs_jar + \
-    os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
-    os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
-    " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
--u jdbc:phoenix:" + phoenix_utils.shell_quote([zookeeper]) + \
-    " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true \
---incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
-
-childProc = subprocess.Popen(java_cmd, shell=True)
-#Wait for child process exit
-(output, error) = childProc.communicate()
-returncode = childProc.returncode
-childProc = None
-# Propagate Java return code to this script
-if returncode is not None:
+    java_cmd = """{java} $PHOENIX_OPTS \
+-cp "{cp}" \
+-Dlog4j.configuration=file:{l4j} \
+sqlline.SqlLine \
+-d org.apache.phoenix.jdbc.PhoenixDriver \
+-u jdbc:phoenix:{zk} \
+-n none \
+-p none \
+--color={color} \
+--fastConnect=false \
+--verbose=true \
+--incremental=false \
+--isolation=TRANSACTION_READ_COMMITTED {sql}
+""".format(color=color_setting,
+           cp=class_paths,
+           java=java,
+           l4j=log4j_props,
+           sql=sqlopt,
+           zk=phoenix_utils.shell_quote([zookeeper]))
+    proc = subprocess.Popen(java_cmd, stdout=subprocess.PIPE,
+                            shell=True, preexec_fn=os.setsid)
+    (output, error) = proc.communicate()
+    returncode = proc.returncode
+    if returncode != 0:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
     sys.exit(returncode)
+
+
+if __name__ == '__main__':
+    main()
