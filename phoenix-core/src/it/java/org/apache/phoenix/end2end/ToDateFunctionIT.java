@@ -255,12 +255,13 @@ public class ToDateFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testToDateWithCloneMethod() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-    	String ddl = "create table t (k varchar primary key, v varchar[])";
+        String tableName = generateRandomString();
+    	String ddl = "create table " + tableName + " (k varchar primary key, v varchar[])";
         conn.createStatement().execute(ddl);
         String dateStr = "2100-01-01";
-        conn.createStatement().execute("UPSERT INTO T VALUES('x',ARRAY['"+dateStr+"'])");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('x',ARRAY['"+dateStr+"'])");
         conn.commit();
-        ResultSet rs = conn.createStatement().executeQuery("select to_date(v[1], 'yyyy-MM-dd', 'local') from t");
+        ResultSet rs = conn.createStatement().executeQuery("select to_date(v[1], 'yyyy-MM-dd', 'local') from " + tableName);
         
         assertTrue(rs.next());
         assertEquals("Unexpected value for date ", Date.valueOf(dateStr), rs.getDate(1));

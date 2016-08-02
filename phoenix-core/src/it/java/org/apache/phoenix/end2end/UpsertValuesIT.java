@@ -52,7 +52,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
     @Test
     public void testGroupByWithLimitOverRowKey() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),TestUtil.PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),TestUtil.PTSDB_NAME,TestUtil.PTSDB_NAME, null, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -85,7 +85,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
     public void testUpsertDateValues() throws Exception {
         long ts = nextTimestamp();
         Date now = new Date(System.currentTimeMillis());
-        ensureTableCreated(getUrl(),TestUtil.PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),TestUtil.PTSDB_NAME,TestUtil.PTSDB_NAME,null, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -114,7 +114,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
     @Test
     public void testUpsertValuesWithExpression() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),"IntKeyTest",null, ts-2);
+        ensureTableCreated(getUrl(),"IntKeyTest","IntKeyTest", null, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
         Connection conn = DriverManager.getConnection(getUrl(), props);

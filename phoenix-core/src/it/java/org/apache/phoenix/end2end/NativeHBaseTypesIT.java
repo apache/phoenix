@@ -151,7 +151,7 @@ public class NativeHBaseTypesIT extends BaseClientManagedTimeIT {
         }
         // Create Phoenix table after HBase table was created through the native APIs
         // The timestamp of the table creation must be later than the timestamp of the data
-        ensureTableCreated(getUrl(),HBASE_NATIVE,null, ts+1);
+        ensureTableCreated(getUrl(),HBASE_NATIVE,HBASE_NATIVE,null, ts+1);
     }
     
     @Test

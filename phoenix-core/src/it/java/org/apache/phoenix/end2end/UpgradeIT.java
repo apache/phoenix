@@ -372,7 +372,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeTableReuseIT {
         assertTrue(rs.getString(1).contains(hbaseTableName));
     }
     
-    @Ignore
+
     @Test
     public void testSettingBaseColumnCountForMultipleViewsOnTable() throws Exception {
         String baseSchema = "XYZ";

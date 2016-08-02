@@ -51,7 +51,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(tenantId, getDefaultSplits(tenantId),date, ts);
+        initATableValues("aTable", tenantId, getDefaultSplits(tenantId),date, ts, getUrl());
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
@@ -74,7 +74,8 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
     public void testTypeMismatchToDateFunctionBind() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId),null, ts);
+        initATableValues("aTable", tenantId, getDefaultSplits(tenantId),null, ts, getUrl());
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -101,8 +102,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(tenantId, getDefaultSplits(tenantId),date, ts);
-        
+        initATableValues("aTable", tenantId, getDefaultSplits(tenantId),date, ts, getUrl());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -147,8 +147,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(tenantId, getDefaultSplits(tenantId),date, ts);
-        
+        initATableValues("aTable", tenantId, getDefaultSplits(tenantId),date, ts, getUrl());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         Connection conn = DriverManager.getConnection(getUrl(), props);

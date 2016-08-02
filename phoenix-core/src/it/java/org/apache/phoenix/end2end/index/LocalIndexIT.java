@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -57,17 +59,14 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -212,22 +211,31 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         return DriverManager.getConnection(getUrl(),props);
     }
 
-    @Ignore
+
     @Test
     public void testDropLocalIndexTable() throws Exception {
         String tableName = schemaName + "." + generateRandomString();
         String indexName = "IDX_" + generateRandomString();
         createBaseTable(tableName, null, null);
+
+        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped);
+        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
+
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+        verifySequence(null, sequenceName, sequenceSchemaName, true);
+
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         conn1.createStatement().execute("DROP TABLE "+ tableName);
-        ResultSet rs = conn2.createStatement().executeQuery("SELECT "
+       /* ResultSet rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
-        assertFalse("View index sequences should be deleted.", rs.next());
+                */
+        verifySequence(null, sequenceName, sequenceSchemaName, false);
+
+        //assertFalse("View index sequences should be deleted.", rs.next());
     }
     
     @Test
@@ -611,7 +619,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         conn1.close();
     }
 
-    @Ignore
+
     @Test
     public void testDropLocalIndexShouldDeleteDataFromLocalIndexTable() throws Exception {
         String tableName = schemaName + "." + generateRandomString();
@@ -628,7 +636,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTable table = new HTable(admin.getConfiguration() ,TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME));
+            HTable table = new HTable(admin.getConfiguration() ,TableName.valueOf(tableName));
             Pair<byte[][], byte[][]> startEndKeys = table.getStartEndKeys();
             byte[][] startKeys = startEndKeys.getFirst();
             byte[][] endKeys = startEndKeys.getSecond();

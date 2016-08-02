@@ -280,10 +280,14 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeTableReuseIT
         int insertedRowsA = 10;
         int insertedRowsB = 5;
         int insertedRowsC = 7;
-        Set<String> keySetA = createTableAndInsertRows("TABLEA", insertedRowsA, true, true);
-        Set<String> keySetB = createTableAndInsertRows("TABLEB", insertedRowsB, true, true);
-        Set<String> keySetC = createTableAndInsertRows("TABLEC", insertedRowsC, false, true);
-        String query = "SELECT K FROM TABLEA UNION ALL SELECT K FROM TABLEB UNION ALL SELECT K FROM TABLEC";
+        String baseTableName = generateRandomString();
+        String tableA = "TABLEA" + baseTableName;
+        String tableB = "TABLEB" + baseTableName;
+        String tableC = "TABLEC" + baseTableName;
+        Set<String> keySetA = createTableAndInsertRows(tableA, insertedRowsA, true, true);
+        Set<String> keySetB = createTableAndInsertRows(tableB, insertedRowsB, true, true);
+        Set<String> keySetC = createTableAndInsertRows(tableC, insertedRowsC, false, true);
+        String query = "SELECT K FROM " + tableA + " UNION ALL SELECT K FROM " + tableB + " UNION ALL SELECT K FROM " + tableC;
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(query);
         stmt.setFetchSize(2); // force parallel fetch of scanner cache

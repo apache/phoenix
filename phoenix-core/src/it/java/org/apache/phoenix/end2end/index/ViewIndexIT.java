@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -116,7 +118,6 @@ public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         this.isNamespaceMapped = isNamespaceMapped;
     }
 
-    @Ignore
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
         String tableName = schemaName + "." + generateRandomString();
@@ -148,11 +149,15 @@ public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(viewIndexPhysicalTableName)));
-        rs = conn2.createStatement().executeQuery("SELECT "
+        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("a"), isNamespaceMapped);
+        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
+        verifySequence(null, sequenceName, sequenceSchemaName, false);
+        /*rs = conn2.createStatement().executeQuery("SELECT "
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_NAME
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
         assertFalse("View index sequences should be deleted.", rs.next());
+        */
     }
     
     @Test

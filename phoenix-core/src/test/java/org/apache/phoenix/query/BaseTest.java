@@ -83,10 +83,7 @@ import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -1120,6 +1117,10 @@ public abstract class BaseTest {
             conn.close();
         }
     }
+
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        return initATableValues(tenantId, splits, date, ts, getUrl());
+    }
     
     protected static String initATableValues(String tenantId, byte[][] splits, String url) throws Exception {
         return initATableValues(tenantId, splits, null, url);
@@ -1128,9 +1129,15 @@ public abstract class BaseTest {
     protected static String initATableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
         return initATableValues(tenantId, splits, date, null, url);
     }
-    
+
     protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
-        String tableName = generateRandomString();
+        return initATableValues(null, tenantId, splits, date, ts, url);
+    }
+    
+    protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+        if(tableName == null) {
+            tableName = generateRandomString();
+        }
         String tableDDLType = ATABLE_NAME;
         if (ts == null) {
             ensureTableCreated(url, tableName, tableDDLType, splits);
@@ -1337,10 +1344,7 @@ public abstract class BaseTest {
             return tableName;
         }
     }
-    
-    protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-       return initATableValues(tenantId, splits, date, ts, getUrl());
-    }
+
     
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
         initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
@@ -2076,5 +2080,35 @@ public abstract class BaseTest {
         } finally {
             conn.close();
         }
-    }  
+    }
+
+    protected static void verifySequence(String tenantID, String sequenceName, String sequenceSchemaName, boolean exists) throws SQLException {
+
+        PhoenixConnection phxConn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+        String ddl = "SELECT "
+                + PhoenixDatabaseMetaData.TENANT_ID + ","
+                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME
+                + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
+                + " WHERE ";
+
+        ddl += " TENANT_ID  " + ((tenantID == null ) ? "IS NULL " : " = '" + tenantID + "'");
+        ddl += " AND SEQUENCE_NAME " + ((sequenceName == null) ? "IS NULL " : " = '" +  sequenceName + "'");
+        ddl += " AND SEQUENCE_SCHEMA " + ((sequenceSchemaName == null) ? "IS NULL " : " = '" + sequenceSchemaName + "'" );
+
+        ResultSet rs = phxConn.createStatement().executeQuery(ddl);
+        //boolean res =
+        while(rs.next()){
+            String ten = rs.getString("TENANT_ID");
+            String seqN = rs.getString("SEQUENCE_SCHEMA");
+            String seqaN = rs.getString("SEQUENCE_NAME");
+            String seqNam = rs.getString("SEQUENCE_SCHEMA");
+        }
+        /*if(exists) {
+            assertTrue(rs.next());
+        } else {
+            assertFalse(rs.next());
+        }*/
+        phxConn.close();
+    }
 }
