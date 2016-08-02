@@ -386,6 +386,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeTableReuseIT {
             String tenantView2 = generateRandomString();
             String tenantView3 = generateRandomString();
 
+
             for (int i = 1; i <=2; i++) {
                 // Create views for tenants;
                 String tenant = "tenant" + i;
