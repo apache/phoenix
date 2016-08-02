@@ -88,6 +88,15 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         insertPrefixV("3", "1");
         insertPrefixV("3", "2");
         insertPrefixV("3", "3");
+        conn.commit();
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ count(*) from " + testTableV);
+        assertTrue(rs.next());
+        long count1 = rs.getLong(1);
+        rs = conn.createStatement().executeQuery("select count(*) from " + testTableV + "_idx");
+        assertTrue(rs.next());
+        long count2 = rs.getLong(1);
+        assertEquals(count1,count2);
 
         multiply();
         multiply();
@@ -258,7 +267,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
         testCommonDistinct(testTableF);
         testCommonDistinct(testTableV);
-}
+    }
 
     private void testCommonDistinct(String testTable) throws Exception {
         testSkipRange("SELECT %s DISTINCT prefix1 FROM " + testTable, 4);
