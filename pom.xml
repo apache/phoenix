@@ -33,6 +33,7 @@
     <module>phoenix-hive</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <module>phoenix-zipkin</module>
   </modules>
 
   <repositories>

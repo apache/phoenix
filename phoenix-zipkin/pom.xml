@@ -4,7 +4,6 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example</groupId>
-    <artifactId>myproject</artifactId>
     <version>0.0.1-SNAPSHOT</version>
 
     <parent>
@@ -19,7 +18,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <dependency>
+      <!--  <dependency>
             <groupId>io.zipkin.java</groupId>
             <artifactId>zipkin-server</artifactId>
             <version>1.5.0</version>
@@ -28,7 +27,7 @@
             <groupId>io.zipkin.java</groupId>
             <artifactId>zipkin-autoconfigure-storage-mysql</artifactId>
             <version>1.5.0</version>
-        </dependency>
+        </dependency -->
     </dependencies>
 
 <build>
@@ -39,5 +38,6 @@
         </plugin>
     </plugins>
 </build>
+	<artifactId>myproject</artifactId>
 </project>
 

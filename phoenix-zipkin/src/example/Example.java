@@ -9,16 +9,20 @@ import org.springframework.web.bind.annotation.*;
 @EnableAutoConfiguration
 public class Example {
 	
-
-    @RequestMapping(value="/trace", method=RequestMethod.GET)
-    public ResponseEntity<Trace> get() {
-
-        Trace t = new Trace("1","upsert into mytable");
-        return new ResponseEntity<Trace>(t, HttpStatus.OK);
+	
+	@RequestMapping("/greet")
+    String sayHello(@RequestParam("name") String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("The 'name' parameter must not be null or empty");
+        }
+        return String.format("Hello %s!", name);
     }
 
     public static void main(String[] args) throws Exception {
         SpringApplication.run(Example.class, args);
     }
+    
+    
 
+    
 }
