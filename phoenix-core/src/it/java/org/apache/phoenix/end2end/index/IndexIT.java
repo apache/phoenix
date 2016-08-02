@@ -53,7 +53,6 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.coprocessor.generated.PTableProtos.PTableType;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -83,7 +82,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class IndexIT extends BaseHBaseManagedTimeTableReuseIT {
+public class IndexIT extends BaseHBaseManagedTimeIT {
     private static final long MAX_WAIT_FOR_ASYNC_INDEX_BUILD = 30000;
     	
 	private final boolean localIndex;
