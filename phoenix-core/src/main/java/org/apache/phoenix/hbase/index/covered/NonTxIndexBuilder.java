@@ -98,7 +98,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
         Collection<Batch> batches = createTimestampBatchesFromMutation(m);
 
         // go through each batch of keyvalues and build separate index entries for each
-        boolean cleanupCurrentState = true;
+        boolean cleanupCurrentState = !indexMetaData.isImmutableRows();
         for (Batch batch : batches) {
             /*
              * We have to split the work between the cleanup and the update for each group because when we update the
@@ -215,7 +215,9 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
         // determine if we need to make any cleanup given the pending update.
         long batchTs = batch.getTimestamp();
         state.setPendingUpdates(batch.getKvs());
-        addCleanupForCurrentBatch(updateMap, batchTs, state, indexMetaData);
+        if (!indexMetaData.isImmutableRows()) {
+            addCleanupForCurrentBatch(updateMap, batchTs, state, indexMetaData);
+        }
 
         // A.2 do a single pass first for the updates to the current state
         state.applyPendingUpdates();

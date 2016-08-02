@@ -834,12 +834,17 @@ public class PTableImpl implements PTable {
             // we're using the Tephra column family delete marker here to prevent the translation 
             // of deletes to puts by the Tephra's TransactionProcessor
             if (PTableImpl.this.isTransactional()) {
-                Put delete = new Put(key);
-                for (PColumnFamily colFamily : families) {
-                    delete.add(colFamily.getName().getBytes(), TxConstants.FAMILY_DELETE_QUALIFIER, ts,
+                Put put = new Put(key);
+                if (families.isEmpty()) {
+                    put.add(SchemaUtil.getEmptyColumnFamily(PTableImpl.this), TxConstants.FAMILY_DELETE_QUALIFIER, ts,
                             HConstants.EMPTY_BYTE_ARRAY);
+                } else {
+                    for (PColumnFamily colFamily : families) {
+                        put.add(colFamily.getName().getBytes(), TxConstants.FAMILY_DELETE_QUALIFIER, ts,
+                                HConstants.EMPTY_BYTE_ARRAY);
+                    }
                 }
-                deleteRow = delete;                
+                deleteRow = put;                
             } else {
                 Delete delete = new Delete(key);
                 for (PColumnFamily colFamily : families) {
