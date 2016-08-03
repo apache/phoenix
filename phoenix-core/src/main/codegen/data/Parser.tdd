@@ -28,6 +28,7 @@
     "org.apache.phoenix.parse.ColumnDefInPkConstraint",
     "org.apache.calcite.sql.SqlColumnDefNode"
     "org.apache.calcite.sql.SqlColumnDefInPkConstraintNode"
+    "org.apache.calcite.sql.SqlIndexExpressionNode"
     "org.apache.calcite.sql.SqlDataTypeNode"
     "org.apache.calcite.sql.SqlTableOptionNode"
     "java.util.*"
@@ -35,10 +36,13 @@
 
   # List of keywords.
   keywords: [
-  	"IF"
-  	"ROW_TIMESTAMP"
-  	"SPLIT"
-  	"CACHE"
+    "ASYNC"
+    "CACHE"
+    "IF"
+    "INCLUDE"
+    "INDEX"
+    "ROW_TIMESTAMP"
+    "SPLIT"
   ]
 
   # List of keywords from "keywords" section that are not reserved.
@@ -51,6 +55,7 @@
     "SqlPhoenixExplain()",
     "SqlCreateView()",
     "SqlCreateTable()",
+    "SqlCreateIndex()",
     "SqlCreateSequence()",
     "SqlDropTableOrDropView()",
     "SqlDropSequence()",

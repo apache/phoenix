@@ -178,6 +178,63 @@ SqlNode SqlCreateTable() :
 
 /**
  * Parses statement
+ *   CREATE INDEX
+ */
+SqlNode SqlCreateIndex() :
+{
+    SqlParserPos pos;
+    SqlIdentifier indexName;
+    boolean isLocal = false;
+    boolean ifNotExists = false;
+    SqlIdentifier dataTableName;
+    SqlNodeList expressions;
+    SqlNodeList includeColumns = SqlNodeList.EMPTY;
+    boolean async = false;
+    SqlNodeList indexOptions = SqlNodeList.EMPTY;
+    SqlNodeList splitKeys = SqlNodeList.EMPTY;
+}
+{
+    <CREATE> { pos = getPos(); }
+    [
+        <LOCAL> { isLocal = true; }
+    ]
+    <INDEX>
+    [
+        <IF> <NOT> <EXISTS> { ifNotExists = true; }
+    ]
+    indexName = SimpleIdentifier()
+    <ON> dataTableName = DualIdentifier()
+    <LPAREN>
+    expressions = IndexExpressionList()
+    <RPAREN>
+    [
+        <INCLUDE> <LPAREN>
+        includeColumns = IndexIncludeList()
+        <RPAREN>
+    ]
+    [
+        <ASYNC> { async = true; }
+    ]
+    [
+        indexOptions = TableOptionList()
+    ]
+    [
+        <SPLIT> <ON> <LPAREN>
+        splitKeys = SplitKeyList()
+        <RPAREN>
+    ]
+    {
+        return new SqlCreateIndex(pos.plus(getPos()), indexName,
+            SqlLiteral.createBoolean(isLocal, SqlParserPos.ZERO),
+            SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
+            dataTableName, expressions, includeColumns,
+            SqlLiteral.createBoolean(async, SqlParserPos.ZERO),
+            indexOptions, splitKeys);
+    }
+}
+
+/**
+ * Parses statement
  *   CREATE SEQUENCE
  */
 SqlNode SqlCreateSequence() :
@@ -331,6 +388,40 @@ SqlNodeList PkConstraintColumnDefList() :
     }
 }
 
+SqlNodeList IndexExpressionList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> indexExpressionList;
+}
+{
+    { pos = getPos(); }
+    e = IndexExpression() { indexExpressionList = startList(e); }
+    (
+        <COMMA> e = IndexExpression() { indexExpressionList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(indexExpressionList, pos.plus(getPos()));
+    }
+}
+
+SqlNodeList IndexIncludeList() :
+{
+    SqlParserPos pos;
+    SqlIdentifier e;
+    List<SqlNode> indexIncludeList;
+}
+{
+    { pos = getPos(); }
+    e = DualIdentifier() { indexIncludeList = startList(e); }
+    (
+        <COMMA> e = DualIdentifier() { indexIncludeList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(indexIncludeList, pos.plus(getPos()));
+    }
+}
+
 SqlNodeList TableOptionList() :
 {
     SqlParserPos pos;
@@ -465,6 +556,27 @@ SqlColumnDefInPkConstraintNode ColumnDefInPkConstraint() :
     {
         pos = columnName.getParserPosition().plus(getPos());
         return new SqlColumnDefInPkConstraintNode(pos, columnName, sortOrder, isRowTimestamp);
+    }
+}
+
+SqlIndexExpressionNode IndexExpression() :
+{
+    SqlNode expression;
+    SortOrder sortOrder = SortOrder.getDefault();
+    SqlParserPos pos;
+}
+{
+    expression = Expression(ExprContext.ACCEPT_NONQUERY)
+    [
+        <ASC>
+        {sortOrder = SortOrder.ASC;}
+        |
+        <DESC>
+        {sortOrder = SortOrder.DESC;}
+    ]
+    {
+        pos = expression.getParserPosition().plus(getPos());
+        return new SqlIndexExpressionNode(pos, expression, sortOrder);
     }
 }
 

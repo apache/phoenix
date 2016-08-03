@@ -1,7 +1,9 @@
 package org.apache.phoenix.calcite.jdbc;
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.jdbc.CalcitePrepare;
@@ -22,6 +24,8 @@ import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlIndexExpressionNode;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
@@ -36,6 +40,7 @@ import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.calcite.parse.SqlCreateIndex;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
 import org.apache.phoenix.calcite.parse.SqlDropSequence;
@@ -52,6 +57,7 @@ import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
 import org.apache.phoenix.calcite.rules.PhoenixTableScanColumnRefRule;
+import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.MutationPlan;
@@ -60,17 +66,25 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
+import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
+import org.apache.phoenix.parse.IndexKeyConstraint;
+import org.apache.phoenix.parse.NamedNode;
+import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 
 import com.google.common.base.Function;
 import com.google.common.collect.ArrayListMultimap;
@@ -251,6 +265,78 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                         baseTableName, where, 0);
                 try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
                     final CreateTableCompiler compiler = new CreateTableCompiler(stmt, Operation.UPSERT);
+                    final MutationPlan plan = compiler.compile(create);
+                    plan.execute();
+                }
+                break;
+            }
+            case CREATE_INDEX: {
+                final SqlCreateIndex index = (SqlCreateIndex) node;
+                final NamedNode name = NamedNode.caseSensitiveNamedNode(index.indexName.getSimple());
+                final IndexType indexType = index.isLocal.booleanValue() ? IndexType.LOCAL : IndexType.GLOBAL;
+                final TableName dataTableName;
+                if (index.dataTableName.isSimple()) {
+                    dataTableName = TableName.create(null, index.dataTableName.getSimple());
+                } else {
+                    dataTableName = TableName.create(index.dataTableName.names.get(0), index.dataTableName.names.get(1));
+                }
+                final NamedTableNode dataTable = NamedTableNode.create(dataTableName);
+                final List<org.apache.hadoop.hbase.util.Pair<ParseNode, SortOrder>> indexKeys = Lists.newArrayList();
+                for (SqlNode e : index.expressions) {
+                    SqlIndexExpressionNode indexExpression = (SqlIndexExpressionNode) e;
+                    String sql = THREAD_SQL_STRING.get();
+                    SqlParserPos exprPos = indexExpression.expression.getParserPosition();
+                    int start = SqlParserUtil.lineColToIndex(sql, exprPos.getLineNum(), exprPos.getColumnNum());
+                    int end = SqlParserUtil.lineColToIndex(sql, exprPos.getEndLineNum(), exprPos.getEndColumnNum());
+                    String exprString = sql.substring(start, end + 1);
+                    ParseNode exprNode = new SQLParser(exprString).parseExpression();
+                    indexKeys.add(new org.apache.hadoop.hbase.util.Pair<ParseNode, SortOrder>(exprNode, indexExpression.sortOrder));
+                }
+                final IndexKeyConstraint indexKeyConstraint = nodeFactory.indexKey(indexKeys);
+                final List<ColumnName> includeColumns;
+                if (SqlNodeList.isEmptyList(index.includeColumns)) {
+                    includeColumns = null;
+                } else {
+                    includeColumns = Lists.newArrayList();
+                    for (SqlNode e : index.includeColumns) {
+                        SqlIdentifier n = (SqlIdentifier) e;
+                        ColumnName columnName;
+                        if (n.isSimple()) {
+                            columnName = ColumnName.caseSensitiveColumnName(n.getSimple());
+                        } else {
+                            columnName = ColumnName.caseSensitiveColumnName(n.names.get(0), n.names.get(1));
+                        }
+                        includeColumns.add(columnName);
+                    }
+                }
+                final ListMultimap<String, org.apache.hadoop.hbase.util.Pair<String, Object>> props;
+                if (SqlNodeList.isEmptyList(index.indexOptions)) {
+                    props = null;
+                } else {
+                    props = ArrayListMultimap.<String, org.apache.hadoop.hbase.util.Pair<String, Object>>create();
+                    for (SqlNode tableOption : index.indexOptions) {
+                        SqlTableOptionNode option = (SqlTableOptionNode) tableOption;
+                        props.put(option.familyName, new org.apache.hadoop.hbase.util.Pair<String, Object>(option.propertyName, option.value));
+                    }
+                }
+                final List<ParseNode> splitNodes;
+                if (SqlNodeList.isEmptyList(index.splitKeyList)) {
+                    splitNodes = null;
+                } else {
+                    splitNodes = Lists.newArrayList();
+                    for (SqlNode splitKey : index.splitKeyList) {
+                        final SqlLiteral key = (SqlLiteral) splitKey;
+                        splitNodes.add(nodeFactory.literal(((NlsString) key.getValue()).toString()));
+                    }
+                }
+                // TODO
+                final Map<String, UDFParseNode> udfParseNodes = new HashMap<String, UDFParseNode>();
+                final CreateIndexStatement create = nodeFactory.createIndex(
+                        name, dataTable, indexKeyConstraint, includeColumns,
+                        splitNodes, props, index.ifNotExists.booleanValue(),
+                        indexType, index.async.booleanValue(), 0, udfParseNodes);
+                try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
+                    final CreateIndexCompiler compiler = new CreateIndexCompiler(stmt, Operation.UPSERT);
                     final MutationPlan plan = compiler.compile(create);
                     plan.execute();
                 }
