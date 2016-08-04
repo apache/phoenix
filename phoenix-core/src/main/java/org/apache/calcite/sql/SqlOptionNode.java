@@ -24,12 +24,12 @@ import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.util.Litmus;
 import org.apache.calcite.util.NlsString;
 
-public class SqlTableOptionNode extends SqlNode {
+public class SqlOptionNode extends SqlNode {
     public final String familyName;
     public final String propertyName;
     public final Object value;
 
-    public SqlTableOptionNode(SqlParserPos pos, SqlIdentifier key, SqlLiteral literal) {
+    public SqlOptionNode(SqlParserPos pos, SqlIdentifier key, SqlLiteral literal) {
         super(pos);
         if (key.isSimple()) {
             familyName = "";

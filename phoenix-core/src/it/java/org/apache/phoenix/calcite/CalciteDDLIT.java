@@ -2,6 +2,7 @@ package org.apache.phoenix.calcite;
 
 import java.util.Properties;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class CalciteDDLIT extends BaseCalciteIT {
@@ -49,5 +50,11 @@ public class CalciteDDLIT extends BaseCalciteIT {
         start(PROPS).sql("create table t5(a varchar not null primary key, b varchar)").execute().close();
         start(PROPS).sql("drop table t5").execute().close();
         start(PROPS).sql("create table t5(a bigint not null primary key, b varchar)").execute().close();
+    }
+    
+    @Ignore
+    @Test public void testUpdateStatistics() throws Exception {
+        start(PROPS).sql("create table stest(a varchar(20) not null primary key, b integer)").execute().close();
+        start(PROPS).sql("update statistics stest columns set dummy=2").execute().close();
     }
 }

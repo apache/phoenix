@@ -30,7 +30,7 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.SqlTableOptionNode;
+import org.apache.calcite.sql.SqlOptionNode;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.parser.SqlParserUtil;
@@ -38,7 +38,7 @@ import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
-import org.apache.calcite.util.Pair;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateIndex;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
@@ -46,6 +46,7 @@ import org.apache.phoenix.calcite.parse.SqlCreateTable;
 import org.apache.phoenix.calcite.parse.SqlDropIndex;
 import org.apache.phoenix.calcite.parse.SqlDropSequence;
 import org.apache.phoenix.calcite.parse.SqlDropTable;
+import org.apache.phoenix.calcite.parse.SqlUpdateStatistics;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
@@ -83,6 +84,7 @@ import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UDFParseNode;
+import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
@@ -177,10 +179,10 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             });
         }
         
-        Hook.PROGRAM.add(new Function<Pair<List<Materialization>, Holder<Program>>, Object>() {
+        Hook.PROGRAM.add(new Function<org.apache.calcite.util.Pair<List<Materialization>, Holder<Program>>, Object>() {
 			@Override
 			public Object apply(
-					Pair<List<Materialization>, Holder<Program>> input) {
+			        org.apache.calcite.util.Pair<List<Materialization>, Holder<Program>> input) {
 				input.getValue().set(Programs.standard(PhoenixRel.METADATA_PROVIDER));
 				return null;
 			}
@@ -205,16 +207,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 } else {
                     name = TableName.create(table.tableName.names.get(0), table.tableName.names.get(1));
                 }
-                final ListMultimap<String, org.apache.hadoop.hbase.util.Pair<String, Object>> props;
-                if (SqlNodeList.isEmptyList(table.tableOptions)) {
-                    props = null;
-                } else {
-                    props = ArrayListMultimap.<String, org.apache.hadoop.hbase.util.Pair<String, Object>>create();
-                    for (SqlNode tableOption : table.tableOptions) {
-                        SqlTableOptionNode option = (SqlTableOptionNode) tableOption;
-                        props.put(option.familyName, new org.apache.hadoop.hbase.util.Pair<String, Object>(option.propertyName, option.value));
-                    }
-                }
+                final ListMultimap<String, Pair<String, Object>> props = convertOptions(table.tableOptions);
                 final List<ColumnDef> columnDefs = Lists.newArrayList();
                 for (SqlNode columnDef : table.columnDefs) {
                     columnDefs.add(((SqlColumnDefNode) columnDef).columnDef);
@@ -240,27 +233,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     } else {
                         baseTableName = TableName.create(table.baseTableName.names.get(0), table.baseTableName.names.get(1));
                     }
-                    if (table.whereNode == null) {
-                        where = null;
-                    } else {
-                        String sql = THREAD_SQL_STRING.get();
-                        SqlParserPos wherePos = table.whereNode.getParserPosition();
-                        int start = SqlParserUtil.lineColToIndex(sql, wherePos.getLineNum(), wherePos.getColumnNum());
-                        int end = SqlParserUtil.lineColToIndex(sql, wherePos.getEndLineNum(), wherePos.getEndColumnNum());
-                        String whereString = sql.substring(start, end + 1);
-                        where = new SQLParser(whereString).parseExpression();
-                    }
+                    where = convertSqlNodeToParseNode(table.whereNode);
                 }
-                final List<ParseNode> splitNodes;
-                if (SqlNodeList.isEmptyList(table.splitKeyList)) {
-                    splitNodes = null;
-                } else {
-                    splitNodes = Lists.newArrayList();
-                    for (SqlNode splitKey : table.splitKeyList) {
-                        final SqlLiteral key = (SqlLiteral) splitKey;
-                        splitNodes.add(nodeFactory.literal(((NlsString) key.getValue()).toString()));
-                    }
-                }
+                final List<ParseNode> splitNodes = convertSplits(table.splitKeyList, nodeFactory);
                 final CreateTableStatement create = nodeFactory.createTable(
                         name, props, columnDefs, pkConstraint,
                         splitNodes, tableType, table.ifNotExists.booleanValue(),
@@ -283,16 +258,11 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     dataTableName = TableName.create(index.dataTableName.names.get(0), index.dataTableName.names.get(1));
                 }
                 final NamedTableNode dataTable = NamedTableNode.create(dataTableName);
-                final List<org.apache.hadoop.hbase.util.Pair<ParseNode, SortOrder>> indexKeys = Lists.newArrayList();
+                final List<Pair<ParseNode, SortOrder>> indexKeys = Lists.newArrayList();
                 for (SqlNode e : index.expressions) {
                     SqlIndexExpressionNode indexExpression = (SqlIndexExpressionNode) e;
-                    String sql = THREAD_SQL_STRING.get();
-                    SqlParserPos exprPos = indexExpression.expression.getParserPosition();
-                    int start = SqlParserUtil.lineColToIndex(sql, exprPos.getLineNum(), exprPos.getColumnNum());
-                    int end = SqlParserUtil.lineColToIndex(sql, exprPos.getEndLineNum(), exprPos.getEndColumnNum());
-                    String exprString = sql.substring(start, end + 1);
-                    ParseNode exprNode = new SQLParser(exprString).parseExpression();
-                    indexKeys.add(new org.apache.hadoop.hbase.util.Pair<ParseNode, SortOrder>(exprNode, indexExpression.sortOrder));
+                    ParseNode exprNode = convertSqlNodeToParseNode(indexExpression.expression);
+                    indexKeys.add(new Pair<ParseNode, SortOrder>(exprNode, indexExpression.sortOrder));
                 }
                 final IndexKeyConstraint indexKeyConstraint = nodeFactory.indexKey(indexKeys);
                 final List<ColumnName> includeColumns;
@@ -311,26 +281,8 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                         includeColumns.add(columnName);
                     }
                 }
-                final ListMultimap<String, org.apache.hadoop.hbase.util.Pair<String, Object>> props;
-                if (SqlNodeList.isEmptyList(index.indexOptions)) {
-                    props = null;
-                } else {
-                    props = ArrayListMultimap.<String, org.apache.hadoop.hbase.util.Pair<String, Object>>create();
-                    for (SqlNode tableOption : index.indexOptions) {
-                        SqlTableOptionNode option = (SqlTableOptionNode) tableOption;
-                        props.put(option.familyName, new org.apache.hadoop.hbase.util.Pair<String, Object>(option.propertyName, option.value));
-                    }
-                }
-                final List<ParseNode> splitNodes;
-                if (SqlNodeList.isEmptyList(index.splitKeyList)) {
-                    splitNodes = null;
-                } else {
-                    splitNodes = Lists.newArrayList();
-                    for (SqlNode splitKey : index.splitKeyList) {
-                        final SqlLiteral key = (SqlLiteral) splitKey;
-                        splitNodes.add(nodeFactory.literal(((NlsString) key.getValue()).toString()));
-                    }
-                }
+                final ListMultimap<String, Pair<String, Object>> props = convertOptions(index.indexOptions);
+                final List<ParseNode> splitNodes = convertSplits(index.splitKeyList, nodeFactory);
                 // TODO
                 final Map<String, UDFParseNode> udfParseNodes = new HashMap<String, UDFParseNode>();
                 final CreateIndexStatement create = nodeFactory.createIndex(
@@ -408,12 +360,78 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 client.dropSequence(drop);
                 break;                
             }
+            case OTHER_DDL: {
+                if (node instanceof SqlUpdateStatistics) {
+                    SqlUpdateStatistics updateStatsNode = (SqlUpdateStatistics) node;
+                    final TableName name;
+                    if (updateStatsNode.tableName.isSimple()) {
+                        name = TableName.create(null, updateStatsNode.tableName.getSimple());
+                    } else {
+                        name = TableName.create(updateStatsNode.tableName.names.get(0), updateStatsNode.tableName.names.get(1));
+                    }
+                    final NamedTableNode table = NamedTableNode.create(name);
+                    final Map<String, Object> props = new HashMap<String, Object>();
+                    for (SqlNode optionNode : updateStatsNode.options) {
+                        SqlOptionNode option = (SqlOptionNode) optionNode;
+                        props.put(option.propertyName, option.value);
+                    }
+                    final UpdateStatisticsStatement updateStatsStmt = nodeFactory.updateStatistics(table, updateStatsNode.scope, props);
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.updateStatistics(updateStatsStmt);                    
+                } else {
+                    throw new AssertionError("unknown DDL node " + node.getClass());                    
+                }
+                break;
+            }
             default:
                 throw new AssertionError("unknown DDL type " + node.getKind() + " " + node.getClass());
             }
         } catch (SQLException ex) {
             throw new RuntimeException(ex);
         }
+    }
+
+    private static ParseNode convertSqlNodeToParseNode(SqlNode sqlNode) throws SQLException {
+        if (sqlNode == null) {
+            return null;
+        }
+
+        String sql = THREAD_SQL_STRING.get();
+        SqlParserPos pos = sqlNode.getParserPosition();
+        int start = SqlParserUtil.lineColToIndex(sql, pos.getLineNum(), pos.getColumnNum());
+        int end = SqlParserUtil.lineColToIndex(sql, pos.getEndLineNum(), pos.getEndColumnNum());
+        String sqlString = sql.substring(start, end + 1);
+        return new SQLParser(sqlString).parseExpression();
+    }
+
+    private static ListMultimap<String, Pair<String, Object>> convertOptions(SqlNodeList options) {
+        final ListMultimap<String, Pair<String, Object>> props;
+        if (SqlNodeList.isEmptyList(options)) {
+            props = null;
+        } else {
+            props = ArrayListMultimap.<String, Pair<String, Object>>create();
+            for (SqlNode optionNode : options) {
+                SqlOptionNode option = (SqlOptionNode) optionNode;
+                props.put(option.familyName, new Pair<String, Object>(option.propertyName, option.value));
+            }
+        }
+
+        return props;
+    }
+
+    private static List<ParseNode> convertSplits(SqlNodeList splitKeyList, ParseNodeFactory nodeFactory) {
+        final List<ParseNode> splits;
+        if (SqlNodeList.isEmptyList(splitKeyList)) {
+            splits = null;
+        } else {
+            splits = Lists.newArrayList();
+            for (SqlNode splitKey : splitKeyList) {
+                final SqlLiteral key = (SqlLiteral) splitKey;
+                splits.add(nodeFactory.literal(((NlsString) key.getValue()).toString()));
+            }
+        }
+
+        return splits;
     }
     
     private static PhoenixConnection getPhoenixConnection(SchemaPlus rootSchema) {

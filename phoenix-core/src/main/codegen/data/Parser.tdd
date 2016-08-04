@@ -23,6 +23,7 @@
   imports: [
     "org.apache.phoenix.calcite.parse.*",
     "org.apache.phoenix.schema.SortOrder",
+    "org.apache.phoenix.schema.stats.StatisticsCollectionScope",
     "org.apache.phoenix.parse.ColumnName",
     "org.apache.phoenix.parse.ColumnDef",
     "org.apache.phoenix.parse.ColumnDefInPkConstraint",
@@ -30,7 +31,7 @@
     "org.apache.calcite.sql.SqlColumnDefInPkConstraintNode"
     "org.apache.calcite.sql.SqlIndexExpressionNode"
     "org.apache.calcite.sql.SqlDataTypeNode"
-    "org.apache.calcite.sql.SqlTableOptionNode"
+    "org.apache.calcite.sql.SqlOptionNode"
     "java.util.*"
   ]
 
@@ -38,11 +39,13 @@
   keywords: [
     "ASYNC"
     "CACHE"
+    "COLUMNS"
     "IF"
     "INCLUDE"
     "INDEX"
     "ROW_TIMESTAMP"
     "SPLIT"
+    "STATISTICS"
   ]
 
   # List of keywords from "keywords" section that are not reserved.
@@ -60,6 +63,7 @@
     "SqlDropTableOrDropView()",
     "SqlDropIndex()",
     "SqlDropSequence()",
+    "SqlUpdateStatistics()",
   ]
 
   # List of methods for parsing custom literals.

@@ -103,7 +103,7 @@ SqlNode SqlCreateView() :
         }
     )
     (
-        tableOptions = TableOptionList()
+        tableOptions = FamilyOptionList()
         |
         {
             tableOptions = SqlNodeList.EMPTY;
@@ -154,7 +154,7 @@ SqlNode SqlCreateTable() :
     )
     <RPAREN>
     (
-        tableOptions = TableOptionList()
+        tableOptions = FamilyOptionList()
         |
         {
             tableOptions = SqlNodeList.EMPTY;
@@ -216,7 +216,7 @@ SqlNode SqlCreateIndex() :
         <ASYNC> { async = true; }
     ]
     [
-        indexOptions = TableOptionList()
+        indexOptions = FamilyOptionList()
     ]
     [
         <SPLIT> <ON> <LPAREN>
@@ -383,6 +383,40 @@ SqlNode SqlDropSequence() :
     }
 }
 
+/**
+ * Parses statement
+ *   UPDATE STATISTICS
+ */
+SqlNode SqlUpdateStatistics() :
+{
+    SqlParserPos pos;
+    SqlIdentifier tableName;
+    StatisticsCollectionScope scope;
+    SqlNodeList statsOptions = SqlNodeList.EMPTY;
+}
+{
+    <UPDATE> { pos = getPos(); } <STATISTICS>
+    tableName = DualIdentifier()
+    (
+        <ALL> { scope = StatisticsCollectionScope.ALL; }
+        |
+        <INDEX> { scope = StatisticsCollectionScope.INDEX; }
+        |
+        <COLUMNS> { scope = StatisticsCollectionScope.COLUMNS; }
+        |
+        {
+            scope = StatisticsCollectionScope.getDefault();
+        }
+    )
+    [
+        <SET>
+        statsOptions = GeneralOptionList()
+    ]
+    {
+        return new SqlUpdateStatistics(pos.plus(getPos()), tableName, scope, statsOptions);
+    }
+}
+
 SqlNodeList ColumnDefList() :
 {
     SqlParserPos pos;
@@ -451,20 +485,37 @@ SqlNodeList IndexIncludeList() :
     }
 }
 
-SqlNodeList TableOptionList() :
+SqlNodeList FamilyOptionList() :
 {
     SqlParserPos pos;
     SqlNode e;
-    List<SqlNode> tableOptionList;
+    List<SqlNode> familyOptionList;
 }
 {
     { pos = getPos(); }
-    e = TableOption() { tableOptionList = startList(e); }
+    e = FamilyOption() { familyOptionList = startList(e); }
     (
-        <COMMA> e = TableOption() { tableOptionList.add(e); }
+        <COMMA> e = FamilyOption() { familyOptionList.add(e); }
     ) *
     {
-        return new SqlNodeList(tableOptionList, pos.plus(getPos()));
+        return new SqlNodeList(familyOptionList, pos.plus(getPos()));
+    }
+}
+
+SqlNodeList GeneralOptionList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> generalOptionList;
+}
+{
+    { pos = getPos(); }
+    e = GeneralOption() { generalOptionList = startList(e); }
+    (
+        <COMMA> e = GeneralOption() { generalOptionList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(generalOptionList, pos.plus(getPos()));
     }
 }
 
@@ -609,7 +660,7 @@ SqlIndexExpressionNode IndexExpression() :
     }
 }
 
-SqlTableOptionNode TableOption() :
+SqlOptionNode FamilyOption() :
 {
     SqlIdentifier key;
     SqlNode value;
@@ -621,7 +672,23 @@ SqlTableOptionNode TableOption() :
     value = Literal()
     {
         pos = key.getParserPosition().plus(getPos());
-        return new SqlTableOptionNode(pos, key, (SqlLiteral) value);
+        return new SqlOptionNode(pos, key, (SqlLiteral) value);
+    }
+}
+
+SqlOptionNode GeneralOption() :
+{
+    SqlIdentifier key;
+    SqlNode value;
+    SqlParserPos pos;
+}
+{
+    key = SimpleIdentifier()
+    <EQ>
+    value = Literal()
+    {
+        pos = key.getParserPosition().plus(getPos());
+        return new SqlOptionNode(pos, key, (SqlLiteral) value);
     }
 }
 
