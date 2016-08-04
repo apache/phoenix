@@ -58,6 +58,7 @@
     "SqlCreateIndex()",
     "SqlCreateSequence()",
     "SqlDropTableOrDropView()",
+    "SqlDropIndex()",
     "SqlDropSequence()",
   ]
 

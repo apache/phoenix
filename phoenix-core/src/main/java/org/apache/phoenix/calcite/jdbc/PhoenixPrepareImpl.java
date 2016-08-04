@@ -43,6 +43,7 @@ import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateIndex;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
+import org.apache.phoenix.calcite.parse.SqlDropIndex;
 import org.apache.phoenix.calcite.parse.SqlDropSequence;
 import org.apache.phoenix.calcite.parse.SqlDropTable;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
@@ -70,6 +71,7 @@ import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.IndexKeyConstraint;
@@ -378,6 +380,20 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 MetaDataClient client = new MetaDataClient(connection);
                 client.dropTable(drop);
                 break;
+            }
+            case DROP_INDEX: {
+                final SqlDropIndex index = (SqlDropIndex) node;
+                final NamedNode name = NamedNode.caseSensitiveNamedNode(index.indexName.getSimple());
+                final TableName dataTableName;
+                if (index.dataTableName.isSimple()) {
+                    dataTableName = TableName.create(null, index.dataTableName.getSimple());
+                } else {
+                    dataTableName = TableName.create(index.dataTableName.names.get(0), index.dataTableName.names.get(1));
+                }
+                final DropIndexStatement drop = nodeFactory.dropIndex(name, dataTableName, index.ifExists.booleanValue());
+                MetaDataClient client = new MetaDataClient(connection);
+                client.dropIndex(drop);
+                break;                
             }
             case DROP_SEQUENCE: {
                 final SqlDropSequence sequence = (SqlDropSequence) node;

@@ -330,6 +330,35 @@ SqlNode SqlDropTableOrDropView() :
 
 /**
  * Parses statement
+ *   DROP INDEX
+ */
+SqlNode SqlDropIndex() :
+{
+    SqlParserPos pos;
+    SqlIdentifier indexName;
+    boolean ifExists;
+    SqlIdentifier dataTableName;
+}
+{
+    <DROP> { pos = getPos(); } <INDEX>
+    (
+        <IF> <EXISTS> { ifExists = true; }
+        |
+        {
+            ifExists = false;
+        }
+    )
+    indexName = SimpleIdentifier()
+    <ON>
+    dataTableName = DualIdentifier()
+    {
+        return new SqlDropIndex(pos.plus(getPos()), indexName,
+            SqlLiteral.createBoolean(ifExists, SqlParserPos.ZERO), dataTableName);
+    }
+}
+
+/**
+ * Parses statement
  *   DROP SEQUENCE
  */
 SqlNode SqlDropSequence() :

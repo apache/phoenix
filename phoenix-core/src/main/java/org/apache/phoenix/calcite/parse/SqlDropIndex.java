@@ -30,19 +30,22 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 
 import com.google.common.collect.ImmutableList;
 
-public class SqlDropSequence extends SqlCall {
-    public static final SqlOperator OPERATOR = new SqlDdlOperator("DROP SEQUENCE", SqlKind.DROP_SEQUENCE);
+public class SqlDropIndex extends SqlCall {
+    public static final SqlOperator OPERATOR = new SqlDdlOperator("DROP INDEX", SqlKind.DROP_INDEX);
     
-    public final SqlIdentifier sequenceName;
+    public final SqlIdentifier indexName;
     public final SqlLiteral ifExists;
+    public final SqlIdentifier dataTableName;
 
-    public SqlDropSequence(
+    public SqlDropIndex(
             SqlParserPos pos,
-            SqlIdentifier sequenceName,
-            SqlLiteral ifExists) {
+            SqlIdentifier indexName,
+            SqlLiteral ifExists,
+            SqlIdentifier dataTableName) {
         super(pos);
-        this.sequenceName = sequenceName;
+        this.indexName = indexName;
         this.ifExists = ifExists;
+        this.dataTableName = dataTableName;
     }
 
     @Override
@@ -52,7 +55,7 @@ public class SqlDropSequence extends SqlCall {
 
     @Override
     public List<SqlNode> getOperandList() {
-        return ImmutableList.of(sequenceName, ifExists);
+        return ImmutableList.of(indexName, ifExists, dataTableName);
     }
 
     @Override
