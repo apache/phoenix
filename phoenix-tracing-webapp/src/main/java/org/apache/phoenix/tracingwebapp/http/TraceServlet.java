@@ -168,10 +168,7 @@ public class TraceServlet extends HttpServlet {
 
   //return json string
   protected String getJson(String json) {
-    String output = json.toString().replace("_id\":", "_id\":\"")
-        .replace(",\"hostname", "\",\"hostname")
-        .replace(",\"parent", "\",\"parent")
-        .replace(",\"end", "\",\"end");
+    String output = json.toString();
     return output;
   }
 
