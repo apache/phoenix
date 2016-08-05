@@ -60,9 +60,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
+public class AppendOnlySchemaIT extends BaseHBaseManagedTimeTableReuseIT {
+
     
     private void testTableWithSameSchema(boolean notExists, boolean sameClient) throws Exception {
+
         // use a spyed ConnectionQueryServices so we can verify calls to getTable
         ConnectionQueryServices connectionQueryServices =
                 Mockito.spy(driver.getConnectionQueryServices(getUrl(),
@@ -72,20 +74,24 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
 
         try (Connection conn1 = connectionQueryServices.connect(getUrl(), props);
                 Connection conn2 = sameClient ? conn1 : connectionQueryServices.connect(getUrl(), props)) {
+
+            String metricTableName = generateRandomString();
+            String viewName = generateRandomString();
+            String metricIdSeqTableName = generateRandomString();
             // create sequence for auto partition
-            conn1.createStatement().execute("CREATE SEQUENCE metric_id_seq CACHE 1");
+            conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + " CACHE 1");
             // create base table
-            conn1.createStatement().execute("CREATE TABLE metric_table (metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))" 
-                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=metric_id_seq");
+            conn1.createStatement().execute("CREATE TABLE "+ metricTableName + "(metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))"
+                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=" + metricIdSeqTableName);
             // create view
             String ddl =
-                    "CREATE VIEW " + (notExists ? "IF NOT EXISTS" : "")
-                            + " view1( hostName varchar NOT NULL, tagName varChar"
+                    "CREATE VIEW " + (notExists ? "IF NOT EXISTS " : "")
+                            + viewName + " ( hostName varchar NOT NULL, tagName varChar"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
-                            + " AS SELECT * FROM metric_table"
+                            + " AS SELECT * FROM " + metricTableName
                             + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
             conn1.createStatement().execute(ddl);
-            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal) VALUES('host1', 1.0)");
+            conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host1', 1.0)");
             conn1.commit();
             reset(connectionQueryServices);
 
@@ -103,7 +109,7 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             }
             
             // verify getTable rpcs
-            verify(connectionQueryServices, sameClient ? never() : times(1)).getTable((PName)isNull(), eq(new byte[0]), eq(Bytes.toBytes("VIEW1")), anyLong(), anyLong());
+            verify(connectionQueryServices, sameClient ? never() : times(1)).getTable((PName)isNull(), eq(new byte[0]), eq(Bytes.toBytes(viewName)), anyLong(), anyLong());
             
             // verify no create table rpcs
             verify(connectionQueryServices, never()).createTable(anyListOf(Mutation.class),
@@ -112,7 +118,7 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             reset(connectionQueryServices);
             
             // execute alter table ddl that adds the same column
-            ddl = "ALTER VIEW view1 ADD " + (notExists ? "IF NOT EXISTS" : "") + " tagName varchar";
+            ddl = "ALTER VIEW " + viewName + " ADD " + (notExists ? "IF NOT EXISTS" : "") + " tagName varchar";
             try {
                 conn2.createStatement().execute(ddl);
                 if (!notExists) {
@@ -130,10 +136,10 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             verify(connectionQueryServices, notExists ? times(1) : never() ).addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class), anyMap(), anySetOf(String.class));
 
             // upsert one row
-            conn2.createStatement().execute("UPSERT INTO view1(hostName, metricVal) VALUES('host2', 2.0)");
+            conn2.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host2', 2.0)");
             conn2.commit();
             // verify data in base table
-            ResultSet rs = conn2.createStatement().executeQuery("SELECT * from metric_table");
+            ResultSet rs = conn2.createStatement().executeQuery("SELECT * from " + metricTableName);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertEquals(1.0, rs.getDouble(2), 1e-6);
@@ -142,7 +148,7 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             assertEquals(2.0, rs.getDouble(2), 1e-6);
             assertFalse(rs.next());
             // verify data in view
-            rs = conn2.createStatement().executeQuery("SELECT * from view1");
+            rs = conn2.createStatement().executeQuery("SELECT * from " + viewName);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertEquals(1.0, rs.getDouble(2), 1e-6);
@@ -179,47 +185,52 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn1 = DriverManager.getConnection(getUrl(), props);
                 Connection conn2 = sameClient ? conn1 : DriverManager.getConnection(getUrl(), props)) {
+
+            String metricTableName = generateRandomString();
+            String viewName = generateRandomString();
+            String metricIdSeqTableName = generateRandomString();
+
             // create sequence for auto partition
-            conn1.createStatement().execute("CREATE SEQUENCE metric_id_seq CACHE 1");
+            conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + " CACHE 1");
             // create base table
-            conn1.createStatement().execute("CREATE TABLE metric_table (metricId INTEGER NOT NULL, metricVal1 DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))" 
-                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=metric_id_seq");
+            conn1.createStatement().execute("CREATE TABLE " + metricTableName + " (metricId INTEGER NOT NULL, metricVal1 DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))"
+                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=" + metricIdSeqTableName);
             // create view
             String ddl =
-                    "CREATE VIEW IF NOT EXISTS"
-                            + " view1( hostName varchar NOT NULL,"
+                    "CREATE VIEW IF NOT EXISTS "
+                            + viewName + "( hostName varchar NOT NULL,"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
-                            + " AS SELECT * FROM metric_table"
+                            + " AS SELECT * FROM " + metricTableName
                             + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
             conn1.createStatement().execute(ddl);
             
-            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal1) VALUES('host1', 1.0)");
+            conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal1) VALUES('host1', 1.0)");
             conn1.commit();
 
             // execute ddl that creates that same view with an additional pk column and regular column
             // and also changes the order of the pk columns (which is not respected since we only 
             // allow appending columns)
             ddl =
-                    "CREATE VIEW IF NOT EXISTS"
-                            + " view1( instanceName varchar, hostName varchar, metricVal2 double, metricVal1 double"
+                    "CREATE VIEW IF NOT EXISTS "
+                            + viewName + "( instanceName varchar, hostName varchar, metricVal2 double, metricVal1 double"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (instancename, hostName))"
-                            + " AS SELECT * FROM metric_table"
+                            + " AS SELECT * FROM " + metricTableName
                             + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
             conn2.createStatement().execute(ddl);
 
             conn2.createStatement().execute(
-                "UPSERT INTO view1(hostName, instanceName, metricVal1, metricval2) VALUES('host2', 'instance2', 21.0, 22.0)");
+                "UPSERT INTO " + viewName + "(hostName, instanceName, metricVal1, metricval2) VALUES('host2', 'instance2', 21.0, 22.0)");
             conn2.commit();
             
-            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal1) VALUES('host3', 3.0)");
+            conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal1) VALUES('host3', 3.0)");
             conn1.commit();
             
             // verify data exists
-            ResultSet rs = conn2.createStatement().executeQuery("SELECT * from view1");
+            ResultSet rs = conn2.createStatement().executeQuery("SELECT * from " + viewName);
             
             // verify the two columns were added correctly
             PTable table =
-                    conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "VIEW1"));
+                    conn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, viewName));
             List<PColumn> pkColumns = table.getPKColumns();
             assertEquals(3,table.getPKColumns().size());
             // even though the second create view statement changed the order of the pk, the original order is maintained
@@ -274,36 +285,15 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
         testAddColumns(false);
     }
 
-    public void testCreateTableDropColumns() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String ddl =
-                    "create table IF NOT EXISTS TEST( id1 char(2) NOT NULL," + " col1 integer,"
-                            + " col2 integer," + " CONSTRAINT NAME_PK PRIMARY KEY (id1))"
-                            + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
-            conn.createStatement().execute(ddl);
-            conn.createStatement().execute("UPSERT INTO TEST VALUES('a', 11)");
-            conn.commit();
-
-            // execute ddl while dropping a column
-            ddl = "alter table TEST drop column col1";
-            try {
-                conn.createStatement().execute(ddl);
-                fail("Dropping a column from a table with APPEND_ONLY_SCHEMA=true should fail");
-            } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_DROP_COL_APPEND_ONLY_SCHEMA.getErrorCode(),
-                    e.getErrorCode());
-            }
-        }
-    }
-
     @Test
     public void testValidateAttributes() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName = generateRandomString();
+            String viewName = generateRandomString();
             try {
                 conn.createStatement().execute(
-                    "create table IF NOT EXISTS TEST1 ( id char(1) NOT NULL,"
+                    "create table IF NOT EXISTS " + tableName + " ( id char(1) NOT NULL,"
                             + " col1 integer NOT NULL,"
                             + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1))"
                             + " APPEND_ONLY_SCHEMA = true");
@@ -314,13 +304,13 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
             }
             
             conn.createStatement().execute(
-                "create table IF NOT EXISTS TEST1 ( id char(1) NOT NULL,"
+                "create table IF NOT EXISTS " + tableName + " ( id char(1) NOT NULL,"
                         + " col1 integer NOT NULL"
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1))"
                         + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1000");
             try {
                 conn.createStatement().execute(
-                    "create view IF NOT EXISTS MY_VIEW (val1 integer NOT NULL) AS SELECT * FROM TEST1"
+                    "create view IF NOT EXISTS " + viewName + " (val1 integer NOT NULL) AS SELECT * FROM " + tableName
                             + " UPDATE_CACHE_FREQUENCY=1000");
                 fail("APPEND_ONLY_SCHEMA must be true for a view if it is true for the base table ");
             }
@@ -336,25 +326,28 @@ public class AppendOnlySchemaIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn1 = DriverManager.getConnection(getUrl(), props);
                 Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
+            String metricTableName = generateRandomString();
+            String viewName = generateRandomString();
+            String metricIdSeqTableName = generateRandomString();
             // create sequence for auto partition
-            conn1.createStatement().execute("CREATE SEQUENCE metric_id_seq CACHE 1");
+            conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + "  CACHE 1");
             // create base table
-            conn1.createStatement().execute("CREATE TABLE metric_table (metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))" 
-                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=metric_id_seq");
+            conn1.createStatement().execute("CREATE TABLE " + metricTableName + " (metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))"
+                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=" + metricIdSeqTableName);
             // create view
             String ddl =
-                    "CREATE VIEW IF NOT EXISTS"
-                            + " view1( hostName varchar NOT NULL,"
+                    "CREATE VIEW IF NOT EXISTS "
+                            + viewName + "( hostName varchar NOT NULL,"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
-                            + " AS SELECT * FROM metric_table"
+                            + " AS SELECT * FROM " + metricTableName
                             + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
             conn1.createStatement().execute(ddl);
             
             // drop the table using a different connection
-            conn2.createStatement().execute("DROP VIEW view1");
+            conn2.createStatement().execute("DROP VIEW " + viewName);
             
             // upsert one row
-            conn1.createStatement().execute("UPSERT INTO view1(hostName, metricVal) VALUES('host1', 1.0)");
+            conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host1', 1.0)");
             // upsert doesn't fail since base table still exists
             conn1.commit();
         }

@@ -50,7 +50,7 @@ import org.junit.Test;
 /**
  * Smoke test for query server.
  */
-public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
+public class QueryServerBasicsIT extends BaseHBaseManagedTimeTableReuseIT {
 
   private static final Log LOG = LogFactory.getLog(QueryServerBasicsIT.class);
 

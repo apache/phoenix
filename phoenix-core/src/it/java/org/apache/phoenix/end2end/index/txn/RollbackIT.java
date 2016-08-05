@@ -31,7 +31,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -47,24 +47,18 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class RollbackIT extends BaseHBaseManagedTimeIT {
+public class RollbackIT extends BaseHBaseManagedTimeTableReuseIT {
 	
 	private final boolean localIndex;
 	private final boolean mutable;
-	private final String tableName;
-    private final String indexName;
-    private final String fullTableName;
 
 	public RollbackIT(boolean localIndex, boolean mutable) {
 		this.localIndex = localIndex;
 		this.mutable = mutable;
-		this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME;
-		this.indexName = "IDX";
-		this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 	}
 	
 	@BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
@@ -82,6 +76,9 @@ public class RollbackIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testRollbackOfUncommittedKeyValueIndexInsert() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -127,6 +124,9 @@ public class RollbackIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR, v1 VARCHAR, v2 VARCHAR, CONSTRAINT pk PRIMARY KEY (v1, v2))"+(!mutable? " IMMUTABLE_ROWS=true" : ""));

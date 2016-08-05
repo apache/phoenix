@@ -42,7 +42,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -58,12 +58,12 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
+public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final int NUM_SALT_BUCKETS = 4; 
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(32));
@@ -78,7 +78,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testRoundRobinAfterTableSplit() throws Exception {
-        String tableName = "ROUNDROBINSPLIT";
+        String tableName = generateRandomString();
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         int numRows = setupTableForSplit(tableName);
         Connection conn = DriverManager.getConnection(getUrl());
@@ -128,7 +128,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
     }
 
     private void testSelectAllRowsWithDifferentFetchSizes(boolean salted) throws Exception {
-        String tableName = "ALLROWS" + (salted ? "_SALTED" : "_UNSALTED");
+        String tableName = generateRandomString();
         int numRows = 9;
         Set<String> expectedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, numRows, salted, false));
         Connection conn = DriverManager.getConnection(getUrl());
@@ -152,7 +152,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
     }
 
     private void testSelectRowsWithFilterAndDifferentFetchSizes(boolean salted) throws Exception {
-        String tableName = "ROWSWITHFILTER" + (salted ? "_SALTED" : "_UNSALTED");
+        String tableName = generateRandomString();
         int numRows = 6;
         Set<String> insertedKeys = createTableAndInsertRows(tableName, numRows, salted, false);
         Connection conn = DriverManager.getConnection(getUrl());
@@ -205,7 +205,7 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testFetchSizesAndRVCExpression() throws Exception {
-        String tableName = "RVCTest";
+        String tableName = generateRandomString();
         Set<String> insertedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, 4, false, false));
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement("SELECT K FROM " + tableName + " WHERE (K, V)  > (?, ?)");
@@ -280,10 +280,14 @@ public class RoundRobinResultIteratorIT extends BaseHBaseManagedTimeIT {
         int insertedRowsA = 10;
         int insertedRowsB = 5;
         int insertedRowsC = 7;
-        Set<String> keySetA = createTableAndInsertRows("TABLEA", insertedRowsA, true, true);
-        Set<String> keySetB = createTableAndInsertRows("TABLEB", insertedRowsB, true, true);
-        Set<String> keySetC = createTableAndInsertRows("TABLEC", insertedRowsC, false, true);
-        String query = "SELECT K FROM TABLEA UNION ALL SELECT K FROM TABLEB UNION ALL SELECT K FROM TABLEC";
+        String baseTableName = generateRandomString();
+        String tableA = "TABLEA" + baseTableName;
+        String tableB = "TABLEB" + baseTableName;
+        String tableC = "TABLEC" + baseTableName;
+        Set<String> keySetA = createTableAndInsertRows(tableA, insertedRowsA, true, true);
+        Set<String> keySetB = createTableAndInsertRows(tableB, insertedRowsB, true, true);
+        Set<String> keySetC = createTableAndInsertRows(tableC, insertedRowsC, false, true);
+        String query = "SELECT K FROM " + tableA + " UNION ALL SELECT K FROM " + tableB + " UNION ALL SELECT K FROM " + tableC;
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(query);
         stmt.setFetchSize(2); // force parallel fetch of scanner cache

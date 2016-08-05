@@ -43,7 +43,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
+public class HashJoinMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     private final String[] plans = new String[] {
             /*
              * testJoinWithKeyRangeOptimization()
@@ -95,7 +95,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
     };
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used

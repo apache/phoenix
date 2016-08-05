@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.query.BaseTest.generateRandomString;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_NAME;
@@ -449,8 +450,8 @@ public class TestUtil {
      * @param input
      *            input to be inserted
      */
-    public static void upsertRow(Connection conn, String sortOrder, int id, Object input) throws SQLException {
-        String dml = String.format("UPSERT INTO TEST_TABLE_%s VALUES(?,?)", sortOrder);
+    public static void upsertRow(Connection conn, String tableName, String sortOrder, int id, Object input) throws SQLException {
+        String dml = String.format("UPSERT INTO " + tableName + "_%s VALUES(?,?)", sortOrder);
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setInt(1, id);
         if (input instanceof String)
@@ -471,11 +472,11 @@ public class TestUtil {
         conn.commit();
     }
 
-    private static void createTable(Connection conn, String inputSqlType, String sortOrder) throws SQLException {
+    private static void createTable(Connection conn, String inputSqlType, String tableName, String sortOrder) throws SQLException {
         String dmlFormat =
-            "CREATE TABLE TEST_TABLE_%s" + "(id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s "
+            "CREATE TABLE " + tableName + "_%s (id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s "
                 + "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (id, pk %s))";
-        String ddl = String.format(dmlFormat, sortOrder, inputSqlType, inputSqlType, sortOrder);
+        String ddl = String.format(dmlFormat,sortOrder, inputSqlType, inputSqlType, sortOrder);
         conn.createStatement().execute(ddl);
         conn.commit();
     }
@@ -491,13 +492,15 @@ public class TestUtil {
      * @param inputList
      *            list of values to be inserted into the pk column
      */
-    public static void initTables(Connection conn, String inputSqlType, List<Object> inputList) throws Exception {
-        createTable(conn, inputSqlType, "ASC");
-        createTable(conn, inputSqlType, "DESC");
+    public static String initTables(Connection conn, String inputSqlType, List<Object> inputList) throws Exception {
+        String tableName = generateRandomString();
+        createTable(conn, inputSqlType, tableName, "ASC");
+        createTable(conn, inputSqlType, tableName, "DESC");
         for (int i = 0; i < inputList.size(); ++i) {
-            upsertRow(conn, "ASC", i, inputList.get(i));
-            upsertRow(conn, "DESC", i, inputList.get(i));
+            upsertRow(conn, tableName, "ASC", i, inputList.get(i));
+            upsertRow(conn, tableName, "DESC", i, inputList.get(i));
         }
+        return tableName;
     }
     
     public static List<KeyRange> getAllSplits(Connection conn, String tableName) throws SQLException {

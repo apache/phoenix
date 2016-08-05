@@ -30,7 +30,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.pherf.configuration.Column;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
@@ -39,7 +39,8 @@ import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
 import org.junit.Test;
 
-public class SchemaReaderIT extends BaseHBaseManagedTimeIT {
+
+public class SchemaReaderIT extends BaseHBaseManagedTimeTableReuseIT {
     protected static PhoenixUtil util = PhoenixUtil.create(true);
 
     @Test 

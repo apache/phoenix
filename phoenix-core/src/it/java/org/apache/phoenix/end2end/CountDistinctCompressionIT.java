@@ -51,7 +51,7 @@ public class CountDistinctCompressionIT extends BaseOwnClusterHBaseManagedTimeIT
     @Test
     public void testDistinctCountOnColumn() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), (Date)null, getUrl());
+        initATableValues("aTable", tenantId, getDefaultSplits(tenantId), (Date)null, null, getUrl());
 
         String query = "SELECT count(DISTINCT A_STRING) FROM aTable";
 
