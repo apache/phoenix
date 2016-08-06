@@ -110,8 +110,13 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeIT {
     @Parameters(name="localIndex = {0} , transactional = {1}")
     public static Collection<Boolean[]> data() {
 		return Arrays.asList(new Boolean[][] { 
-				{ false, false }, { false, true },
-				{ true, false }, { true, true } });
+				{ false, false },
+				// XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+				// { false, true },
+				{ true, false },
+				// XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+				// { true, true }
+		  });
     }
 
     @Test

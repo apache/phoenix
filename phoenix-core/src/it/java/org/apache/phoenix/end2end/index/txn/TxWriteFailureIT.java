@@ -49,6 +49,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -56,6 +57,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Maps;
 
+@Ignore("Disabled until Tephra 0.8.0-incubating supports CDH > 5.7")
 @RunWith(Parameterized.class)
 public class TxWriteFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
 	

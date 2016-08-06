@@ -85,7 +85,11 @@ public class StatsCollectorIT extends StatsCollectorAbstractIT {
     
     @Parameters(name="transactional = {0}")
     public static Collection<Boolean> data() {
-        return Arrays.asList(false,true);
+        return Arrays.asList(
+          false
+          // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+          //, true
+        );
     }
 
     @Test

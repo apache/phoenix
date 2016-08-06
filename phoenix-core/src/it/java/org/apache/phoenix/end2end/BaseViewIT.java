@@ -88,7 +88,11 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     @Parameters(name="transactional = {0}")
     public static Collection<Boolean> data() {
-        return Arrays.asList(new Boolean[] { false, true });
+        return Arrays.asList(new Boolean[] { 
+            false,
+            // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+            // true
+          });
     }
     
     protected void testUpdatableViewWithIndex(Integer saltBuckets, boolean localIndex) throws Exception {

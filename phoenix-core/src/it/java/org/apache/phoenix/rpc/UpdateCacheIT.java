@@ -52,6 +52,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -82,6 +83,7 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeIT {
     }
     
     @Test
+    @Ignore("Disabled until Tephra 0.8.0-incubating supports CDH > 5.7")
     public void testUpdateCacheForTxnTable() throws Exception {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
         ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);

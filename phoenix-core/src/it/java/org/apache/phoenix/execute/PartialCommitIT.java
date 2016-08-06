@@ -58,6 +58,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -66,6 +67,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
+@Ignore("Disabled until Tephra 0.8.0-incubating supports CDH > 5.7")
 @RunWith(Parameterized.class)
 // Needs to extend BaseOwnClusterIT (and not BaseOwnClusterHBaseManagedTimeIT since table data 
 // is created and populated once in the constructor 
@@ -95,7 +97,11 @@ public class PartialCommitIT extends BaseOwnClusterIT {
     
     @Parameters(name="transactional = {0}")
     public static Collection<Boolean> data() {
-        return Arrays.asList(false, true);
+        return Arrays.asList(
+          false
+          // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+          //, true
+          );
     }
     
     private final boolean transactional;

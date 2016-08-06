@@ -97,10 +97,23 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
     @Parameters(name="transactional = {0} , mutable = {1} , localIndex = {2}, directApi = {3}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
-                 { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
-                 { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
-                 { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true }
+                 { false, false, false, false },
+                 { false, false, false, true },
+                 { false, false, true, false },
+                 { false, false, true, true }, 
+                 { false, true, false, false },
+                 { false, true, false, true },
+                 { false, true, true, false },
+                 { false, true, true, true },
+                 // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+                 // { true, false, false, false },
+                 // { true, false, false, true },
+                 // { true, false, true, false },
+                 // { true, false, true, true }, 
+                 // { true, true, false, false },
+                 // { true, true, false, true },
+                 // { true, true, true, false },
+                 // { true, true, true, true }
            });
     }
     

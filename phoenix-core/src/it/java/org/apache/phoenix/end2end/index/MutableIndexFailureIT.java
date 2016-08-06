@@ -117,9 +117,17 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @Parameters(name = "transactional = {0}, localIndex = {1}, isNamespaceMapped = {2}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { { false, false, true }, { false, false, false }, { false, true, true },
-                { false, true, false }, { true, false, true }, { true, true, true }, { true, false, false },
-                { true, true, false } });
+        return Arrays.asList(new Boolean[][] {
+          { false, false, true },
+          { false, false, false },
+          { false, true, true },
+          { false, true, false },
+          // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+          // { true, false, true },
+          // { true, true, true },
+          // { true, false, false },
+          // { true, true, false }
+      });
     }
 
     @Test

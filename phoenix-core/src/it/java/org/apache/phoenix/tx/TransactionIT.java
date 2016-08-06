@@ -75,6 +75,7 @@ import org.apache.tephra.hbase.TransactionAwareHTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+@Ignore("Disabled until Tephra 0.8.0-incubating supports CDH > 5.7")
 public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     private static final String FULL_TABLE_NAME = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;

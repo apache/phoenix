@@ -119,8 +119,18 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
 	@Parameters(name="localIndex = {0} , mutable = {1} , transactional = {2}")
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true }, 
-                 { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
+                 { false, false, false },
+                 // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+                 // { false, false, true },
+                 { false, true, false },
+                 // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+                 // { false, true, true }, 
+                 { true, false, false },
+                 // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+                 // { true, false, true },
+                 { true, true, false },
+                 // XXX: Disabled until Tephra 0.8.0-incubating supports CDH > 5.7
+                 // { true, true, true }
            });
     }
 

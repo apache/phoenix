@@ -31,10 +31,12 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
+@Ignore("Disabled until Tephra 0.8.0-incubating supports CDH > 5.7")
 public class TransactionalViewIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @BeforeClass
