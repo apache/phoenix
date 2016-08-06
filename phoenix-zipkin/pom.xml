@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.springframework</groupId>
-    <artifactId>gs-spring-boot</artifactId>
+    <artifactId>phoenix-zipkin</artifactId>
     <version>0.1.0</version>
 
     <parent>
