@@ -725,17 +725,20 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         descriptor = admin.getTableDescriptor(htableName);
         assertEquals(3,descriptor.getColumnFamilies().length);
         HColumnDescriptor cdA = descriptor.getFamily(cfA);
-        assertNotEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
+        assertNotEquals(Boolean.valueOf(HColumnDescriptor.DEFAULT_KEEP_DELETED.toString()),
+          cdA.getKeepDeletedCells());
         assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using WITH
         assertEquals(1,cdA.getMaxVersions());// Overriden using WITH
         HColumnDescriptor cdB = descriptor.getFamily(cfB);
         // Allow KEEP_DELETED_CELLS to be false for VIEW
-        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
+        assertEquals(Boolean.valueOf(HColumnDescriptor.DEFAULT_KEEP_DELETED.toString()),
+          cdB.getKeepDeletedCells());
         assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the original value.
         // CF c should stay the same since it's not a Phoenix cf.
         HColumnDescriptor cdC = descriptor.getFamily(cfC);
         assertNotNull("Column family not found", cdC);
-        assertEquals(HColumnDescriptor.DEFAULT_KEEP_DELETED, cdC.getKeepDeletedCells());
+        assertEquals(Boolean.valueOf(HColumnDescriptor.DEFAULT_KEEP_DELETED.toString()),
+          cdC.getKeepDeletedCells());
         assertFalse(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING == cdC.getDataBlockEncoding());
         assertTrue(descriptor.hasCoprocessor(UngroupedAggregateRegionObserver.class.getName()));
         assertTrue(descriptor.hasCoprocessor(GroupedAggregateRegionObserver.class.getName()));
