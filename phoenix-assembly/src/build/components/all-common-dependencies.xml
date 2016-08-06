@@ -41,7 +41,7 @@
         <include>log4j:log4j</include>
         <include>org.apache.hbase:hbase*</include>
         <include>org.antlr:antlr-runtime</include>
-        <include>org.cloudera.htrace:htrace-core</include>
+        <include>org.apache.htrace:htrace-core</include>
         <include>io.netty:netty</include>
         <include>commons-codec:commons-codec</include>
         <include>org.apache.calcite:calcite-avatica*</include>

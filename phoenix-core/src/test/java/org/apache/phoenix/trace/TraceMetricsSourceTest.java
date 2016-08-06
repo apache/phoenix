@@ -90,6 +90,6 @@ public class TraceMetricsSourceTest {
   }
 
   private Span getSpan(){
-    return new MilliSpan("test span", 0, 1 , 2, "pid");
+    return new MilliSpan.Builder().build();
   }
 }

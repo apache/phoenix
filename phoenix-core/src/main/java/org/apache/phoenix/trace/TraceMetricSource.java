@@ -22,7 +22,7 @@ import org.apache.hadoop.metrics2.*;
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.metrics.Metrics;
-import org.apache.htrace.HTraceConfiguration;
+import org.apache.phoenix.trace.TracingUtils;
 import org.apache.htrace.Span;
 import org.apache.htrace.SpanReceiver;
 import org.apache.htrace.TimelineAnnotation;
@@ -96,7 +96,14 @@ public class TraceMetricSource implements SpanReceiver, MetricsSource {
     Metric builder = new Metric(span);
     // add all the metrics for the span
     builder.addCounter(Interns.info(SPAN.traceName, EMPTY_STRING), span.getSpanId());
-    builder.addCounter(Interns.info(PARENT.traceName, EMPTY_STRING), span.getParentId());
+    long[] parents = span.getParents();
+    if (parents.length > 0) {
+      for (int i = 0; i < parents.length; i++) {
+        builder.addCounter(Interns.info(PARENT.traceName, EMPTY_STRING), parents[i]);
+      }
+    } else {
+      builder.addCounter(Interns.info(PARENT.traceName, EMPTY_STRING), TracingUtils.ROOT_SPAN_ID);
+    }
     builder.addCounter(Interns.info(START.traceName, EMPTY_STRING), span.getStartTimeMillis());
     builder.addCounter(Interns.info(END.traceName, EMPTY_STRING), span.getStopTimeMillis());
     // add the tags to the span. They were written in order received so we mark them as such
@@ -107,12 +114,10 @@ public class TraceMetricSource implements SpanReceiver, MetricsSource {
 
     // add the annotations. We assume they are serialized as strings and integers, but that can
     // change in the future
-    Map<byte[], byte[]> annotations = span.getKVAnnotations();
-    for (Entry<byte[], byte[]> annotation : annotations.entrySet()) {
-      Pair<String, String> val =
-          TracingUtils.readAnnotation(annotation.getKey(), annotation.getValue());
-      builder.add(new MetricsTag(Interns.info(ANNOTATION.traceName, val.getFirst()), val
-          .getSecond()));
+    Map<String, String> annotations = span.getKVAnnotations();
+    for (Entry<String, String> annotation : annotations.entrySet()) {
+      builder.add(new MetricsTag(Interns.info(ANNOTATION.traceName, annotation.getKey()), annotation
+        .getValue()));
     }
 
     // add the span to the list we care about

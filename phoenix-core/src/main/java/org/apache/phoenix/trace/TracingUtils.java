@@ -33,6 +33,9 @@ public class TracingUtils {
     /** Marker metric to ensure that we register the tracing mbeans */
     public static final String METRICS_MARKER_CONTEXT = "marker";
 
+    /** Backwards compatible marker for root span */
+    public static final long ROOT_SPAN_ID = 0x74ace;
+
     public static void addAnnotation(Span span, String message, int value) {
         span.addKVAnnotation(message.getBytes(), Bytes.toBytes(Integer.toString(value)));
     }
