@@ -36,7 +36,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ZooKeeperConnectionException;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
-import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.ActiveRMInfoProto;
 import org.apache.zookeeper.KeeperException;
@@ -64,8 +63,11 @@ public class PhoenixMRJobUtil {
 
     // Default MR Capacity Scheduler Configurations for Phoenix MR Index Build
     // Jobs
+    public static final String QUEUE_NAME = "mapreduce.job.queuename";
     public static final String DEFAULT_QUEUE_NAME = "default";
+    public static final String MAP_MEMORY_MB = "mapreduce.map.memory.mb";
     public static final int DEFAULT_MAP_MEMROY_MB = 5120;
+    public static final String MAP_JAVA_OPTS = "mapreduce.map.java.opts";
     public static final String XMX_OPT = "-Xmx";
 
     public static final String RM_HTTP_SCHEME = "http";
@@ -219,15 +221,15 @@ public class PhoenixMRJobUtil {
      * @param conf - Configuration to which Capacity Queue information to be added
      */
     public static void updateCapacityQueueInfo(Configuration conf) {
-        conf.set(MRJobConfig.QUEUE_NAME,
+        conf.set(QUEUE_NAME,
             conf.get(PHOENIX_INDEX_MR_QUEUE_NAME_PROPERTY, DEFAULT_QUEUE_NAME));
         int mapMemoryMB = conf.getInt(PHOENIX_INDEX_MR_MAP_MEMORY_PROPERTY, DEFAULT_MAP_MEMROY_MB);
 
-        conf.setInt(MRJobConfig.MAP_MEMORY_MB, mapMemoryMB);
-        conf.set(MRJobConfig.MAP_JAVA_OPTS, XMX_OPT + ((int) (mapMemoryMB * 0.9)) + "m");
+        conf.setInt(MAP_MEMORY_MB, mapMemoryMB);
+        conf.set(MAP_JAVA_OPTS, XMX_OPT + ((int) (mapMemoryMB * 0.9)) + "m");
 
-        LOG.info("Queue Name=" + conf.get(MRJobConfig.QUEUE_NAME) + ";" + "Map Meory MB="
-                + conf.get(MRJobConfig.MAP_MEMORY_MB) + ";" + "Map Java Opts="
-                + conf.get(MRJobConfig.MAP_JAVA_OPTS));
+        LOG.info("Queue Name=" + conf.get(QUEUE_NAME) + ";" + "Map Meory MB="
+                + conf.get(MAP_MEMORY_MB) + ";" + "Map Java Opts="
+                + conf.get(MAP_JAVA_OPTS));
     }
 }
