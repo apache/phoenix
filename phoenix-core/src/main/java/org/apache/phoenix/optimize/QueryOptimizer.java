@@ -383,35 +383,38 @@ public class QueryOptimizer {
                 // For shared indexes (i.e. indexes on views and local indexes),
                 // a) add back any view constants as these won't be in the index, and
                 // b) ignore the viewIndexId which will be part of the row key columns.
-                int c = (plan2.getContext().getScanRanges().getBoundPkColumnCount() + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) - 
+                int c = (plan2.getContext().getScanRanges().getBoundPkColumnCount() + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) -
                         (plan1.getContext().getScanRanges().getBoundPkColumnCount() + (table1.getViewIndexId() == null ? 0 : (boundRanges - 1)));
                 if (c != 0) return c;
-                if (plan1.getGroupBy()!=null && plan2.getGroupBy()!=null) {
+                if (plan1.getGroupBy() != null && plan2.getGroupBy() != null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
                         return plan1.getGroupBy().isOrderPreserving() ? -1 : 1;
-                    } 
+                    }
                 }
                 // Use smaller table (table with fewest kv columns)
                 c = (table1.getColumns().size() - table1.getPKColumns().size()) - (table2.getColumns().size() - table2.getPKColumns().size());
                 if (c != 0) return c;
-                
+
                 // If all things are equal, don't choose local index as it forces scan
                 // on every region (unless there's no start/stop key)
-                if (table1.getIndexType() == IndexType.LOCAL) {
+
+                if (table1.getIndexType() == IndexType.LOCAL && table2.getIndexType() !=
+                        IndexType.LOCAL) {
                     return plan1.getContext().getScanRanges().getRanges().isEmpty() ? -1 : 1;
                 }
-                if (table2.getIndexType() == IndexType.LOCAL) {
+                if (table2.getIndexType() == IndexType.LOCAL && table1.getIndexType() !=
+                        IndexType.LOCAL) {
                     return plan2.getContext().getScanRanges().getRanges().isEmpty() ? 1 : -1;
                 }
 
                 // All things being equal, just use the table based on the Hint.USE_DATA_OVER_INDEX_TABLE
-                if (table1.getType() == PTableType.INDEX) {
+
+                if (table1.getType() == PTableType.INDEX && table2.getType() != PTableType.INDEX) {
                     return comparisonOfDataVersusIndexTable;
                 }
-                if (table2.getType() == PTableType.INDEX) {
+                if (table2.getType() == PTableType.INDEX && table1.getType() != PTableType.INDEX) {
                     return -comparisonOfDataVersusIndexTable;
                 }
-                
                 return 0;
             }
             
