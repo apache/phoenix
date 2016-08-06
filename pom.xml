@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.8.0-HBase-1.2</version>
+  <version>4.8.0-cdh5.8.0</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -39,15 +39,39 @@
 
   <repositories>
     <repository>
+      <id>cdh.repo</id>
+      <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+      <name>Cloudera Repositories</name>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>cdh.snapshots.repo</id>
+      <url>https://repository.cloudera.com/artifactory/libs-snapshot-local</url>
+      <name>Cloudera Snapshots Repository</name>
+      <snapshots>
+        <enabled>true</enabled>
+        </snapshots>
+        <releases>
+          <enabled>false</enabled>
+        </releases>
+    </repository>
+    <repository>
+      <id>cloudbees netty</id>
+      <url>http://repository-netty.forge.cloudbees.com/snapshot/</url>
+    </repository>
+    <repository>
       <id>apache release</id>
       <url>https://repository.apache.org/content/repositories/releases/</url>
     </repository>
   </repositories>
 
   <parent>
-    <groupId>org.apache</groupId>
-    <artifactId>apache</artifactId>
-    <version>14</version>
+    <groupId>com.cloudera.cdh</groupId>
+    <artifactId>cdh-root</artifactId>
+    <version>5.8.0</version>
+    <relativePath/>
   </parent>
 
   <scm>
@@ -64,18 +88,19 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.2.0</hbase.version>
-    <hadoop-two.version>2.7.1</hadoop-two.version>
+    <hbase.version>${cdh.hbase.version}</hbase.version>
+    <hadoop-two.version>${cdh.hadoop.version}</hadoop-two.version>
+    <hadoop-two.mr1.version>${cdh.mr1.version}</hadoop-two.mr1.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
-    <hive.version>1.2.1</hive.version>
-    <hadoop.version>2.7.1</hadoop.version>
-    <pig.version>0.13.0</pig.version>
-    <jackson.version>1.9.2</jackson.version>
+    <hive.version>${cdh.hive.version}</hive.version>
+    <hadoop-two.version>${cdh.hadoop.version}</hadoop-two.version>
+    <pig.version>${cdh.pig.version}</pig.version>
+    <jackson.version>${cdh.jackson.version}</jackson.version>
     <antlr.version>3.5.2</antlr.version>
     <log4j.version>1.2.17</log4j.version>
-    <slf4j.version>1.6.4</slf4j.version>
+    <slf4j.version>${cdh.slf4j.version}</slf4j.version>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <commons-configuration.version>1.6</commons-configuration.version>
     <commons-io.version>2.1</commons-io.version>
@@ -84,14 +109,14 @@
     <commons-csv.version>1.0</commons-csv.version>
     <sqlline.version>1.1.9</sqlline.version>
     <guava.version>13.0.1</guava.version>
-    <flume.version>1.4.0</flume.version>
+    <flume.version>${cdh.flume.version}</flume.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
     <snappy.version>0.3</snappy.version>
     <netty.version>4.0.23.Final</netty.version>
     <commons-codec.version>1.7</commons-codec.version>
-    <htrace.version>3.1.0-incubating</htrace.version>
+    <htrace.version>3.2.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
     <!-- Do not change jodatime.version until HBASE-15199 is fixed -->
     <jodatime.version>1.6</jodatime.version>
@@ -99,7 +124,7 @@
     <avatica.version>1.8.0</avatica.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
     <tephra.version>0.8.0-incubating</tephra.version>
-    <spark.version>1.6.1</spark.version>
+    <spark.version>${cdh.spark.version}</spark.version>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
 

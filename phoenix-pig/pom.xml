@@ -26,7 +26,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.8.0-HBase-1.2</version>
+    <version>4.8.0-cdh5.8.0</version>
   </parent>
   <artifactId>phoenix-pig</artifactId>
   <name>Phoenix - Pig</name>
@@ -53,7 +53,6 @@
     <dependency>
       <groupId>org.apache.pig</groupId>
       <artifactId>pig</artifactId>
-      <classifier>h2</classifier>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
