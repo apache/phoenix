@@ -223,7 +223,7 @@ public class AggregatePlan extends BaseQueryPlan {
 
         AggregatingResultIterator aggResultIterator;
         // No need to merge sort for ungrouped aggregation
-        if (groupBy.isEmpty()) {
+        if (groupBy.isEmpty() || groupBy.isUngroupedAggregate()) {
             aggResultIterator = new UngroupedAggregatingResultIterator(new ConcatResultIterator(iterators), aggregators);
         // If salted or local index we still need a merge sort as we'll potentially have multiple group by keys that aren't contiguous.
         } else if (groupBy.isOrderPreserving() && !(this.getTableRef().getTable().getBucketNum() != null || this.getTableRef().getTable().getIndexType() == IndexType.LOCAL)) {

@@ -290,6 +290,8 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
         testCount("SELECT %s COUNT(DISTINCT col1) FROM " + testTable, -1);
         testCount("SELECT %s COUNT(DISTINCT col2) FROM " + testTable, -1);
+
+        testCount("SELECT %s COUNT(DISTINCT prefix1) FROM " + testTable + " WHERE col1 < 0", -1);
     }
 
     @Test
