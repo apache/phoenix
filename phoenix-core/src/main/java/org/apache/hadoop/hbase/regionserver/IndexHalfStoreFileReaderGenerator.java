@@ -185,7 +185,6 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             long earliestPutTs, InternalScanner s, CompactionRequest request) throws IOException {
         if (!store.getFamily().getNameAsString()
                 .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
-                || !scanType.equals(ScanType.COMPACT_DROP_DELETES)
                 || s != null
                 || !store.hasReferences()) {
             return s;
