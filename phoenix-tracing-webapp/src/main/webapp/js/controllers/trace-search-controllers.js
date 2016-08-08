@@ -194,6 +194,4 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
     return GenerateDistributionService.loadData(data, byData);
   };
 
-
-
 });
