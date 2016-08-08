@@ -7,31 +7,31 @@
  */
 angular.module('TracingAppCtrl').service('GenerateTimelineService', function() {
 
-  //trace item to show current time
-  var cdatamodel = [{
-    "v": "Trace 01"
-  }, {
-    "v": "Current Time"
-  }, {
-    "v": new Date()
-  }, {
-    "v": new Date()
-  }, {
-    "v": "Current time"
-  }];
+    //trace item to show current time
+    var cdatamodel = [{
+        "v": "Trace 01"
+    }, {
+        "v": "Current Time"
+    }, {
+        "v": new Date()
+    }, {
+        "v": new Date()
+    }, {
+        "v": "Current time"
+    }];
 
-  this.getDescription = function(description) {
-    var dst = '';
-    var haveBracket = description.indexOf("(");
-    if (haveBracket != -1) {
-      dst = description.substring(0, description.indexOf("("))
-    } else {
-      dst = description;
-    }
-    return dst;
-  };
+    this.getDescription = function(description) {
+        var dst = '';
+        var haveBracket = description.indexOf("(");
+        if (haveBracket != -1) {
+            dst = description.substring(0, description.indexOf("("))
+        } else {
+            dst = description;
+        }
+        return dst;
+    };
 
-  this.getDataModel = function() {
-    return cdatamodel;
-  };
+    this.getDataModel = function() {
+        return cdatamodel;
+    };
 });

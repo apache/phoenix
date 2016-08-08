@@ -53,5 +53,4 @@ TraceCtrl.controller('TraceDistChartCtrl', function($scope, $http) {
 
   $scope.chartObject = {};
   $scope.loadData();
-  //$scope.chartObject = chartObject
 });

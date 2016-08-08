@@ -41,19 +41,25 @@ import java.util.Map;
 public class TraceServlet extends HttpServlet {
 
   private static final long serialVersionUID = -354285100083055559L;
+
   private static Connection con;
+
   protected String DEFAULT_LIMIT = "25";
+
+  protected String DEFAULT_TRACEID = "0";
+
   protected String DEFAULT_COUNTBY = "hostname";
+
   protected String LOGIC_AND = "AND";
+
   protected String LOGIC_OR = "OR";
+
   protected String TRACING_TABLE = "SYSTEM.TRACING_STATS";
 
-
-
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
-      throws ServletException, IOException {
+          throws ServletException, IOException {
 
-    //reading url params
+    // reading url params
     String action = request.getParameter("action");
     String limit = request.getParameter("limit");
     String traceid = request.getParameter("traceid");
@@ -69,12 +75,14 @@ public class TraceServlet extends HttpServlet {
       jsonObject = getCount("description");
     } else if ("getDistribution".equals(action)) {
       jsonObject = getCount(DEFAULT_COUNTBY);
+    } else if ("getDuration".equals(action)) {
+      jsonObject = tracebyDurations(traceid);
     } else if ("searchTrace".equals(action)) {
       jsonObject = searchTrace(parentid, traceid, LOGIC_OR);
     } else if ("searchTraceByHost".equals(action)) {
-      jsonObject = tracebyHost(hostname,limit);
+      jsonObject = tracebyHost(hostname, limit);
     } else if ("searchTraceByDescription".equals(action)) {
-      jsonObject = traceByDescription(description,limit);
+      jsonObject = traceByDescription(description, limit);
     } else if ("setTrace".equals(action)) {
       jsonObject = traceON(traceStatus);
     } else if ("searchQuery".equals(action)) {
@@ -82,7 +90,7 @@ public class TraceServlet extends HttpServlet {
     } else {
       jsonObject = "{ \"Server\": \"Phoenix Tracing Web App\", \"API version\": 0.1 }";
     }
-    //response send as json
+    // response send as json
     response.setContentType("application/json");
     String output = jsonObject;
     PrintWriter out = response.getWriter();
@@ -90,148 +98,164 @@ public class TraceServlet extends HttpServlet {
     out.flush();
   }
 
-  //get all trace results with limit count
+  // get all trace results with limit count
   protected String getAll(String limit) {
     String json = null;
-    if(limit == null) {
+    if (limit == null) {
       limit = DEFAULT_LIMIT;
     }
-    String sqlQuery = "SELECT * FROM " + TRACING_TABLE + " LIMIT "+limit;
+    String sqlQuery = "SELECT * FROM " + TRACING_TABLE + " LIMIT " + limit;
     json = getResults(sqlQuery);
     return getJson(json);
   }
 
-  //set trace on and off
+  // set trace on and off
   protected String traceON(String status) {
     String json = null;
     String sqlQuery = "TRACE ON";
-    if (status.equals("OFF")){
+    if (status.equals("OFF")) {
       sqlQuery = "TRACE OFF";
     }
     json = getResults(sqlQuery);
     return json;
   }
 
-  //get count on traces can pick on param to count
+  // get count on traces can pick on param to count
   protected String getCount(String countby) {
     String json = null;
-    if(countby == null) {
+    if (countby == null) {
       countby = DEFAULT_COUNTBY;
     }
-    String sqlQuery = "SELECT "+countby+", COUNT(*) AS count FROM " + TRACING_TABLE + " GROUP BY "+countby+" HAVING COUNT(*) > 1 ";
+    String sqlQuery = "SELECT " + countby + ", COUNT(*) AS count FROM " + TRACING_TABLE
+            + " GROUP BY " + countby + " HAVING COUNT(*) > 1 ";
     json = getResults(sqlQuery);
     return json;
   }
 
-  //search the trace over parent id or trace id
-  protected String searchTrace(String parentId, String traceId,String logic) {
+  // search the trace over parent id or trace id
+  protected String searchTrace(String parentId, String traceId, String logic) {
     String json = null;
     String query = null;
-    if(parentId != null && traceId != null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId+" "+logic+" trace_id="+traceId;
-    }else if (parentId != null && traceId == null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId;
-    }else if(parentId == null && traceId != null ) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE trace_id="+traceId;
+    if (parentId != null && traceId != null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id=" + parentId + " " + logic
+              + " trace_id=" + traceId;
+    } else if (parentId != null && traceId == null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id=" + parentId;
+    } else if (parentId == null && traceId != null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE trace_id=" + traceId;
     }
     json = getResults(query);
     return getJson(json);
   }
 
-  //search the trace over hostname
-  protected String tracebyHost(String hostname,String limit) {
+  // search the trace over hostname
+  protected String tracebyHost(String hostname, String limit) {
     String json = null;
     String query = null;
-    if(limit == null) {
+    if (limit == null) {
       limit = DEFAULT_LIMIT;
     }
-    if(hostname!= null && limit !=null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE HOSTNAME='"+hostname+"'"+ " LIMIT "+limit;
+    if (hostname != null && limit != null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE HOSTNAME='" + hostname + "'" + " LIMIT "
+              + limit;
     }
     json = getResults(query);
     return getJson(json);
   }
 
-  //search the trace over description
-  protected String traceByDescription(String description,String limit) {
+  // search the trace over durations
+  protected String tracebyDurations(String traceid) {
     String json = null;
     String query = null;
-    if(limit == null) {
-      limit = DEFAULT_LIMIT;
+    if (traceid == null) {
+      traceid = DEFAULT_TRACEID;
     }
-    if(description!= null && limit !=null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE DESCRIPTION like '%"+description+"%' LIMIT " +limit;
+    if (traceid != null) {
+      query = "SELECT (END_TIME - START_TIME) as DURATION, DESCRIPTION FROM " + TRACING_TABLE
+              + " WHERE TRACE_ID = " + traceid + " GROUP BY DESCRIPTION, DURATION";
     }
     json = getResults(query);
     return getJson(json);
   }
 
-  //return json string
+  // search the trace over description
+  protected String traceByDescription(String description, String limit) {
+    String json = null;
+    String query = null;
+    if (limit == null) {
+      limit = DEFAULT_LIMIT;
+    }
+    if (description != null && limit != null) {
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE DESCRIPTION like '%" + description
+              + "%' LIMIT " + limit;
+    }
+    json = getResults(query);
+    return getJson(json);
+  }
+
+  // return json string
   protected String getJson(String json) {
     String output = json.toString();
     return output;
   }
 
-  //get results with passing sql query
+  // get results with passing sql query
   protected String getResults(String sqlQuery) {
     String json = null;
-    if(sqlQuery == null){
+    if (sqlQuery == null) {
       json = "{error:true,msg:'SQL was null'}";
-    }else{
-    try {
-      con = ConnectionFactory.getConnection();
-      EntityFactory nutrientEntityFactory = new EntityFactory(con,sqlQuery);
-      List<Map<String, Object>> nutrients = nutrientEntityFactory
-          .findMultiple(new Object[] {});
-      ObjectMapper mapper = new ObjectMapper();
-      json = mapper.writeValueAsString(nutrients);
-    } catch (Exception e) {
-      json = "{error:true,msg:'Serrver Error:"+e.getMessage()+"'}";
-    } finally {
-      if (con != null) {
-        try {
-          con.close();
-        } catch (SQLException e) {
-          json = "{error:true,msg:'SQL Serrver Error:"+e.getMessage()+"'}";
+    } else {
+      try {
+        con = ConnectionFactory.getConnection();
+        EntityFactory nutrientEntityFactory = new EntityFactory(con, sqlQuery);
+        List<Map<String, Object>> nutrients = nutrientEntityFactory.findMultiple(new Object[] {});
+        ObjectMapper mapper = new ObjectMapper();
+        json = mapper.writeValueAsString(nutrients);
+      } catch (Exception e) {
+        json = "{error:true,msg:'Serrver Error:" + e.getMessage() + "'}";
+      } finally {
+        if (con != null) {
+          try {
+            con.close();
+          } catch (SQLException e) {
+            json = "{error:true,msg:'SQL Serrver Error:" + e.getMessage() + "'}";
+          }
         }
       }
-    }
     }
     return json;
   }
 
-    //get traceid from statments
+  // get traceid from statments
   protected String getResultId(String sqlQuery) {
     String json = null;
     String traceId = "0";
-    if(sqlQuery == null){
+    if (sqlQuery == null) {
       json = "{error:true,msg:'SQL was null'}";
-    }else{
-    try {
-      con = ConnectionFactory.getConnection();
-      Statement statement = con.createStatement();
-      ResultSet rs =statement.executeQuery("TRACE ON");
-      while (rs.next()) {
-        traceId = rs.getString("trace_id");
-      }
-      statement.executeQuery(sqlQuery);
-      statement.executeQuery("TRACE OFF");
-      ResultSet t=statement.executeQuery("Select * from SYSTEM.TRACING_STATS WHERE TRACE_ID ="+traceId );
-      json=getJson(getResults("Select * from SYSTEM.TRACING_STATS WHERE TRACE_ID ="+traceId));
-    } catch (Exception e) {
-      json = "{error:true,msg:'Serrver Error:"+e.getMessage()+"'}";
-    } finally {
-      if (con != null) {
-        try {
-          con.close();
-        } catch (SQLException e) {
-          json = "{error:true,msg:'SQL Serrver Error:"+e.getMessage()+"'}";
+    } else {
+      try {
+        con = ConnectionFactory.getConnection();
+        Statement statement = con.createStatement();
+        ResultSet rs = statement.executeQuery("TRACE ON");
+        while (rs.next()) {
+          traceId = rs.getString("trace_id");
+        }
+        statement.executeQuery(sqlQuery);
+        statement.executeQuery("TRACE OFF");
+        json = getJson(getResults("Select * from " + TRACING_TABLE + " WHERE TRACE_ID =" + traceId));
+      } catch (Exception e) {
+        json = "{error:true,msg:'Serrver Error:" + e.getMessage() + "'}";
+      } finally {
+        if (con != null) {
+          try {
+            con.close();
+          } catch (SQLException e) {
+            json = "{error:true,msg:'SQL Serrver Error:" + e.getMessage() + "'}";
+          }
         }
       }
-    }
     }
     return json;
   }
 
 }
-

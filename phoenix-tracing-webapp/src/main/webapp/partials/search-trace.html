@@ -12,6 +12,7 @@
   </select>
   <input type="text" ng-model="traceId"/>
   <button ng-click="searchTrace()">Search</button>
+  <button ng-click="cleanTrace()">cleanTrace</button>
 </label>
 
 <ul class="nav nav-tabs">
@@ -33,6 +34,7 @@
   <table class="table table-striped">
     <thead>
       <tr>
+        <th>Trace ID</th>
         <th>Parent ID</th>
         <th>Span ID</th>
         <th>Description</th>
@@ -40,11 +42,11 @@
     </thead>
     <tbody>
       <tr ng-repeat="trace in traces">
+        <td>{{trace.trace_id}}</td>
         <td>{{trace.parent_id}}</td>
         <td>{{trace.span_id}}</td>
         <td>{{trace.description | limitTo:letterLimit}}</td>
       </tr>
-     </tbody>
   </table>
 </div>
   </div>
@@ -70,12 +72,20 @@
     <h1>Trace Distribution</h1>
     <div class="alert {{page.alertType}}" role="alert">{{reqStatus}}</div>
     <div class="btn-group">
-    <h3>Chart Type</h3>
+    <h4>Chart Type</h4>
           <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setChartType('PieChart')">Pie</label>
           <label class="btn btn-primary" ng-model="checkModel.middle" ng-click="setChartType('LineChart')">Line</label>
-          <label class="btn btn-primary" ng-model="checkModel.right" ng-click="setChartType('BarChart')">Bar</label>
-          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setChartType('AreaChart')">Area</label>
+          <label class="btn btn-primary" ng-model="checkModel.middle" ng-click="setChartType('BarChart')">Bar</label>
         </div>
+
+         <div class="btn-group">
+    <h4>Count By</h4>
+          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setByCount('hostname')">Host Name</label>
+          <label class="btn btn-primary" ng-model="checkModel.middle" ng-click="setByCount('description')">Trace Count</label>
+          <label class="btn btn-primary" ng-model="checkModel.right" ng-click="setByCount('duration')">Trace Duration</label>
+        </div>
+
    <div google-chart chart="distributionChartObject" style="{{cssStyle}}"></div>
   </div>
 </script>
+

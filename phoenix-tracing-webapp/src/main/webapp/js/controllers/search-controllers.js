@@ -72,13 +72,13 @@ $scope.search = function(sqlQuery) {
     ];
 
   $scope.getDayClass = function(date, mode) {
-    if (mode === 'day') {
+    if (mode == 'day') {
       var dayToCheck = new Date(date).setHours(0,0,0,0);
 
       for (var i=0;i<$scope.events.length;i++){
         var currentDay = new Date($scope.events[i].date).setHours(0,0,0,0);
 
-        if (dayToCheck === currentDay) {
+        if (dayToCheck == currentDay) {
           return $scope.events[i].status;
         }
       }
