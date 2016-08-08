@@ -70,24 +70,34 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
 
   //getting TimeLine chart with data
   function getTimeLineChart(data) {
-    for (var i = 0; i < data.length; i++) {
-      var datax = data[i];
+    var currentData = data;
+    var minTimeGap = GenerateTimelineService.getMinTimeGap(currentData);
+    var mulTime = 1;
+    if (minTimeGap < 1000) {
+      mulTime = 1000;
+    }
+
+    for (var i = 0; i < currentData.length; i++) {
+      var datax = currentData[i];
+      var toolTip = GenerateTimelineService.getToolTip(datax);
       var dest = GenerateTimelineService.getDescription(datax.description);
       var datamodel = [{
         "v": "Trace " + i
       }, {
         "v": dest
       }, {
-        "v": new Date(parseFloat(datax.start_time) * 1000)
+        "v": toolTip
       }, {
-        "v": new Date(parseFloat(datax.end_time) * 1000)
+        "v": new Date(parseFloat(datax.start_time) * mulTime)
       }, {
-        "v": dest
+        "v": new Date(parseFloat(datax.end_time) * mulTime)
       }]
       timeLine.data.rows[i] = {
         "c": datamodel
       }
     }
+    timeLine.data.cols = GenerateTimelineService.getTimeLineProperties();
+    timeLine.data.options = GenerateTimelineService.getTimeLineOptions();
     return timeLine;
   };
 
@@ -95,10 +105,8 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
   function setSQLQuery(data) {
     for (var i = 0; i < data.length; i++) {
       var currentParentID = data[i].parent_id;
-      //console.log('p '+currentParentID);
       for (var j = 0; j < data.length; j++) {
         var currentSpanID = data[j].span_id;
-        //console.log('s '+currentSpanID);
         if (currentSpanID == currentParentID) {
           break;
         } else if (j == data.length - 1) {
@@ -145,7 +153,8 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
 
   $scope.setByCount = function(type) {
     $scope.clearDistChart();
-    getDistData($scope.currentData, type)
+    $('#distributionHeader').html('<h1> Trace Distribution By '+type+'</h1>')
+    getDistData($scope.currentData, type);
   };
 
 

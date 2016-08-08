@@ -36,7 +36,7 @@ angular.module('TracingAppCtrl').service('GenerateDependancyTreeService', functi
     var dst = this.getDescription(data.description);
     var start_time = new Date(parseFloat(data.start_time));
     var end_time = new Date(parseFloat(data.end_time));
-    var duration = (data.end_time - data.start_time) + ' ns';
+    var duration = (data.end_time - data.start_time) + ' ms';
     var hostname = data.hostname;
     toolTip = 'Hostname :  ' + hostname + '\nDescription :  ' + dst +
       '\nStart At :  ' + start_time + '\nEnd At :  ' + end_time +

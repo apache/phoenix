@@ -11,9 +11,9 @@ angular.module('TracingAppCtrl').service('GenerateDistributionService',
     this.loadData = function(data, byData) {
       this.modelReset();
       for (var i = 0; i < data.length; i++) {
-        if (byData == "description") {
+        if (byData == "TraceCount") {
           this.countHost(data[i].description);
-        } else if (byData == "duration") {
+        } else if (byData == "Duration") {
           var localDuration = data[i].end_time - data[i].start_time;
           this.countDuration(data[i].description, localDuration);
         } else {

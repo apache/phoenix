@@ -68,8 +68,10 @@
 </script>
 
 <script type="text/ng-template" id="four.tpl.html">
-  <div id="Trace Distribution">
-    <h1>Trace Distribution</h1>
+  <div id="distribution">
+    <div id="distributionHeader">
+      <h1>Trace Distribution</h1>
+    </div>
     <div class="alert {{page.alertType}}" role="alert">{{reqStatus}}</div>
     <div class="btn-group">
     <h4>Chart Type</h4>
@@ -80,9 +82,9 @@
 
          <div class="btn-group">
     <h4>Count By</h4>
-          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setByCount('hostname')">Host Name</label>
-          <label class="btn btn-primary" ng-model="checkModel.middle" ng-click="setByCount('description')">Trace Count</label>
-          <label class="btn btn-primary" ng-model="checkModel.right" ng-click="setByCount('duration')">Trace Duration</label>
+          <label class="btn btn-primary" ng-model="checkModel.left" ng-click="setByCount('Hostname')">Host Name</label>
+          <label class="btn btn-primary" ng-model="checkModel.middle" ng-click="setByCount('TraceCount')">Trace Count</label>
+          <label class="btn btn-primary" ng-model="checkModel.right" ng-click="setByCount('Duration')">Trace Duration</label>
         </div>
 
    <div google-chart chart="distributionChartObject" style="{{cssStyle}}"></div>
