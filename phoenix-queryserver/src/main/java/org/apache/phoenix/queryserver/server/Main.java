@@ -18,14 +18,15 @@
 package org.apache.phoenix.queryserver.server;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.remote.Driver;
 import org.apache.calcite.avatica.remote.LocalService;
 import org.apache.calcite.avatica.remote.Service;
-import org.apache.calcite.avatica.server.AvaticaHandler;
-import org.apache.calcite.avatica.server.AvaticaServerConfiguration;
 import org.apache.calcite.avatica.server.DoAsRemoteUserCallback;
-import org.apache.calcite.avatica.server.HandlerFactory;
 import org.apache.calcite.avatica.server.HttpServer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -43,7 +44,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.security.PrivilegedExceptionAction;
@@ -54,6 +54,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -210,7 +211,7 @@ public final class Main extends Configured implements Tool, Runnable {
         // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
         builder.withSpnego(ugi.getUserName())
             .withAutomaticLogin(keytab)
-            .withImpersonation(new PhoenixDoAsCallback(ugi));
+            .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
       }
 
       // Build and start the HttpServer
@@ -261,15 +262,29 @@ public final class Main extends Configured implements Tool, Runnable {
    */
   static class PhoenixDoAsCallback implements DoAsRemoteUserCallback {
     private final UserGroupInformation serverUgi;
+    private final LoadingCache<String,UserGroupInformation> ugiCache;
 
-    public PhoenixDoAsCallback(UserGroupInformation serverUgi) {
+    public PhoenixDoAsCallback(UserGroupInformation serverUgi, Configuration conf) {
       this.serverUgi = Objects.requireNonNull(serverUgi);
+      this.ugiCache = CacheBuilder.newBuilder()
+          .initialCapacity(conf.getInt(QueryServices.QUERY_SERVER_UGI_CACHE_INITIAL_SIZE,
+                  QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_INITIAL_SIZE))
+          .concurrencyLevel(conf.getInt(QueryServices.QUERY_SERVER_UGI_CACHE_CONCURRENCY,
+                  QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_CONCURRENCY))
+          .maximumSize(conf.getLong(QueryServices.QUERY_SERVER_UGI_CACHE_MAX_SIZE,
+                  QueryServicesOptions.DEFAULT_QUERY_SERVER_UGI_CACHE_MAX_SIZE))
+          .build(new UgiCacheLoader(this.serverUgi));
     }
 
     @Override
     public <T> T doAsRemoteUser(String remoteUserName, String remoteAddress, final Callable<T> action) throws Exception {
-      // Proxy this user on top of the server's user (the real user)
-      UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(remoteUserName, serverUgi);
+      // We are guaranteed by Avatica that the `remoteUserName` is properly authenticated by the
+      // time this method is called. We don't have to verify the wire credentials, we can assume the
+      // user provided valid credentials for who it claimed it was.
+
+      // Proxy this user on top of the server's user (the real user). Get a cached instance, the
+      // LoadingCache will create a new instance for us if one isn't cached.
+      UserGroupInformation proxyUser = createProxyUser(remoteUserName);
 
       // Check if this user is allowed to be impersonated.
       // Will throw AuthorizationException if the impersonation as this user is not allowed
@@ -283,6 +298,36 @@ public final class Main extends Configured implements Tool, Runnable {
         }
       });
     }
+
+      @VisibleForTesting
+      UserGroupInformation createProxyUser(String remoteUserName) throws ExecutionException {
+          // PHOENIX-3164 UGI's hashCode and equals methods rely on reference checks, not
+          // value-based checks. We need to make sure we return the same UGI instance for a remote
+          // user, otherwise downstream code in Phoenix and HBase may not treat two of the same
+          // calls from one user as equivalent.
+          return ugiCache.get(remoteUserName);
+      }
+
+      @VisibleForTesting
+      LoadingCache<String,UserGroupInformation> getCache() {
+          return ugiCache;
+      }
+  }
+
+  /**
+   * CacheLoader implementation which creates a "proxy" UGI instance for the given user name.
+   */
+  static class UgiCacheLoader extends CacheLoader<String,UserGroupInformation> {
+      private final UserGroupInformation serverUgi;
+
+      public UgiCacheLoader(UserGroupInformation serverUgi) {
+          this.serverUgi = Objects.requireNonNull(serverUgi);
+      }
+
+      @Override
+      public UserGroupInformation load(String remoteUserName) throws Exception {
+          return UserGroupInformation.createProxyUser(remoteUserName, serverUgi);
+      }
   }
 
   public static void main(String[] argv) throws Exception {
