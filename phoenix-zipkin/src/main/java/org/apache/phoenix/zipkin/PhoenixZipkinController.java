@@ -56,30 +56,6 @@ public class PhoenixZipkinController {
     return "Greetings from Spring Boot!";
   }
 
-  @RequestMapping("/foo")
-  public String foo() throws SQLException {
-    Statement stmt = null;
-    ResultSet rset = null;
-    String rString = "";
-    try {
-      Connection con = DriverManager.getConnection("jdbc:phoenix:localhost:2181");
-      stmt = con.createStatement();
-
-      PreparedStatement statement = con.prepareStatement("select * from SYSTEM.TRACING_STATS");
-      rset = statement.executeQuery();
-      while (rset.next()) {
-        System.out.println(rset.getString("mycolumn"));
-        rString += rset.getString("mycolumn");
-      }
-      statement.close();
-      con.close();
-    } catch (SQLException e) {
-      throw (e);
-    }
-
-    return "Greetings from foo!, " + rString;
-  }
-
   @RequestMapping("/api/v1/services")
   public String services() {
     return "[\"phoenix-server\"]";
@@ -98,15 +74,13 @@ public class PhoenixZipkinController {
   @RequestMapping("/api/v1/traces")
   public String tracesv2(@RequestParam(value = "limit", defaultValue = "10") String limit)
           throws JSONException {
-
     String jsonarray = "[]";
-
     jsonarray = getTraces(limit);
     JSONObject element;
     String json = "{ traces: " + jsonarray + "}";
     JSONObject obj = new JSONObject(json);
     JSONArray traces = obj.getJSONArray("traces");
-    System.out.println(traces.length());
+    // System.out.println(traces.length());
 
     JSONObject trace = new JSONObject();
     JSONArray zipkinspans = new JSONArray();
@@ -119,7 +93,6 @@ public class PhoenixZipkinController {
       JSONArray annotation = new JSONArray();
       JSONArray binaryannotation = new JSONArray();
 
-      // System.out.println(trace.toString());
       element.put("traceId", trace.getString("traceid"));
       element.put("name", trace.getString("name"));
       element.put("id", trace.getString("id"));
@@ -139,20 +112,46 @@ public class PhoenixZipkinController {
         array.put(zipkinspans);
         zipkinspans = new JSONArray();
         zipkinspans.put(element);
-
         System.out.print("zipkinspans Cleared");
       }
 
     }
-    // array.put(zipkinspans);
-    String ss = array.toString();
-    return ss;
+
+    String tracesStr = array.toString();
+    return tracesStr;
   }
 
-  @RequestMapping("/api/v2/trace/{traceId}")
-  @ResponseBody
-  public String tracesV2(@PathVariable String traceId) {
-    return "[{\"traceId\":\"24baa9cd369ebd80\",\"name\":\"get\",\"id\":\"24baa9cd369ebd80\",\"timestamp\":1469943807711000,\"duration\":16000,\"annotations\":[{\"endpoint\":{\"serviceName\":\"phoenix-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469943807711000,\"value\":\"sr\"},{\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469943807727000,\"value\":\"ss\"}],\"binaryAnnotations\":[{\"key\":\"http.status_code\",\"value\":\"200\",\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411}},{\"key\":\"http.url\",\"value\":\"/api/v1/services\",\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411}}]}]";
+  @RequestMapping("/api/v1/dependencies")
+  public String dependancy(@RequestParam long endTs, @RequestParam long lookback)
+          throws JSONException {
+    String jsonarray = "[]";
+    long endTime = endTs;
+    long startTime = endTs - lookback;
+    jsonarray = getTraceByTime(startTime, endTime);
+    JSONArray array = new JSONArray(jsonarray);
+    JSONArray zipkindependancy = new JSONArray();
+
+    for (int i = 0; i < array.length(); i++) {
+      int count = 0;
+      JSONObject trace = array.getJSONObject(i);      
+      String parent = trace.getString("name");
+      if (isParentNonExisting(zipkindependancy, parent)) {
+        long parentId = trace.getLong("parent_id");
+        String child = "";
+        for (int j = 0; j < array.length(); j++) {
+          if (parentId == array.getJSONObject(j).getLong("id")) {
+            count++;
+            child = array.getJSONObject(j).getString("name");
+          }
+        }
+        if (count > 0) {
+          JSONObject element = dependancyElement(parent, child, count);
+          zipkindependancy.put(element);
+          System.out.println("adding zipkindependancy element");
+        }
+      }
+    }// parent level loop end
+    return zipkindependancy.toString();
   }
 
   @RequestMapping("/api/v1/trace/{traceId}")
@@ -189,14 +188,42 @@ public class PhoenixZipkinController {
   // get trace
   protected String getTrace(String traceid) {
     String json = null;
-    System.out.print(traceid);
     String sqlQuery = "SELECT trace_id as traceId, description as name,"
             + " start_time as timestamp, span_id as id, parent_id,"
             + " ( end_time-start_time ) as duration FROM " + TRACING_TABLE + " WHERE trace_id = "
             + traceid;
     json = getResults(sqlQuery);
-    System.out.print(json);
     return json;
+  }
+
+  // get trace
+  protected String getTraceByTime(long start, long end) {
+    String json = null;
+    String limit = "100";
+    String sqlQuery = "SELECT trace_id as traceId, description as name,"
+            + " span_id as id, parent_id" + " FROM " + TRACING_TABLE + " WHERE start_time > "
+            + start + " AND end_time < " + end + " LIMIT " + limit;
+    json = getResults(sqlQuery);
+    return json;
+  }
+
+  protected JSONObject dependancyElement(String parent, String child, int callCount)
+          throws JSONException {
+    JSONObject element = new JSONObject();
+    element.put("parent", parent);
+    element.put("child", child);
+    element.put("callCount", callCount);
+    return element;
+  }
+
+  protected boolean isParentNonExisting(JSONArray array, String parent) throws JSONException {
+    boolean out = true;
+    for (int i = 0; i < array.length(); ++i) {
+      if (array.getJSONObject(i).getString("parent").equalsIgnoreCase(parent)) {
+        out = false;
+      }
+    }
+    return out;
   }
 
   // get all traces with limit count
