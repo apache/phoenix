@@ -152,12 +152,7 @@ public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("a"), isNamespaceMapped);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
         verifySequence(null, sequenceName, sequenceSchemaName, false);
-        /*rs = conn2.createStatement().executeQuery("SELECT "
-                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
-                + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
-        assertFalse("View index sequences should be deleted.", rs.next());
-        */
+
     }
     
     @Test

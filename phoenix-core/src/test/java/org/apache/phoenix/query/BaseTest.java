@@ -83,7 +83,12 @@ import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
-import static org.junit.Assert.*;
+import static org.apache.phoenix.util.TestUtil.SUM_DOUBLE_NAME;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -225,7 +230,7 @@ public abstract class BaseTest {
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
             .newSingleThreadExecutor(factory);
-    
+
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -440,7 +445,7 @@ public abstract class BaseTest {
         builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
         builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
         builder.put(TRANSACTIONAL_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
-        builder.put("SumDoubleTest","create table SumDoubleTest" +
+        builder.put(SUM_DOUBLE_NAME,"create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
                 "   (\"order_id\" varchar(15) not null primary key, " +
@@ -1059,11 +1064,11 @@ public abstract class BaseTest {
     }
 
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
-        initSumDoubleValues("SumDoubleTest", splits, url);
+        initSumDoubleValues(SUM_DOUBLE_NAME, splits, url);
     }
 
     protected static void initSumDoubleValues(String tableName, byte[][] splits, String url) throws Exception {
-        ensureTableCreated(url, tableName, "SumDoubleTest", splits);
+        ensureTableCreated(url, tableName, SUM_DOUBLE_NAME, splits);
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -2097,18 +2102,12 @@ public abstract class BaseTest {
         ddl += " AND SEQUENCE_SCHEMA " + ((sequenceSchemaName == null) ? "IS NULL " : " = '" + sequenceSchemaName + "'" );
 
         ResultSet rs = phxConn.createStatement().executeQuery(ddl);
-        //boolean res =
-        while(rs.next()){
-            String ten = rs.getString("TENANT_ID");
-            String seqN = rs.getString("SEQUENCE_SCHEMA");
-            String seqaN = rs.getString("SEQUENCE_NAME");
-            String seqNam = rs.getString("SEQUENCE_SCHEMA");
-        }
-        /*if(exists) {
+
+        if(exists) {
             assertTrue(rs.next());
         } else {
             assertFalse(rs.next());
-        }*/
+        }
         phxConn.close();
     }
 }

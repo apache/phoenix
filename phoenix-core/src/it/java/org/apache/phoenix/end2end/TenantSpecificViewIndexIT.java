@@ -117,17 +117,18 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     private void testMultiCFViewIndex(boolean localIndex, boolean isNamespaceEnabled) throws Exception {
-        String tableName = "A.MT_BASE" + generateRandomString();
+        String tableName = "XYZ." + generateRandomString();
         String baseViewName = generateRandomString() ;
         createTableAndValidate(tableName, isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "b", isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "a", isNamespaceEnabled);
 
-        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("a"), isNamespaceEnabled);
+        String sequenceNameA = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("a"), isNamespaceEnabled);
+        String sequenceNameB = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("b"), isNamespaceEnabled);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
-        verifySequence(null, sequenceName, sequenceSchemaName, true);
-        verifySequence(null, sequenceName, sequenceSchemaName, true);
-        //validateSequence(tableName, isNamespaceEnabled, "-32767,-32767");
+        verifySequence(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName, true);
+        verifySequence(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName, true);
+
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "a");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -139,25 +140,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         }
         DriverManager.getConnection(getUrl()).createStatement().execute("DROP TABLE " + tableName + " CASCADE");
 
-        verifySequence(null, sequenceName, sequenceSchemaName, false);
-        //validateSequence(tableName, isNamespaceEnabled, null);
-    }
-
-    private void validateSequence(String tableName, boolean isNamespaceEnabled, String expectedResult)
-            throws SQLException {
-        PhoenixConnection phxConn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
-        ResultSet rs = phxConn.createStatement().executeQuery("SELECT " + PhoenixDatabaseMetaData.CURRENT_VALUE
-                + "  FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
-        if (expectedResult != null) {
-            String[] splits = expectedResult.split(",");
-            for (String seq : splits) {
-                assertTrue(rs.next());
-                assertEquals(seq, rs.getString(1));
-            }
-        } else {
-            assertFalse(rs.next());
-        }
-        phxConn.close();
+        verifySequence(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName, false);
+        verifySequence(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName, false);
     }
 
     private void createViewAndIndexesWithTenantId(String tableName,String baseViewName, boolean localIndex, String tenantId,

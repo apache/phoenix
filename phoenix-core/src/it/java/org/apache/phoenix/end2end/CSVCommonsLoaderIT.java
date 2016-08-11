@@ -52,8 +52,6 @@ public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeTableReuseIT {
             + "KEY1,A,A,2147483647,1.1,0,TRUE,9223372036854775807,0,1990-12-31 10:59:59,1999-12-31 23:59:59\n"
             + "KEY2,B,B,-2147483648,-1.1,2147483647,FALSE,-9223372036854775808,9223372036854775807,2000-01-01 00:00:01,2012-02-29 23:59:59\n"
             + "KEY3,,,,,,,,,,\n";
-    //private static final String stockTableName = "STOCK_SYMBOL";
-    //private static final String stockTableMultiName = "STOCK_SYMBOL_MULTI";
     private static final String STOCK_CSV_VALUES = "AAPL,APPLE Inc.\n"
             + "CRM,SALESFORCE\n" + "GOOG,Google\n"
             + "HOG,Harlet-Davidson Inc.\n" + "HPQ,Hewlett Packard\n"
