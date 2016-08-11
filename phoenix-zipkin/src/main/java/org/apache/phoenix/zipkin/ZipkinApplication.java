@@ -17,14 +17,26 @@
  */
 package org.apache.phoenix.zipkin;
 
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.ApplicationContext;
+
 
 @SpringBootApplication
 public class ZipkinApplication {
 
-  public static void main(String[] args) {
-    SpringApplication.run(ZipkinApplication.class, args);
 
+  
+  public static void main(String[] args) {
+    System.out.println("testing....");
+
+    ApplicationContext ctx =  SpringApplication.run(ZipkinApplication.class, args);
+    //System.out.println(ctx.getBean("value"));
   }
+  
+//  @Bean
+//  public String value(@Value("#{systemProperties.test}")String value){
+//      return value;
+//  }
 }
