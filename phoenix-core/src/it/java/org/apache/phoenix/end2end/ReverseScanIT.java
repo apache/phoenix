@@ -53,26 +53,6 @@ import com.google.common.collect.Maps;
 
 
 public class ReverseScanIT extends BaseHBaseManagedTimeTableReuseIT {
-    protected static final String ATABLE_INDEX_NAME = generateRandomString();
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-        // Ensures our split points will be used
-        // TODO: do deletePriorTables before test?
-        Connection conn = DriverManager.getConnection(getUrl());
-        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-        try {
-            admin.disableTable(TestUtil.ATABLE_NAME);
-            admin.deleteTable(TestUtil.ATABLE_NAME);
-        } catch (TableNotFoundException e) {
-        } finally {
-            admin.close();
-            conn.close();
-        }
-     }
 
     private static byte[][] getSplitsAtRowKeys(String tenantId) {
         return new byte[][] { 
@@ -191,12 +171,13 @@ public class ReverseScanIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testReverseScanIndex() throws Exception {
+        String indexName = generateRandomString();
         String tenantId = getOrganizationId();
         String tableName = initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "CREATE INDEX " + ATABLE_INDEX_NAME + " ON " + tableName + " (a_integer DESC) INCLUDE ("
+        String ddl = "CREATE INDEX " + indexName + " ON " + tableName + " (a_integer DESC) INCLUDE ("
         + "    A_STRING, " + "    B_STRING, " + "    A_DATE)";
         conn.createStatement().execute(ddl);
         
@@ -211,7 +192,7 @@ public class ReverseScanIT extends BaseHBaseManagedTimeTableReuseIT {
         
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         assertEquals(
-                "CLIENT SERIAL 1-WAY REVERSE RANGE SCAN OVER " + ATABLE_INDEX_NAME + " [not null]\n" +
+                "CLIENT SERIAL 1-WAY REVERSE RANGE SCAN OVER " + indexName + " [not null]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "    SERVER 1 ROW LIMIT\n" + 
                 "CLIENT 1 ROW LIMIT",QueryUtil.getExplainPlan(rs));

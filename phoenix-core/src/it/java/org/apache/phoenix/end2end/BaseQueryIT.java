@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -29,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -90,8 +90,7 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     @Before
     public void initTable() throws Exception {
          ts = nextTimestamp();
-
-        initATableValues("aTable", tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl());
         if (indexDDL != null && indexDDL.length() > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
