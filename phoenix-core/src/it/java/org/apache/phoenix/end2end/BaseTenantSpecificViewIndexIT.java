@@ -148,7 +148,7 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeTableReus
             String expected = saltBuckets == null ? 
                     "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName + " [-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + "  [0,-32768,'" + tenantId + "','" + valuePrefix + "v2-1'] - ["+(saltBuckets.intValue()-1)+",-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + " [0,-32768,'" + tenantId + "','" + valuePrefix + "v2-1'] - ["+(saltBuckets.intValue()-1)+",-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
 
                   + "    SERVER FILTER BY FIRST KEY ONLY\n"
                   + "CLIENT MERGE SORT";
