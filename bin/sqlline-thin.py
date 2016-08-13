@@ -164,7 +164,6 @@ org.apache.phoenix.queryserver.client.SqllineWrapper \
            ser=serialization,
            sql=sqlopt,
            url=url)
-    print(java_cmd)
     proc = subprocess.Popen(java_cmd,
                             stdout=subprocess.PIPE,
                             shell=False,

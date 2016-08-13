@@ -126,7 +126,6 @@ sqlline.SqlLine \
            l4j=log4j_props,
            sql=sqlopt,
            zk=zk)
-    print(java_cmd)
     proc = subprocess.Popen(java_cmd,
                             stdout=subprocess.PIPE,
                             shell=False,
