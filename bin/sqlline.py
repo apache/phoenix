@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-"""sqlline.py"""
 ############################################################################
 #
 # Licensed to the Apache Software Foundation (ASF) under one
@@ -21,13 +20,18 @@
 ############################################################################
 
 from __future__ import print_function
+import atexit
 import os
 import phoenix_utils
 import subprocess
-import signal
 import sys
 
 phoenix_utils.setPath()
+
+
+@atexit.register
+def cleanup():
+    os.system('stty sane')
 
 
 def print_usage():
@@ -42,8 +46,8 @@ Example:
 
 
 def main():
-    sqlfile = ""
-    zookeeper = ""
+    sqlfile = ''
+    zookeeper = ''
 
     if len(sys.argv) > 3:
         print_usage()
@@ -60,9 +64,6 @@ def main():
         else:
             zookeeper = sys.argv[1]
             sqlfile = sys.argv[2]
-
-    if sqlfile:
-        sqlfile = "--run=" + phoenix_utils.shell_quote([sqlfile])
 
     java_home = os.getenv('JAVA_HOME')
     # HBase configuration folder path (where hbase-site.xml reside) for
@@ -96,15 +97,17 @@ def main():
     # disable color setting for windows OS
     color_setting = 'false' if os.name == 'nt' else 'true'
     java = os.path.join(java_home, 'bin', 'java') if java_home else 'java'
-    conf_dir = os.path.join(phoenix_utils.hbase_conf_dir,
-                            phoenix_utils.phoenix_thin_client_jar)
+    conf_dir = os.path.normpath(os.path.join(
+        phoenix_utils.hbase_conf_dir, phoenix_utils.phoenix_thin_client_jar))
     class_paths = os.pathsep.join(
         [hbase_config_path, conf_dir, phoenix_utils.hadoop_conf,
          phoenix_utils.hadoop_classpath])
     log4j_props = os.path.join(phoenix_utils.current_dir, "log4j.properties")
-    sqlopt = '--run=' + sqlfile if sqlfile else sqlfile
+    sqlopt = '--run=' + phoenix_utils.shell_quote([sqlfile
+                                                   ]) if sqlfile else sqlfile
+    zk = phoenix_utils.shell_quote([zookeeper])
 
-    java_cmd = """{java} $PHOENIX_OPTS \
+    java_cmd = '''{java} $PHOENIX_OPTS \
 -cp "{cp}" \
 -Dlog4j.configuration=file:{l4j} \
 sqlline.SqlLine \
@@ -117,20 +120,23 @@ sqlline.SqlLine \
 --verbose=true \
 --incremental=false \
 --isolation=TRANSACTION_READ_COMMITTED {sql}
-""".format(color=color_setting,
+'''.format(color=color_setting,
            cp=class_paths,
            java=java,
            l4j=log4j_props,
            sql=sqlopt,
-           zk=phoenix_utils.shell_quote([zookeeper]))
-    proc = subprocess.Popen(java_cmd, stdout=subprocess.PIPE,
-                            shell=True, preexec_fn=os.setsid)
+           zk=zk)
+    print(java_cmd)
+    proc = subprocess.Popen(java_cmd,
+                            stdout=subprocess.PIPE,
+                            shell=False,
+                            preexec_fn=os.setsid)
     (output, error) = proc.communicate()
-    returncode = proc.returncode
-    if returncode != 0:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    sys.exit(returncode)
+    sys.exit(proc.returncode)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        cleanup()

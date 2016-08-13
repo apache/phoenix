@@ -19,14 +19,19 @@
 #
 ############################################################################
 from __future__ import print_function
+import atexit
 import os
 import phoenix_utils
-import signal
 import subprocess
 import sys
 import urlparse
 
 phoenix_utils.setPath()
+
+
+@atexit.register
+def cleanup():
+    os.system('stty sane')
 
 
 def cleanup_url(url):
@@ -133,10 +138,10 @@ def main():
         java_home = hbase_env['JAVA_HOME']
 
     java = os.path.join(java_home, 'bin', 'java') if java_home else 'java'
-    conf_dir = os.path.join(phoenix_utils.hbase_conf_dir,
-                            phoenix_utils.phoenix_thin_client_jar)
-    class_paths = os.pathsep.join(
-        [conf_dir, phoenix_utils.hadoop_conf, phoenix_utils.hadoop_classpath])
+    conf_dir = os.path.normpath(os.path.join(
+        phoenix_utils.hbase_conf_dir, phoenix_utils.phoenix_thin_client_jar))
+    class_paths = os.pathsep.join([conf_dir, phoenix_utils.hadoop_conf,
+                                   phoenix_utils.hadoop_classpath])
     log4j_props = os.path.join(phoenix_utils.current_dir, "log4j.properties")
     sqlopt = '--run=' + sqlfile if sqlfile else sqlfile
     java_cmd = """{java} $PHOENIX_OPTS \
@@ -152,16 +157,25 @@ org.apache.phoenix.queryserver.client.SqllineWrapper \
 --verbose=true \
 --incremental=false \
 --isolation=TRANSACTION_READ_COMMITTED {sql}
-""".format(java=java, cp=class_paths, l4j=log4j_props,
-               url=url, ser=serialization, color=color_setting, sql=sqlopt)
-    proc = subprocess.Popen(java_cmd, stdout=subprocess.PIPE,
-                            shell=True, preexec_fn=os.setsid)
+""".format(color=color_setting,
+           cp=class_paths,
+           java=java,
+           l4j=log4j_props,
+           ser=serialization,
+           sql=sqlopt,
+           url=url)
+    print(java_cmd)
+    proc = subprocess.Popen(java_cmd,
+                            stdout=subprocess.PIPE,
+                            shell=False,
+                            preexec_fn=os.setsid)
     (output, error) = proc.communicate()
-    returncode = proc.returncode
-    if returncode != 0:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    sys.exit(returncode)
+    os.system('stty sane')
+    sys.exit(proc.returncode)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        cleanup()
