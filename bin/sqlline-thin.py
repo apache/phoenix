@@ -169,7 +169,6 @@ org.apache.phoenix.queryserver.client.SqllineWrapper \
                             shell=False,
                             preexec_fn=os.setsid)
     (output, error) = proc.communicate()
-    os.system('stty sane')
     sys.exit(proc.returncode)
 
 
