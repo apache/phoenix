@@ -82,8 +82,6 @@ public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     public LocalIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
-        //this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        //this.indexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
     
     @BeforeClass 
