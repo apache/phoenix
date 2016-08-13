@@ -33,6 +33,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -356,7 +357,6 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeTableReuseIT {
         conn.setAutoCommit(false);
         String indexName = "\"lowerCaseIndex\"";
         String indexDataTable = generateRandomString();
-        //String indexName = generateRandomString();
         try {
             ensureTableCreated(getUrl(), indexDataTable, INDEX_DATA_TABLE);
             String ddl = "CREATE INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable
@@ -482,20 +482,22 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeTableReuseIT {
             conn.close();
         }
     }
-    
+
     @Test
     public void testAsyncCreatedDate() throws Exception {
+        //Have to delete metaData tables because BaseHBaseManagedTimeTableReuseIT doesn't delete them after each test case , and tenant list will create issues between test cases
+        //deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
         Date d0 = new Date(System.currentTimeMillis());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String testTable = generateRandomString();
 
+
         String ddl = "create table " + testTable  + " (k varchar primary key, v1 varchar, v2 varchar, v3 varchar)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
-        String indexDataTable = generateRandomString();
-        String indexName = generateRandomString();
+        String indexName = "ASYNCIND_" + generateRandomString();
         
         ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (v1) ASYNC";
         stmt = conn.prepareStatement(ddl);
@@ -510,7 +512,7 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeTableReuseIT {
         ResultSet rs = conn.createStatement().executeQuery(
             "select table_name, " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " +
             "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") " +
-            "where " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " is not null " +
+            "where " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " is not null and table_name like 'ASYNCIND_%' " +
             "order by " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE
         );
         assertTrue(rs.next());

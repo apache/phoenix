@@ -81,11 +81,6 @@ public class DropMetadataIT extends BaseHBaseManagedTimeTableReuseIT {
 
         byte[] hbaseNativeBytes = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, hbaseNativeViewName);
         try {
-            try {
-                admin.disableTable(hbaseNativeBytes);
-                admin.deleteTable(hbaseNativeBytes);
-            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            }
             @SuppressWarnings("deprecation")
             HTableDescriptor descriptor = new HTableDescriptor(hbaseNativeBytes);
             HColumnDescriptor columnDescriptor =  new HColumnDescriptor(FAMILY_NAME);
@@ -107,18 +102,7 @@ public class DropMetadataIT extends BaseHBaseManagedTimeTableReuseIT {
                 "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
                      HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'");
         conn.createStatement().execute("drop view " + hbaseNativeViewName);
-        
-        admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
-        try {
-            try {
-                admin.disableTable(hbaseNativeBytes);
-                admin.deleteTable(hbaseNativeBytes);
-            } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                fail(); // The underlying HBase table should still exist
-            }
-        } finally {
-            admin.close();
-        }
+
     }
     
     @Test

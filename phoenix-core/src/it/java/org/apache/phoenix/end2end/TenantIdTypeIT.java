@@ -75,7 +75,6 @@ public class TenantIdTypeIT extends BaseHBaseManagedTimeTableReuseIT {
         this.tenantId = tenantId;
         this.otherTenantId = otherTenantId;
         String tbl = generateRandomString();
-        //String tbl = "foo" + dataType;
         if(tbl.contains("(")){
             tbl = tbl.substring(0, tbl.indexOf("("));
         }
