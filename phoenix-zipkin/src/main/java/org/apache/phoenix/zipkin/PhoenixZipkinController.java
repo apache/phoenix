@@ -56,11 +56,17 @@ public class PhoenixZipkinController {
 
   @RequestMapping("/api/v1/services")
   public String services() throws JSONException {
-    JSONArray services = new JSONArray(getServices("1"));
     JSONArray servicesOut = new JSONArray();
-    for (int i = 0; i < services.length(); i++) {
-      JSONObject obj = services.getJSONObject(i);
-      servicesOut.put(obj.get("hostname"));
+    String json = "{ services: " + getServices("1") + "}";
+    JSONObject obj = new JSONObject(json);
+    if (obj.get("services") instanceof JSONObject) {
+      return obj.get("services").toString();
+    } else {
+      JSONArray services = (JSONArray) obj.get("services");
+      for (int i = 0; i < services.length(); i++) {
+        JSONObject currentObj = services.getJSONObject(i);
+        servicesOut.put(currentObj.get("hostname"));
+      }
     }
     return servicesOut.toString();
   }
@@ -86,12 +92,13 @@ public class PhoenixZipkinController {
   @RequestMapping("/api/v1/traces")
   public String tracesv2(@RequestParam(value = "limit", defaultValue = "10") String limit,
           @RequestParam(value = "serviceName") String hostname,
+          @RequestParam(value = "spanName", defaultValue = "all") String spanName,
           @RequestParam(value = "lookback", defaultValue = "0") long lookback,
           @RequestParam(value = "endTs", defaultValue = "0") long endTime,
           @RequestParam(value = "minDuration", defaultValue = "0") long minDuration)
           throws JSONException {
     String jsonarray = "[]";
-    jsonarray = getTraces(limit, hostname, endTime, lookback, minDuration);
+    jsonarray = getTraces(limit, hostname, spanName, endTime, lookback, minDuration);
     JSONObject element;
     String json = "{ traces: " + jsonarray + "}";
     JSONObject obj = new JSONObject(json);
@@ -283,11 +290,15 @@ public class PhoenixZipkinController {
   }
 
   // get all traces with limit count, host and time stamp
-  protected String getTraces(String limit, String hostname, long endTime, long lookBack,
-          long minDuration) {
+  protected String getTraces(String limit, String hostname, String spanName, long endTime,
+          long lookBack, long minDuration) {
     String json = null;
+    String addtionalQuery = "";
     if (limit == null) {
       limit = DEFAULT_LIMIT;
+    }
+    if (!spanName.equalsIgnoreCase("all")) {
+      addtionalQuery = " AND description like '" + spanName + "%'";
     }
     long startTimeStamp = endTime - lookBack;
     long minDurationMilSec = minDuration / 1000;
@@ -296,7 +307,8 @@ public class PhoenixZipkinController {
             + " tablex.end_time, tablex.start_time, tablex.hostname  FROM " + TRACING_TABLE
             + " as tablex WHERE hostname = '" + hostname + "' " + " AND end_time < " + endTime
             + " AND start_time > " + startTimeStamp + " AND end_time - start_time > "
-            + minDurationMilSec + " GROUP BY tablex.trace_id, tablex.description, timestamp, id,"
+            + minDurationMilSec + addtionalQuery
+            + " GROUP BY tablex.trace_id, tablex.description, timestamp, id,"
             + " tablex.parent_id, tablex.end_time, tablex.start_time, tablex.hostname" + " LIMIT "
             + limit;
     json = getResults(sqlQuery);
