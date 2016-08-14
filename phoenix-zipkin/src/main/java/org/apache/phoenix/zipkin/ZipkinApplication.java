@@ -17,26 +17,25 @@
  */
 package org.apache.phoenix.zipkin;
 
-
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.ApplicationContext;
-
+import org.springframework.beans.factory.annotation.*;
 
 @SpringBootApplication
 public class ZipkinApplication {
-
-
   
-  public static void main(String[] args) {
-    System.out.println("testing....");
-
-    ApplicationContext ctx =  SpringApplication.run(ZipkinApplication.class, args);
-    //System.out.println(ctx.getBean("value"));
+  @Value("${phoenix.host}")
+  public void setHostName(String hostName) {
+    ConnectionFactory.setHost(hostName);
   }
   
-//  @Bean
-//  public String value(@Value("#{systemProperties.test}")String value){
-//      return value;
-//  }
+  @Value("${phoenix.port}")
+  public void setPortNo(String portNo) {
+    ConnectionFactory.setPort(portNo);
+  }  
+  
+  public static void main(String[] args) {
+    SpringApplication.run(ZipkinApplication.class, args);
+  }
+
 }

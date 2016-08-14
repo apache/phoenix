@@ -21,6 +21,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
+import org.springframework.beans.factory.annotation.*;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -46,31 +47,51 @@ public class PhoenixZipkinController {
 
   protected String TRACING_TABLE = "SYSTEM.TRACING_STATS";
 
-  @RequestMapping("/")
-  public String index() {
-    return "Greetings from Spring Boot!";
-  }
+  // spring will automatically bind value of property
+  @Value("${phoenix.host}")
+  private String PHOENIX_HOSTX;
+
+  @Value("${phoenix.port}")
+  private String PHOENIX_PORTX;
 
   @RequestMapping("/api/v1/services")
-  public String services() {
-    return "[\"phoenix-server\"]";
+  public String services() throws JSONException {
+    JSONArray services = new JSONArray(getServices("1"));
+    JSONArray servicesOut = new JSONArray();
+    for (int i = 0; i < services.length(); i++) {
+      JSONObject obj = services.getJSONObject(i);
+      servicesOut.put(obj.get("hostname"));
+    }
+    return servicesOut.toString();
   }
 
   @RequestMapping("/api/v1/spans")
-  public String spans() {
-    return "[]";
-  }
-
-  @RequestMapping("/api/v2/traces")
-  public String traces() {
-    return "[[{\"traceId\":\"0d73ed4802216e0e\",\"name\":\"bootstrap\",\"id\":\"0d73ed4802216e0e\",\"timestamp\":1469940471944000,\"duration\":12054546,\"annotations\":[{\"endpoint\":{\"serviceName\":\"phoenix-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469940472204546,\"value\":\"ApplicationStarted\"},{\"endpoint\":{\"serviceName\":\"phoenix-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469940472892282,\"value\":\"ApplicationEnvironmentPrepared\"},{\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469940473470234,\"value\":\"ApplicationPrepared\"},{\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469940483864223,\"value\":\"ContextRefreshed\"},{\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469940483993406,\"value\":\"EmbeddedServletContainerInitialized\"},{\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411},\"timestamp\":1469940483998543,\"value\":\"ApplicationReady\"}],\"binaryAnnotations\":[{\"key\":\"lc\",\"value\":\"spring-boot\",\"endpoint\":{\"serviceName\":\"zipkin-server\",\"ipv4\":\"127.0.0.1\",\"port\":9411}}]}]]";
+  public String spans(@RequestParam(value = "serviceName") String hostname) {
+    JSONArray spanOut = new JSONArray();
+    if (!hostname.equalsIgnoreCase("undefined")) {
+      try {
+        JSONArray spans = new JSONArray(getSpans("5", hostname));
+        for (int i = 0; i < spans.length(); i++) {
+          JSONObject obj = spans.getJSONObject(i);
+          spanOut.put(obj.get("spanname"));
+        }
+      } catch (Exception JSONException) {
+        return spanOut.toString();
+      }
+    }
+    // return spanOut.toString();
+    return spanOut.toString();
   }
 
   @RequestMapping("/api/v1/traces")
-  public String tracesv2(@RequestParam(value = "limit", defaultValue = "10") String limit)
+  public String tracesv2(@RequestParam(value = "limit", defaultValue = "10") String limit,
+          @RequestParam(value = "serviceName") String hostname,
+          @RequestParam(value = "lookback", defaultValue = "0") long lookback,
+          @RequestParam(value = "endTs", defaultValue = "0") long endTime,
+          @RequestParam(value = "minDuration", defaultValue = "0") long minDuration)
           throws JSONException {
     String jsonarray = "[]";
-    jsonarray = getTraces(limit);
+    jsonarray = getTraces(limit, hostname, endTime, lookback, minDuration);
     JSONObject element;
     String json = "{ traces: " + jsonarray + "}";
     JSONObject obj = new JSONObject(json);
@@ -181,7 +202,7 @@ public class PhoenixZipkinController {
     return json;
   }
 
-  // get trace
+  // get trace by trace id
   protected String getTrace(String traceid) {
     String json = null;
     String sqlQuery = "SELECT trace_id as traceId, description as name,"
@@ -192,7 +213,7 @@ public class PhoenixZipkinController {
     return json;
   }
 
-  // get trace
+  // get trace by time
   protected String getTraceByTime(long start, long end) {
     String json = null;
     String limit = "10000";
@@ -203,6 +224,7 @@ public class PhoenixZipkinController {
     return json;
   }
 
+  // getting span's annotations
   protected JSONArray getAnnotation(String hostname, long timestamp) throws JSONException {
     JSONArray outJsonarray = new JSONArray();
     JSONObject annotation = new JSONObject();
@@ -219,10 +241,12 @@ public class PhoenixZipkinController {
     return outJsonarray;
   }
 
+  // getting binary annotations
   protected JSONArray getBinaryAnnotations(String hostname, String description)
           throws JSONException {
     String key[] = description.trim().split("VALUES")[0].split("\\(")[1].split("\\)")[0].split(",");
-    String value[] = description.trim().split("VALUES")[1].split("\\)")[0].split("\\(")[1].split(",");
+    String value[] = description.trim().split("VALUES")[1].split("\\)")[0].split("\\(")[1]
+            .split(",");
     JSONArray annotations = new JSONArray();
     if (key.length == value.length) {
       for (int i = 0; i < key.length; i++) {
@@ -258,18 +282,48 @@ public class PhoenixZipkinController {
     return out;
   }
 
-  // get all traces with limit count
-  protected String getTraces(String limit) {
+  // get all traces with limit count, host and time stamp
+  protected String getTraces(String limit, String hostname, long endTime, long lookBack,
+          long minDuration) {
     String json = null;
     if (limit == null) {
       limit = DEFAULT_LIMIT;
     }
+    long startTimeStamp = endTime - lookBack;
+    long minDurationMilSec = minDuration / 1000;
     String sqlQuery = "SELECT tablex.trace_id as traceid, tablex.description as name,"
             + " tablex.start_time as timestamp, tablex.span_id as id, tablex.parent_id,"
             + " tablex.end_time, tablex.start_time, tablex.hostname  FROM " + TRACING_TABLE
-            + " as tablex GROUP BY tablex.trace_id, tablex.description, timestamp, id,"
+            + " as tablex WHERE hostname = '" + hostname + "' " + " AND end_time < " + endTime
+            + " AND start_time > " + startTimeStamp + " AND end_time - start_time > "
+            + minDurationMilSec + " GROUP BY tablex.trace_id, tablex.description, timestamp, id,"
             + " tablex.parent_id, tablex.end_time, tablex.start_time, tablex.hostname" + " LIMIT "
             + limit;
+    json = getResults(sqlQuery);
+    return json;
+  }
+
+  // get all span names
+  protected String getSpans(String limit, String hostname) {
+    String json = null;
+    String strLimit = "";
+    if (limit.length() != 0) {
+      strLimit = " LIMIT " + limit;
+    }
+    String sqlQuery = "SELECT distinct REGEXP_SUBSTR(description,'[^(@:\\[-]+') AS SPANNAME"
+            + " from " + TRACING_TABLE + " where hostname = '" + hostname + "'" + strLimit;
+    json = getResults(sqlQuery);
+    return json;
+  }
+
+  // get all services
+  protected String getServices(String limit) {
+    String json = null;
+    String strLimit = "";
+    if (limit.length() != 0) {
+      strLimit = " LIMIT " + limit;
+    }
+    String sqlQuery = "SELECT distinct hostname FROM " + TRACING_TABLE + strLimit;
     json = getResults(sqlQuery);
     return json;
   }
