@@ -9,19 +9,19 @@
  *http://localhost:8865/*
 
  ###Note
- You can set the port of the Phoenix-Zipkin by -Dserver.port={portNo}
+ You can set the port of the Phoenix-Zipkin by `-Dserver.port={portNo}`
 
  eg:
  `java -jar -Dserver.port=8088 ./target/phoenix-zipkin-4.8.0-HBase-1.2-SNAPSHOT.jar ` server will start in 8088
 
 
-To change the zookeeper host
+ To change the zookeeper host
 
--Dphoenix.host=pc
+ `-Dphoenix.host={hostname}`
 
-To change the zookeeper port
+ To change the zookeeper port
 
--Dphoenix.port=2181
+ `-Dphoenix.port={portNo}`
 
-eg:
+ eg:
  `java -jar -Dphoenix.host=pc -Dphoenix.port=2181 ./target/phoenix-zipkin-4.8.0-HBase-1.2-SNAPSHOT.jar `
