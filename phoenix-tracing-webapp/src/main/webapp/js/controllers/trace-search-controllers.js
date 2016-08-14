@@ -76,11 +76,12 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
     if (minTimeGap < 1000) {
       mulTime = 1000;
     }
-
+    var startDateTime;
     for (var i = 0; i < currentData.length; i++) {
       var datax = currentData[i];
       var toolTip = GenerateTimelineService.getToolTip(datax);
       var dest = GenerateTimelineService.getDescription(datax.description);
+      startDateTime = new Date(parseFloat(datax.start_time) * mulTime)
       var datamodel = [{
         "v": "Trace " + i
       }, {
@@ -95,6 +96,26 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
       timeLine.data.rows[i] = {
         "c": datamodel
       }
+    }
+    //adding a mock span
+    if (minTimeGap == 0) {
+      var mockindex = timeLine.data.rows.length
+      var t = new Date();
+      startDateTime.setMilliseconds(startDateTime.getMilliseconds() + 1);
+      var mockdatamodel = [{
+        "v": "Trace " + mockindex
+      }, {
+        "v": "This is a Mock Span"
+      }, {
+        "v": "This is a Mock Span <br>"
+        +"This is added because all other spans durations are zero "
+        +"<br>and all have same start time"
+      }, {
+        "v": timeLine.data.rows[0].c[3].v
+      }, {
+        "v": startDateTime
+      }]
+      timeLine.data.rows[mockindex] = {"c": mockdatamodel};
     }
     timeLine.data.cols = GenerateTimelineService.getTimeLineProperties();
     timeLine.data.options = GenerateTimelineService.getTimeLineOptions();
