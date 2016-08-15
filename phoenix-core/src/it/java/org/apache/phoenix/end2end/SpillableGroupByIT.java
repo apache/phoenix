@@ -74,7 +74,7 @@ public class SpillableGroupByIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     private long createTable() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, null, ts - 2);
+        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, GROUPBYTEST_NAME, null, ts - 2);
         return ts;
     }
 

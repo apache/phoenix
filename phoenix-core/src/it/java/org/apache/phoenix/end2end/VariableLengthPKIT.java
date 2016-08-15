@@ -58,7 +58,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     }
 
     protected static void initGroupByRowKeyColumns(long ts) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB_NAME, null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         // Insert all rows at ts
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
@@ -85,7 +85,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     }
 
     protected static void initTableValues(byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB_NAME, splits, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, splits, ts-2);
 
         // Insert all rows at ts
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
@@ -106,7 +106,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.setBigDecimal(4, new BigDecimal(.5));
         stmt.execute();
 
-        ensureTableCreated(getUrl(),BTABLE_NAME, splits, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, splits, ts-2);
         conn.setAutoCommit(false);
 
         // Insert all rows at ts
@@ -431,7 +431,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testNullValueEqualityScan() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         // Insert all rows at ts
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
@@ -459,7 +459,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testVarLengthPKColScan() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -489,7 +489,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testEscapedQuoteScan() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -527,7 +527,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     }
 
     private static void initPtsdbTableValues(long ts) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -560,7 +560,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     }
 
     private static void initPtsdbTableValues2(long ts, Date d) throws Exception {
-        ensureTableCreated(getUrl(),PTSDB2_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB2_NAME, PTSDB2_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -696,7 +696,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testBatchUpsert() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB2_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB2_NAME, PTSDB2_NAME, null, ts-2);
         Date d = new Date(ts);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -874,7 +874,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testMissingPKColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -894,7 +894,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testNoKVColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -914,7 +914,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     // Broken, since we don't know if insert vs update. @Test
     public void testMissingKVColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -942,7 +942,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testTooShortKVColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -978,7 +978,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testTooShortPKColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1014,7 +1014,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testTooLongPKColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1051,7 +1051,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testTooLongKVColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),BTABLE_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),BTABLE_NAME, BTABLE_NAME, null, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts; // Insert at timestamp 0
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -1481,7 +1481,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testLikeOnColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         // Insert all rows at ts
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
@@ -1598,7 +1598,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testILikeOnColumn() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         // Insert all rows at ts
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
@@ -1730,7 +1730,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testIsNullInPK() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),PTSDB_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),PTSDB_NAME, PTSDB_NAME, null, ts-2);
 
         // Insert all rows at ts
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;

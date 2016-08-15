@@ -29,6 +29,7 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -88,8 +89,9 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
     private void testUpsertSelect(boolean createIndex) throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl());
+
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
         String indexName = "IDX1";
         if (createIndex) {
             Properties props = new Properties();
@@ -208,8 +210,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
     public void testUpsertSelectEmptyPKColumn() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(getUrl(), PTSDB_NAME, ts-1);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl());
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts-1);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -384,8 +386,8 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
     private void testUpsertSelectForAgg(boolean autoCommit) throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts-1);
-        ensureTableCreated(getUrl(), PTSDB_NAME, ts-1);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl());
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts-1);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -460,7 +462,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
                 PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),"IntKeyTest",splits, ts-2);
+        ensureTableCreated(getUrl(),"IntKeyTest", "IntKeyTest", splits, ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -600,7 +602,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         byte[][] splits = new byte[][] { PInteger.INSTANCE.toBytes(1), PInteger.INSTANCE.toBytes(2),
                 PInteger.INSTANCE.toBytes(3), PInteger.INSTANCE.toBytes(4)};
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),"IntKeyTest",splits,ts-2);
+        ensureTableCreated(getUrl(),"IntKeyTest", "IntKeyTest", splits,ts-2);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1));
         Connection conn = DriverManager.getConnection(getUrl(), props);

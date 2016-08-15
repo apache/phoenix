@@ -48,33 +48,34 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
 
-public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
+public class ExecuteStatementsIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testExecuteStatements() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String ptsdbTableName = generateRandomString();
         String statements = 
-            "create table if not exists " + ATABLE_NAME + // Shouldn't error out b/c of if not exists clause
+            "create table if not exists " + tableName + // Shouldn't error out b/c of if not exists clause
             "   (organization_id char(15) not null, \n" + 
             "    entity_id char(15) not null,\n" + 
             "    a_string varchar(100),\n" + 
             "    b_string varchar(100)\n" +
             "    CONSTRAINT pk PRIMARY KEY (organization_id,entity_id));\n" + 
-            "create table " + PTSDB_NAME +
+            "create table " + ptsdbTableName +
             "   (inst varchar null,\n" + 
             "    host varchar null,\n" + 
             "    date date not null,\n" + 
             "    val decimal\n" +
             "    CONSTRAINT pk PRIMARY KEY (inst,host,date))\n" +
             "    split on (?,?,?);\n" +
-            "alter table " + PTSDB_NAME + " add if not exists val decimal;\n" +  // Shouldn't error out b/c of if not exists clause
-            "alter table " + PTSDB_NAME + " drop column if exists blah;\n" +  // Shouldn't error out b/c of if exists clause
+            "alter table " + ptsdbTableName + " add if not exists val decimal;\n" +  // Shouldn't error out b/c of if not exists clause
+            "alter table " + ptsdbTableName + " drop column if exists blah;\n" +  // Shouldn't error out b/c of if exists clause
             "drop table if exists FOO.BAR;\n" + // Shouldn't error out b/c of if exists clause
-            "UPSERT INTO " + PTSDB_NAME + "(date, val, host) " +
-            "    SELECT current_date(), x_integer+2, entity_id FROM ATABLE WHERE a_integer >= ?;" +
-            "UPSERT INTO " + PTSDB_NAME + "(date, val, inst)\n" +
-            "    SELECT date+1, val*10, host FROM " + PTSDB_NAME + ";";
+            "UPSERT INTO " + ptsdbTableName + "(date, val, host) " +
+            "    SELECT current_date(), x_integer+2, entity_id FROM " + tableName + " WHERE a_integer >= ?;" +
+            "UPSERT INTO " + ptsdbTableName + "(date, val, inst)\n" +
+            "    SELECT date+1, val*10, host FROM " + ptsdbTableName + ";";
         
         Date now = new Date(System.currentTimeMillis());
         Connection conn = DriverManager.getConnection(getUrl());
@@ -84,7 +85,7 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
         assertEquals(7, nStatements);
 
         Date then = new Date(System.currentTimeMillis() + QueryConstants.MILLIS_IN_DAY);
-        String query = "SELECT host,inst, date,val FROM " + PTSDB_NAME + " where inst is not null";
+        String query = "SELECT host,inst, date,val FROM " + ptsdbTableName + " where inst is not null";
         PreparedStatement statement = conn.prepareStatement(query);
         
         ResultSet rs = statement.executeQuery();
@@ -119,7 +120,7 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testCharPadding() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = "foo";
+        String tableName = generateRandomString();
         String rowKey = "hello"; 
         String testString = "world";
         String query = "create table " + tableName +
@@ -142,10 +143,11 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
         statement.setString(3, testString);
         statement.execute();       
         conn.commit();
-        
-        ensureTableCreated(getUrl(),BTABLE_NAME, null, nextTimestamp()-2);
+
+        String btableName = generateRandomString();
+        ensureTableCreated(getUrl(),btableName, BTABLE_NAME, nextTimestamp()-2);
         statement = conn.prepareStatement(
-                "upsert into BTABLE VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                "upsert into " + btableName + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
         statement.setString(1, "abc");
         statement.setString(2, "xyz");
         statement.setString(3, "x");
@@ -197,10 +199,10 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
             
             // test upsert statement with padding
             String tenantId = getOrganizationId();
-            initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+            String atableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
             
             upsert = "UPSERT INTO " + tableName + "(a_id, a_string, b_string) " +
-                    "SELECT A_INTEGER, A_STRING, B_STRING FROM ATABLE WHERE a_string = ?";
+                    "SELECT A_INTEGER, A_STRING, B_STRING FROM " + atableName + " WHERE a_string = ?";
             
             statement = conn.prepareStatement(upsert);
             statement.setString(1, A_VALUE);
@@ -249,7 +251,7 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
             try {
                 
                 upsert = "UPSERT INTO " + tableName + "(a_id, a_string, b_string) " +
-                        "SELECT x_integer, organization_id, b_string FROM ATABLE WHERE a_string = ?";
+                        "SELECT x_integer, organization_id, b_string FROM " + atableName + " WHERE a_string = ?";
                 
                 statement = conn.prepareStatement(upsert);
                 statement.setString(1, A_VALUE);
@@ -263,7 +265,7 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
             try {
                 
                 upsert = "UPSERT INTO " + tableName + "(a_id, a_string, b_string) " +
-                        "SELECT y_integer, a_string, entity_id FROM ATABLE WHERE a_string = ?";
+                        "SELECT y_integer, a_string, entity_id FROM " + atableName + " WHERE a_string = ?";
                 
                 statement = conn.prepareStatement(upsert);
                 statement.setString(1, A_VALUE);
@@ -276,7 +278,7 @@ public class ExecuteStatementsIT extends BaseHBaseManagedTimeIT {
                         
             //where selecting from a CHAR(x) and upserting into a CHAR(y) where x<=y.
             upsert = "UPSERT INTO " + tableName + "(a_id, a_string, b_string) " +
-                    "SELECT a_integer, e_string, a_id FROM BTABLE";
+                    "SELECT a_integer, e_string, a_id FROM " + btableName ;
             
             statement = conn.prepareStatement(upsert);
             rowsInserted = statement.executeUpdate();

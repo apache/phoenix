@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -42,7 +42,7 @@ import org.junit.BeforeClass;
 
 import com.google.common.collect.Maps;
 
-public class BasePigIT extends BaseHBaseManagedTimeIT {
+public class BasePigIT extends BaseHBaseManagedTimeTableReuseIT {
     protected TupleFactory tupleFactory;
     protected String zkQuorum;
     protected Connection conn;
@@ -50,7 +50,7 @@ public class BasePigIT extends BaseHBaseManagedTimeIT {
     protected PigServer pigServer;
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
