@@ -39,7 +39,7 @@ import org.junit.Test;
 public class FunkyNamesIT extends BaseClientManagedTimeIT {
 
     protected static void initTableValues(byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),FUNKY_NAME,splits, ts-2);
+        ensureTableCreated(getUrl(), FUNKY_NAME, FUNKY_NAME,splits, ts-2);
 
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

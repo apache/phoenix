@@ -30,29 +30,30 @@ import java.sql.ResultSet;
 import org.junit.Test;
 
 
-public class IsNullIT extends BaseHBaseManagedTimeIT {
+public class IsNullIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testIsNullInPk() throws Exception {
-        ensureTableCreated(getUrl(),"IntIntKeyTest");
+        String tableName = generateRandomString();
+        ensureTableCreated(getUrl(), tableName, "IntIntKeyTest");
         Connection conn = DriverManager.getConnection(getUrl());
-        String upsert = "UPSERT INTO IntIntKeyTest VALUES(4,2)";
+        String upsert = "UPSERT INTO " + tableName + " VALUES(4,2)";
         PreparedStatement upsertStmt = conn.prepareStatement(upsert);
         int rowsInserted = upsertStmt.executeUpdate();
         assertEquals(1, rowsInserted);
-        upsert = "UPSERT INTO IntIntKeyTest VALUES(6)";
+        upsert = "UPSERT INTO " + tableName + " VALUES(6)";
         upsertStmt = conn.prepareStatement(upsert);
         rowsInserted = upsertStmt.executeUpdate();
         assertEquals(1, rowsInserted);
         conn.commit();
         
-        String select = "SELECT i/j FROM IntIntKeyTest WHERE j IS NULL";
+        String select = "SELECT i/j FROM " + tableName + " WHERE j IS NULL";
         ResultSet rs;
         rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
         assertEquals(0,rs.getInt(1));
         assertTrue(rs.wasNull());
         assertFalse(rs.next());
-        select = "SELECT i/j FROM IntIntKeyTest WHERE j IS NOT NULL";
+        select = "SELECT i/j FROM " + tableName + " WHERE j IS NOT NULL";
         rs = conn.createStatement().executeQuery(select);
         assertTrue(rs.next());
         assertEquals(2,rs.getInt(1));
@@ -61,15 +62,16 @@ public class IsNullIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testIsNullWithLastPKColDesc() throws Exception {
+        String tableName = generateRandomString();
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE T(k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2, k3 DESC))");
-        conn.createStatement().execute("UPSERT INTO T VALUES ('a')");
-        conn.createStatement().execute("UPSERT INTO T VALUES ('b')");
-        conn.createStatement().execute("UPSERT INTO T VALUES ('b',null,'c')");
-        conn.createStatement().execute("UPSERT INTO T VALUES ('ba', null, 'd')");
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2, k3 DESC))");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('b')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('b',null,'c')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('ba', null, 'd')");
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1,k2,k3 FROM T WHERE k1='b' AND k2 IS NULL");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1,k2,k3 FROM " + tableName + " WHERE k1='b' AND k2 IS NULL");
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
         assertNull(rs.getString(2));
@@ -87,15 +89,16 @@ public class IsNullIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testIsNullInCompositeKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE T(k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))");
-        conn.createStatement().execute("UPSERT INTO T VALUES (null,'a')");
-        conn.createStatement().execute("UPSERT INTO T VALUES ('a','a')");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (null,'a')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a','a')");
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM T");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tableName);
         assertTrue(rs.next());
         assertEquals(2,rs.getInt(1));
-        rs = conn.createStatement().executeQuery("SELECT count(*) FROM T WHERE k1 = 'a' or k1 is null");
+        rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tableName + " WHERE k1 = 'a' or k1 is null");
         assertTrue(rs.next());
         assertEquals(2,rs.getInt(1));
         conn.close();

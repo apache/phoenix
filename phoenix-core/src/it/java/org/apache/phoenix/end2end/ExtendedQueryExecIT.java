@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -51,7 +52,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(tenantId, getDefaultSplits(tenantId),date, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),date, ts, getUrl());
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
@@ -74,7 +75,8 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
     public void testTypeMismatchToDateFunctionBind() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId),null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),null, ts, getUrl());
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -101,8 +103,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(tenantId, getDefaultSplits(tenantId),date, ts);
-        
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),date, ts, getUrl());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -147,8 +148,7 @@ public class ExtendedQueryExecIT extends BaseClientManagedTimeIT {
         Date date = new Date(1);
         String tenantId = getOrganizationId();
 
-        initATableValues(tenantId, getDefaultSplits(tenantId),date, ts);
-        
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId),date, ts, getUrl());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+1));
         Connection conn = DriverManager.getConnection(getUrl(), props);

@@ -287,9 +287,9 @@ public class DistinctCountIT extends BaseClientManagedTimeIT {
     
     protected static void initATableValues(String tenantId1, String tenantId2, byte[][] splits, Date date, Long ts) throws Exception {
         if (ts == null) {
-            ensureTableCreated(getUrl(), ATABLE_NAME, splits);
+            ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, splits);
         } else {
-            ensureTableCreated(getUrl(), ATABLE_NAME, splits, ts-2);
+            ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, splits, ts-2);
         }
         
         Properties props = new Properties();

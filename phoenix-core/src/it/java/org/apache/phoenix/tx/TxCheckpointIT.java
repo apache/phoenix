@@ -33,7 +33,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -41,7 +41,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -53,26 +52,19 @@ import org.apache.tephra.Transaction.VisibilityLevel;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
+public class TxCheckpointIT extends BaseHBaseManagedTimeTableReuseIT {
 	
 	private final boolean localIndex;
 	private final boolean mutable;
-	private String tableName;
-    private String indexName;
-    private String seqName;
-    private String fullTableName;
 
 	public TxCheckpointIT(boolean localIndex, boolean mutable) {
 		this.localIndex = localIndex;
 		this.mutable = mutable;
-		this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME;
-        this.indexName = "IDX_" + System.currentTimeMillis();
-        this.seqName = "SEQ_" + System.currentTimeMillis();
-        this.fullTableName = SchemaUtil.getTableName(tableName, tableName);
+
 	}
 	
 	@BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
@@ -89,6 +81,10 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String seqName = "SEQ_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
@@ -110,17 +106,23 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testRollbackOfUncommittedDeleteSingleCol() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)";
-        testRollbackOfUncommittedDelete(indexDDL);
+        testRollbackOfUncommittedDelete(indexDDL, fullTableName);
     }
 
     @Test
     public void testRollbackOfUncommittedDeleteMultiCol() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1, v2)";
-        testRollbackOfUncommittedDelete(indexDDL);
+        testRollbackOfUncommittedDelete(indexDDL, fullTableName);
     }
     
-    private void testRollbackOfUncommittedDelete(String indexDDL) throws Exception {
+    private void testRollbackOfUncommittedDelete(String indexDDL, String fullTableName) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -207,6 +209,9 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
     
 	@Test
 	public void testCheckpointForUpsertSelect() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(tableName, tableName);
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
 			conn.setAutoCommit(false);
@@ -222,17 +227,17 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
             stmt.executeUpdate("upsert into " + fullTableName + " values(3, 'a3', 'b3')");
 			conn.commit();
 
-			upsertRows(conn);
+			upsertRows(conn, fullTableName);
 			conn.rollback();
-			verifyRows(conn, 3);
+			verifyRows(conn, fullTableName, 3);
 
-			upsertRows(conn);
+			upsertRows(conn, fullTableName);
 			conn.commit();
-			verifyRows(conn, 6);
+			verifyRows(conn, fullTableName, 6);
 		}
 	}
 
-	private void verifyRows(Connection conn, int expectedMaxId) throws SQLException {
+	private void verifyRows(Connection conn, String fullTableName, int expectedMaxId) throws SQLException {
 		ResultSet rs;
 		//query the data table
 		rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ max(id) from " + fullTableName + "");
@@ -247,7 +252,7 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
 		assertFalse(rs.next());
 	}
 
-	private void upsertRows(Connection conn) throws SQLException {
+	private void upsertRows(Connection conn, String fullTableName) throws SQLException {
 		ResultSet rs;
 		MutationState state = conn.unwrap(PhoenixConnection.class)
 				.getMutationState();
@@ -294,6 +299,9 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeIT {
 	
 	@Test
     public void testCheckpointForDeleteAndUpsert() throws Exception {
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(tableName, tableName);
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		ResultSet rs;
 		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {

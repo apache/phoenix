@@ -99,9 +99,9 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testTableMetadataScan() throws SQLException {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), ATABLE_NAME, null, ts);
-        ensureTableCreated(getUrl(), STABLE_NAME, null, ts);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
+        ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, ts);
+        ensureTableCreated(getUrl(), STABLE_NAME, STABLE_NAME, ts);
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -274,8 +274,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testSchemaMetadataScan() throws SQLException {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
-        ensureTableCreated(getUrl(), PTSDB_NAME, null, ts);
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -303,7 +303,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testColumnMetadataScan() throws SQLException {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), MDTEST_NAME, null, ts);
+        ensureTableCreated(getUrl(), MDTEST_NAME, MDTEST_NAME, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -477,7 +477,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertFalse(rs.next());
 
-        ensureTableCreated(getUrl(), TABLE_WITH_SALTING, null, ts);
+        ensureTableCreated(getUrl(), TABLE_WITH_SALTING, TABLE_WITH_SALTING, ts);
         rs = dbmd.getColumns("", "", TABLE_WITH_SALTING, StringUtil.escapeLike("A_INTEGER"));
         assertTrue(rs.next());
         assertEquals(1, rs.getInt("ORDINAL_POSITION"));
@@ -488,8 +488,8 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testPrimaryKeyMetadataScan() throws SQLException {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), MDTEST_NAME, null, ts);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
+        ensureTableCreated(getUrl(), MDTEST_NAME, MDTEST_NAME, ts);
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -591,10 +591,10 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testMultiTableColumnsMetadataScan() throws SQLException {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), MDTEST_NAME, null, ts);
-        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, null, ts);
-        ensureTableCreated(getUrl(), PTSDB_NAME, null, ts);
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, null, ts);
+        ensureTableCreated(getUrl(), MDTEST_NAME, MDTEST_NAME, ts);
+        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, GROUPBYTEST_NAME, ts);
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts);
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -652,10 +652,10 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testCreateDropTable() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         
-        ensureTableCreated(getUrl(), BTABLE_NAME, null, ts-2);
-        ensureTableCreated(getUrl(), PTSDB_NAME, null, ts-2);
+        ensureTableCreated(getUrl(), BTABLE_NAME, BTABLE_NAME, ts-2);
+        ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts-2);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -720,7 +720,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         PhoenixConnection conn1 = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        ensureTableCreated(getUrl(), tableName, null, ts);
+        ensureTableCreated(getUrl(), tableName, tableName, ts);
         
         descriptor = admin.getTableDescriptor(htableName);
         assertEquals(3,descriptor.getColumnFamilies().length);
@@ -975,7 +975,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testAddKVColumnToExistingFamily() throws Throwable {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1006,8 +1006,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testAddKVColumnToNewFamily() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
-        
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
@@ -1033,7 +1032,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testAddPKColumn() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1066,7 +1065,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testDropKVColumn() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1106,7 +1105,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testDropPKColumn() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1124,7 +1123,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testDropAllKVCols() throws Exception {
         ResultSet rs;
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), MDTEST_NAME, null, ts);
+        ensureTableCreated(getUrl(), MDTEST_NAME, MDTEST_NAME, null, ts);
         
         Properties props = new Properties();
         
@@ -1170,7 +1169,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testNewerTableDisallowed() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), ATABLE_NAME, null, ts);
+        ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, null, ts);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));

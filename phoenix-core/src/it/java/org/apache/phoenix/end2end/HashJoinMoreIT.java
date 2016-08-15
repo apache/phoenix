@@ -43,7 +43,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
+public class HashJoinMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     private final String[] plans = new String[] {
             /*
              * testJoinWithKeyRangeOptimization()
@@ -51,10 +51,10 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
              *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
              *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 = rhs.col2
              */
-            "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "CLIENT MERGE SORT\n" +
             "    PARALLEL INNER-JOIN TABLE 0\n" +
-            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "        CLIENT MERGE SORT",
             /*
              * testJoinWithKeyRangeOptimization()
@@ -62,10 +62,10 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
              *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
              *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col2
              */
-            "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "CLIENT MERGE SORT\n" +
             "    PARALLEL INNER-JOIN TABLE 0\n" +
-            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "        CLIENT MERGE SORT\n" +
             "    DYNAMIC SERVER FILTER BY LHS.COL0 IN (RHS.COL2)",
             /*
@@ -74,10 +74,10 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
              *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
              *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col1 = rhs.col2
              */
-            "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "CLIENT MERGE SORT\n" +
             "    PARALLEL INNER-JOIN TABLE 0\n" +
-            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "        CLIENT MERGE SORT\n" +
             "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1) IN ((RHS.COL1, RHS.COL2))",
             /*
@@ -86,16 +86,16 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
              *     FROM TEMP_TABLE_COMPOSITE_PK lhs 
              *     JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 = rhs.col1 AND lhs.col2 = rhs.col3 - 1 AND lhs.col1 = rhs.col2
              */
-            "CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "CLIENT MERGE SORT\n" +
             "    PARALLEL INNER-JOIN TABLE 0\n" +
-            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER TEMP_TABLE_COMPOSITE_PK\n" +
+            "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" +
             "        CLIENT MERGE SORT\n" +
             "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",            
     };
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used
@@ -117,8 +117,8 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testJoinOverSaltedTables() throws Exception {
-        String tempTableNoSalting = "TEMP_TABLE_NO_SALTING";
-        String tempTableWithSalting = "TEMP_TABLE_WITH_SALTING";
+        String tempTableNoSalting = generateRandomString();
+        String tempTableWithSalting = generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -255,8 +255,8 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testJoinOnDynamicColumns() throws Exception {
-        String tableA = "tableA";
-        String tableB = "tableB";
+        String tableA = generateRandomString();
+        String tableB = generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -274,7 +274,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             stmt.close();
 
-            String upsertA = "UPSERT INTO TABLEA (pkA, colA1, colA2) VALUES(?, ?, ?)";
+            String upsertA = "UPSERT INTO " + tableA + " (pkA, colA1, colA2) VALUES(?, ?, ?)";
             stmt = conn.prepareStatement(upsertA);
             int i = 0;
             for (i = 0; i < 5; i++) {
@@ -286,19 +286,20 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             conn.commit();
             stmt.close();
 
+            String sequenceB = generateRandomString();
             // upsert select dynamic columns in tableB
-            conn.createStatement().execute("CREATE SEQUENCE SEQB");
-            String upsertBSelectA = "UPSERT INTO TABLEB (pkB, pkA INTEGER)"
-                    + "SELECT NEXT VALUE FOR SEQB, pkA FROM TABLEA";
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceB );
+            String upsertBSelectA = "UPSERT INTO " + tableB + " (pkB, pkA INTEGER)"
+                    + "SELECT NEXT VALUE FOR " + sequenceB + ", pkA FROM " + tableA ;
             stmt = conn.prepareStatement(upsertBSelectA);
             stmt.executeUpdate();
             stmt.close();
             conn.commit();
-            conn.createStatement().execute("DROP SEQUENCE SEQB");
+            conn.createStatement().execute("DROP SEQUENCE " + sequenceB );
 
             // perform a join between tableB and tableA by joining on the dynamic column that we upserted in
             // tableB. This join should return all the rows from table A.
-            String joinSql = "SELECT A.pkA, A.COLA1, A.colA2 FROM TABLEB B(pkA INTEGER) JOIN TABLEA A ON a.pkA = b.pkA";
+            String joinSql = "SELECT A.pkA, A.COLA1, A.colA2 FROM " + tableB + " B(pkA INTEGER) JOIN " + tableA + " A ON a.pkA = b.pkA";
             stmt = conn.prepareStatement(joinSql);
             ResultSet rs = stmt.executeQuery();
             i = 0;
@@ -324,7 +325,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testJoinWithKeyRangeOptimization() throws Exception {
-        String tempTableWithCompositePK = "TEMP_TABLE_COMPOSITE_PK";
+        String tempTableWithCompositePK = generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -375,7 +376,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(plans[0], QueryUtil.getExplainPlan(rs));
+            assertEquals(String.format(plans[0],tempTableWithCompositePK,tempTableWithCompositePK), QueryUtil.getExplainPlan(rs));
             
             // Two parts of PK but only one leading part
             query = "SELECT lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
@@ -396,7 +397,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
+            assertEquals(String.format(plans[1],tempTableWithCompositePK,tempTableWithCompositePK), QueryUtil.getExplainPlan(rs));
             
             // Two leading parts of PK
             query = "SELECT lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
@@ -426,7 +427,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(plans[2], QueryUtil.getExplainPlan(rs));
+            assertEquals(String.format(plans[2],tempTableWithCompositePK,tempTableWithCompositePK), QueryUtil.getExplainPlan(rs));
             
             // All parts of PK
             query = "SELECT lhs.col0, lhs.col1, lhs.col2, lhs.col3, rhs.col0, rhs.col1, rhs.col2, rhs.col3 FROM " 
@@ -456,7 +457,7 @@ public class HashJoinMoreIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals(plans[3], QueryUtil.getExplainPlan(rs));
+            assertEquals(String.format(plans[3],tempTableWithCompositePK,tempTableWithCompositePK), QueryUtil.getExplainPlan(rs));
         } finally {
             conn.close();
         }
