@@ -117,8 +117,6 @@ public interface QueryServices extends SQLCloseable {
     public static final String MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheTimeToLiveMs";
     public static final String MAX_SERVER_METADATA_CACHE_SIZE_ATTRIB = "phoenix.coprocessor.maxMetaDataCacheSize";
     public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB = "phoenix.client.maxMetaDataCacheSize";
-    public static final String HBASE_CLUSTER_DISTRIBUTED_ATTRIB = "hbase.cluster.distributed";
-    public static final String MAPRED_FRAMEWORK_NAME = "mapreduce.framework.name";
 
     public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
     // Mainly for testing to force spilling
@@ -220,6 +218,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_POPULATION_SLEEP_TIME = "phoenix.index.population.wait.time";
     public static final String LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB = "phoenix.client.localIndexUpgrade";
     public static final String LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.limited.query.serial.threshold";
+
+    public static final String INDEX_ASYNC_BUILD_ENABLED = "phoenix.index.async.build.enabled";
     /**
      * Get executor service used for parallel scans
      */

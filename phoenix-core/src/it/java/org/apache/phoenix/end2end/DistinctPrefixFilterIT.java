@@ -88,6 +88,15 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         insertPrefixV("3", "1");
         insertPrefixV("3", "2");
         insertPrefixV("3", "3");
+        conn.commit();
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ count(*) from " + testTableV);
+        assertTrue(rs.next());
+        long count1 = rs.getLong(1);
+        rs = conn.createStatement().executeQuery("select count(*) from " + testTableV + "_idx");
+        assertTrue(rs.next());
+        long count2 = rs.getLong(1);
+        assertEquals(count1,count2);
 
         multiply();
         multiply();
@@ -162,8 +171,6 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testPlan("SELECT COUNT(*) FROM (SELECT DISTINCT(prefix1) FROM "+testTable+")", true);
         testPlan("SELECT /*+ RANGE_SCAN */ DISTINCT prefix1 FROM "+testTable, false);
         testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable, true);
-        // use the filter even when the boolean expression filter is used
-        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable+ " WHERE col1 > 0.5", true);
         // do not use the filter when the distinct is on the entire key
         testPlan("SELECT DISTINCT prefix1, prefix2, prefix3 FROM "+testTable, false);
         testPlan("SELECT DISTINCT (prefix1, prefix2, prefix3) FROM "+testTable, false);
@@ -184,7 +191,6 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testPlan("SELECT (prefix1, prefix2, prefix3) FROM "+testTable+" GROUP BY (prefix1, prefix2, prefix3)", false);
         testPlan("SELECT prefix1, 1, 2 FROM "+testTable+" GROUP BY prefix1", true);
         testPlan("SELECT prefix1 FROM "+testTable+" GROUP BY prefix1, col1", false);
-        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable+" WHERE col1 > 0.5", true);
 
         testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" HAVING COUNT(col1) > 10", false);
         testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" ORDER BY COUNT(col1)", true);
@@ -195,6 +201,8 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" HAVING COUNT(DISTINCT prefix2) > 10", false);
         testPlan("SELECT COUNT(DISTINCT prefix1) FROM "+testTable+" HAVING COUNT(DISTINCT prefix1) > 10", false);
         testPlan("SELECT COUNT(DISTINCT prefix1) / 10 FROM "+testTable, false);
+        // do not use the filter when the boolean expression filter is used
+        testPlan("SELECT DISTINCT prefix1, prefix2 FROM "+testTable+" WHERE col1 > 0.5", false);
     }
 
     private void testPlan(String query, boolean optimizable) throws Exception {
@@ -211,6 +219,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testSkipRange("SELECT %s prefix1 FROM "+ testTableF + " GROUP BY prefix1, prefix2 HAVING prefix2 = 2147483647", 2);
         testSkipRange("SELECT %s prefix1 FROM "+ testTableF + " GROUP BY prefix1, prefix2 HAVING prefix1 = 2147483647", 1);
         testSkipRange("SELECT %s prefix1 FROM "+ testTableF + " WHERE col1 > 0.99 GROUP BY prefix1, prefix2 HAVING prefix2 = 2", -1);
+        testSkipRange("SELECT %s prefix1 FROM "+ testTableF + " WHERE col1 >=0 and col2 > 990 GROUP BY prefix1, prefix2 HAVING prefix2 = 2", -1);
 
         testSkipRange("SELECT %s prefix1 FROM "+ testTableV + " GROUP BY prefix1, prefix2 HAVING prefix1 IN ('1','2')", 6);
         testSkipRange("SELECT %s prefix1 FROM "+ testTableV + " GROUP BY prefix1, prefix2 HAVING prefix1 IN ('1','2') AND prefix2 IN ('1','2')", 4);
@@ -219,6 +228,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
         testSkipRange("SELECT %s prefix1 FROM "+ testTableV + " GROUP BY prefix1, prefix2 HAVING prefix2 = '22'", 1);
         testSkipRange("SELECT %s prefix1 FROM "+ testTableV + " GROUP BY prefix1, prefix2 HAVING prefix1 = '22'", 1);
         testSkipRange("SELECT %s prefix1 FROM "+ testTableV + " WHERE col1 > 0.99 GROUP BY prefix1, prefix2 HAVING prefix2 = '2'", -1);
+        testSkipRange("SELECT %s prefix1 FROM "+ testTableV + " WHERE col1 >= 0 and col2 > 990 GROUP BY prefix1, prefix2 HAVING prefix2 = '2'", -1);
 
         testCommonGroupBy(testTableF);
         testCommonGroupBy(testTableV);
@@ -258,7 +268,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
         testCommonDistinct(testTableF);
         testCommonDistinct(testTableV);
-}
+    }
 
     private void testCommonDistinct(String testTable) throws Exception {
         testSkipRange("SELECT %s DISTINCT prefix1 FROM " + testTable, 4);
@@ -280,6 +290,8 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
         testCount("SELECT %s COUNT(DISTINCT col1) FROM " + testTable, -1);
         testCount("SELECT %s COUNT(DISTINCT col2) FROM " + testTable, -1);
+
+        testCount("SELECT %s COUNT(DISTINCT prefix1) FROM " + testTable + " WHERE col1 < 0", -1);
     }
 
     @Test

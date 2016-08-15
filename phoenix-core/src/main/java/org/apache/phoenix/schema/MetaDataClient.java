@@ -1446,8 +1446,11 @@ public class MetaDataClient {
         }
 
         if (logger.isInfoEnabled()) logger.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
+        boolean asyncIndexBuildEnabled = connection.getQueryServices().getProps().getBoolean(
+            QueryServices.INDEX_ASYNC_BUILD_ENABLED,
+            QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
         // In async process, we return immediately as the MR job needs to be triggered .
-        if(statement.isAsync()) {
+        if(statement.isAsync() && asyncIndexBuildEnabled) {
             return new MutationState(0, connection);
         }
         

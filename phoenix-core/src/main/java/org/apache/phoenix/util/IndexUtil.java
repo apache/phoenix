@@ -673,4 +673,17 @@ public class IndexUtil {
             HConstants.NO_NONCE, HConstants.NO_NONCE);
     }
 
+    public static boolean matchingSplitKeys(byte[][] splitKeys1, byte[][] splitKeys2) throws IOException {
+        if (splitKeys1 != null && splitKeys2 != null
+                && splitKeys1.length == splitKeys2.length) {
+            for (int i = 0; i < splitKeys1.length; i++) {
+                if (Bytes.compareTo(splitKeys1[i], splitKeys2[i]) != 0) {
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        }
+        return true;
+    }
 }
