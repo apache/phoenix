@@ -56,8 +56,6 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
         }
         PAYLOAD = buf.toString();
     }
-    private static final String tableName = "S";
-    private static final byte[] tableNameBytes = Bytes.toBytes(tableName);
     private static final int MIN_CHAR = 'a';
     private static final int MAX_CHAR = 'z';
 
@@ -283,8 +281,8 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
     @Test
     public void testSkipScanInListOfRVCAfterManualSplit() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-
-        String ddl = "CREATE TABLE FIELD_HISTORY_ARCHIVE ( "
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE " + tableName + " ( "
             + "organization_id CHAR(15) NOT NULL, "
             + "parent_id CHAR(15) NOT NULL, "
             + "created_date DATE NOT NULL, "
@@ -309,7 +307,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
         ddlStmt.execute();
         conn.commit();
         
-        final String upsertPrefix = "UPSERT INTO FIELD_HISTORY_ARCHIVE VALUES ( '00Dxx0000001gER', ";
+        final String upsertPrefix = "UPSERT INTO " + tableName + " VALUES ( '00Dxx0000001gER', ";
         conn.createStatement().executeUpdate(upsertPrefix + "'001xx000003DGr4', TO_DATE('2014-07-11 20:53:01'), '017xx0000022MmH', '005xx000001Sv21' )");
         conn.createStatement().executeUpdate(upsertPrefix + "'001xx000003DGr5', TO_DATE('2014-07-11 20:53:01'), '017xx0000022Mln', '005xx000001Sv21' )");
         conn.createStatement().executeUpdate(upsertPrefix + "'001xx000003DGsy', TO_DATE('2014-07-11 20:53:01'), '017xx0000022MsO', '005xx000001Sv21' )");
@@ -320,8 +318,8 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
         
         String sql = "SELECT "
             + "CREATED_BY_ID, PARENT_ID "
-            + "FROM FIELD_HISTORY_ARCHIVE "
-            + "WHERE ORGANIZATION_ID='00Dxx0000001gER' "
+            + "FROM " + tableName
+            + " WHERE ORGANIZATION_ID='00Dxx0000001gER' "
             + "AND (PARENT_ID,CREATED_DATE,ENTITY_HISTORY_ID)  IN  ("
             + "('001xx000003DGr4',TO_DATE('2014-07-11 20:53:01'),'017xx0000022MmH'),"
             + "('001xx000003DGr5',TO_DATE('2014-07-11 20:53:01'),'017xx0000022Mln'),"
@@ -353,8 +351,8 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
     @Test
     public void testMinMaxRangeIntersection() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        
-        PreparedStatement stmt = conn.prepareStatement("create table splits_test "
+        String tableName = generateRandomString();
+        PreparedStatement stmt = conn.prepareStatement("create table " + tableName
             + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
             + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)) SALT_BUCKETS=4 SPLIT ON (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         // Split each salt bucket into multiple regions
@@ -373,7 +371,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
         stmt.execute();
         
         // Use a query with a RVC in a non equality expression
-        ResultSet rs = conn.createStatement().executeQuery("select count(kv) from splits_test where pk1 <= 3 and (pk1,PK2) >= (3, 1)");
+        ResultSet rs = conn.createStatement().executeQuery("select count(kv) from " + tableName + " where pk1 <= 3 and (pk1,PK2) >= (3, 1)");
         assertTrue(rs.next());
     }
 }

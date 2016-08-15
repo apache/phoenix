@@ -485,8 +485,6 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testAsyncCreatedDate() throws Exception {
-        //Have to delete metaData tables because BaseHBaseManagedTimeTableReuseIT doesn't delete them after each test case , and tenant list will create issues between test cases
-        //deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
         Date d0 = new Date(System.currentTimeMillis());
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

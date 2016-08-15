@@ -106,44 +106,7 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeTableReuseIT {
 
         }
     }
-    /*
-    @SuppressWarnings("deprecation")
-    @Before
-    public void createTable() throws Exception {
-        try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
-            ConnectionQueryServices services = pconn.getQueryServices();
-            HTableInterface hTable = services.getTable(Bytes.toBytes(tableName));
-            try {
-                // Insert rows using standard HBase mechanism with standard HBase "types"
-                List<Row> mutations = new ArrayList<Row>();
-                byte[] dv = Bytes.toBytes("DV");
-                byte[] first = Bytes.toBytes("F");
-                byte[] f1v1 = Bytes.toBytes("F1V1");
-                byte[] f1v2 = Bytes.toBytes("F1V2");
-                byte[] f2v1 = Bytes.toBytes("F2V1");
-                byte[] f2v2 = Bytes.toBytes("F2V2");
-                byte[] key = Bytes.toBytes("entry1");
-    
-                Put put = new Put(key);
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
-                put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
-                put.add(FAMILY_NAME_A, f1v1, Bytes.toBytes("f1value1"));
-                put.add(FAMILY_NAME_A, f1v2, Bytes.toBytes("f1value2"));
-                put.add(FAMILY_NAME_B, f2v1, Bytes.toBytes("f2value1"));
-                put.add(FAMILY_NAME_B, f2v2, Bytes.toBytes("f2value2"));
-                mutations.add(put);
-    
-                hTable.batch(mutations);
-    
-                // Create Phoenix table after HBase table was created through the native APIs
-                // The timestamp of the table creation must be later than the timestamp of the data
-                ensureTableCreated(getUrl(), tableName, HBASE_DYNAMIC_COLUMNS);
-            } finally {
-                hTable.close();
-            }
-        }
-    }
-*/
+
     /**
      * Test a simple select with a dynamic Column
      */

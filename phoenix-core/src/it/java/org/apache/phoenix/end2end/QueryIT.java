@@ -122,7 +122,7 @@ public class QueryIT extends BaseQueryIT {
         assertFalse(rs.next());
         conn.close();
     }
-
+    
     @Test
     public void testEmptyStringValue() throws Exception {
         testNoStringValue("");
@@ -148,7 +148,7 @@ public class QueryIT extends BaseQueryIT {
         }
     }
 
-
+    
     @Test
     public void testColumnOnBothSides() throws Exception {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and a_string = b_string";
@@ -180,12 +180,12 @@ public class QueryIT extends BaseQueryIT {
         stmt.setString(3, value);
         stmt.execute(); // should commit too
         upsertConn.close();
-
+        
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         analyzeTable(conn1, "ATABLE");
         conn1.close();
-
+        
         String query = "SELECT a_string, b_string FROM aTable WHERE organization_id=? and a_integer = 5";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -207,7 +207,7 @@ public class QueryIT extends BaseQueryIT {
     public void testNullStringValue() throws Exception {
         testNoStringValue(null);
     }
-
+    
     @Test
     public void testDateInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE a_date IN (?,?) AND a_integer < 4";
@@ -226,10 +226,10 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testTimestamp() throws Exception {
-        String updateStmt =
+        String updateStmt = 
             "upsert into " +
             "ATABLE(" +
             "    ORGANIZATION_ID, " +
@@ -248,13 +248,13 @@ public class QueryIT extends BaseQueryIT {
         byte[] ts1 = PTimestamp.INSTANCE.toBytes(tsValue1);
         stmt.setTimestamp(3, tsValue1);
         stmt.execute();
-
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 15);
+        
+        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 15);       
         Connection conn1 = DriverManager.getConnection(url, props);
         analyzeTable(conn1, "ATABLE");
         conn1.close();
-
-        updateStmt =
+        
+        updateStmt = 
             "upsert into " +
             "ATABLE(" +
             "    ORGANIZATION_ID, " +
@@ -272,7 +272,7 @@ public class QueryIT extends BaseQueryIT {
         stmt.setTime(4, new Time(tsValue2.getTime()));
         stmt.execute();
         upsertConn.close();
-
+        
         assertTrue(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts2), new ImmutableBytesWritable(ts1)));
         assertFalse(compare(CompareOp.GREATER, new ImmutableBytesWritable(ts1), new ImmutableBytesWritable(ts1)));
 
@@ -293,7 +293,7 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testSimpleInListStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_integer IN (2,4)";
@@ -309,7 +309,7 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testPartiallyQualifiedRVCInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE (a_integer,a_string) IN ((2,'a'),(5,'b'))";
@@ -324,7 +324,7 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testFullyQualifiedRVCInList() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE (a_integer,a_string, organization_id,entity_id) IN ((2,'a',:1,:2),(5,'b',:1,:3))";
@@ -342,7 +342,7 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testOneInListStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND b_string IN (?)";
@@ -366,7 +366,7 @@ public class QueryIT extends BaseQueryIT {
         }
     }
 
-
+    
     @Test
     public void testMixedTypeInListStatement() throws Exception {
         String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_long IN (5, ?)";
@@ -388,7 +388,7 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testIsNull() throws Exception {
         String query = "SELECT entity_id FROM aTable WHERE X_DECIMAL is null";
@@ -436,12 +436,12 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testValidStringConcatExpression() throws Exception {//test fails with stack overflow wee
         int counter=0;
         String[] answers = new String[]{"00D300000000XHP5bar","a5bar","15bar","5bar","5bar"};
-        String[] queries = new String[] {
+        String[] queries = new String[] { 
         		"SELECT  organization_id || 5 || 'bar' FROM atable limit 1",
         		"SELECT a_string || 5 || 'bar' FROM atable  order by a_string  limit 1",
         		"SELECT a_integer||5||'bar' FROM atable order by a_integer  limit 1",
@@ -465,7 +465,7 @@ public class QueryIT extends BaseQueryIT {
         	}
         }
     }
-
+    
     @Test
     public void testRowKeySingleIn() throws Exception {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and entity_id IN (?,?,?)";
@@ -490,8 +490,8 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
-
+    
+    
     @Test
     public void testRowKeyMultiIn() throws Exception {
         String query = "SELECT entity_id FROM aTable WHERE organization_id=? and entity_id IN (?,?,?) and a_string IN (?,?)";
@@ -516,7 +516,7 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
-
+    
     @Test
     public void testColumnAliasMapping() throws Exception {
         String query = "SELECT a.a_string, aTable.b_string FROM aTable a WHERE ?=organization_id and 5=a_integer ORDER BY a_string, b_string";
