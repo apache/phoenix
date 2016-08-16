@@ -161,7 +161,7 @@ public class LiteralResultIteratorPlanTest {
         }
 
         return new LiteralResultIterationPlan(tuples, CONTEXT, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF,
-                RowProjector.EMPTY_PROJECTOR, limit, offset, OrderBy.EMPTY_ORDER_BY, null);
+                RowProjector.EMPTY_PROJECTOR, (SelectStatement.SELECT_ONE.getCursorName() == null ? null : SelectStatement.SELECT_ONE.getCursorName().getName()), limit, offset, OrderBy.EMPTY_ORDER_BY, null);
     }
 
     private TableRef createProjectedTableFromLiterals(Object[] row) {

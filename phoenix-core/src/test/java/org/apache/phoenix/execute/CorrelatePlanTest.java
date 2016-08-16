@@ -207,7 +207,7 @@ public class CorrelatePlanTest {
         Expression columnExpr = new ColumnRef(rightTable, rightCorrelColumn).newColumnExpression();
         Expression fieldAccess = new CorrelateVariableFieldAccessExpression(runtimeContext, varName, new ColumnRef(leftTable, leftCorrelColumn).newColumnExpression());
         Expression filter = ComparisonExpression.create(CompareOp.EQUAL, Arrays.asList(columnExpr, fieldAccess), CONTEXT.getTempPtr(), false);
-        rightPlan = new ClientScanPlan(CONTEXT, SelectStatement.SELECT_ONE, rightTable, RowProjector.EMPTY_PROJECTOR,
+        rightPlan = new ClientScanPlan(CONTEXT, SelectStatement.SELECT_ONE, rightTable, RowProjector.EMPTY_PROJECTOR, (SelectStatement.SELECT_ONE.getCursorName() == null ? null : SelectStatement.SELECT_ONE.getCursorName().getName()),
                 null, null, filter, OrderBy.EMPTY_ORDER_BY, rightPlan);
         PTable joinedTable = JoinCompiler.joinProjectedTables(leftTable.getTable(), rightTable.getTable(), type);
         CorrelatePlan correlatePlan = new CorrelatePlan(leftPlan, rightPlan, varName, type, false, runtimeContext, joinedTable, leftTable.getTable(), rightTable.getTable(), leftTable.getTable().getColumns().size());
@@ -238,7 +238,7 @@ public class CorrelatePlanTest {
         }
         
         return new LiteralResultIterationPlan(tuples, CONTEXT, SelectStatement.SELECT_ONE, TableRef.EMPTY_TABLE_REF,
-                RowProjector.EMPTY_PROJECTOR, null, offset, OrderBy.EMPTY_ORDER_BY, null);
+                RowProjector.EMPTY_PROJECTOR, (SelectStatement.SELECT_ONE.getCursorName() == null ? null : SelectStatement.SELECT_ONE.getCursorName().getName()), null, offset, OrderBy.EMPTY_ORDER_BY, null);
     }
 
 
