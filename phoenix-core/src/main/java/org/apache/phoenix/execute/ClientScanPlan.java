@@ -44,9 +44,9 @@ import com.google.common.collect.Lists;
 public class ClientScanPlan extends ClientProcessingPlan {
 
     public ClientScanPlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, Expression where, OrderBy orderBy,
+            RowProjector projector, String cursorName, Integer limit, Integer offset, Expression where, OrderBy orderBy,
             QueryPlan delegate) {
-        super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
+        super(context, statement, table, projector, cursorName, limit, offset, where, orderBy, delegate);
     }
 
     @Override

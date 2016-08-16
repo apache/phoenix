@@ -191,6 +191,11 @@ public class ListJarsQueryPlan implements QueryPlan {
     public RowProjector getProjector() {
         return JARS_PROJECTOR;
     }
+	
+	@Override
+    public String getCursorName() {
+        return null;
+    }
 
     @Override
     public Integer getLimit() {

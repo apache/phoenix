@@ -60,16 +60,18 @@ public class UnionPlan implements QueryPlan {
     private final Integer offset;
     private final GroupBy groupBy;
     private final RowProjector projector;
+    private final String cursorName;
     private final boolean isDegenerate;
     private final List<QueryPlan> plans;
     private UnionResultIterators iterators;
 
-    public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
+    public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, String cursorName,
             Integer limit, Integer offset, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) throws SQLException {
         this.parentContext = context;
         this.statement = statement;
         this.tableRef = table;
         this.projector = projector;
+        this.cursorName = cursorName;
         this.limit = limit;
         this.orderBy = orderBy;
         this.groupBy = groupBy;
@@ -133,6 +135,11 @@ public class UnionPlan implements QueryPlan {
     @Override
     public RowProjector getProjector() {
         return projector;
+    }
+	
+	@Override
+    public String getCursorName() {
+        return cursorName;
     }
 
     @Override

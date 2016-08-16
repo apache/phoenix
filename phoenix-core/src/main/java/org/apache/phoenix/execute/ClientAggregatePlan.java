@@ -71,9 +71,9 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     private final Aggregators serverAggregators;
     private final Aggregators clientAggregators;
     
-    public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
+    public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, String cursorName,
             Integer limit, Integer offset, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
-        super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
+        super(context, statement, table, projector, cursorName, limit, offset, where, orderBy, delegate);
         this.groupBy = groupBy;
         this.having = having;
         this.serverAggregators =

@@ -85,17 +85,17 @@ public class AggregatePlan extends BaseQueryPlan {
     
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
+            RowProjector projector, String cursorName, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having) {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
+        this(context, statement, table, projector, cursorName, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
                 null);
     }
 
     private AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
+            RowProjector projector, String cursorName, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having,
             Expression dynamicFilter) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, offset,
+        super(context, statement, table, projector, cursorName, context.getBindManager().getParameterMetaData(), limit, offset,
                 orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();

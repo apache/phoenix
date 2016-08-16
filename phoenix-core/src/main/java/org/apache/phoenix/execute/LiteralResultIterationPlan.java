@@ -42,16 +42,16 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
     protected final Iterable<Tuple> tuples;
 
     public LiteralResultIterationPlan(StatementContext context, 
-            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
+            FilterableStatement statement, TableRef tableRef, RowProjector projection, String cursorName,
             Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
         this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)), 
-                context, statement, tableRef, projection, limit, offset, orderBy, parallelIteratorFactory);
+                context, statement, tableRef, projection, cursorName, limit, offset, orderBy, parallelIteratorFactory);
     }
 
     public LiteralResultIterationPlan(Iterable<Tuple> tuples, StatementContext context, 
-            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
+            FilterableStatement statement, TableRef tableRef, RowProjector projection, String cursorName,
             Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
-        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
+        super(context, statement, tableRef, projection, cursorName, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
         this.tuples = tuples;
     }
 
