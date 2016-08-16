@@ -27,6 +27,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -76,6 +77,9 @@ public class ClientScanPlan extends ClientProcessingPlan {
         
         if (context.getSequenceManager().getSequenceCount() > 0) {
             iterator = new SequenceResultIterator(iterator, context.getSequenceManager());
+        }
+        if (cursorName != null){
+            iterator = new CursorResultIterator(iterator, cursorName);
         }
         
         return iterator;

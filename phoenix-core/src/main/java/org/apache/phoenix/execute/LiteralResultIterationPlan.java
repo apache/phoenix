@@ -28,6 +28,7 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -107,7 +108,11 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
         if (context.getSequenceManager().getSequenceCount() > 0) {
             scanner = new SequenceResultIterator(scanner, context.getSequenceManager());
         }
-        
+
+        if (cursorName != null){
+            scanner = new CursorResultIterator(scanner, cursorName);
+        }
+
         return scanner;
     }
 }

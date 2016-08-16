@@ -33,6 +33,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ConcatResultIterator;
+import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -172,6 +173,9 @@ public class UnionPlan implements QueryPlan {
                 scanner = new LimitingResultIterator(scanner, limit);
             }          
         }
+        if (cursorName != null) {
+                scanner = new CursorResultIterator(scanner, cursorName);
+            }
         return scanner;
     }
 

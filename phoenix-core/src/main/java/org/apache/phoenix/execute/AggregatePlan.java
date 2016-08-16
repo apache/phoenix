@@ -38,6 +38,7 @@ import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.iterate.AggregatingResultIterator;
 import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ConcatResultIterator;
+import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.DistinctAggregatingResultIterator;
 import org.apache.phoenix.iterate.FilterAggregatingResultIterator;
 import org.apache.phoenix.iterate.GroupedAggregatingResultIterator;
@@ -257,6 +258,10 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
+        }
+
+        if (cursorName != null) {
+            resultScanner = new CursorResultIterator(resultScanner, cursorName);
         }
         return resultScanner;
     }
