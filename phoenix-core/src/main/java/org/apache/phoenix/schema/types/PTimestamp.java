@@ -174,7 +174,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         if (equalsAny(rhsType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE)) {
             return ((java.sql.Timestamp) lhs).compareTo((java.sql.Timestamp) rhs);
         }
-        int c = ((java.util.Date) rhs).compareTo((java.util.Date) lhs);
+        int c = ((java.util.Date) lhs).compareTo((java.util.Date) rhs);
         if (c != 0) return c;
         return ((java.sql.Timestamp) lhs).getNanos();
     }
