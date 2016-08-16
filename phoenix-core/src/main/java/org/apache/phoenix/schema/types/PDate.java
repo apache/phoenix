@@ -129,7 +129,7 @@ public class PDate extends PDataType<Date> {
     if (rhsType == PTimestamp.INSTANCE || rhsType == PUnsignedTimestamp.INSTANCE) {
       return -rhsType.compareTo(rhs, lhs, PTime.INSTANCE);
     }
-    return ((java.util.Date) rhs).compareTo((java.util.Date) lhs);
+    return ((java.util.Date) lhs).compareTo((java.util.Date) rhs);
   }
 
   @Override
