@@ -732,4 +732,48 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(new java.util.Date().getYear(),rs.getTimestamp(2).getYear());
     }
+    
+    @Test
+    public void testLiteralDateComparison() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select DATE '2016-05-10 00:00:00' > DATE '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testLiteralTimestampComparison() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select TIMESTAMP '2016-05-10 00:00:00' > TIMESTAMP '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testLiteralDateTimestampComparison() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select DATE '2016-05-10 00:00:00' > TIMESTAMP '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testLiteralDateTimestampComparison2() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select TIMESTAMP '2016-05-10 00:00:00' > DATE '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
 }
