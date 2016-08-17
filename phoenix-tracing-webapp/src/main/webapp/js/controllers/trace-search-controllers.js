@@ -9,7 +9,8 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
   $scope.tracesLimit = 100;
   $scope.letterLimit = 100;
   $scope.page = {
-    alertType: 'alert-info'
+    alertType: 'alert-info',
+    timelineAlertType: 'alert-info'
   };
   $scope.rootId = "";
   var sqlQuery = null;
@@ -70,6 +71,7 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
 
   //getting TimeLine chart with data
   function getTimeLineChart(data) {
+    $scope.timelineStatus = "Retriving data from Phoenix.";
     var currentData = data;
     var minTimeGap = GenerateTimelineService.getMinTimeGap(currentData);
     var mulTime = 1;
@@ -116,9 +118,15 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
         "v": startDateTime
       }]
       timeLine.data.rows[mockindex] = {"c": mockdatamodel};
+      $scope.page.timelineAlertType = 'alert-warning';
+      $scope.timelineStatus = "Duration time of the traces are zero and all have same start time."
+      +"Therefore Timeline is not rendered";
+      return null;
     }
     timeLine.data.cols = GenerateTimelineService.getTimeLineProperties();
     timeLine.data.options = GenerateTimelineService.getTimeLineOptions();
+    $scope.page.timelineAlertType = 'alert-success';
+    $scope.timelineStatus = "Data retrieved and Timeline Rendered.";
     return timeLine;
   };
 
@@ -186,6 +194,8 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
   }
 
   $scope.cleanTimeline = function() {
+    $scope.page.timelineAlertType = 'alert-success';
+    $scope.timelineStatus = "Timeline is cleaned.";
     var nextid = $scope.chartObject.data.rows.length;
     $scope.chartObject.data.rows.splice(0, nextid);
   }

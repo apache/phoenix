@@ -55,6 +55,7 @@
 <script type="text/ng-template" id="two.tpl.html">
   <div id="timeline">
   <h1>TimeLine</h1>
+  <div class="alert {{page.timelineAlertType}}" role="alert">{{timelineStatus}}</div>
   <div google-chart chart="chartObject" style="height: 100%;"></div>
   </div>
 </script>
