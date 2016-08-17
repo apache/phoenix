@@ -485,19 +485,39 @@ public class PhoenixRuntime {
         }
         PColumn pColumn = null;
         if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
-            String[] tokens = columnName.split(QueryConstants.NAME_SEPARATOR_REGEX);
-            if (tokens.length!=2) {
-                throw new SQLException(String.format("Unable to process column %s, expected family-qualified name.",columnName));
-            }
+            String[] tokens = getColumnParts(columnName,QueryConstants.NAME_SEPARATOR_REGEX);
             String familyName = tokens[0];
             String familyColumn = tokens[1];
             PColumnFamily family = table.getColumnFamily(familyName);
             pColumn = family.getColumn(familyColumn);
+        } else if (columnName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+            //now the column is defined as a dynamic column, we create a ColumnInfo for that column
+            String[] tokens = getColumnParts(columnName, QueryConstants.NAMESPACE_SEPARATOR);
+            String dataType = tokens[1];
+            //add DataType to make sure it will be used in prepareStatement
+            String colName = SchemaUtil.ESCAPE_CHARACTER + tokens[0] + SchemaUtil.ESCAPE_CHARACTER +
+                    " " + SchemaUtil.ESCAPE_CHARACTER + dataType + SchemaUtil.ESCAPE_CHARACTER;
+            return new ColumnInfo(colName,PDataType.fromSqlTypeName(dataType).getSqlType());
         } else {
             pColumn = table.getColumn(columnName);
         }
         return getColumnInfo(pColumn);
     }
+
+    /**
+     * Gets column parts info by supplying a constant for split
+     * @param columnName
+     * @return
+     * @throws SQLException
+     */
+    private static String[] getColumnParts(String columnName,String splitPattern) throws SQLException {
+        String[] tokens = columnName.split(splitPattern);//QueryConstants.NAME_SEPARATOR_REGEX);
+        if (tokens.length != 2) {
+            throw new SQLException(String.format("Unable to process column %s, expected family-qualified name.", columnName));
+        }
+        return tokens;
+    }
+
 
     /**
      * Constructs a column info for the supplied pColumn

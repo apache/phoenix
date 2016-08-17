@@ -271,6 +271,63 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
+
+  test("Can save dynamic column to phoenix table") {
+    val sqlContext = new SQLContext(sc)
+
+    //per data set has 4 columns
+    val dataSet = List((1L, "1", 1, 1), (2L, "2", 2, 2), (3L, "3", 3, 3))
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        "OUTPUT_TEST_TABLE",
+        Seq("ID", "COL1", "COL2", "COL4:INTEGER"),
+        hbaseConfiguration
+      )
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT ID, COL1, COL2, COL4 FROM OUTPUT_TEST_TABLE(COL4 INTEGER)")
+    val results = ListBuffer[(Long, String, Int, Int)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getString(2), rs.getInt(3), rs.getInt(4)))
+    }
+
+    // Verify they match
+    (0 to results.size - 1).foreach { i =>
+      dataSet(i) shouldEqual results(i)
+    }
+  }
+
+  test("Save dynamic column is not affecting loading from all") {
+    val sqlContext = new SQLContext(sc)
+
+    //per data set has 4 columns
+    val dataSet = List((1L, "1", 1, 1), (2L, "2", 2, 2), (3L, "3", 3, 3))
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        "OUTPUT_TEST_TABLE",
+        Seq("ID", "COL1", "COL2", "COL5:INTEGER"),
+        hbaseConfiguration
+      )
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT * FROM OUTPUT_TEST_TABLE(COL5 INTEGER)")
+    val results = ListBuffer[(Long, String, Int, Int)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getString(2), rs.getInt(3), rs.getInt(5)))
+    }
+
+    // Verify they match
+    (0 to results.size - 1).foreach { i =>
+      dataSet(i) shouldEqual results(i)
+    }
+  }
+
   test("Can save Java and Joda dates to Phoenix (no config)") {
     val dt = new DateTime()
     val date = new Date()
