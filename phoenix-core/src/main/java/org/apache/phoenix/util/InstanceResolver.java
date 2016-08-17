@@ -19,6 +19,8 @@ package org.apache.phoenix.util;
 
 import org.apache.commons.collections.IteratorUtils;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceLoader;
@@ -84,5 +86,10 @@ public class InstanceResolver {
             return singleton;
         }
         return defaultInstance;
+    }
+
+    @VisibleForTesting
+    public static void clearSingletons() {
+        RESOLVED_SINGLETONS.clear();
     }
 }
