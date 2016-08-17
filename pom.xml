@@ -322,6 +322,12 @@
           <artifactId>maven-shade-plugin</artifactId>
           <version>2.4.3</version>
         </plugin>
+        <plugin>
+          <!-- Allows us to get the apache-ds bundle artifacts -->
+          <groupId>org.apache.felix</groupId>
+          <artifactId>maven-bundle-plugin</artifactId>
+          <version>2.5.3</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -448,6 +454,13 @@
             <exclude>**/patchprocess/**</exclude>
           </excludes>
         </configuration>
+      </plugin>
+      <plugin>
+        <!-- Allows us to get the apache-ds bundle artifacts -->
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <extensions>true</extensions>
+        <inherited>true</inherited>
       </plugin>
     </plugins>
   </build>
@@ -619,6 +632,11 @@
         <version>${hadoop-two.version}</version>
         <type>test-jar</type> <!-- this does not work which is typical for maven.-->
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop-two.version}</version>
       </dependency>
 
       <!-- General Dependencies -->

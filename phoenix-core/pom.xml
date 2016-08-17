@@ -456,6 +456,11 @@
       <artifactId>hadoop-minicluster</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-minikdc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
         <groupId>org.jruby.joni</groupId>
         <artifactId>joni</artifactId>
         <version>${joni.version}</version>
