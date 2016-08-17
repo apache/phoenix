@@ -88,7 +88,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
-import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -366,22 +365,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private void openConnection() throws SQLException {
         try {
-            // check if we need to authenticate with kerberos
-            String clientKeytab = this.getProps().get(HBASE_CLIENT_KEYTAB);
-            String clientPrincipal = this.getProps().get(HBASE_CLIENT_PRINCIPAL);
-            if (clientKeytab != null && clientPrincipal != null) {
-                logger.info("Trying to connect to a secure cluster with keytab:" + clientKeytab);
-                UserGroupInformation.setConfiguration(config);
-                User.login(config, HBASE_CLIENT_KEYTAB, HBASE_CLIENT_PRINCIPAL, null);
-                logger.info("Successfull login to secure cluster!!");
+            boolean transactionsEnabled = props.getBoolean(
+                    QueryServices.TRANSACTIONS_ENABLED,
+                    QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
+            // only initialize the tx service client if needed
+            if (transactionsEnabled) {
+                initTxServiceClient();
             }
-			boolean transactionsEnabled = props.getBoolean(
-					QueryServices.TRANSACTIONS_ENABLED,
-					QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
-			// only initialize the tx service client if needed
-			if (transactionsEnabled) {
-				initTxServiceClient();
-			}
             this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
