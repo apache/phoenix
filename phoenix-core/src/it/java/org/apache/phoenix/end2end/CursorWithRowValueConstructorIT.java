@@ -35,8 +35,9 @@ import static org.junit.Assert.*;
 
 
 public class CursorWithRowValueConstructorIT extends BaseClientManagedTimeIT {
-    private static final String TABLE_NAME = "CursorRVCTestTable";
-    protected static final Log LOG = LogFactory.getLog(CursorWithRowValueConstructorIT.class);
+    private final String TABLE_NAME = "CursorRVCTestTable";
+    private final String TIMESTAMP_TABLE_NAME = "TimestampedTestTable";
+    protected final Log LOG = LogFactory.getLog(CursorWithRowValueConstructorIT.class);
 
     public void createAndInitializeTestTable() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
@@ -72,6 +73,105 @@ public class CursorWithRowValueConstructorIT extends BaseClientManagedTimeIT {
         stmt.execute();
         synchronized (conn){
             conn.commit();
+        }
+    }
+
+    public void createAndInitializeTimestampedTable() throws SQLException{
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + TIMESTAMP_TABLE_NAME +
+                "(a_id INTEGER NOT NULL, " +
+                "a_date DATE NOT NULL, " +
+                "CONSTRAINT my_pk PRIMARY KEY (a_id, a_date ROW_TIMESTAMP))");
+        stmt.execute();
+        synchronized (conn){
+            conn.commit();
+        }
+
+        //Upsert test value into the test table
+        conn.prepareStatement("UPSERT INTO " + TIMESTAMP_TABLE_NAME +
+                "(a_id) VALUES (0)").execute();
+        synchronized (conn){
+            conn.commit();
+        }
+    }
+
+    public void deleteTimestampedTable() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        PreparedStatement stmt = conn.prepareStatement("DROP TABLE IF EXISTS " + TIMESTAMP_TABLE_NAME);
+        stmt.execute();
+        synchronized (conn){
+            conn.commit();
+        }
+    }
+
+    @Test
+    public void testCursorsWithStaticOption() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        createAndInitializeTimestampedTable();
+        try{
+            String querySQL = "SELECT a_id FROM " + TIMESTAMP_TABLE_NAME;
+
+            String cursorSQL = "DECLARE testCursor CURSOR STATIC FOR " + querySQL;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "OPEN testCursor";
+            conn.prepareStatement(cursorSQL).execute();
+
+            //Upsert new value into table after opening cursor
+            conn.prepareStatement("UPSERT INTO " + TIMESTAMP_TABLE_NAME +
+                    "(a_id) VALUES (1)").execute();
+            synchronized (conn){
+                conn.commit();
+            }
+
+            cursorSQL = "FETCH NEXT FROM testCursor";
+            ResultSet rs = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+            int rowID = 0;
+            while(rs.next()){
+                assertEquals(rowID, rs.getInt(1));
+                ++rowID;
+                rs = conn.prepareStatement(cursorSQL).executeQuery();
+            }
+            assertEquals(1, rowID);
+        } finally{
+            DriverManager.getConnection(getUrl()).prepareStatement("CLOSE testCursor").execute();
+            deleteTimestampedTable();
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testCursorsOverwriteWithStaticOption() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        createAndInitializeTimestampedTable();
+        try{
+            String querySQL = "SELECT a_id FROM " + TIMESTAMP_TABLE_NAME;
+
+            String cursorSQL = "DECLARE testCursor CURSOR STATIC FOR " + querySQL;
+            conn.prepareStatement(cursorSQL).execute();
+            cursorSQL = "OPEN testCursor";
+            conn.prepareStatement(cursorSQL).execute();
+
+            //"Update" value in table after opening cursor
+            conn.prepareStatement("UPSERT INTO " + TIMESTAMP_TABLE_NAME +
+                    "(a_id) VALUES (0)").execute();
+            synchronized (conn){
+                conn.commit();
+            }
+
+            cursorSQL = "FETCH NEXT FROM testCursor";
+            ResultSet rs = DriverManager.getConnection(getUrl()).prepareStatement(cursorSQL).executeQuery();
+            int rowID = 0;
+            while(rs.next()){
+                assertEquals(rowID, rs.getInt(1));
+                ++rowID;
+                rs = conn.prepareStatement(cursorSQL).executeQuery();
+            }
+            assertEquals(1, rowID);
+        } finally{
+            DriverManager.getConnection(getUrl()).prepareStatement("CLOSE testCursor").execute();
+            deleteTimestampedTable();
+            conn.close();
         }
     }
 

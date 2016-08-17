@@ -27,6 +27,7 @@ import org.apache.phoenix.expression.function.FunctionArgumentType;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.*;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.schema.tuple.Tuple;
 
@@ -37,6 +38,7 @@ import java.util.*;
 public final class CursorUtil {
 
     private static class CursorWrapper {
+        private final boolean isCursorStatic;
         private final int fetchSize = 1;
         private final List<String> listSelectColNames;
         private final String cursorName;
@@ -62,24 +64,44 @@ public final class CursorUtil {
         private boolean selectHasPKCol = false;
 
         private CursorWrapper(String cursorName, String selectSQL, List<OrderByNode> orderBy){
+            this(cursorName, selectSQL, orderBy, false);
+        }
+
+        private CursorWrapper(String cursorName, String selectSQL, List<OrderByNode> orderBy, boolean isCursorStatic){
             this.cursorName = cursorName;
             this.orderBy = orderBy;
             this.selectSQL = selectSQL;
             this.listSelectColNames = new ArrayList<String>(java.util.Arrays.asList(selectSQL
                     .substring(selectSQL.indexOf("SELECT") + 7, selectSQL.indexOf("FROM")).trim()
                     .replaceAll("[()]", "").toUpperCase().split(",")));
+            this.isCursorStatic = isCursorStatic;
         }
 
         private synchronized void openCursor(Connection conn) throws SQLException {
             if(isOpen){
                 return;
             }
-            QueryPlan plan = conn.prepareStatement(selectSQL).unwrap(PhoenixPreparedStatement.class).compileQuery();
-            List<String> listPKColNames = new ArrayList<String>(Arrays.asList(plan.getTableRef().getTable()
-                    .getPKColumns().toString().replaceAll("[\\[ \\]]", "").toUpperCase().split(",")));
             StringBuilder whereBuilder = new StringBuilder(" WHERE (");
             StringBuilder orderByBuilder = new StringBuilder(" ORDER BY ");
             StringBuilder selectBuilder = new StringBuilder(listSelectColNames.toString().replaceAll("[\\[ \\]]", ""));
+
+            QueryPlan plan = conn.prepareStatement(selectSQL).unwrap(PhoenixPreparedStatement.class).compileQuery();
+            PTable table = plan.getTableRef().getTable();
+            //Process static cursor option
+            if(isCursorStatic){
+                int columnIndex = table.getRowTimestampColPos();
+                if(columnIndex == -1) throw new SQLException("Cursor " + cursorName + " declared as STATIC, " +
+                        "but target table does not contain a ROW_TIMESTAMP column!");
+
+                String columnName = table.getColumns().get(columnIndex).getName().getString();
+                whereBuilder.append(columnName).append(") <= (");
+                String timestampFilter = "TO_DATE('"+DateUtil.getDateFormatter(DateUtil.DEFAULT_DATE_FORMAT).format(new java.sql.Date(System.currentTimeMillis()))+"')";
+                whereBuilder.append(timestampFilter).append(") AND (");
+            }
+
+            List<String> listPKColNames = new ArrayList<String>(Arrays.asList(table.getPKColumns().toString().replaceAll("[\\[ \\]]", "").toUpperCase().split(",")));
+
+            //Process ORDER BY expressions in the internal select statement
             boolean isPriorAsc = true;
             int lhsLength = 0;
             int colBinding = 0;
@@ -98,7 +120,7 @@ public final class CursorUtil {
                             whereBuilder.append(") ?< (");
                         }
                         while(lhsLength > 0){
-                            whereBuilder.append(":").append(Integer.toString(colBinding-lhsLength));
+                            whereBuilder.append("::").append(Integer.toString(colBinding-lhsLength));
                             if(lhsLength > 1){
                                 whereBuilder.append(',');
                             } else{
@@ -161,7 +183,7 @@ public final class CursorUtil {
                         whereBuilder.append(") ?< (");
                     }
                     while(lhsLength > 0){
-                        whereBuilder.append(":").append(Integer.toString(colBinding-lhsLength));
+                        whereBuilder.append("::").append(Integer.toString(colBinding-lhsLength));
                         if(lhsLength > 1){
                             whereBuilder.append(',');
                         } else{
@@ -195,7 +217,7 @@ public final class CursorUtil {
             }
             if(lhsLength>0) whereBuilder.append(") ?> (");
             while(lhsLength>0){
-                whereBuilder.append(":").append(colBinding-lhsLength);
+                whereBuilder.append("::").append(colBinding-lhsLength);
                 if(lhsLength > 1){
                     whereBuilder.append(',');
                 } else{
@@ -247,11 +269,11 @@ public final class CursorUtil {
                     PDataType type = projector.getExpression().getDataType();
                     Object value = projector.getValue(currentRow, type, new ImmutableBytesPtr());
                     if(value == null){
-                        whereExpressionNext = whereExpressionNext.replaceFirst(":"+Integer.toString(colBinding),"NULL");
-                        whereExpressionPrior = whereExpressionPrior.replaceFirst(":"+Integer.toString(colBinding),"NULL");
+                        whereExpressionNext = whereExpressionNext.replaceFirst("::"+Integer.toString(colBinding),"NULL");
+                        whereExpressionPrior = whereExpressionPrior.replaceFirst("::"+Integer.toString(colBinding),"NULL");
                     } else{
-                        whereExpressionNext = whereExpressionNext.replaceFirst(":"+Integer.toString(colBinding),formatString(value, type));
-                        whereExpressionPrior = whereExpressionPrior.replaceFirst(":"+Integer.toString(colBinding),formatString(value, type));
+                        whereExpressionNext = whereExpressionNext.replaceFirst("::"+Integer.toString(colBinding),formatString(value, type));
+                        whereExpressionPrior = whereExpressionPrior.replaceFirst("::"+Integer.toString(colBinding),formatString(value, type));
                     }
                     ++colBinding;
                 }
@@ -302,7 +324,7 @@ public final class CursorUtil {
         if(mapCursorIDQuery.containsKey(stmt.getCursorName())){
             throw new SQLException("Can't declare cursor " + stmt.getCursorName() + ", cursor identifier already in use.");
         } else {
-            mapCursorIDQuery.put(stmt.getCursorName(), new CursorWrapper(stmt.getCursorName(), stmt.getQuerySQL(), stmt.getSelectOrderBy()));
+            mapCursorIDQuery.put(stmt.getCursorName(), new CursorWrapper(stmt.getCursorName(), stmt.getQuerySQL(), stmt.getSelectOrderBy(), stmt.isCursorStatic()));
             return true;
         }
     }

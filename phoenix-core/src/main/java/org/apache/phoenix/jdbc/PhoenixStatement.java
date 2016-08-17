@@ -728,8 +728,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
 
     private static class ExecutableDeclareCursorStatement extends DeclareCursorStatement implements CompilableStatement {
-        public ExecutableDeclareCursorStatement(CursorName cursor, SelectStatement select){
-            super(cursor, select);
+        public ExecutableDeclareCursorStatement(CursorName cursor, SelectStatement select, boolean isStatic){
+            super(cursor, select, isStatic);
         }
 
         @Override
@@ -1174,8 +1174,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
 
         @Override
-        public ExecutableDeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select){
-            return new ExecutableDeclareCursorStatement(cursor, select);
+        public ExecutableDeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select, boolean isStatic){
+            return new ExecutableDeclareCursorStatement(cursor, select, isStatic);
         }
 
         @Override

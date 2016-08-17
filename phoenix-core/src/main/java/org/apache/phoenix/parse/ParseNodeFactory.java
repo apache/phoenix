@@ -700,8 +700,8 @@ public class ParseNodeFactory {
         return new CursorName(name);
     }
 
-    public DeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select){
-        return new DeclareCursorStatement(cursor, select);
+    public DeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select, boolean isStatic){
+        return new DeclareCursorStatement(cursor, select, isStatic);
     }
 
     public FetchStatement fetch(CursorName cursor, boolean isNext){

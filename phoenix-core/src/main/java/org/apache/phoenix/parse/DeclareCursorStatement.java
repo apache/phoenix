@@ -26,12 +26,14 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import java.util.*;
 
 public class DeclareCursorStatement implements BindableStatement {
+    private final boolean isStatic;
     private final CursorName cursorName;
     private final SelectStatement select;
 
-    public DeclareCursorStatement(CursorName cursorName, SelectStatement select){
+    public DeclareCursorStatement(CursorName cursorName, SelectStatement select, boolean isStatic){
         this.cursorName = cursorName;
         this.select = select;
+        this.isStatic = isStatic;
     }
 
     public String getCursorName(){
@@ -39,17 +41,12 @@ public class DeclareCursorStatement implements BindableStatement {
     }
 
     public String getQuerySQL(){
-        //Check if there are parameters to bind.
-        if(select.getBindCount() > 0){
-
-        }
-        //TODO: Test if this works
         return select.toString();
     }
 
-    //public SelectStatement getSelect(){
-    //return select;
-    //}
+    public boolean isCursorStatic(){
+        return isStatic;
+    }
 
     public List<OrderByNode> getSelectOrderBy() {
         return select.getOrderBy();

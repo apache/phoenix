@@ -138,6 +138,7 @@ tokens
     ROW = 'row';
     ROWS = 'rows';
     ONLY = 'only';
+    STATIC = 'static';
 }
 
 
@@ -726,8 +727,11 @@ upsert_column_refs returns [Pair<List<ColumnDef>,List<ColumnName>> ret]
 
 // Parse a full declare cursor expression structure.
 declare_cursor_node returns [DeclareCursorStatement ret]
-    :    DECLARE c=cursor_name CURSOR FOR s=select_node
-        {ret = factory.declareCursor(c, s); }
+@init{boolean isStatic = false;}
+    :   DECLARE c=cursor_name CURSOR
+        (STATIC {isStatic = true;})?
+        FOR s=select_node
+        {ret = factory.declareCursor(c, s, isStatic); }
     ;
 
 cursor_open_node returns [OpenStatement ret]
