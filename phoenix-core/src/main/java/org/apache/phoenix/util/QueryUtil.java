@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.util.SchemaUtil.ESCAPE_CHARACTER;
 import static org.apache.phoenix.util.SchemaUtil.getEscapedFullColumnName;
 
 import java.sql.Connection;
@@ -168,11 +169,34 @@ public final class QueryUtil {
                                     @Nullable
                                     @Override
                                     public String apply(@Nullable String columnName) {
+                                        columnName = getUpsertDynamicColumnName(columnName);
                                         return getEscapedFullColumnName(columnName);
                                     }
                                 })),
                 Joiner.on(", ").join(parameterList));
 
+    }
+
+    private static String getUpsertDynamicColumnName(String columnName) {
+        String[] tokens = columnName.replaceAll(ESCAPE_CHARACTER,"").split(QueryConstants.NAMESPACE_SEPARATOR);
+        if(tokens.length == 2){
+            return ESCAPE_CHARACTER + tokens[0].trim() + ESCAPE_CHARACTER +
+                    " " + ESCAPE_CHARACTER + tokens[1].trim() + ESCAPE_CHARACTER;
+        }
+        return columnName;
+    }
+
+    private static String getSelectDynamicColumnName(String columnName,ArrayList<String> dynamicColumns) {
+        String[] tokens = columnName.replaceAll(ESCAPE_CHARACTER,"").split(QueryConstants.NAMESPACE_SEPARATOR);
+        if(tokens.length == 2){
+            dynamicColumns.add(ESCAPE_CHARACTER + tokens[0].trim() + ESCAPE_CHARACTER +
+                    " " + ESCAPE_CHARACTER + tokens[1].trim() + ESCAPE_CHARACTER);
+            //only return the column name, the full part will be used later in select query
+            //dynamic part after TABLE phase
+            return tokens[0];
+
+        }
+        return columnName;
     }
 
     /**
@@ -211,10 +235,12 @@ public final class QueryUtil {
              throw new IllegalArgumentException("At least one column must be provided");
         }
         StringBuilder query = new StringBuilder();
+        ArrayList<String> dynamicColumns =new ArrayList<String>();
         query.append("SELECT ");
         for (ColumnInfo cinfo : columnInfos) {
             if (cinfo != null) {
-                String fullColumnName = getEscapedFullColumnName(cinfo.getColumnName());
+                String fullColumnName = getEscapedFullColumnName(
+                        getSelectDynamicColumnName(cinfo.getColumnName(),dynamicColumns));
                 query.append(fullColumnName);
                 query.append(",");
              }
@@ -223,10 +249,16 @@ public final class QueryUtil {
         query.setLength(query.length() - 1);
         query.append(" FROM ");
         query.append(fullTableName);
+        query.append(getSelectDynamicColumnDefinition(dynamicColumns));
         if(conditions != null && conditions.length() > 0) {
             query.append(" WHERE (").append(conditions).append(")");
         }
         return query.toString();
+    }
+
+    private static String getSelectDynamicColumnDefinition(ArrayList<String> dynamicColumns) {
+        if(dynamicColumns.size() <= 0) return "";
+        return "(" + Joiner.on(",").join(dynamicColumns) + ")";
     }
 
     /**

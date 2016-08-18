@@ -495,8 +495,7 @@ public class PhoenixRuntime {
             String[] tokens = getColumnParts(columnName, QueryConstants.NAMESPACE_SEPARATOR);
             String dataType = tokens[1];
             //add DataType to make sure it will be used in prepareStatement
-            String colName = SchemaUtil.ESCAPE_CHARACTER + tokens[0] + SchemaUtil.ESCAPE_CHARACTER +
-                    " " + SchemaUtil.ESCAPE_CHARACTER + dataType + SchemaUtil.ESCAPE_CHARACTER;
+            String colName = tokens[0] + ":" + dataType;
             return new ColumnInfo(colName,PDataType.fromSqlTypeName(dataType).getSqlType());
         } else {
             pColumn = table.getColumn(columnName);

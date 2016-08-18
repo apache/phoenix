@@ -300,6 +300,39 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
+  test("Can read dynamic column from phoenix table") {
+    val sqlContext = new SQLContext(sc)
+
+    //per data set has 4 columns
+    val dataSet = List((1L, "1", 2, 3), (2L, "2", 3, 4), (3L, "3", 4, 5))
+    val columnNames = Seq("ID", "COL1", "COL2", "COL5:INTEGER")
+    val targetSet = Seq(Map("ID"-> 1L,"COL1" -> "1","COL2"->2,"COL5" -> 3),
+      Map("ID"-> 2L,"COL1" -> "2","COL2"->3,"COL5" -> 4),
+      Map("ID"-> 3L,"COL1" -> "3","COL2"->4,"COL5" -> 5))
+
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        "OUTPUT_TEST_TABLE",
+        columnNames,
+        hbaseConfiguration
+      )
+
+    // Load the results back
+    val loaded = sc.phoenixTableAsRDD(
+      "OUTPUT_TEST_TABLE",columnNames,
+      conf = hbaseConfiguration
+    )
+    //verify the result
+    loaded.count() shouldEqual 3
+    val results = loaded.take(3)
+    (0 to results.size - 1).foreach{ i =>
+      targetSet(i) shouldEqual results(i)
+    }
+
+  }
+
   test("Save dynamic column is not affecting loading from all") {
     val sqlContext = new SQLContext(sc)
 
