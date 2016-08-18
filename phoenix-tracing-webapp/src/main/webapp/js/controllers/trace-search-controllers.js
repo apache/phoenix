@@ -185,17 +185,29 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
     return dependencyChart;
   };
 
+  //Controllering distribution chart
   $scope.setChartType = function(type) {
     $scope.distributionChartObject.type = type;
+  };
+
+  $scope.setChartAxis = function(type) {
+    var chartMeta = GenerateDistributionService.getMateData(type);
+    $scope.distributionChartObject.options.vAxis.title = chartMeta.vAxis;
+    $scope.distributionChartObject.options.hAxis.title = chartMeta.hAxis;
+    $scope.distributionChartObject.data.cols[1].label = chartMeta.label;
+    $scope.distributionChartObject.options.width = 1100;
+    $scope.distributionChartObject.options['chartArea'] = {left:500, width: 500};
   };
 
   $scope.setByCount = function(type) {
     $scope.clearDistChart();
     $('#distributionHeader').html('<h1> Trace Distribution By '+type+'</h1>')
     getDistData($scope.currentData, type);
+    $scope.setChartAxis(type);
   };
 
 
+  //cleaning charts
   $scope.cleanTrace = function() {
     $scope.clearTree();
     $scope.cleanTimeline();

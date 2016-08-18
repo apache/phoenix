@@ -7,24 +7,40 @@
 angular.module('TracingAppCtrl').service('GenerateDistributionService',
   function() {
     var cmodel = [];
+    var chartMetaData = {
+      'TraceCount': {
+        'vAxis': 'Description',
+        'hAxis': 'Trace Count',
+        'label': 'Trace Count'
+      },
+      'Duration': {
+        'vAxis': 'Description',
+        'hAxis': 'Total Duration (ms)',
+        'label': 'Duration (ms)'
+      },
+      'Hostname': {
+        'vAxis': 'Hostname',
+        'hAxis': 'Trace Count in Host',
+        'label': 'Trace Count'
+      }
+    };
 
     this.loadData = function(data, byData) {
       this.modelReset();
       for (var i = 0; i < data.length; i++) {
         if (byData == "TraceCount") {
-          this.countHost(data[i].description);
+          this.countDescription(data[i].description);
         } else if (byData == "Duration") {
           var localDuration = data[i].end_time - data[i].start_time;
           this.countDuration(data[i].description, localDuration);
         } else {
-          this.countDescription(data[i].hostname);
+          this.countHost(data[i].hostname);
         }
       }
-
       for (var i = 0; i < cmodel.length; i++) {
         var datax = cmodel[i];
         var datamodel = [{
-          "v": datax.hostname
+          "v": datax.label
         }, {
           "v": parseFloat(datax.count)
         }]
@@ -32,8 +48,6 @@ angular.module('TracingAppCtrl').service('GenerateDistributionService',
           "c": datamodel
         }
       }
-
-      this.setChartType('PieChart');
       return chartObject;
     };
 
@@ -45,21 +59,21 @@ angular.module('TracingAppCtrl').service('GenerateDistributionService',
       var isFound = false;
       if (cmodel.length == 0) {
         var obj = {
-          'hostname': localHostname,
+          'label': localHostname,
           'count': 1
         };
         isFound = true
         cmodel.push(obj);
       } else {
         for (var i = 0; i < cmodel.length; i++) {
-          if (cmodel[i].hostname == localHostname) {
+          if (cmodel[i].label == localHostname) {
             cmodel[i].count = cmodel[i].count + 1;
             isFound = true;
           }
         }
         if (isFound == false) {
           var obj = {
-            'hostname': localHostname,
+            'label': localHostname,
             'count': 1
           };
           isFound = true
@@ -72,21 +86,21 @@ angular.module('TracingAppCtrl').service('GenerateDistributionService',
       var isFound = false;
       if (cmodel.length == 0) {
         var obj = {
-          'description': localDescription,
+          'label': localDescription,
           'count': 1
         };
         isFound = true
         cmodel.push(obj);
       } else {
         for (var i = 0; i < cmodel.length; i++) {
-          if (cmodel[i].description == localDescription) {
+          if (cmodel[i].label == localDescription) {
             cmodel[i].count = cmodel[i].count + 1;
             isFound = true;
           }
         }
         if (isFound == false) {
           var obj = {
-            'description': localDescription,
+            'label': localDescription,
             'count': 1
           };
           isFound = true
@@ -95,26 +109,25 @@ angular.module('TracingAppCtrl').service('GenerateDistributionService',
       }
     };
 
-
     this.countDuration = function(localDescription, localDuration) {
       var isFound = false;
       if (cmodel.length == 0) {
         var obj = {
-          'hostname': localDescription,
+          'label': localDescription,
           'count': localDuration
         };
         isFound = true
         cmodel.push(obj);
       } else {
         for (var i = 0; i < cmodel.length; i++) {
-          if (cmodel[i].hostname == localDescription) {
+          if (cmodel[i].label == localDescription) {
             cmodel[i].count = cmodel[i].count + localDuration;
             isFound = true;
           }
         }
         if (isFound == false) {
           var obj = {
-            'hostname': localDescription,
+            'label': localDescription,
             'count': localDuration
           };
           isFound = true
@@ -126,5 +139,9 @@ angular.module('TracingAppCtrl').service('GenerateDistributionService',
     this.setChartType = function(type) {
       chartObject.type = type;
     };
+
+    this.getMateData = function(dataType) {
+      return chartMetaData[dataType];
+    }
 
   });
