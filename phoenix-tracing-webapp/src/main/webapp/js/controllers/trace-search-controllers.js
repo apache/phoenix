@@ -62,12 +62,21 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
       url: searchurl
     }).success(function(data, status) {
       $scope.currentData = data;
-      $scope.traces = data;
+      $scope.traces = getTraceList(data);
       $scope.chartObject = getTimeLineChart(data);
       $scope.dependencyTreeObject = getTreeData(data);
       $scope.distributionChartObject = getDistData(data, 'hostname');
     });
   };
+
+  //get trace list for list page
+  function getTraceList(data) {
+    for(var i=0; i<data.length; i++){
+      var date = new Date(data[i].start_time);
+      data[i]["formated_date"] = date.toString();
+    }
+    return data;
+  }
 
   //getting TimeLine chart with data
   function getTimeLineChart(data) {
