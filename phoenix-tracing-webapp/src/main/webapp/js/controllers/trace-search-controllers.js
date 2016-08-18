@@ -64,6 +64,10 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
       $scope.currentData = data;
       $scope.traces = getTraceList(data);
       $scope.chartObject = getTimeLineChart(data);
+      GenerateTimelineService.getMinTimeGap(data);
+      $scope.timelineTraceStartTime = GenerateTimelineService.getTimeLineStartTime();
+      $scope.timelineTraceEndTime = GenerateTimelineService.getTimeLineEndTime();
+      $scope.timelineTimeUnit = "ms";
       $scope.dependencyTreeObject = getTreeData(data);
       $scope.distributionChartObject = getDistData(data, 'hostname');
     });
@@ -80,18 +84,21 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
 
   //getting TimeLine chart with data
   function getTimeLineChart(data) {
+    console.log(data);
     $scope.timelineStatus = "Retriving data from Phoenix.";
     var currentData = data;
     var minTimeGap = GenerateTimelineService.getMinTimeGap(currentData);
     var mulTime = 1;
     if (minTimeGap < 1000) {
-      mulTime = 1000;
+      mulTime = 1000 / minTimeGap;
     }
     var startDateTime;
     for (var i = 0; i < currentData.length; i++) {
       var datax = currentData[i];
+      var duration = (datax.end_time - datax.start_time) + ' ms';
       var toolTip = GenerateTimelineService.getToolTip(datax);
       var dest = GenerateTimelineService.getDescription(datax.description);
+      dest = dest + '  : Duration ' + duration + ''
       startDateTime = new Date(parseFloat(datax.start_time) * mulTime)
       var datamodel = [{
         "v": "Trace " + i
@@ -134,8 +141,10 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
     }
     timeLine.data.cols = GenerateTimelineService.getTimeLineProperties();
     timeLine.data.options = GenerateTimelineService.getTimeLineOptions();
+    timeLine.data.options['hAxis']= {'hAxis.title': 'tyooo'};
     $scope.page.timelineAlertType = 'alert-success';
     $scope.timelineStatus = "Data retrieved and Timeline Rendered.";
+    console.log(timeLine);
     return timeLine;
   };
 
@@ -215,6 +224,9 @@ TraceCtrl.controller('TraceSearchCtrl', function($scope, $http,
   }
 
   $scope.cleanTimeline = function() {
+    $scope.timelineTraceStartTime = "";
+    $scope.timelineTraceEndTime = "";
+    $scope.timelineTimeUnit = "";
     $scope.page.timelineAlertType = 'alert-success';
     $scope.timelineStatus = "Timeline is cleaned.";
     var nextid = $scope.chartObject.data.rows.length;

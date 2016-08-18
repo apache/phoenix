@@ -54,6 +54,15 @@
   <div id="timeline">
   <h1>TimeLine</h1>
   <div class="alert {{page.timelineAlertType}}" role="alert">{{timelineStatus}}</div>
+
+  <div class="row"> 
+    <div class="col-sm-6 col-md-3">{{timelineTraceStartTime}} {{timelineTimeUnit}}
+    </div>
+    <div class="col-sm-6 col-md-7">
+    </div>
+    <div class="col-sm-6 col-md-2 timeline-endtime">{{timelineTraceEndTime}} {{timelineTimeUnit}}
+    </div>
+  </div>
   <div google-chart chart="chartObject" style="height: 100%;"></div>
   </div>
 </script>

@@ -49,6 +49,13 @@ angular.module('TracingAppCtrl').service('GenerateTimelineService', function() {
     }
   };
 
+  var trace_start_time;
+  var trace_end_time;
+/*      $scope.chartObject.options.vAxis.title = "chartMeta.vAxis";
+    $scope.chartObject.options.hAxis.title = "chartMeta.hAxis";
+    $scope.chartObject.data.cols[1].label = "chartMeta.label";
+    $scope.chartObject.options.width = 500;
+    */
   this.getDescription = function(description) {
     var dst = '';
     var haveBracket = description.indexOf("(");
@@ -62,6 +69,14 @@ angular.module('TracingAppCtrl').service('GenerateTimelineService', function() {
 
   this.getTimeLineProperties = function() {
     return timeLineColProperty;
+  };
+
+  this.getTimeLineStartTime = function() {
+    return trace_start_time;
+  };
+
+  this.getTimeLineEndTime = function() {
+    return trace_end_time;
   };
 
   this.getTimeLineOptions = function() {
@@ -79,6 +94,8 @@ angular.module('TracingAppCtrl').service('GenerateTimelineService', function() {
         high = data[i].end_time;
       }
     }
+    trace_start_time = low;
+    trace_end_time = high;
     return (high - low);
   };
 
