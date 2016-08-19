@@ -43,6 +43,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
@@ -396,6 +397,45 @@ public class IndexMetadataIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             fail("Should have caught exception.");
         } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testTableWithSameColumnNames() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String ddl = "create table test_table (char_pk varchar not null,"
+        		+ " int_col integer, long_col integer, int_col integer"
+        		+ " constraint pk primary key (char_pk))";
+            PreparedStatement stmt = conn.prepareStatement(ddl);
+            stmt.execute();
+            fail("Should have caught exception");
+        } catch (ColumnAlreadyExistsException e) {
+            assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testTableWithSameColumnNamesWithFamily() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String ddl = "create table test_table (char_pk varchar not null,"
+        		+ " a.int_col integer, a.long_col integer,"
+        		+ " a.int_col integer, b.long_col integer"
+        		+ " constraint pk primary key (char_pk))";
+            PreparedStatement stmt = conn.prepareStatement(ddl);
+            stmt.execute();
+            fail("Should have caught exception");
+        } catch (ColumnAlreadyExistsException e) {
             assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
