@@ -77,7 +77,6 @@ import com.google.common.collect.Maps;
  * storing data in a single column (ColumnLayout.SINGLE) or in
  * multiple columns (ColumnLayout.MULTI).
  *
- * TODO add hashCode and equal methods to check equality of two PTableImpl objects.
  * @since 0.1
  */
 public class PTableImpl implements PTable {
@@ -1073,9 +1072,9 @@ public class PTableImpl implements PTable {
       List<PName> physicalNames = Collections.emptyList();
       if (tableType == PTableType.VIEW) {
         viewType = ViewType.fromSerializedValue(table.getViewType().toByteArray()[0]);
-        if(table.hasViewStatement()){
-          viewStatement = (String) PVarchar.INSTANCE.toObject(table.getViewStatement().toByteArray());
-        }
+      }
+      if(table.hasViewStatement()){
+        viewStatement = (String) PVarchar.INSTANCE.toObject(table.getViewStatement().toByteArray());
       }
       if (tableType == PTableType.VIEW || viewIndexId != null) {
         physicalNames = Lists.newArrayListWithExpectedSize(table.getPhysicalNamesCount());
@@ -1181,6 +1180,8 @@ public class PTableImpl implements PTable {
       builder.setTransactional(table.isTransactional());
       if(table.getType() == PTableType.VIEW){
         builder.setViewType(ByteStringer.wrap(new byte[]{table.getViewType().getSerializedValue()}));
+      }
+      if(table.getViewStatement()!=null){
         builder.setViewStatement(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
       }
       if(table.getType() == PTableType.VIEW || table.getViewIndexId() != null){
@@ -1243,5 +1244,25 @@ public class PTableImpl implements PTable {
     @Override
     public boolean isAppendOnlySchema() {
         return isAppendOnlySchema;
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + ((key == null) ? 0 : key.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null) return false;
+        if (getClass() != obj.getClass()) return false;
+        PTableImpl other = (PTableImpl) obj;
+        if (key == null) {
+            if (other.key != null) return false;
+        } else if (!key.equals(other.key)) return false;
+        return true;
     }
 }
