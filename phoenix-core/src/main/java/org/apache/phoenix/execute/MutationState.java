@@ -680,7 +680,7 @@ public class MutationState implements SQLCloseable {
             return Iterators.emptyIterator();
         }
         Long scn = connection.getSCN();
-        final long timestamp = (tableTimestamp!=null && tableTimestamp!=QueryConstants.UNSET_TIMESTAMP) ? tableTimestamp : (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
+        final long timestamp = getMutationTimestamp(tableTimestamp, scn);
         return new Iterator<Pair<byte[],List<Mutation>>>() {
             private Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>> current = iterator.next();
             private Iterator<Pair<byte[],List<Mutation>>> innerIterator = init();
@@ -725,6 +725,10 @@ public class MutationState implements SQLCloseable {
             }
             
         };
+    }
+
+    public static long getMutationTimestamp(final Long tableTimestamp, Long scn) {
+        return (tableTimestamp!=null && tableTimestamp!=QueryConstants.UNSET_TIMESTAMP) ? tableTimestamp : (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
     }
         
     /**

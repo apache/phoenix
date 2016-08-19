@@ -21,12 +21,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TimeKeeper;
 import org.junit.Test;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class PMetaDataImplTest {
@@ -72,9 +76,11 @@ public class PMetaDataImplTest {
     
     @Test
     public void testEviction() throws Exception {
-        long maxSize = 10;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
-        PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "10");
+        props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
+        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
         addToTable(metaData, "a", 5, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "b", 4, timeKeeper);
@@ -116,9 +122,11 @@ public class PMetaDataImplTest {
 
     @Test
     public void shouldNotEvictMoreEntriesThanNecessary() throws Exception {
-        long maxSize = 5;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
-        PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "5");
+        props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
+        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
         addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "b", 1, timeKeeper);
@@ -136,9 +144,11 @@ public class PMetaDataImplTest {
 
     @Test
     public void shouldAlwaysKeepAtLeastOneEntryEvenIfTooLarge() throws Exception {
-        long maxSize = 5;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
-        PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "5");
+        props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
+        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
         addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "b", 1, timeKeeper);
@@ -157,9 +167,11 @@ public class PMetaDataImplTest {
 
     @Test
     public void shouldAlwaysKeepOneEntryIfMaxSizeIsZero() throws Exception {
-        long maxSize = 0;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
-        PMetaData metaData = new PMetaDataImpl(0, maxSize, timeKeeper);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "0");
+        props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
+        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
         addToTable(metaData, "a", 1, timeKeeper);
         assertEquals(1, metaData.size());
         addToTable(metaData, "b", 1, timeKeeper);
@@ -178,9 +190,11 @@ public class PMetaDataImplTest {
 
     @Test
     public void testAge() throws Exception {
-        long maxSize = 10;
         TestTimeKeeper timeKeeper = new TestTimeKeeper();
-        PMetaData metaData = new PMetaDataImpl(5, maxSize, timeKeeper);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "10");
+        props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
+        PMetaData metaData = new PMetaDataImpl(5, timeKeeper,  new ReadOnlyProps(props));
         String tableName = "a";
         addToTable(metaData, tableName, 1, timeKeeper);
         PTableRef aTableRef = metaData.getTableRef(new PTableKey(null,tableName));
