@@ -18,253 +18,50 @@
 package org.apache.phoenix.schema;
 
 import java.sql.SQLException;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.MinMaxPriorityQueue;
-import com.google.common.primitives.Longs;
 
 /**
- * 
- * Client-side cache of MetaData. Not thread safe, but meant to be used
- * in a copy-on-write fashion. Internally uses a LinkedHashMap that evicts
- * the oldest entries when size grows beyond the maxSize specified at
- * create time.
- *
+ * Client-side cache of MetaData, not thread safe. Internally uses a LinkedHashMap that evicts the
+ * oldest entries when size grows beyond the maxSize specified at create time.
  */
 public class PMetaDataImpl implements PMetaData {
-    private static final Logger logger = LoggerFactory.getLogger(PMetaDataImpl.class);
-        static class PMetaDataCache implements Cloneable {
-            private static final int MIN_REMOVAL_SIZE = 3;
-            private static final Comparator<PTableRef> COMPARATOR = new Comparator<PTableRef>() {
-                @Override
-                public int compare(PTableRef tableRef1, PTableRef tableRef2) {
-                    return Longs.compare(tableRef1.getLastAccessTime(), tableRef2.getLastAccessTime());
-                }
-            };
-            private static final MinMaxPriorityQueue.Builder<PTableRef> BUILDER = MinMaxPriorityQueue.orderedBy(COMPARATOR);
-            
-            private long currentByteSize;
-            private final long maxByteSize;
-            private final int expectedCapacity;
-            private final TimeKeeper timeKeeper;
-
-            private final Map<PTableKey,PTableRef> tables;
-            private final Map<PTableKey,PFunction> functions;
-            private final Map<PTableKey,PSchema> schemas;
-            
-            private static Map<PTableKey,PTableRef> newMap(int expectedCapacity) {
-                // Use regular HashMap, as we cannot use a LinkedHashMap that orders by access time
-                // safely across multiple threads (as the underlying collection is not thread safe).
-                // Instead, we track access time and prune it based on the copy we've made.
-                return Maps.newHashMapWithExpectedSize(expectedCapacity);
-            }
-
-            private static Map<PTableKey,PFunction> newFunctionMap(int expectedCapacity) {
-                // Use regular HashMap, as we cannot use a LinkedHashMap that orders by access time
-                // safely across multiple threads (as the underlying collection is not thread safe).
-                // Instead, we track access time and prune it based on the copy we've made.
-                return Maps.newHashMapWithExpectedSize(expectedCapacity);
-            }
-
-            private static Map<PTableKey,PSchema> newSchemaMap(int expectedCapacity) {
-                // Use regular HashMap, as we cannot use a LinkedHashMap that orders by access time
-                // safely across multiple threads (as the underlying collection is not thread safe).
-                // Instead, we track access time and prune it based on the copy we've made.
-                return Maps.newHashMapWithExpectedSize(expectedCapacity);
-            }
-
-            private static Map<PTableKey,PTableRef> cloneMap(Map<PTableKey,PTableRef> tables, int expectedCapacity) {
-                Map<PTableKey,PTableRef> newTables = newMap(Math.max(tables.size(),expectedCapacity));
-                // Copy value so that access time isn't changing anymore
-                for (PTableRef tableAccess : tables.values()) {
-                    newTables.put(tableAccess.getTable().getKey(), new PTableRef(tableAccess));
-                }
-                return newTables;
-            }
-
-            private static Map<PTableKey, PSchema> cloneSchemaMap(Map<PTableKey, PSchema> schemas, int expectedCapacity) {
-                Map<PTableKey, PSchema> newSchemas = newSchemaMap(Math.max(schemas.size(), expectedCapacity));
-                // Copy value so that access time isn't changing anymore
-                for (PSchema schema : schemas.values()) {
-                    newSchemas.put(schema.getSchemaKey(), new PSchema(schema));
-                }
-                return newSchemas;
-            }
-
-            private static Map<PTableKey,PFunction> cloneFunctionsMap(Map<PTableKey,PFunction> functions, int expectedCapacity) {
-                Map<PTableKey,PFunction> newFunctions = newFunctionMap(Math.max(functions.size(),expectedCapacity));
-                for (PFunction functionAccess : functions.values()) {
-                    newFunctions.put(functionAccess.getKey(), new PFunction(functionAccess));
-                }
-                return newFunctions;
-            }
-
-            private PMetaDataCache(PMetaDataCache toClone) {
-                this.timeKeeper = toClone.timeKeeper;
-                this.maxByteSize = toClone.maxByteSize;
-                this.currentByteSize = toClone.currentByteSize;
-                this.expectedCapacity = toClone.expectedCapacity;
-                this.tables = cloneMap(toClone.tables, expectedCapacity);
-                this.functions = cloneFunctionsMap(toClone.functions, expectedCapacity);
-                this.schemas = cloneSchemaMap(toClone.schemas, expectedCapacity);
-            }
-            
-            public PMetaDataCache(int initialCapacity, long maxByteSize, TimeKeeper timeKeeper) {
-                this.currentByteSize = 0;
-                this.maxByteSize = maxByteSize;
-                this.expectedCapacity = initialCapacity;
-                this.tables = newMap(this.expectedCapacity);
-                this.functions = newFunctionMap(this.expectedCapacity);
-                this.timeKeeper = timeKeeper;
-                this.schemas = newSchemaMap(this.expectedCapacity);
-            }
-            
-            public PTableRef get(PTableKey key) {
-                PTableRef tableAccess = this.tables.get(key);
-                if (tableAccess == null) {
-                    return null;
-                }
-                tableAccess.setLastAccessTime(timeKeeper.getCurrentTime());
-                return tableAccess;
-            }
-            
-            @Override
-            public PMetaDataCache clone() {
-                return new PMetaDataCache(this);
-            }
-
-            /**
-             * Used when the cache is growing past its max size to clone in a single pass.
-             * Removes least recently used tables to get size of cache below its max size by
-             * the overage amount.
-             */
-            public PMetaDataCache cloneMinusOverage(long overage) {
-                assert(overage > 0);
-                int nToRemove = Math.max(MIN_REMOVAL_SIZE, (int)Math.ceil((currentByteSize-maxByteSize) / ((double)currentByteSize / size())) + 1);
-                MinMaxPriorityQueue<PTableRef> toRemove = BUILDER.expectedSize(nToRemove).create();
-                PMetaDataCache newCache = new PMetaDataCache(this.size(), this.maxByteSize, this.timeKeeper);
-                
-                long toRemoveBytes = 0;
-                // Add to new cache, but track references to remove when done
-                // to bring cache at least overage amount below it's max size.
-                for (PTableRef tableRef : this.tables.values()) {
-                    newCache.put(tableRef.getTable().getKey(), new PTableRef(tableRef));
-                    toRemove.add(tableRef);
-                    toRemoveBytes += tableRef.getEstSize();
-                    while (toRemoveBytes - toRemove.peekLast().getEstSize() >= overage) {
-                        PTableRef removedRef = toRemove.removeLast();
-                        toRemoveBytes -= removedRef.getEstSize();
-                    }
-                }
-                for (PTableRef toRemoveRef : toRemove) {
-                    newCache.remove(toRemoveRef.getTable().getKey());
-                }
-                return newCache;
-            }
-
-            private PTable put(PTableKey key, PTableRef ref) {
-                currentByteSize += ref.getEstSize();
-                PTableRef oldTableAccess = this.tables.put(key, ref);
-                PTable oldTable = null;
-                if (oldTableAccess != null) {
-                    currentByteSize -= oldTableAccess.getEstSize();
-                    oldTable = oldTableAccess.getTable();
-                }
-                return oldTable;
-            }
-
-            public PTable put(PTableKey key, PTable value, long resolvedTime) {
-                return put(key, new PTableRef(value, timeKeeper.getCurrentTime(), resolvedTime));
-            }
-            
-            public PTable putDuplicate(PTableKey key, PTable value, long resolvedTime) {
-                return put(key, new PTableRef(value, timeKeeper.getCurrentTime(), 0, resolvedTime));
-            }
-            
-            public long getAge(PTableRef ref) {
-                return timeKeeper.getCurrentTime() - ref.getCreateTime();
-            }
-            
-            public PTable remove(PTableKey key) {
-                PTableRef value = this.tables.remove(key);
-                if (value == null) {
-                    return null;
-                }
-                currentByteSize -= value.getEstSize();
-                return value.getTable();
-            }
-            
-            public Iterator<PTable> iterator() {
-                final Iterator<PTableRef> iterator = this.tables.values().iterator();
-                return new Iterator<PTable>() {
-
-                    @Override
-                    public boolean hasNext() {
-                        return iterator.hasNext();
-                    }
-
-                    @Override
-                    public PTable next() {
-                        return iterator.next().getTable();
-                    }
-
-                    @Override
-                    public void remove() {
-                        throw new UnsupportedOperationException();
-                    }
-                    
-                };
-            }
-
-            public int size() {
-                return this.tables.size();
-            }
-
-            public long getCurrentSize() {
-                return this.currentByteSize;
-            }
-
-            public long getMaxSize() {
-                return this.maxByteSize;
-            }
-        }
-            
+    
     private PMetaDataCache metaData;
+    private final TimeKeeper timeKeeper;
+    private final PTableRefFactory tableRefFactory;
     
-    @VisibleForTesting
-    public PMetaDataCache getMetaData() {
-        return metaData;
-    }
-    
-    public PMetaDataImpl(int initialCapacity, long maxByteSize) {
-        this.metaData = new PMetaDataCache(initialCapacity, maxByteSize, TimeKeeper.SYSTEM);
+    public PMetaDataImpl(int initialCapacity, ReadOnlyProps props) {
+        this(initialCapacity, TimeKeeper.SYSTEM, props);
     }
 
-    public PMetaDataImpl(int initialCapacity, long maxByteSize, TimeKeeper timeKeeper) {
-        this.metaData = new PMetaDataCache(initialCapacity, maxByteSize, timeKeeper);
+    public PMetaDataImpl(int initialCapacity, TimeKeeper timeKeeper, ReadOnlyProps props) {
+        this(new PMetaDataCache(initialCapacity, props.getLong(
+            QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
+            QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE), timeKeeper,
+                PTableRefFactory.getFactory(props)), timeKeeper, PTableRefFactory.getFactory(props));
     }
 
-    private PMetaDataImpl(PMetaDataCache metaData) {
+    private PMetaDataImpl(PMetaDataCache metaData, TimeKeeper timeKeeper, PTableRefFactory tableRefFactory) {
+        this.timeKeeper = timeKeeper;
         this.metaData = metaData;
+        this.tableRefFactory = tableRefFactory;
     }
-    
+
     @Override
     public PMetaDataImpl clone() {
-        return new PMetaDataImpl(new PMetaDataCache(this.metaData));
+        return new PMetaDataImpl(new PMetaDataCache(this.metaData), this.timeKeeper, this.tableRefFactory);
     }
     
     @Override
@@ -292,18 +89,20 @@ public class PMetaDataImpl implements PMetaData {
 
     @Override
     public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
-    	metaData.putDuplicate(table.getKey(), table, resolvedTimestamp);
+    	metaData.put(table.getKey(), tableRefFactory.makePTableRef(table, this.timeKeeper.getCurrentTime(), resolvedTimestamp));
     }
 
     @Override
     public void addTable(PTable table, long resolvedTime) throws SQLException {
+        PTableRef tableRef = tableRefFactory.makePTableRef(table, this.timeKeeper.getCurrentTime(), resolvedTime);
         int netGain = 0;
         PTableKey key = table.getKey();
         PTableRef oldTableRef = metaData.get(key);
         if (oldTableRef != null) {
-            netGain -= oldTableRef.getEstSize();
+            netGain -= oldTableRef.getEstimatedSize();
         }
         PTable newParentTable = null;
+        PTableRef newParentTableRef = null;
         long parentResolvedTimestamp = resolvedTime;
         if (table.getParentName() != null) { // Upsert new index table into parent data table list
             String parentName = table.getParentName().getString();
@@ -321,25 +120,26 @@ public class PMetaDataImpl implements PMetaData {
                     }
                 }
                 newIndexes.add(table);
-                netGain -= oldParentRef.getEstSize();
+                netGain -= oldParentRef.getEstimatedSize();
                 newParentTable = PTableImpl.makePTable(oldParentRef.getTable(), table.getTimeStamp(), newIndexes);
-                netGain += newParentTable.getEstimatedSize();
+                newParentTableRef = tableRefFactory.makePTableRef(newParentTable, this.timeKeeper.getCurrentTime(), parentResolvedTimestamp);
+                netGain += newParentTableRef.getEstimatedSize();
             }
         }
         if (newParentTable == null) { // Don't count in gain if we found a parent table, as its accounted for in newParentTable
-            netGain += table.getEstimatedSize();
+            netGain += tableRef.getEstimatedSize();
         }
         long overage = metaData.getCurrentSize() + netGain - metaData.getMaxSize();
         metaData = overage <= 0 ? metaData : metaData.cloneMinusOverage(overage);
         
         if (newParentTable != null) { // Upsert new index table into parent data table list
-            metaData.put(newParentTable.getKey(), newParentTable, parentResolvedTimestamp);
-            metaData.putDuplicate(table.getKey(), table, resolvedTime);
+            metaData.put(newParentTable.getKey(), newParentTableRef);
+            metaData.put(table.getKey(), tableRef);
         } else {
-            metaData.put(table.getKey(), table, resolvedTime);
+            metaData.put(table.getKey(), tableRef);
         }
         for (PTable index : table.getIndexes()) {
-            metaData.putDuplicate(index.getKey(), index, resolvedTime);
+            metaData.put(index.getKey(), tableRefFactory.makePTableRef(index, this.timeKeeper.getCurrentTime(), resolvedTime));
         }
     }
 
@@ -401,7 +201,7 @@ public class PMetaDataImpl implements PMetaData {
                                 parentTableRef.getTable(),
                                 tableTimeStamp == HConstants.LATEST_TIMESTAMP ? parentTableRef.getTable().getTimeStamp() : tableTimeStamp,
                                 newIndexes);
-                        metaData.put(parentTable.getKey(), parentTable, parentTableRef.getResolvedTimeStamp());
+                        metaData.put(parentTable.getKey(), tableRefFactory.makePTableRef(parentTable, this.timeKeeper.getCurrentTime(), parentTableRef.getResolvedTimeStamp()));
                         break;
                     }
                 }
@@ -444,7 +244,7 @@ public class PMetaDataImpl implements PMetaData {
             
             table = PTableImpl.makePTable(table, tableTimeStamp, tableSeqNum, columns);
         }
-        tables.put(table.getKey(), table, resolvedTime);
+        tables.put(table.getKey(), tableRefFactory.makePTableRef(table, this.timeKeeper.getCurrentTime(), resolvedTime));
     }
 
     @Override
