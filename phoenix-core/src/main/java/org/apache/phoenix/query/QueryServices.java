@@ -222,6 +222,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.limited.query.serial.threshold";
 
     public static final String INDEX_ASYNC_BUILD_ENABLED = "phoenix.index.async.build.enabled";
+    
+    public static final String CLIENT_CACHE_ENCODING = "phoenix.table.client.cache.encoding";
     /**
      * Get executor service used for parallel scans
      */
