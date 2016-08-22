@@ -227,7 +227,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
 
             int cols = plan.getGroupBy().getOrderPreservingColumnCount();
-            if (cols > 0 && context.getWhereConditionColumns().size() == 0 &&
+            if (cols > 0 && keyOnlyFilter &&
                 !plan.getStatement().getHint().hasHint(HintNode.Hint.RANGE_SCAN) &&
                 cols < plan.getTableRef().getTable().getRowKeySchema().getFieldCount() &&
                 plan.getGroupBy().isOrderPreserving() &&
