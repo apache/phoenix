@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.regionserver.ScannerContext;
 
 public class DelegateRegionScanner implements RegionScanner {
 
-    protected final RegionScanner delegate;
+    protected RegionScanner delegate;
 
     public DelegateRegionScanner(RegionScanner scanner) {
         this.delegate = scanner;
