@@ -325,7 +325,7 @@ public class ServerCacheClient {
             				byte[] regionEndKey = entry.getRegionInfo().getEndKey();
             				final byte[] locateStartKey=regionStartKey;
             				final byte[] locateEndKey=ByteUtil.getLocateEndKeyInclusive(regionStartKey, regionEndKey);
-            			    iterateOverTable.coprocessorService(ServerCachingService.class, locateStartKey, locateEndKey, 
+            				iterateOverTable.coprocessorService(ServerCachingService.class, locateStartKey, locateEndKey, 
     							new Batch.Call<ServerCachingService, RemoveServerCacheResponse>() {
     						@Override
     						public RemoveServerCacheResponse call(ServerCachingService instance) throws IOException {
