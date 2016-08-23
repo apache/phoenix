@@ -96,8 +96,6 @@ public final class PhoenixConfigurationUtil {
     
     public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
 
-    public static final String COLUMN_OPERATE_MODE = "phoenix.column.operate.mode";
-
     public enum SchemaType {
         TABLE,
         QUERY;
@@ -189,11 +187,6 @@ public final class PhoenixConfigurationUtil {
         configuration.setLong(UPSERT_BATCH_SIZE, batchSize);
     }
 
-    public static void setDynamicColumnSupport(final Configuration configuration, final boolean supported) {
-        Preconditions.checkNotNull(configuration);
-        configuration.setBoolean(COLUMN_OPERATE_MODE, supported);
-    }
-
     /**
      * Sets which HBase cluster a Phoenix MapReduce job should read from
      * @param configuration
@@ -234,7 +227,6 @@ public final class PhoenixConfigurationUtil {
         }
         final String tableName = getOutputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        final boolean autoCreateDynamicColumn = getDynamicColumnSupport(configuration);
         final Connection connection = ConnectionUtil.getOutputConnection(configuration);
         List<String> upsertColumnList = PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
         if(!upsertColumnList.isEmpty()) {
@@ -362,10 +354,6 @@ public final class PhoenixConfigurationUtil {
         return configuration.get(OUTPUT_TABLE_NAME);
     }
 
-    public static boolean getDynamicColumnSupport(Configuration configuration) {
-        Preconditions.checkNotNull(configuration);
-        return configuration.getBoolean(COLUMN_OPERATE_MODE,false);
-    }
     /**
      * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will read from
      * @param configuration
