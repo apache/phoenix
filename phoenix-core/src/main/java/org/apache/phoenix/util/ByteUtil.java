@@ -579,20 +579,16 @@ public class ByteUtil {
         }
     }
     
-    public static byte[] getLocateEndKeyInclusive(byte[] regionStartKey,byte[] regionEndKey)
-    {
-        if(regionStartKey!=null && !Bytes.equals(regionStartKey, HConstants.EMPTY_BYTE_ARRAY))
-        {
+    public static byte[] getLocateEndKeyInclusive(byte[] regionStartKey,byte[] regionEndKey)  {
+        if(regionStartKey!=null && !Bytes.equals(regionStartKey, HConstants.EMPTY_BYTE_ARRAY)){
             return regionStartKey;
         }
         
-        if(regionEndKey==null || Bytes.equals(regionEndKey,HConstants.EMPTY_BYTE_ARRAY))
-        {
+        if(regionEndKey==null || Bytes.equals(regionEndKey,HConstants.EMPTY_BYTE_ARRAY)){
             return regionStartKey;
         }
         
-        if (regionEndKey[regionEndKey.length - 1] == 0)
-        {
+        if (regionEndKey[regionEndKey.length - 1] == 0){
             return Arrays.copyOf(regionEndKey, regionEndKey.length - 1);
         }
         
