@@ -28,7 +28,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
   //add parameter to make indicate if there are column that is not exist in the table,
   //save it as dynamic column
   def saveToPhoenix(tableName: String, conf: Configuration = new Configuration,
-                    zkUrl: Option[String] = None,dynamicColumn: Boolean = false): Unit = {
+                    zkUrl: Option[String] = None): Unit = {
 
 
     // Retrieve the schema field names and normalize to Phoenix, need to do this outside of mapPartitions
@@ -38,7 +38,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
       + catalystTypeToPhoenixTypeString(x.dataType))
 
     // Create a configuration object to use for saving
-    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, Some(conf),dynamicColumn)
+    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, Some(conf))
 
     // Retrieve the zookeeper URL
     val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
@@ -47,8 +47,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
     val phxRDD = data.mapPartitions{ rows =>
  
        // Create a within-partition config to retrieve the ColumnInfo list
-       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal,
-         autoCreateDynamicColumn = dynamicColumn)
+       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal)
        @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
  
        rows.map { row =>
