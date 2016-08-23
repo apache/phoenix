@@ -80,7 +80,6 @@ public final class Main extends Configured implements Tool {
         root.setResourceBase(webappDirLocation);        
         root.setParentLoaderPriority(true);
         server.setHandler(root);
-
         server.start();
         server.join();
    

@@ -61,7 +61,6 @@ public class EntityFactory {
       for (int i = 0; i < params.length; ++i) {
         ps.setObject(1, params[i]);
       }
-
       rs = ps.executeQuery();
       return getEntitiesFromResultSet(rs);
     } catch (SQLException e) {
