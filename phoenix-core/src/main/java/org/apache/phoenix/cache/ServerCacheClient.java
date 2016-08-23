@@ -65,6 +65,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
@@ -177,7 +178,8 @@ public class ServerCacheClient {
                     // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
-                    final byte[] key = entry.getRegionInfo().getStartKey();
+                    final byte[] locateStartKey=regionStartKey;
+                    final byte[] locateEndKey=ByteUtil.getLocateEndKeyInclusive(regionStartKey, regionEndKey);
                     final HTableInterface htable = services.getTable(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
                     closeables.add(htable);
                     futures.add(executor.submit(new JobCallable<Boolean>() {
@@ -186,7 +188,7 @@ public class ServerCacheClient {
                         public Boolean call() throws Exception {
                             final Map<byte[], AddServerCacheResponse> results;
                             try {
-                                results = htable.coprocessorService(ServerCachingService.class, key, key, 
+                                results = htable.coprocessorService(ServerCachingService.class, locateStartKey, locateEndKey, 
                                             new Batch.Call<ServerCachingService, AddServerCacheResponse>() {
                                                 @Override
                                                 public AddServerCacheResponse call(ServerCachingService instance) throws IOException {
@@ -319,8 +321,11 @@ public class ServerCacheClient {
     		for (HRegionLocation entry : locations) {
     			if (remainingOnServers.contains(entry)) {  // Call once per server
     				try {
-    					byte[] key = entry.getRegionInfo().getStartKey();
-    					iterateOverTable.coprocessorService(ServerCachingService.class, key, key, 
+    				    byte[] regionStartKey = entry.getRegionInfo().getStartKey();
+    	                byte[] regionEndKey = entry.getRegionInfo().getEndKey();
+    	                final byte[] locateStartKey=regionStartKey;
+                        final byte[] locateEndKey=ByteUtil.getLocateEndKeyInclusive(regionStartKey, regionEndKey);
+    					iterateOverTable.coprocessorService(ServerCachingService.class, locateStartKey, locateEndKey, 
     							new Batch.Call<ServerCachingService, RemoveServerCacheResponse>() {
     						@Override
     						public RemoveServerCacheResponse call(ServerCachingService instance) throws IOException {

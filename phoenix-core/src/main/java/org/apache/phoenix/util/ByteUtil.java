@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -576,5 +577,25 @@ public class ByteUtil {
         default:
             throw new IllegalArgumentException("Unknown operator " + op);
         }
+    }
+    
+    public static byte[] getLocateEndKeyInclusive(byte[] regionStartKey,byte[] regionEndKey)
+    {
+        if(regionStartKey!=null && !Bytes.equals(regionStartKey, HConstants.EMPTY_BYTE_ARRAY))
+        {
+            return regionStartKey;
+        }
+        
+        if(regionEndKey==null || Bytes.equals(regionEndKey,HConstants.EMPTY_BYTE_ARRAY))
+        {
+            return regionStartKey;
+        }
+        
+        if (regionEndKey[regionEndKey.length - 1] == 0)
+        {
+            return Arrays.copyOf(regionEndKey, regionEndKey.length - 1);
+        }
+        
+        return previousKey(regionEndKey);
     }
 }
