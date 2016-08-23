@@ -36,6 +36,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
@@ -97,6 +98,8 @@ public class OrderByCompiler {
             compiler = new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY) {
                 @Override
                 protected Expression addExpression(Expression expression) {return expression;}
+                @Override
+                protected void addColumn(PColumn column) {}
             };
         } else {
             compiler = new ExpressionCompiler(context, groupBy);
