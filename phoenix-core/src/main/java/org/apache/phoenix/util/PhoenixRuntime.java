@@ -425,11 +425,12 @@ public class PhoenixRuntime {
         PTable table = PhoenixRuntime.getTable(conn, SchemaUtil.normalizeFullTableName(tableName));
         List<ColumnInfo> columnInfoList = Lists.newArrayList();
         Set<String> unresolvedColumnNames = new TreeSet<String>();
+        List<PColumn> tableColumns = table.getColumns();//cache current table columns
         if (columns == null || columns.isEmpty()) {
             // use all columns in the table
         	int offset = (table.getBucketNum() == null ? 0 : 1);
         	for (int i = offset; i < table.getColumns().size(); i++) {
-        	   PColumn pColumn = table.getColumns().get(i);
+        	   PColumn pColumn = tableColumns.get(i);
                columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn)); 
             }
         } else {
@@ -437,8 +438,16 @@ public class PhoenixRuntime {
             for (int i = 0; i < columns.size(); i++) {
                 String columnName = columns.get(i);
                 try {
-                    ColumnInfo columnInfo = PhoenixRuntime.getColumnInfo(table, columnName);
-                    columnInfoList.add(columnInfo);
+                    //here we check on the column list, if exists already,
+                    //use the data type defined in table, otherwise we add it
+                    //as dynamic
+                    PColumn pColumn = getTableColumn(columnName,tableColumns);
+                    if(pColumn != null)
+                        columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn));
+                    else {
+                        ColumnInfo columnInfo = PhoenixRuntime.getColumnInfo(table, columnName);
+                        columnInfoList.add(columnInfo);
+                    }
                 } catch (ColumnNotFoundException cnfe) {
                     unresolvedColumnNames.add(columnName);
                 } catch (AmbiguousColumnException ace) {
@@ -469,6 +478,23 @@ public class PhoenixRuntime {
     }
 
     /**
+     * Helper to get column info from table metadata, if not exists, return null
+     *
+     * @param columnName the name of a column to be found in the table metadata
+     * @param tableColumns All columns a table contains in the metadata, does not include dynamic columns
+     * @return null if not found matching column, else @see PColumn
+     */
+    private static PColumn getTableColumn(String columnName, List<PColumn> tableColumns){
+        String pureColumnName = getColumnName(columnName,QueryConstants.NAMESPACE_SEPARATOR);
+        for(PColumn col: tableColumns){
+            if(col.getName().toString().equals(pureColumnName)){
+                return col;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Returns the column info for the given column for the given table.
      *
      * @param table
@@ -485,6 +511,7 @@ public class PhoenixRuntime {
         }
         PColumn pColumn = null;
         if (columnName.contains(QueryConstants.NAME_SEPARATOR)) {
+
             String[] tokens = getColumnParts(columnName,QueryConstants.NAME_SEPARATOR_REGEX);
             String familyName = tokens[0];
             String familyColumn = tokens[1];
@@ -495,7 +522,7 @@ public class PhoenixRuntime {
             String[] tokens = getColumnParts(columnName, QueryConstants.NAMESPACE_SEPARATOR);
             String dataType = tokens[1];
             //add DataType to make sure it will be used in prepareStatement
-            String colName = tokens[0] + ":" + dataType;
+            String colName = tokens[0] + QueryConstants.NAMESPACE_SEPARATOR + dataType;
             return new ColumnInfo(colName,PDataType.fromSqlTypeName(dataType).getSqlType());
         } else {
             pColumn = table.getColumn(columnName);
@@ -517,6 +544,16 @@ public class PhoenixRuntime {
         return tokens;
     }
 
+    /**
+     * Gets column name by returning the first part of the possible name:data combination
+     * @param columnName
+     * @return
+     * @throws
+     */
+    private static String getColumnName(String columnName,String splitPattern)  {
+        String[] tokens = columnName.split(splitPattern);//QueryConstants.NAME_SEPARATOR_REGEX);
+        return tokens[0];
+    }
 
     /**
      * Constructs a column info for the supplied pColumn
@@ -854,7 +891,7 @@ public class PhoenixRuntime {
      * Column names and family names are enclosed in double quotes to allow for case sensitivity and for presence of 
      * special characters. Salting column and view index id column are not included. If the connection is tenant specific 
      * and the table used by the query plan is multi-tenant, then the tenant id column is not included as well.
-     * @param datatypes - Initialized empty list to be filled with the corresponding data type for the columns in @param columns. 
+     * @param dataTypes - Initialized empty list to be filled with the corresponding data type for the columns in @param columns.
      * @param plan - query plan to get info for
      * @param conn - phoenix connection used to generate the query plan. Caller should take care of closing the connection appropriately.
      * @param forDataTable - if true, then column names and data types correspond to the data table even if the query plan uses

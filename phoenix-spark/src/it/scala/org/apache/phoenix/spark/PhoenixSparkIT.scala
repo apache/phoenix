@@ -25,6 +25,7 @@ import org.apache.phoenix.util.{SchemaUtil, ColumnInfo}
 import org.apache.spark.sql.{Row, SaveMode, SQLContext}
 import org.apache.spark.sql.types._
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.hadoop.conf.Configuration
 import org.joda.time.DateTime
 import org.scalatest._
 
@@ -272,7 +273,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
   }
 
 
-  test("Can save dynamic column to phoenix table") {
+  test("Can save RDD with dynamic column to phoenix table") {
     val sqlContext = new SQLContext(sc)
 
     //per data set has 4 columns
@@ -300,7 +301,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
-  test("Can read dynamic column from phoenix table") {
+  test("Can read dynamic column from phoenix table to RDD") {
     val sqlContext = new SQLContext(sc)
 
     //per data set has 4 columns
@@ -330,10 +331,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     (0 to results.size - 1).foreach{ i =>
       targetSet(i) shouldEqual results(i)
     }
-
   }
-
-  test("Save dynamic column is not affecting loading from all") {
+  test("Save RDD with dynamic column is not affecting loading from all") {
     val sqlContext = new SQLContext(sc)
 
     //per data set has 4 columns
@@ -359,6 +358,61 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     (0 to results.size - 1).foreach { i =>
       dataSet(i) shouldEqual results(i)
     }
+  }
+
+  test("Can save Dataframe with dynamic column to phoenix"){
+
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    //per data set has 4 columns
+    val dataSet = List((1L, "1", 1, 1,"2"), (2L, "2", 2, 2,"3"), (3L, "3", 3, 3,"4"))
+    val conf = new Configuration()
+
+    sc
+      .parallelize(dataSet).toDF("ID","COL1","COL2","COL6","COL7")
+        .saveToPhoenix("OUTPUT_TEST_TABLE",zkUrl = Some(quorumAddress))
+
+
+    // Load the results back
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT * FROM OUTPUT_TEST_TABLE(COL6 INTEGER, COL7 VARCHAR)")
+    val results = ListBuffer[(Long, String, Int, Int,String)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getString(2), rs.getInt(3), rs.getInt(5), rs.getString(6)))
+    }
+
+    // Verify they match
+    (0 to results.size - 1).foreach { i =>
+      dataSet(i) shouldEqual results(i)
+    }
+  }
+
+  test("Can create schema RDD with dynamic column and execute query") {
+
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+
+    //per data set has 4 columns
+    val dataSet = List((1L, "1", 1, 1,"2"), (2L, "2", 2, 2,"3"), (3L, "3", 3, 3,"4"))
+    val conf = new Configuration()
+
+    sc
+      .parallelize(dataSet).toDF("ID","COL1","COL2","COL6","COL7")
+      .saveToPhoenix("OUTPUT_TEST_TABLE",zkUrl = Some(quorumAddress))
+
+    val df1 = sqlContext.phoenixTableAsDataFrame("OUTPUT_TEST_TABLE", Array("ID", "COL1","COL6:INTEGER", "COL7:VARCHAR"), conf = hbaseConfiguration)
+
+    df1.registerTempTable("sql_table_1")
+
+    val sqlRdd = sqlContext.sql("""
+                                  |SELECT ID, COL1,COL6,COL7 FROM sql_table_1
+                                  |""".stripMargin
+    )
+
+    val count = sqlRdd.count()
+
+    count shouldEqual 3L
   }
 
   test("Can save Java and Joda dates to Phoenix (no config)") {

@@ -84,12 +84,19 @@ public class ColumnInfo {
      * @return
      */
     public String getDisplayName() {
+
     	final String unescapedColumnName = SchemaUtil.getUnEscapedFullColumnName(columnName);
-        int index = unescapedColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
+        String nameWithoutTypeInfo = removeTypeInfo(unescapedColumnName);
+        int index = nameWithoutTypeInfo.indexOf(QueryConstants.NAME_SEPARATOR);
         if (index < 0) {
-            return unescapedColumnName; 
+            return nameWithoutTypeInfo;
         }
-        return unescapedColumnName.substring(index+1).trim();
+        return nameWithoutTypeInfo.substring(index+1).trim();
+    }
+    private String removeTypeInfo(String toProcess){
+        String[] tokens = toProcess.split(QueryConstants.NAMESPACE_SEPARATOR);
+        if(tokens.length <=0) throw new IllegalArgumentException("Column name should be not null");
+        return tokens[0];
     }
 
     // Return the proper SQL type string, taking into account possible array, length and scale parameters

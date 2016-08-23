@@ -22,7 +22,9 @@ import scala.collection.JavaConversions._
 
 object ConfigurationUtil extends Serializable {
 
-  def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String], conf: Option[Configuration] = None): Configuration = {
+  def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String],
+
+                             conf: Option[Configuration] = None,autoCreateDynamicColumn:Boolean = false): Configuration = {
 
     // Create an HBaseConfiguration object from the passed in config, if present
     val config = conf match {
@@ -33,6 +35,9 @@ object ConfigurationUtil extends Serializable {
     // Set the table to save to
     PhoenixConfigurationUtil.setOutputTableName(config, tableName)
     PhoenixConfigurationUtil.setPhysicalTableName(config, tableName)
+    //set dynamic column support parameter, if true, column will be added as dynamic
+    //if not found in table metadata
+    PhoenixConfigurationUtil.setDynamicColumnSupport(config,autoCreateDynamicColumn)
 
     // Infer column names from the DataFrame schema
     PhoenixConfigurationUtil.setUpsertColumnNames(config, Array(columns : _*))

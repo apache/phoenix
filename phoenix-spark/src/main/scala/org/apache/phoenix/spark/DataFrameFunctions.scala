@@ -17,22 +17,28 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
 import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
-import org.apache.phoenix.util.SchemaUtil
+import org.apache.phoenix.schema.types._
+import org.apache.phoenix.util.{ColumnInfo, SchemaUtil}
 import org.apache.spark.Logging
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types._
 import scala.collection.JavaConversions._
 
 class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
-
+  //add parameter to make indicate if there are column that is not exist in the table,
+  //save it as dynamic column
   def saveToPhoenix(tableName: String, conf: Configuration = new Configuration,
-                    zkUrl: Option[String] = None): Unit = {
+                    zkUrl: Option[String] = None,dynamicColumn: Boolean = false): Unit = {
 
 
     // Retrieve the schema field names and normalize to Phoenix, need to do this outside of mapPartitions
-    val fieldArray = data.schema.fieldNames.map(x => SchemaUtil.normalizeIdentifier(x))
+    //val fieldArray = data.schema.fieldNames.map(x => SchemaUtil.normalizeIdentifier(x))
+    //put it to format name:dataType so that later when constructing column,we can take care of that.
+    val fieldArray = data.schema.fields.map(x=>SchemaUtil.normalizeIdentifier(x.name) +":"
+      + catalystTypeToPhoenixTypeString(x.dataType))
 
     // Create a configuration object to use for saving
-    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, Some(conf))
+    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, Some(conf),dynamicColumn)
 
     // Retrieve the zookeeper URL
     val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
@@ -41,7 +47,8 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
     val phxRDD = data.mapPartitions{ rows =>
  
        // Create a within-partition config to retrieve the ColumnInfo list
-       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal)
+       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal,
+         autoCreateDynamicColumn = dynamicColumn)
        @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
  
        rows.map { row =>
@@ -60,4 +67,38 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
       outConfig
     )
   }
+  // Lookup table for Phoenix types to Spark catalyst types
+  def catalystTypeToPhoenixTypeString(dataType: DataType): String = dataType match {
+    case t if t.isInstanceOf[StringType] => "VARCHAR"
+    case t if t.isInstanceOf[LongType] => "LONG"
+    case t if t.isInstanceOf[IntegerType] => "INTEGER"
+    case t if t.isInstanceOf[ShortType] => "SHORT"
+    case t if t.isInstanceOf[ByteType] => "BYTE"
+    case t if t.isInstanceOf[FloatType] => "FLOAT"
+    case t if t.isInstanceOf[DoubleType] => "DOUBLE"
+    case t if t.simpleString.startsWith("decimal") => "DECIMAL"
+    case t if t.isInstanceOf[TimestampType] => "TIMESTAMP"
+    case t if t.isInstanceOf[DateType] => "DATE"
+    case t if t.isInstanceOf[BooleanType] => "BOOLEAN"
+    case t if t.isInstanceOf[BinaryType] => "BINARY"
+    //signed
+    case t if t.simpleString == "array<int>"  => "INTEGER ARRAY"
+    case t if t.simpleString == "array<varchar>"  => "VARCHAR ARRAY"
+    case t if t.simpleString == "array<varbinary>"  => "VARBINARY ARRAY"
+    case t if t.simpleString == "array<long>"  => "LONG ARRAY"
+    case t if t.simpleString == "array<smallint>"  => "SMALLINT ARRAY"
+    case t if t.simpleString == "array<tinyint>"  => "TINYINT ARRAY"
+    case t if t.simpleString == "array<float>"  => "FLOAT ARRAY"
+    case t if t.simpleString == "array<double>"  => "DOUBLE ARRAY"
+    case t if t.simpleString == "array<timestamp>"  => "TIMESTAMP ARRAY"
+    case t if t.simpleString == "array<date>"  => "TIMESTAMP ARRAY"
+    case t if t.simpleString == "array<time>"  => "TIMESTAMP ARRAY"
+    case t if t.simpleString == "array<string>"  => "VARCHAR ARRAY"
+    //special type
+    case t if t.simpleString.startsWith("array<decimal")  => "DECIMAL ARRAY"
+    case t if t.simpleString == "array<boolean>"  => "BOOLEAN ARRAY"
+    case _ => throw new UnsupportedOperationException(s"Cannot convert SQL type ${dataType.simpleString} to Phoenix type")
+
+  }
+
 }
