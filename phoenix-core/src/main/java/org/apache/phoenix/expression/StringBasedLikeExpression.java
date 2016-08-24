@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.util.regex.JavaPattern;
@@ -34,7 +35,7 @@ public class StringBasedLikeExpression extends LikeExpression {
 
     @Override
     protected AbstractBasePattern compilePatternSpec(String value) {
-        return new JavaPattern(value);
+        return new JavaPattern(value, Pattern.DOTALL);
     }
 
     public static LikeExpression create(List<Expression> children, LikeType likeType) {
