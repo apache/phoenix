@@ -18,10 +18,12 @@
 package org.apache.phoenix.expression;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.util.regex.JONIPattern;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.joni.Option;
 
 public class ByteBasedLikeExpression extends LikeExpression {
 
@@ -34,7 +36,7 @@ public class ByteBasedLikeExpression extends LikeExpression {
 
     @Override
     protected AbstractBasePattern compilePatternSpec(String value) {
-        return new JONIPattern(value);
+        return new JONIPattern(value, Option.MULTILINE);
     }
 
     public static LikeExpression create(List<Expression> children, LikeType likeType) {
