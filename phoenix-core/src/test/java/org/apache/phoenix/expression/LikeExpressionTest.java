@@ -77,6 +77,12 @@ public class LikeExpressionTest {
     }
 
     @Test
+    public void testOneChar() throws Exception {
+        assertEquals(Boolean.TRUE, testExpression ("A", "_"));
+        assertEquals(Boolean.FALSE, testExpression ("AA", "_"));
+    }
+
+    @Test
     public void testEmptySourceStr() throws Exception {
         assertEquals(Boolean.TRUE, testExpression ("", "%"));
         assertEquals(Boolean.FALSE, testExpression ("", "_"));
