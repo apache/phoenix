@@ -19,7 +19,9 @@ package org.apache.phoenix.jdbc;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.LinkedList;
 import java.util.Properties;
+import java.util.Queue;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -44,7 +46,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    
+    protected Queue<Connection> connectionQueue = new LinkedList();
+
     @GuardedBy("this")
     private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
@@ -54,6 +57,10 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     
     @GuardedBy("this")
     private boolean closed = false;
+
+    public Queue<Connection> getConnectionQueue() {
+        return connectionQueue;
+    }
 
     public PhoenixTestDriver() {
         this(ReadOnlyProps.EMPTY_PROPS);
@@ -80,7 +87,9 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     @Override
     public synchronized Connection connect(String url, Properties info) throws SQLException {
         checkClosed();
-        return super.connect(url, info);
+        Connection conn = super.connect(url,info);
+        connectionQueue.add(conn);
+        return conn;
     }
     
     @Override // public for testing

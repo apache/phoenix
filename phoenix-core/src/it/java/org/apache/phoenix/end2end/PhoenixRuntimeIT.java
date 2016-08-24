@@ -52,6 +52,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.Ignore;
+
 
 import com.google.common.collect.Lists;
 
@@ -75,12 +77,13 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeTableReuseIT {
         Collections.sort(actualTenantIds);
         assertEquals(expectedTenantIds, actualTenantIds);
     }
-    
+    @Ignore
     @Test
     public void testGetTenantIdExpressionForSaltedTable() throws Exception {
         testGetTenantIdExpression(true);
     }
-    
+
+    @Ignore
     @Test
     public void testGetTenantIdExpressionForUnsaltedTable() throws Exception {
         testGetTenantIdExpression(false);

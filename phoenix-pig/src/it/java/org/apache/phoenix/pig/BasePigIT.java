@@ -42,7 +42,7 @@ import org.junit.BeforeClass;
 
 import com.google.common.collect.Maps;
 
-public class BasePigIT extends BaseHBaseManagedTimeTableReuseIT {
+public abstract class BasePigIT extends BaseHBaseManagedTimeTableReuseIT {
     protected TupleFactory tupleFactory;
     protected String zkQuorum;
     protected Connection conn;

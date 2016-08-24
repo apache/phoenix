@@ -21,12 +21,23 @@ package org.apache.phoenix.end2end;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.log4j.spi.LoggerFactory;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.schema.PMetaData;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+
+import java.io.File;
+import java.sql.Connection;
+import java.util.Iterator;
+import java.util.Queue;
 
 /**
  * Base class for tests that let HBase set timestamps.
@@ -48,10 +59,10 @@ import org.junit.experimental.categories.Category;
 @NotThreadSafe
 @Category(HBaseManagedTimeTableReuseTest.class)
 public class BaseHBaseManagedTimeTableReuseIT extends BaseTest {
-    protected static Configuration getTestClusterConfig() {
+    /*protected static Configuration getTestClusterConfig() {
         // don't want callers to modify config.
         return new Configuration(config);
-    }
+    }*/
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -62,7 +73,22 @@ public class BaseHBaseManagedTimeTableReuseIT extends BaseTest {
     public static void doTeardown() throws Exception {
         // no teardown since we are creating unique table names
         // just destroy our test driver
-        destroyDriver();
+        //destroyDriver();
+        //Queue connectionQueue = driver.getConnectionQueue();
+        //List<>
+        /*
+        for (Object c : connectionQueue){
+            Connection conn = (Connection) c;
+            PMetaData pMetaDataCache = conn.unwrap(PhoenixConnection.class).getMetaDataCache();
+            Iterator metaDataCacheIterator = pMetaDataCache.iterator();
+            while(metaDataCacheIterator.hasNext()) {
+                PTable pTable = (PTable)metaDataCacheIterator.next();
+                String pTableName = pTable.getPhysicalName().getString();
+                String a = pTableName;
+
+            }
+        }*/
+        dropNonSystemTables(false);
     }
 
     @After

@@ -110,8 +110,8 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-surefire-plugin.version>2.19.1</maven-surefire-plugin.version>
-    <maven-failsafe-plugin.version>2.19.1</maven-failsafe-plugin.version>
+    <maven-surefire-plugin.version>2.19.2-SNAPSHOT</maven-surefire-plugin.version>
+    <maven-failsafe-plugin.version>2.19.2-SNAPSHOT</maven-failsafe-plugin.version>
     
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
@@ -226,6 +226,7 @@
           <artifactId>maven-failsafe-plugin</artifactId>
           <version>${maven-failsafe-plugin.version}</version>
           <executions>
+<!--
             <execution>
                <id>ClientManagedTimeTests</id>
                  <configuration>
@@ -244,6 +245,7 @@
                  <goal>verify</goal>
                </goals>
             </execution>
+
             <execution>
                <id>HBaseManagedTimeTests</id>
                  <configuration>
@@ -262,6 +264,7 @@
                  <goal>verify</goal>
                </goals>
             </execution>
+            -->
             <execution>
               <id>HBaseManagedTimeTableReuseTest</id>
               <configuration>
@@ -269,6 +272,10 @@
                 <forkCount>${numForkedIT}</forkCount>
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
+                <includes>
+                  <include>org.apache.phoenix.end2end.AlterMultiTenantTableWithViewsIT</include>
+                </includes>
+
                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -280,6 +287,7 @@
                 <goal>verify</goal>
               </goals>
             </execution>
+<!--
 	        <execution>
                <id>NeedTheirOwnClusterTests</id>
                  <configuration>
@@ -298,7 +306,9 @@
                  <goal>verify</goal>
                </goals>
             </execution>
+-->
           </executions>
+
         </plugin>
         <plugin>
           <artifactId>maven-dependency-plugin</artifactId>
@@ -390,6 +400,7 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
+            <skip>true</skip>
           <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>

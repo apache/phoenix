@@ -29,6 +29,7 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -39,6 +40,7 @@ public class PhoenixQueryTimeoutIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final String QUERY_TIMEOUT_TEST = generateRandomString();
 
+    @Ignore
     @Test
     /**
      * This test validates that we timeout as expected. It does do by

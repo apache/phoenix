@@ -103,13 +103,8 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -228,8 +223,9 @@ public abstract class BaseTest {
     private static final int dropTableTimeout = 300; // 5 mins should be long enough.
     private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
+    private static final int numThreads = 10;
     private static final ExecutorService dropHTableService = Executors
-            .newSingleThreadExecutor(factory);
+            .newFixedThreadPool(numThreads, factory);
 
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
@@ -596,9 +592,9 @@ public abstract class BaseTest {
         teardownTxManager();
     }
     
-    protected static void dropNonSystemTables() throws Exception {
+    protected static void dropNonSystemTables(boolean waitForTablesToDrop) throws Exception {
         try {
-            disableAndDropNonSystemTables();
+            disableAndDropNonSystemTables(waitForTablesToDrop);
         } finally {
             destroyDriver();
         }
@@ -1834,11 +1830,27 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-    
+
+    private static void dropTablesAsync(List<String> tables) throws SQLException {
+        if(driver==null) return;
+        HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        Set<String> tablesToDelete = new HashSet<>();
+        for(String table : tables){
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(table);
+            if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName) && !tablesToDelete.contains(table)) {
+
+                //disableAndDropTable(admin, table, false);
+                tablesToDelete.add(table);
+            }
+
+            }
+        }
+
+
     /**
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
-    private static void disableAndDropNonSystemTables() throws Exception {
+    private static void disableAndDropNonSystemTables(boolean waitForTablesToDrop) throws Exception {
         if (driver == null) return;
         HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin();
         try {
@@ -1846,7 +1858,7 @@ public abstract class BaseTest {
             for (HTableDescriptor table : tables) {
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(table.getName());
                 if (!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName)) {
-                    disableAndDropTable(admin, table.getTableName());
+                    disableAndDropTable(admin, table.getTableName(), waitForTablesToDrop);
                 }
             }
         } finally {
@@ -1854,7 +1866,7 @@ public abstract class BaseTest {
         }
     }
     
-    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName)
+    private static void disableAndDropTable(final HBaseAdmin admin, final TableName tableName, boolean waitForTablesToDrop)
             throws Exception {
         Future<Void> future = null;
         boolean success = false;
@@ -1870,7 +1882,10 @@ public abstract class BaseTest {
                         return null;
                     }
                 });
-                future.get(dropTableTimeout, TimeUnit.SECONDS);
+                if (waitForTablesToDrop) {
+                    future.get(dropTableTimeout, TimeUnit.SECONDS);
+                }
+
                 success = true;
             } catch (TimeoutException e) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.OPERATION_TIMED_OUT)

@@ -59,7 +59,7 @@ public abstract class BaseHBaseManagedTimeIT extends BaseTest {
     
     @AfterClass
     public static void doTeardown() throws Exception {
-        dropNonSystemTables();
+        dropNonSystemTables(true);
     }
     
     @After
