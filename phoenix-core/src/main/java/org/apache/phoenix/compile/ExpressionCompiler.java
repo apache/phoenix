@@ -518,8 +518,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                       return new ComparisonExpression(Arrays.asList(lhs,rhs), op);
                   }
                 }
-            } else if (index == 0 && pattern.length() == 1 && pattern.equals(Character.toString(StringUtil.MULTI_CHAR_LIKE))) {
-                return IsNullExpression.create(lhs, true, context.getTempPtr());
+            } else {
+                byte[] nullExpressionString = new byte[pattern.length()];
+                byte[] wildcard = {StringUtil.MULTI_CHAR_LIKE};
+                StringUtil.fill(nullExpressionString, 0, pattern.length(), wildcard, 0, 1, false);
+                if (pattern.equals(new String (nullExpressionString))) {
+                    return IsNullExpression.create(lhs, true, context.getTempPtr());
+                }
             }
         }
         QueryServices services = context.getConnection().getQueryServices();
