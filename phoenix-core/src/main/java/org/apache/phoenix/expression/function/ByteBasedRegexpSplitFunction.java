@@ -22,6 +22,7 @@ import java.util.List;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBaseSplitter;
 import org.apache.phoenix.expression.util.regex.JONIPattern;
+import org.joni.Option;
 
 public class ByteBasedRegexpSplitFunction extends RegexpSplitFunction {
     public ByteBasedRegexpSplitFunction() {
@@ -33,6 +34,6 @@ public class ByteBasedRegexpSplitFunction extends RegexpSplitFunction {
 
     @Override
     protected AbstractBaseSplitter compilePatternSpec(String value) {
-        return new JONIPattern(value);
+        return new JONIPattern(value, Option.MULTILINE);
     }
 }
