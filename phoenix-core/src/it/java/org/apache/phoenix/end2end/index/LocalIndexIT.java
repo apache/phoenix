@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -50,7 +52,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -58,10 +60,8 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.*;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -76,24 +76,16 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class LocalIndexIT extends BaseHBaseManagedTimeIT {
-
-    private String schemaName="TEST";
+public class LocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     private boolean isNamespaceMapped;
-    private String tableName = schemaName + ".T";
-    private String indexTableName = schemaName + ".I";
-    private String indexName = "I";
-    private String indexPhysicalTableName;
-    private TableName physicalTableName;
+    String schemaName="TEST";
 
     public LocalIndexIT(boolean isNamespaceMapped) {
         this.isNamespaceMapped = isNamespaceMapped;
-        this.physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        this.indexPhysicalTableName = this.physicalTableName.getNameAsString();
     }
     
     @BeforeClass 
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Drop the HBase table metadata for this test
@@ -126,6 +118,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexRoundTrip() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, null);
         Connection conn1 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
@@ -146,6 +142,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexCreationWithSplitsShouldFail() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
@@ -162,6 +161,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexCreationWithSaltingShouldFail() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
@@ -178,6 +180,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexTableRegionSplitPolicyAndSplitKeys() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null,"('e','i','o')");
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
@@ -203,23 +210,34 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         return DriverManager.getConnection(getUrl(),props);
     }
 
+
     @Test
     public void testDropLocalIndexTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
         createBaseTable(tableName, null, null);
+
+        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped);
+        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
+
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+        verifySequence(null, sequenceName, sequenceSchemaName, true);
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         conn1.createStatement().execute("DROP TABLE "+ tableName);
-        ResultSet rs = conn2.createStatement().executeQuery("SELECT "
-                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
-                + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
-        assertFalse("View index sequences should be deleted.", rs.next());
+
+        verifySequence(null, sequenceName, sequenceSchemaName, false);
     }
     
     @Test
     public void testPutsToLocalIndexTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
@@ -254,6 +272,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testBuildIndexWhenUserTableAlreadyHasData() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
@@ -288,6 +312,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScan() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
@@ -420,6 +450,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScanJoinColumnsFromDataTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         try{
@@ -554,6 +590,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testIndexPlanSelectionIfBothGlobalAndLocalIndexesHasSameColumnsAndOrder() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
@@ -571,8 +611,12 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         conn1.close();
     }
 
+
     @Test
     public void testDropLocalIndexShouldDeleteDataFromLocalIndexTable() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
@@ -584,7 +628,7 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
             conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
             conn1.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
             HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-            HTable table = new HTable(admin.getConfiguration() ,TableName.valueOf(TestUtil.DEFAULT_DATA_TABLE_NAME));
+            HTable table = new HTable(admin.getConfiguration() ,TableName.valueOf(tableName));
             Pair<byte[][], byte[][]> startEndKeys = table.getStartEndKeys();
             byte[][] startKeys = startEndKeys.getFirst();
             byte[][] endKeys = startEndKeys.getSecond();
@@ -615,6 +659,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexRowsShouldBeDeletedWhenUserTableRowsDeleted() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
@@ -637,6 +685,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testScanWhenATableHasMultipleLocalIndexes() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try {
@@ -659,6 +710,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexesOnTableWithImmutableRows() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
         try {
@@ -702,6 +756,10 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScanWithInList() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        String indexTableName = schemaName + "." + indexName;
+
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
@@ -732,13 +790,15 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
             Statement statement = conn1.createStatement();
-            statement.execute("create table example (id integer not null,fn varchar,"
+            String tableName = generateRandomString();
+            String indexName = generateRandomString();
+            statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
                     + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
-            statement.execute("upsert into example values(1,'fn','ln')");
+            statement.execute("upsert into " + tableName + "  values(1,'fn','ln')");
             statement
-                    .execute("create local index my_idx on example (fn)");
-            statement.execute("upsert into example values(2,'fn1','ln1')");
-            ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM my_idx");
+                    .execute("create local index " + indexName + " on " + tableName + "  (fn)");
+            statement.execute("upsert into " + tableName + "  values(2,'fn1','ln1')");
+            ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName );
             assertTrue(rs.next());
        } finally {
             conn1.close();
@@ -747,6 +807,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScanAfterRegionSplit() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         if (isNamespaceMapped) { return; }
         createBaseTable(tableName, null, "('e','j','o')");
         Connection conn1 = getConnection();
@@ -838,6 +903,9 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScanWithSmallChunks() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+
         createBaseTable(tableName, 3, null);
         Properties props = new Properties();
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "2");
@@ -881,6 +949,11 @@ public class LocalIndexIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testLocalIndexScanAfterRegionsMerge() throws Exception {
+        String tableName = schemaName + "." + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
+        String indexPhysicalTableName = physicalTableName.getNameAsString();
+
         if (isNamespaceMapped) { return; }
         createBaseTable(tableName, null, "('e','j','o')");
         Connection conn1 = getConnection();

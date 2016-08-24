@@ -41,56 +41,63 @@ import static org.junit.Assert.*;
 /**
  * Test that our MapReduce basic tools work as expected
  */
-public class MapReduceIT extends BaseHBaseManagedTimeIT {
+public class MapReduceIT extends BaseHBaseManagedTimeTableReuseIT {
 
-    private static final String STOCK_TABLE_NAME = "stock";
-    private static final String STOCK_STATS_TABLE_NAME = "stock_stats";
     private static final String STOCK_NAME = "STOCK_NAME";
     private static final String RECORDING_YEAR = "RECORDING_YEAR";
     private static final String RECORDINGS_QUARTER = "RECORDINGS_QUARTER";
-    private static final String CREATE_STOCK_TABLE = "CREATE TABLE IF NOT EXISTS " + STOCK_TABLE_NAME + " ( " +
-            STOCK_NAME + " VARCHAR NOT NULL ," + RECORDING_YEAR + " INTEGER NOT  NULL, " + RECORDINGS_QUARTER +
-            " DOUBLE array[] CONSTRAINT pk PRIMARY KEY (" + STOCK_NAME + " , " + RECORDING_YEAR + "))";
+    private  String CREATE_STOCK_TABLE = "CREATE TABLE IF NOT EXISTS %s ( " +
+            " STOCK_NAME VARCHAR NOT NULL , RECORDING_YEAR  INTEGER NOT  NULL,  RECORDINGS_QUARTER " +
+            " DOUBLE array[] CONSTRAINT pk PRIMARY KEY ( STOCK_NAME, RECORDING_YEAR ))";
 
     private static final String MAX_RECORDING = "MAX_RECORDING";
-    private static final String CREATE_STOCK_STATS_TABLE =
-            "CREATE TABLE IF NOT EXISTS " + STOCK_STATS_TABLE_NAME + "(" + STOCK_NAME + " VARCHAR NOT NULL , "
-                    + MAX_RECORDING + " DOUBLE CONSTRAINT pk PRIMARY KEY (" + STOCK_NAME + "))";
-    private static final String UPSERT = "UPSERT into " + STOCK_TABLE_NAME + " values (?, ?, ?)";
+    private  String CREATE_STOCK_STATS_TABLE =
+            "CREATE TABLE IF NOT EXISTS %s(STOCK_NAME VARCHAR NOT NULL , "
+                    + " MAX_RECORDING DOUBLE CONSTRAINT pk PRIMARY KEY (STOCK_NAME ))";
+    private String UPSERT = "UPSERT into %s values (?, ?, ?)";
 
     @Before
     public void setupTables() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute(CREATE_STOCK_TABLE);
-        conn.createStatement().execute(CREATE_STOCK_STATS_TABLE);
-        conn.commit();
+
     }
 
     @Test
     public void testNoConditionsOnSelect() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String stockTableName = generateRandomString();
+        String stockStatsTableName = generateRandomString();
+        conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
+        conn.createStatement().execute(String.format(CREATE_STOCK_STATS_TABLE, stockStatsTableName));
+        conn.commit();
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        PhoenixMapReduceUtil.setInput(job, StockWritable.class, STOCK_TABLE_NAME, null,
+        PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockTableName, null,
                 STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
-        testJob(job, 91.04);
+        testJob(job, stockTableName, stockStatsTableName, 91.04);
     }
 
     @Test
     public void testConditionsOnSelect() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String stockTableName = generateRandomString();
+        String stockStatsTableName = generateRandomString();
+        conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
+        conn.createStatement().execute(String.format(CREATE_STOCK_STATS_TABLE, stockStatsTableName));
+        conn.commit();
         final Configuration conf = getUtility().getConfiguration();
         Job job = Job.getInstance(conf);
-        PhoenixMapReduceUtil.setInput(job, StockWritable.class, STOCK_TABLE_NAME, RECORDING_YEAR+"  < 2009",
+        PhoenixMapReduceUtil.setInput(job, StockWritable.class, stockTableName, RECORDING_YEAR+"  < 2009",
                 STOCK_NAME, RECORDING_YEAR, "0." + RECORDINGS_QUARTER);
-        testJob(job, 81.04);
+        testJob(job, stockTableName, stockStatsTableName, 81.04);
     }
 
-    private void testJob(Job job, double expectedMax)
+    private void testJob(Job job, String stockTableName, String stockStatsTableName, double expectedMax)
             throws SQLException, InterruptedException, IOException, ClassNotFoundException {
-        upsertData();
+        upsertData(stockTableName);
 
         // only run locally, rather than having to spin up a MiniMapReduce cluster and lets us use breakpoints
         job.getConfiguration().set("mapreduce.framework.name", "local");
-        setOutput(job);
+        setOutput(job, stockStatsTableName);
 
         job.setMapperClass(StockMapper.class);
         job.setReducerClass(StockReducer.class);
@@ -106,7 +113,7 @@ public class MapReduceIT extends BaseHBaseManagedTimeIT {
 
         // verify
         ResultSet stats = DriverManager.getConnection(getUrl()).createStatement()
-                .executeQuery("SELECT * FROM " + STOCK_STATS_TABLE_NAME);
+                .executeQuery("SELECT * FROM " + stockStatsTableName);
         assertTrue("No data stored in stats table!", stats.next());
         String name = stats.getString(1);
         double max = stats.getDouble(2);
@@ -120,17 +127,17 @@ public class MapReduceIT extends BaseHBaseManagedTimeIT {
      *
      * @param job to update
      */
-    private void setOutput(Job job) {
+    private void setOutput(Job job, String stockStatsTableName) {
         final Configuration configuration = job.getConfiguration();
-        PhoenixConfigurationUtil.setOutputTableName(configuration, STOCK_STATS_TABLE_NAME);
-        configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, "UPSERT into " + STOCK_STATS_TABLE_NAME +
+        PhoenixConfigurationUtil.setOutputTableName(configuration, stockStatsTableName);
+        configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, "UPSERT into " + stockStatsTableName +
                 " (" + STOCK_NAME + ", " + MAX_RECORDING + ") values (?,?)");
         job.setOutputFormatClass(PhoenixOutputFormat.class);
     }
 
-    private void upsertData() throws SQLException {
+    private void upsertData(String stockTableName) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        PreparedStatement stmt = conn.prepareStatement(UPSERT);
+        PreparedStatement stmt = conn.prepareStatement(String.format(UPSERT, stockTableName));
         upsertData(stmt, "AAPL", 2009, new Double[]{85.88, 91.04, 88.5, 90.3});
         upsertData(stmt, "AAPL", 2008, new Double[]{75.88, 81.04, 78.5, 80.3});
         conn.commit();

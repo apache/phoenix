@@ -45,23 +45,24 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 
 
-public class InListIT extends BaseHBaseManagedTimeIT {
+public class InListIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testLeadingPKWithTrailingRVC() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE in_test "
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName
                 + "( col1 VARCHAR NOT NULL,"
                 + "  col2 VARCHAR NOT NULL, "
                 + "  id VARCHAR NOT NULL,"
                 + "  CONSTRAINT pk PRIMARY KEY (col1, col2, id))");
 
-        conn.createStatement().execute("upsert into in_test (col1, col2, id) values ('a', 'b', 'c')");
-        conn.createStatement().execute("upsert into in_test (col1, col2, id) values ('a', 'b', 'd')");
+        conn.createStatement().execute("upsert into " + tableName + " (col1, col2, id) values ('a', 'b', 'c')");
+        conn.createStatement().execute("upsert into " + tableName + " (col1, col2, id) values ('a', 'b', 'd')");
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("select id from in_test WHERE col1 = 'a' and ((col2, id) IN (('b', 'c'),('b', 'e')))");
+        ResultSet rs = conn.createStatement().executeQuery("select id from " + tableName + " WHERE col1 = 'a' and ((col2, id) IN (('b', 'c'),('b', 'e')))");
         assertTrue(rs.next());
         assertEquals("c", rs.getString(1));
         assertFalse(rs.next());
@@ -73,13 +74,14 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     public void testLeadingPKWithTrailingRVC2() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE in_test ( user VARCHAR, tenant_id VARCHAR(5) NOT NULL,tenant_type_id VARCHAR(3) NOT NULL,  id INTEGER NOT NULL CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id))");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " ( user VARCHAR, tenant_id VARCHAR(5) NOT NULL,tenant_type_id VARCHAR(3) NOT NULL,  id INTEGER NOT NULL CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id))");
 
-        conn.createStatement().execute("upsert into in_test (tenant_id, tenant_type_id, id, user) values ('a', 'a', 1, 'BonA')");
-        conn.createStatement().execute("upsert into in_test (tenant_id, tenant_type_id, id, user) values ('a', 'a', 2, 'BonB')");
+        conn.createStatement().execute("upsert into " + tableName + " (tenant_id, tenant_type_id, id, user) values ('a', 'a', 1, 'BonA')");
+        conn.createStatement().execute("upsert into " + tableName + " (tenant_id, tenant_type_id, id, user) values ('a', 'a', 2, 'BonB')");
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("select id from in_test WHERE tenant_id = 'a' and tenant_type_id = 'a' and ((id, user) IN ((1, 'BonA'),(1, 'BonB')))");
+        ResultSet rs = conn.createStatement().executeQuery("select id from " + tableName + " WHERE tenant_id = 'a' and tenant_type_id = 'a' and ((id, user) IN ((1, 'BonA'),(1, 'BonB')))");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertFalse(rs.next());
@@ -142,8 +144,7 @@ public class InListIT extends BaseHBaseManagedTimeIT {
      * @return  the table or view name that should be used to access the created table
      */
     private static String initializeAndGetTable(Connection baseConn, Connection conn, boolean isMultiTenant, PDataType pkType, int saltBuckets) throws SQLException {
-            String tableName = "in_test" + pkType.getSqlTypeName() + saltBuckets + (isMultiTenant ? "_multi" : "_single");
-            
+            String tableName = generateRandomString() + "in_test" + pkType.getSqlTypeName() + saltBuckets + (isMultiTenant ? "_multi" : "_single");
             String tableDDL = createTableDDL(tableName, pkType, saltBuckets, isMultiTenant);
             baseConn.createStatement().execute(tableDDL);
             
@@ -444,13 +445,14 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     public void testWithFixedLengthKV() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE in_test ( id INTEGER PRIMARY KEY, k CHAR(3))");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " ( id INTEGER PRIMARY KEY, k CHAR(3))");
 
-        conn.createStatement().execute("upsert into in_test values (1, 'aa')");
-        conn.createStatement().execute("upsert into in_test values (2, 'bb')");
+        conn.createStatement().execute("upsert into " + tableName + " values (1, 'aa')");
+        conn.createStatement().execute("upsert into " + tableName + " values (2, 'bb')");
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("select k from in_test WHERE k IN ('aa','bb')");
+        ResultSet rs = conn.createStatement().executeQuery("select k from " + tableName + " WHERE k IN ('aa','bb')");
         assertTrue(rs.next());
         assertEquals("aa", rs.getString(1));
         assertTrue(rs.next());
@@ -463,13 +465,14 @@ public class InListIT extends BaseHBaseManagedTimeIT {
     private void testWithFixedLengthPK(SortOrder sortOrder) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("CREATE TABLE in_test ( k CHAR(3) PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " ( k CHAR(3) PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
 
-        conn.createStatement().execute("upsert into in_test (k) values ('aa')");
-        conn.createStatement().execute("upsert into in_test (k) values ('bb')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('aa')");
+        conn.createStatement().execute("upsert into " + tableName + " (k) values ('bb')");
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("select k from in_test WHERE k IN ('aa','bb')");
+        ResultSet rs = conn.createStatement().executeQuery("select k from " + tableName + " WHERE k IN ('aa','bb')");
         assertTrue(rs.next());
         assertEquals(sortOrder == SortOrder.ASC ? "aa" : "bb", rs.getString(1));
         assertTrue(rs.next());

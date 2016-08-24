@@ -35,7 +35,7 @@ import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.collect.Lists;
 
-public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
+public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     
     public static final String TENANT1_ID = "tenant1";
     public static final String TENANT2_ID = "tenant2";
@@ -48,24 +48,26 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     }
     
     protected void testUpdatableView(Integer saltBuckets, boolean localIndex) throws Exception {
-        createBaseTable("t", saltBuckets, true);
+        String tableName = generateRandomString();
+        createBaseTable(tableName, saltBuckets, true);
         Connection conn = createTenantConnection(TENANT1_ID);
         try {
-            createAndPopulateTenantView(conn, TENANT1_ID, "t", "");
-            createAndVerifyIndex(conn, saltBuckets, TENANT1_ID, "", localIndex);
-            verifyViewData(conn, "");
+            String viewName = createAndPopulateTenantView(conn, TENANT1_ID, tableName, "");
+            createAndVerifyIndex(conn, viewName, tableName, saltBuckets, TENANT1_ID, "", localIndex);
+            verifyViewData(conn, viewName, "");
         } finally {
             try { conn.close();} catch (Exception ignored) {}
         }
     }
 
     protected void testUpdatableViewNonString(Integer saltBuckets, boolean localIndex) throws Exception {
-        createBaseTable("t", saltBuckets, false);
+        String tableName = generateRandomString();
+        createBaseTable(tableName, saltBuckets, false);
         Connection conn = createTenantConnection(NON_STRING_TENANT_ID);
         try {
-            createAndPopulateTenantView(conn, NON_STRING_TENANT_ID, "t", "");
-            createAndVerifyIndexNonStringTenantId(conn, NON_STRING_TENANT_ID, "");
-            verifyViewData(conn, "");
+            String viewName = createAndPopulateTenantView(conn, NON_STRING_TENANT_ID, tableName, "");
+            createAndVerifyIndexNonStringTenantId(conn, viewName, tableName, NON_STRING_TENANT_ID, "");
+            verifyViewData(conn, viewName, "");
         } finally {
             try { conn.close();} catch (Exception ignored) {}
         }
@@ -76,7 +78,8 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     }
 
     protected void testUpdatableViewsWithSameNameDifferentTenants(Integer saltBuckets, boolean localIndex) throws Exception {
-        createBaseTable("t", saltBuckets, true);
+        String tableName = generateRandomString();
+        createBaseTable(tableName, saltBuckets, true);
         Connection conn1 = createTenantConnection(TENANT1_ID);
         Connection conn2 = createTenantConnection(TENANT2_ID);
         try {
@@ -84,14 +87,14 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
             String prefixForTenant2Data = "TII";
             
             // tenant views with same name for two different tables
-            createAndPopulateTenantView(conn1, TENANT1_ID, "t", prefixForTenant1Data);
-            createAndPopulateTenantView(conn2, TENANT2_ID, "t", prefixForTenant2Data);
+            String viewName1 = createAndPopulateTenantView(conn1, TENANT1_ID, tableName, prefixForTenant1Data);
+            String viewName2 = createAndPopulateTenantView(conn2, TENANT2_ID, tableName, prefixForTenant2Data);
             
-            createAndVerifyIndex(conn1, saltBuckets, TENANT1_ID, prefixForTenant1Data, localIndex);
-            createAndVerifyIndex(conn2, saltBuckets, TENANT2_ID, prefixForTenant2Data, localIndex);
+            createAndVerifyIndex(conn1, viewName1, tableName, saltBuckets, TENANT1_ID, prefixForTenant1Data, localIndex);
+            createAndVerifyIndex(conn2, viewName2, tableName, saltBuckets, TENANT2_ID, prefixForTenant2Data, localIndex);
             
-            verifyViewData(conn1, prefixForTenant1Data);
-            verifyViewData(conn2, prefixForTenant2Data);
+            verifyViewData(conn1, viewName1, prefixForTenant1Data);
+            verifyViewData(conn2, viewName2, prefixForTenant2Data);
         } finally {
             try { conn1.close();} catch (Exception ignored) {}
             try { conn2.close();} catch (Exception ignored) {}
@@ -111,51 +114,56 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
         conn.close();
     }
     
-    private void createAndPopulateTenantView(Connection conn, String tenantId, String baseTable, String valuePrefix) throws SQLException {
-        String ddl = "CREATE VIEW v(v2 VARCHAR) AS SELECT * FROM " + baseTable + " WHERE k1 = 1";
+    private String createAndPopulateTenantView(Connection conn, String tenantId, String baseTable, String valuePrefix) throws SQLException {
+        String viewName = generateRandomString();
+        String ddl = "CREATE VIEW " + viewName + "(v2 VARCHAR) AS SELECT * FROM " + baseTable + " WHERE k1 = 1";
         conn.createStatement().execute(ddl);
-        tenantViewsToDelete.add(new Pair<String, String>(tenantId, "v"));
+        tenantViewsToDelete.add(new Pair<String, String>(tenantId, viewName ));
         for (int i = 0; i < 10; i++) {
-            conn.createStatement().execute("UPSERT INTO v(k2,v1,v2) VALUES(" + i + ",'" + valuePrefix + "v1-" + (i%5) + "','" + valuePrefix + "v2-" + (i%2) + "')");
+            conn.createStatement().execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES(" + i + ",'" + valuePrefix + "v1-" + (i%5) + "','" + valuePrefix + "v2-" + (i%2) + "')");
         }
         conn.commit();
+        return viewName;
     }
     
-    private void createAndVerifyIndex(Connection conn, Integer saltBuckets, String tenantId, String valuePrefix, boolean localIndex) throws SQLException {
+    private void createAndVerifyIndex(Connection conn, String viewName, String tableName, Integer saltBuckets, String tenantId, String valuePrefix, boolean localIndex) throws SQLException {
+        String indexName = generateRandomString();
         if(localIndex){
-            conn.createStatement().execute("CREATE LOCAL INDEX i ON v(v2)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + viewName + "(v2)");
         } else {
-            conn.createStatement().execute("CREATE INDEX i ON v(v2)");
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + "(v2)");
         }
-        conn.createStatement().execute("UPSERT INTO v(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
+        conn.createStatement().execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
         conn.commit();
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'");
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'");
         if(localIndex){
             assertEquals(saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [1,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER T [1,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER " + tableName + " [1,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         } else {
             String expected = saltBuckets == null ? 
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_" + tableName + " [-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY" :
-                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_T [0,-32768,'" + tenantId + "','" + valuePrefix + "v2-1'] - ["+(saltBuckets.intValue()-1)+",-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+                    "CLIENT PARALLEL 3-WAY RANGE SCAN OVER _IDX_" + tableName + " [0,-32768,'" + tenantId + "','" + valuePrefix + "v2-1'] - ["+(saltBuckets.intValue()-1)+",-32768,'" + tenantId + "','" + valuePrefix + "v2-1']\n"
+
                   + "    SERVER FILTER BY FIRST KEY ONLY\n"
                   + "CLIENT MERGE SORT";
             assertEquals(expected, QueryUtil.getExplainPlan(rs));
         }
     }
 
-    private void createAndVerifyIndexNonStringTenantId(Connection conn, String tenantId, String valuePrefix) throws SQLException {
-        conn.createStatement().execute("CREATE LOCAL INDEX i ON v(v2)");
-        conn.createStatement().execute("UPSERT INTO v(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
+    private void createAndVerifyIndexNonStringTenantId(Connection conn, String viewName, String tableName, String tenantId, String valuePrefix) throws SQLException {
+        String indexName = generateRandomString();
+        conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + viewName + "(v2)");
+        conn.createStatement().execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
         conn.commit();
-        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'");
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'");
         assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T [1," + tenantId + ",'" + valuePrefix + "v2-1']\n"
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1," + tenantId + ",'" + valuePrefix + "v2-1']\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
     }
@@ -167,8 +175,8 @@ public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeIT {
     }
     
     @SuppressWarnings("unchecked")
-    private void verifyViewData(Connection conn, String valuePrefix) throws SQLException {
-        String query = "SELECT k1, k2, v2 FROM v WHERE v2='" + valuePrefix + "v2-1'";
+    private void verifyViewData(Connection conn, String viewName, String valuePrefix) throws SQLException {
+        String query = "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'";
         ResultSet rs = conn.createStatement().executeQuery(query);
         List<List<Object>> expectedResultsA = Lists.newArrayList(
             Arrays.<Object>asList(1,1, valuePrefix + "v2-1"),

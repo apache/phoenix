@@ -57,12 +57,13 @@ import org.junit.Before;
 import org.junit.Test;
 
 
-public class DateTimeIT extends BaseHBaseManagedTimeIT {
+public class DateTimeIT extends BaseHBaseManagedTimeTableReuseIT {
 
     protected Connection conn;
     protected Date date;
     protected static final String tenantId = getOrganizationId();
     protected final static String ROW10 = "00D123122312312";
+    protected  String tableName;
 
     public DateTimeIT() throws Exception {
         super();
@@ -72,7 +73,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     @Before
     public void setUp() throws SQLException {
         conn = DriverManager.getConnection(getUrl());
-        initAtable();
+        this.tableName = initAtable();
     }
 
     @After
@@ -80,10 +81,11 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         conn.close();
     }
     
-    private void initAtable() throws SQLException { 
-        ensureTableCreated(getUrl(), ATABLE_NAME, (byte[][])null);
+    private String initAtable() throws SQLException {
+        String tableName = generateRandomString();
+        ensureTableCreated(getUrl(), tableName, ATABLE_NAME, (byte[][])null);
         PreparedStatement stmt = conn.prepareStatement(
-            "upsert into " + ATABLE_NAME +
+            "upsert into " + tableName +
             "(" +
             "    ORGANIZATION_ID, " +
             "    ENTITY_ID, " +
@@ -288,6 +290,8 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         stmt.execute();
 
         conn.commit();
+        return  tableName;
+
     }
 
     @Test
@@ -298,9 +302,10 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         java.util.Date dateToday = cal.getTime();
         cal.add(Calendar.DAY_OF_YEAR, 1);
         java.util.Date dateTomorrow = cal.getTime();
+        String tableName = generateRandomString();
         String today = formatter.format(dateToday);
         String tomorrow = formatter.format(dateTomorrow);
-        String query = "SELECT entity_id FROM ATABLE WHERE a_integer < 4 AND a_date BETWEEN date '" + today + "' AND date '" + tomorrow + "' ";
+        String query = "SELECT entity_id FROM " + this.tableName + " WHERE a_integer < 4 AND a_date BETWEEN date '" + today + "' AND date '" + tomorrow + "' ";
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -311,7 +316,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectLiteralDate() throws Exception {
         String s = DateUtil.DEFAULT_DATE_FORMATTER.format(date);
-        String query = "SELECT DATE '" + s + "' FROM ATABLE";
+        String query = "SELECT DATE '" + s + "' FROM " + this.tableName;
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -320,7 +325,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSelectLiteralDateCompare() throws Exception {
-        String query = "SELECT (DATE '" + date + "' = DATE '" + date + "') FROM ATABLE";
+        String query = "SELECT (DATE '" + date + "' = DATE '" + date + "') FROM " + this.tableName;
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -329,7 +334,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSelectWhereDatesEqual() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' = DATE '" + date + "'";
+        String query = "SELECT entity_id FROM " + this.tableName + " WHERE  a_integer < 4 AND DATE '" + date + "' = DATE '" + date + "'";
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -338,7 +343,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSelectWhereDateAndToDateEqual() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' = TO_DATE ('" + date + "')";
+        String query = "SELECT entity_id FROM " + this.tableName + " WHERE  a_integer < 4 AND DATE '" + date + "' = TO_DATE ('" + date + "')";
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertTrue(rs.next());
@@ -348,7 +353,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectWhereDateAndTimestampEqual() throws Exception {
         final String timestamp = "2012-09-08 07:08:23";
-        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + timestamp + "' = TIMESTAMP '" + timestamp + "'";
+        String query = "SELECT entity_id FROM " + this.tableName + " WHERE  a_integer < 4 AND DATE '" + timestamp + "' = TIMESTAMP '" + timestamp + "'";
 
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
@@ -357,7 +362,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSelectWhereSameDatesUnequal() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' > DATE '" + date + "'";
+        String query = "SELECT entity_id FROM " + this.tableName + " WHERE  a_integer < 4 AND DATE '" + date + "' > DATE '" + date + "'";
         Statement statement = conn.createStatement();
         ResultSet rs = statement.executeQuery(query);
         assertFalse(rs.next());
@@ -365,7 +370,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDateInList() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE a_date IN (?,?) AND a_integer < 4";
+        String query = "SELECT entity_id FROM " + this.tableName + " WHERE a_date IN (?,?) AND a_integer < 4";
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setDate(1, new Date(0));
             statement.setDate(2, date);
@@ -385,7 +390,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         java.util.Date dateTomorrow = cal.getTime();
         String today = formatter.format(dateToday);
         String tomorrow = formatter.format(dateTomorrow);
-        String query = "SELECT entity_id FROM ATABLE WHERE a_integer < 4 AND a_date BETWEEN date '" + today + "' AND date '" + tomorrow + "' ";
+        String query = "SELECT entity_id FROM " + this.tableName + " WHERE a_integer < 4 AND a_date BETWEEN date '" + today + "' AND date '" + tomorrow + "' ";
             Statement statement = conn.createStatement();
             ResultSet rs = statement.executeQuery(query);
             assertTrue(rs.next());
@@ -456,23 +461,24 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testYearFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2004-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
                 "TO_DATE('2010-03-01 00:00:00:896', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2005-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('2005-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
                 "TO_DATE('2010-03-01 00:00:00:896', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2006-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (3, TO_DATE('2006-03-01 00:00:00'), TO_TIMESTAMP('2006-02-01 00:00:00'), TO_TIME('2008-02-01 00:00:00'), " +
                 "TO_DATE('2010-03-01 00:00:00:896', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-02-01'), TO_TIME('2015-02-01 00:00:00'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, YEAR(timestamps), YEAR(times), Year(unsignedDates), YEAR(unsignedTimestamps), " +
-                "YEAR(unsignedTimes) FROM T1 where YEAR(dates) = 2004");
+                "YEAR(unsignedTimes) FROM " + tableName + " where YEAR(dates) = 2004");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(2006, rs.getInt(2));
@@ -485,23 +491,24 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testMonthFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2004-03-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
                 "TO_DATE('2010-06-20 00:00:00:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:00'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-04-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('2004-04-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
                 "TO_DATE('2010-06-20 00:00:00:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:00'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2004-05-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (3, TO_DATE('2004-05-10 00:00:00'), TO_TIMESTAMP('2006-04-12 00:00:00'), TO_TIME('2008-05-16 00:00:00'), " +
                 "TO_DATE('2010-06-20 00:00:00:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:00'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, MONTH(timestamps), MONTH(times), MONTH(unsignedDates), MONTH(unsignedTimestamps), " +
-                "MONTH(unsignedTimes) FROM T1 where MONTH(dates) = 3");
+                "MONTH(unsignedTimes) FROM " + tableName + " where MONTH(dates) = 3");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(4, rs.getInt(2));
@@ -514,17 +521,18 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testUnsignedTimeDateWithLiteral() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS UT (k1 INTEGER NOT NULL," +
+                "CREATE TABLE IF NOT EXISTS " + tableName + "  (k1 INTEGER NOT NULL," +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO UT VALUES (1, " +
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, " +
                 "'2010-06-20 12:00:00', '2012-07-28 12:00:00', '2015-12-25 12:00:00')";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, unsignedDates, " +
-                "unsignedTimestamps, unsignedTimes FROM UT where k1 = 1");
+                "unsignedTimestamps, unsignedTimes FROM " + tableName + " where k1 = 1");
         assertTrue(rs.next());
         assertEquals(DateUtil.parseDate("2010-06-20 12:00:00"), rs.getDate(2));
         assertEquals(DateUtil.parseTimestamp("2012-07-28 12:00:00"), rs.getTimestamp(3));
@@ -534,23 +542,24 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSecondFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'), " +
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:00:20'), TO_TIME('2008-05-16 10:00:30'), " +
                 "TO_DATE('2010-06-20 00:00:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:50'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:20:30'), TO_TIME('2008-05-16 10:00:30'), " +
+        dml = "UPSERT INTO " + tableName + "  VALUES (2, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:20:30'), TO_TIME('2008-05-16 10:00:30'), " +
                 "TO_DATE('2010-06-20 00:00:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:50'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:50:30'), TO_TIME('2008-05-16 10:00:30'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (3, TO_DATE('2004-03-01 00:00:10'), TO_TIMESTAMP('2006-04-12 00:50:30'), TO_TIME('2008-05-16 10:00:30'), " +
                 "TO_DATE('2010-06-20 00:00:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:00:50'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, SECOND(dates), SECOND(times), SECOND(unsignedDates), SECOND(unsignedTimestamps), " +
-                "SECOND(unsignedTimes) FROM T1 where SECOND(timestamps)=20");
+                "SECOND(unsignedTimes) FROM " + tableName + " where SECOND(timestamps)=20");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(10, rs.getInt(2));
@@ -563,18 +572,19 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testWeekFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+                "CREATE TABLE IF NOT EXISTS " + tableName + "  (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-04-12 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-04-12 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-05-18 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-05-18 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-05-18 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
+        dml = "UPSERT INTO " + tableName + " VALUES (3, TO_DATE('2004-01-10 10:00:10'), TO_TIMESTAMP('2006-05-18 08:00:20'), TO_TIME('2008-05-16 10:00:30'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, WEEK(dates), WEEK(times) FROM T1 where WEEK(timestamps)=15");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, WEEK(dates), WEEK(times) FROM " + tableName + " where WEEK(timestamps)=15");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(2, rs.getInt(2));
@@ -584,21 +594,22 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testHourFuncAgainstColumns() throws Exception {
+        String tableName  = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 15:10:20'), " +
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 15:10:20'), " +
                 "TO_TIME('2008-05-16 20:40:30'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 10:10:20'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 10:10:20'), " +
                 "TO_TIME('2008-05-16 20:40:30'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 08:10:20'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (3, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 08:10:20'), " +
                 "TO_TIME('2008-05-16 20:40:30'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, HOUR(dates), HOUR(times) FROM T1 where HOUR(timestamps)=15");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, HOUR(dates), HOUR(times) FROM " + tableName + " where HOUR(timestamps)=15");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(3, rs.getInt(2));
@@ -608,11 +619,12 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testNowFunction() throws Exception {
+        String tableName = generateRandomString();
         Date date = new Date(System.currentTimeMillis());
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, timestamps TIMESTAMP CONSTRAINT pk PRIMARY KEY (k1))";
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, timestamps TIMESTAMP CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (?, ?)";
+        String dml = "UPSERT INTO " + tableName + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setInt(1, 1);
         stmt.setDate(2, new Date(date.getTime()-500));
@@ -622,7 +634,7 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
         stmt.execute();
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * from T1 where now() > timestamps");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * from " + tableName + "  where now() > timestamps");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(new Date(date.getTime()-500), rs.getDate(2));
@@ -631,20 +643,21 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testMinuteFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-03-01 00:10:10'), TO_TIMESTAMP('2006-04-12 00:20:20'), TO_TIME('2008-05-16 10:30:30'), " +
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2004-03-01 00:10:10'), TO_TIMESTAMP('2006-04-12 00:20:20'), TO_TIME('2008-05-16 10:30:30'), " +
                 "TO_DATE('2010-06-20 00:40:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:50:50'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-03-01 00:10:10'), TO_TIMESTAMP('2006-04-12 00:50:20'), TO_TIME('2008-05-16 10:30:30'), " +
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('2004-03-01 00:10:10'), TO_TIMESTAMP('2006-04-12 00:50:20'), TO_TIME('2008-05-16 10:30:30'), " +
                 "TO_DATE('2010-06-20 00:40:40:789', 'yyyy-MM-dd HH:mm:ss:SSS'), TO_TIMESTAMP('2012-07-28'), TO_TIME('2015-12-25 00:50:50'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, MINUTE(dates), MINUTE(times), MINUTE(unsignedDates), MINUTE(unsignedTimestamps), " +
-                "MINUTE(unsignedTimes) FROM T1 where MINUTE(timestamps)=20");
+                "MINUTE(unsignedTimes) FROM " + tableName + " where MINUTE(timestamps)=20");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(10, rs.getInt(2));
@@ -657,16 +670,17 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDayOfMonthFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('2004-01-08 10:00:10'), TO_TIMESTAMP('2006-04-12 08:00:20'), TO_TIME('2008-05-26 11:00:30'))";
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2004-01-08 10:00:10'), TO_TIMESTAMP('2006-04-12 08:00:20'), TO_TIME('2008-05-26 11:00:30'))";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('2004-01-18 10:00:10'), TO_TIMESTAMP('2006-05-22 08:00:20'), TO_TIME('2008-12-30 11:00:30'))";
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('2004-01-18 10:00:10'), TO_TIMESTAMP('2006-05-22 08:00:20'), TO_TIME('2008-12-30 11:00:30'))";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, DAYOFMONTH(dates), DAYOFMONTH(times) FROM T1 where DAYOFMONTH(timestamps)=12");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, DAYOFMONTH(dates), DAYOFMONTH(times) FROM " + tableName + " where DAYOFMONTH(timestamps)=12");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(8, rs.getInt(2));
@@ -676,7 +690,8 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testNullDate() throws Exception {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT a_date, entity_id from " + ATABLE_NAME + " WHERE entity_id = '" + ROW10 + "'");
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT a_date, entity_id from " + this.tableName + " WHERE entity_id = '" + ROW10 + "'");
         assertNotNull(rs);
         assertTrue(rs.next());
         assertEquals(ROW10, rs.getString(2));
@@ -695,19 +710,20 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
     }
     @Test
     public void testSelectBetweenNanos() throws Exception {
+        String tableName = generateRandomString();
         String ddl =
-                "CREATE TABLE IF NOT EXISTS N1 (k1 INTEGER NOT NULL PRIMARY KEY, ts " +
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL PRIMARY KEY, ts " +
                         "TIMESTAMP(3))";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO N1 VALUES (1, TIMESTAMP'2015-01-01 00:00:00.111111111')";
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TIMESTAMP'2015-01-01 00:00:00.111111111')";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO N1 VALUES (2, TIMESTAMP'2015-01-01 00:00:00.111111115')";
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TIMESTAMP'2015-01-01 00:00:00.111111115')";
         conn.createStatement().execute(dml);
-        dml = "UPSERT INTO N1 VALUES (3, TIMESTAMP'2015-01-01 00:00:00.111111113')";
+        dml = "UPSERT INTO " + tableName + " VALUES (3, TIMESTAMP'2015-01-01 00:00:00.111111113')";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1,ts from N1 where ts between" +
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1,ts from " + tableName + " where ts between" +
                 " TIMESTAMP'2015-01-01 00:00:00.111111112' AND TIMESTAMP'2015-01-01 00:00:00" +
                 ".111111114'");
         assertTrue(rs.next());
@@ -718,17 +734,19 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testCurrentTimeWithProjectedTable () throws Exception {
-        String ddl = "CREATE TABLE T1 ( ID integer primary key)";
+        String tableName1 = generateRandomString();
+        String tableName2 = generateRandomString();
+        String ddl = "CREATE TABLE " + tableName1 + " ( ID integer primary key)";
         conn.createStatement().execute(ddl);
-        ddl = "CREATE TABLE T2 ( ID integer primary key)";
+        ddl = "CREATE TABLE " + tableName2 + " ( ID integer primary key)";
         conn.createStatement().execute(ddl);
-        String ups = "UPSERT INTO T1 VALUES (1)";
+        String ups = "UPSERT INTO " + tableName1 + " VALUES (1)";
         conn.createStatement().execute(ups);
-        ups = "UPSERT INTO T2 VALUES (1)";
+        ups = "UPSERT INTO " + tableName2 + " VALUES (1)";
         conn.createStatement().execute(ups);
         conn.commit();
         ResultSet rs = conn.createStatement().executeQuery("select /*+ USE_SORT_MERGE_JOIN */ op" +
-                ".id, current_time() from t1 op where op.id in (select id from t2)");
+                ".id, current_time() from " +tableName1 + " op where op.id in (select id from " + tableName2 + ")");
         assertTrue(rs.next());
         assertEquals(new java.util.Date().getYear(),rs.getTimestamp(2).getYear());
     }

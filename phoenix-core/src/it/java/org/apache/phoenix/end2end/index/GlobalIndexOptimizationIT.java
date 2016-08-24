@@ -28,22 +28,19 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.*;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
+public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @BeforeClass 
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Drop the HBase table metadata for this test
@@ -76,44 +73,58 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testGlobalIndexOptimization() throws Exception {
-        testOptimization(null);
+        String dataTableName = generateRandomString();
+        String indexTableName = generateRandomString();
+        String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
+        testOptimization(dataTableName, dataTableFullName, indexTableName, 4);
     }
     
     @Test
     public void testGlobalIndexOptimizationWithSalting() throws Exception {
-        testOptimization(4);
+        String dataTableName = generateRandomString();
+        String indexTableName = generateRandomString();
+        String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
+        testOptimization(dataTableName, dataTableFullName, indexTableName, 4);
+
     }
     
     @Test
     public void testGlobalIndexOptimizationTenantSpecific() throws Exception {
-        testOptimizationTenantSpecific(null);
+        String dataTableName = generateRandomString();
+        String indexTableName = generateRandomString();
+        testOptimizationTenantSpecific(dataTableName, indexTableName, null);
     }
     
     @Test
     public void testGlobalIndexOptimizationWithSaltingTenantSpecific() throws Exception {
-        testOptimizationTenantSpecific(4);
+        String dataTableName = generateRandomString();
+        String indexTableName = generateRandomString();
+        testOptimizationTenantSpecific(dataTableName, indexTableName, 4);
     }
 
-    private void testOptimization(Integer saltBuckets) throws Exception {
-        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, saltBuckets, "('e','i','o')", false);
+    private void testOptimization(String dataTableName, String dataTableFullName, String indexTableName, Integer saltBuckets) throws Exception {
+        
+        createBaseTable(dataTableName, saltBuckets, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('q',3,1,1,'c')");
             conn1.commit();
-            createIndex(TestUtil.DEFAULT_INDEX_TABLE_NAME, TestUtil.DEFAULT_DATA_TABLE_NAME, "v1");
+            createIndex(indexTableName, dataTableName, "v1");
             
-            String query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
+            String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM " + dataTableName +" where v1='a'";
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
-            
+
+
+
             String expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\['a'\\]\n" +
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['a'\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             String actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -130,15 +141,15 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals(2, rs.getInt("k3"));
             assertFalse(rs.next());
             
-            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM " + dataTableName +" where v1='a'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\['a'\\]\n" +
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['a'\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -157,16 +168,16 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals("a", rs.getString("v1"));
             assertFalse(rs.next());
             
-            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ * FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a' limit 1";
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM " + dataTableName +" where v1='a' limit 1";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
                     "CLIENT 1 ROW LIMIT\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\['a'\\]\n" +
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['a'\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)\n" +
+                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)\n" +
                     "    JOIN-SCANNER 1 ROW LIMIT";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
@@ -180,18 +191,18 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals("a", rs.getString("v1"));
             assertFalse(rs.next());
             
-            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ t_id, k1, k2, k3, V1 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "  where v1<='z' and k3 > 1 order by V1,t_id";
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, k1, k2, k3, V1 from " + dataTableFullName + "  where v1<='z' and k3 > 1 order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             expected = 
-                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + dataTableName + "\n" +
                     "    SERVER FILTER BY K3 > 1\n" +
-                    "    SERVER SORTED BY \\[T.V1, T.T_ID\\]\n" +
+                    "    SERVER SORTED BY \\[" + dataTableName + ".V1, " + dataTableName + ".T_ID\\]\n" +
                     "CLIENT MERGE SORT\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\[\\*\\] - \\['z'\\]\n" +
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\[\\*\\] - \\['z'\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -216,17 +227,17 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals("z", rs.getString("V1"));
             assertFalse(rs.next());
             
-            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ t_id, V1, k3 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "  where v1 <='z' group by v1,t_id, k3";
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, V1, k3 from " + dataTableFullName + "  where v1 <='z' group by v1,t_id, k3";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             expected = 
-                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
-                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T.V1, T.T_ID, T.K3\\]\n" +
+                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + dataTableName + "\n" +
+                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[" + dataTableName + ".V1, " + dataTableName + ".T_ID, " + dataTableName + ".K3\\]\n" +
                             "CLIENT MERGE SORT\n" +
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
-                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " \\[\\*\\] - \\['z'\\]\n" +
+                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\[\\*\\] - \\['z'\\]\n" +
                             "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                            "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -249,17 +260,17 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertEquals("z", rs.getString("V1"));
             assertFalse(rs.next());
             
-            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ v1,sum(k3) from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where v1 <='z'  group by v1 order by v1";
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ v1,sum(k3) from " + dataTableFullName + " where v1 <='z'  group by v1 order by v1";
             
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             expected = 
-                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER T\n" +
-                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[T.V1\\]\n" +
+                    "CLIENT PARALLEL \\d-WAY FULL SCAN OVER " + dataTableName + "\n" +
+                            "    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[" + dataTableName + ".V1\\]\n" +
                             "CLIENT MERGE SORT\n" +
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
-                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I \\[\\*\\] - \\['z'\\]\n" +
+                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\[\\*\\] - \\['z'\\]\n" +
                             "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"T.T_ID\", \"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                            "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".T_ID\", \"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             actual = QueryUtil.getExplainPlan(rs);
             assertTrue("Expected:\n" + expected + "\nbut got\n" + actual, Pattern.matches(expected, actual));
             
@@ -278,26 +289,26 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
         }
     }
 
-    private void testOptimizationTenantSpecific(Integer saltBuckets) throws Exception {
-        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, saltBuckets, "('e','i','o')", true);
+    private void testOptimizationTenantSpecific(String dataTableName, String indexTableName, Integer saltBuckets) throws Exception {
+        createBaseTable(dataTableName, saltBuckets, "('e','i','o')", true);
         Connection conn1 = DriverManager.getConnection(getUrl() + ';' + PhoenixRuntime.TENANT_ID_ATTRIB + "=tid1");
         try{
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values(1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values(1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values(2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values(3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values(1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values(1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values(2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values(3,1,1,'c')");
             conn1.commit();
-            createIndex(TestUtil.DEFAULT_INDEX_TABLE_NAME, TestUtil.DEFAULT_DATA_TABLE_NAME, "v1");
+            createIndex(indexTableName, dataTableName, "v1");
             
-            String query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ k1,k2,k3,v1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
+            String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ k1,k2,k3,v1 FROM " + dataTableName +" where v1='a'";
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             String actual = QueryUtil.getExplainPlan(rs);
-            String expected = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T \\['tid1'\\]\n" +
+            String expected = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableName + " \\['tid1'\\]\n" +
                             "    SKIP-SCAN-JOIN TABLE 0\n" +
-                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER I \\['tid1','a'\\]\n" +
+                            "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " \\['tid1','a'\\]\n" +
                             "            SERVER FILTER BY FIRST KEY ONLY\n" +
-                            "    DYNAMIC SERVER FILTER BY \\(\"T.K1\", \"T.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                            "    DYNAMIC SERVER FILTER BY \\(\"" + dataTableName + ".K1\", \"" + dataTableName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected, actual));
             
             rs = conn1.createStatement().executeQuery(query);
@@ -319,15 +330,16 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testGlobalIndexOptimizationOnSharedIndex() throws Exception {
-        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')", false);
+        String dataTableName = generateRandomString();
+        createBaseTable(dataTableName, null, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
-            conn1.createStatement().execute("CREATE INDEX i1 ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(k2,k1) INCLUDE (v1)");
-            conn1.createStatement().execute("CREATE VIEW v AS SELECT * FROM t WHERE v1 = 'a'");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("CREATE INDEX i1 ON " + dataTableName + "(k2,k1) INCLUDE (v1)");
+            conn1.createStatement().execute("CREATE VIEW v AS SELECT * FROM " + dataTableName + " WHERE v1 = 'a'");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('q',3,1,1,'c')");
             conn1.commit();
             ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM v");
             assertTrue(rs.next());
@@ -340,10 +352,10 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             
             String actual = QueryUtil.getExplainPlan(rs);
             String expected = 
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER T\n" +
+                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
                     "    SERVER FILTER BY V1 = 'a'\n" +
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_T \\[-32768,1\\] - \\[-32768,2\\]\n" +
+                    "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName + " \\[-32768,1\\] - \\[-32768,2\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY AND \"K2\" IN \\(3,4\\)\n" +
                     "    DYNAMIC SERVER FILTER BY \\(\"V.T_ID\", \"V.K1\", \"V.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected,actual));
@@ -363,22 +375,25 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testNoGlobalIndexOptimization() throws Exception {
-        createBaseTable(TestUtil.DEFAULT_DATA_TABLE_NAME, null, "('e','i','o')", false);
+        String dataTableName = generateRandomString();
+        String indexTableName = generateRandomString();
+        String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
+        createBaseTable(dataTableName, null, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('f',1,2,3,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_NAME + " values('q',3,1,1,'c')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('b',1,2,4,'z')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('f',1,2,3,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('j',2,4,2,'a')");
+            conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('q',3,1,1,'c')");
             conn1.commit();
-            conn1.createStatement().execute("CREATE INDEX " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_NAME + "(v1)");
+            conn1.createStatement().execute("CREATE INDEX " + indexTableName + " ON " + dataTableName + "(v1)");
             
             // All columns available in index
-            String query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ t_id, k1, k2, V1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
+            String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, k1, k2, V1 FROM " + dataTableName +" where v1='a'";
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals(
-                        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ['a']\n"
+                        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableName + " ['a']\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY",
                         QueryUtil.getExplainPlan(rs));
             
@@ -394,11 +409,11 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
 
             // No INDEX hint specified
-            query = "SELECT t_id, k1, k2, k3, V1 FROM " + TestUtil.DEFAULT_DATA_TABLE_NAME +" where v1='a'";
+            query = "SELECT t_id, k1, k2, k3, V1 FROM " + dataTableName +" where v1='a'";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             assertEquals(
-                        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableName + "\n" +
                         "    SERVER FILTER BY V1 = 'a'",
                         QueryUtil.getExplainPlan(rs));
             
@@ -416,11 +431,11 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             // No where clause
-            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ t_id, k1, k2, k3, V1 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " order by V1,t_id";
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, k1, k2, k3, V1 from " + dataTableFullName + " order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
-                        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + dataTableName + "\n" +
                         "    SERVER SORTED BY [V1, T_ID]\n" +
                         "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -453,11 +468,11 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeIT {
             assertFalse(rs.next());
             
             // No where clause in index scan
-            query = "SELECT /*+ INDEX(" + TestUtil.DEFAULT_DATA_TABLE_NAME + " " + TestUtil.DEFAULT_INDEX_TABLE_NAME + ")*/ t_id, k1, k2, k3, V1 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "  where k3 > 1 order by V1,t_id";
+            query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, k1, k2, k3, V1 from " + dataTableFullName + "  where k3 > 1 order by V1,t_id";
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             
             assertEquals(
-                        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_NAME + "\n" +
+                        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + dataTableName + "\n" +
                         "    SERVER FILTER BY K3 > 1\n" +
                         "    SERVER SORTED BY [V1, T_ID]\n" +
                         "CLIENT MERGE SORT",

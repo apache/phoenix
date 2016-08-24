@@ -41,16 +41,18 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-public class UseSchemaIT extends BaseHBaseManagedTimeIT {
+public class UseSchemaIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testUseSchemaCaseInsensitive() throws Exception {
-        testUseSchema("TEST_SCHEMA");
+        String schemaName = generateRandomString();
+        testUseSchema(schemaName);
     }
 
     @Test
     public void testUseSchemaCaseSensitive() throws Exception {
-        testUseSchema("\"test_schema\"");
+        String schemaName = generateRandomString();
+        testUseSchema("\"" + schemaName + "\"");
     }
 
     public void testUseSchema(String schema) throws Exception {
@@ -59,25 +61,26 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "CREATE SCHEMA IF NOT EXISTS "+schema;
         conn.createStatement().execute(ddl);
-        ddl = "create table "+schema+".TEST(id varchar primary key)";
+        String testTable = generateRandomString();
+        ddl = "create table "+schema+"." + testTable + "(id varchar primary key)";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("use "+schema);
-        String query = "select count(*) from TEST";
+        String query = "select count(*) from " + testTable;
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(0, rs.getInt(1));
         try {
-            conn.createStatement().execute("use test");
+            conn.createStatement().execute("use " + testTable);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode(), e.getErrorCode());
         }
         conn.createStatement().execute("use default");
-        ddl = "create table IF NOT EXISTS TEST(schema_name varchar primary key)";
+        ddl = "create table IF NOT EXISTS " + testTable + "(schema_name varchar primary key)";
         conn.createStatement().execute(ddl);
-        conn.createStatement().executeUpdate("upsert into test values('"+SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE+"')");
+        conn.createStatement().executeUpdate("upsert into " + testTable + " values('"+SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE+"')");
         conn.commit();
-        rs = conn.createStatement().executeQuery("select schema_name from TEST");
+        rs = conn.createStatement().executeQuery("select schema_name from " + testTable);
         assertTrue(rs.next());
         assertEquals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE, rs.getString(1));
         conn.close();
@@ -86,29 +89,30 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSchemaInJdbcUrl() throws Exception {
         Properties props = new Properties();
-        String schema = "TEST_SCHEMA";
+        String schema = generateRandomString();
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String ddl = "CREATE SCHEMA IF NOT EXISTS " + schema;
         conn.createStatement().execute(ddl);
-        ddl = "create table IF NOT EXISTS " + schema + ".test(schema_name varchar primary key)";
+        String testTable = generateRandomString();
+        ddl = "create table IF NOT EXISTS " + schema + "." + testTable + " (schema_name varchar primary key)";
         conn.createStatement().execute(ddl);
-        conn.createStatement().executeUpdate("upsert into " + schema + ".test values('" + schema + "')");
-        String query = "select schema_name from test";
+        conn.createStatement().executeUpdate("upsert into " + schema + "." + testTable + " values('" + schema + "')");
+        String query = "select schema_name from " + testTable;
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(schema, rs.getString(1));
 
-        schema = "test";
+        schema = generateRandomString();
         ddl = "CREATE SCHEMA " + schema;
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("use " + schema);
-        ddl = "create table test(schema_name varchar primary key)";
+        ddl = "create table " + testTable + "(schema_name varchar primary key)";
         conn.createStatement().execute(ddl);
-        conn.createStatement().executeUpdate("upsert into test values('" + schema + "')");
-        rs = conn.createStatement().executeQuery("select schema_name from test");
+        conn.createStatement().executeUpdate("upsert into " + testTable + " values('" + schema + "')");
+        rs = conn.createStatement().executeQuery("select schema_name from " + testTable );
         assertTrue(rs.next());
         assertEquals(schema, rs.getString(1));
         conn.close();
@@ -117,8 +121,8 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMappedView() throws Exception {
         Properties props = new Properties();
-        String schema = "TEST_SCHEMA_V";
-        String tableName = "TEST";
+        String schema = generateRandomString();
+        String tableName = generateRandomString();
         String fullTablename = schema + QueryConstants.NAME_SEPARATOR + tableName;
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         Connection conn = DriverManager.getConnection(getUrl(), props);

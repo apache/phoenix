@@ -60,7 +60,7 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
     @Test
     public void testKeyOnly() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),KEYONLY_NAME,null, ts);
+        ensureTableCreated(getUrl(),KEYONLY_NAME,KEYONLY_NAME,null, ts);
         initTableValues(ts+1);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+30));
@@ -139,7 +139,7 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
     @Test
     public void testOr() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),KEYONLY_NAME,null, ts);
+        ensureTableCreated(getUrl(),KEYONLY_NAME,KEYONLY_NAME,null, ts);
         initTableValues(ts+1);
         Properties props = new Properties();
         
@@ -164,7 +164,7 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
     @Test
     public void testQueryWithLimitAndStats() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(),KEYONLY_NAME,null, ts);
+        ensureTableCreated(getUrl(),KEYONLY_NAME,KEYONLY_NAME,null, ts);
         initTableValues(ts+1, 100);
         
         TestUtil.analyzeTable(getUrl(), ts+10, KEYONLY_NAME);
