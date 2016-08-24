@@ -81,4 +81,12 @@ public class LikeExpressionTest {
         assertEquals(Boolean.TRUE, testExpression ("", "%"));
         assertEquals(Boolean.FALSE, testExpression ("", "_"));
     }
+
+    @Test
+    public void testNewline() throws Exception {
+        assertEquals(Boolean.TRUE, testExpression ("AA\nA", "AA%"));
+        assertEquals(Boolean.TRUE, testExpression ("AA\nA", "AA_A"));
+        assertEquals(Boolean.TRUE, testExpression ("AA\nA", "AA%A"));
+        assertEquals(Boolean.FALSE, testExpression ("AA\nA", "AA_"));
+    }
  }
