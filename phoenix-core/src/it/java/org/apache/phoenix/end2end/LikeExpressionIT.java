@@ -182,4 +182,27 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
                 "SELECT * FROM " + t + " WHERE k like 'AA_'");
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testOneChar() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String t = generateRandomString();
+        String ddl = "CREATE TABLE " + t + " (k VARCHAR NOT NULL PRIMARY KEY)";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO " + t + " VALUES('A')");
+        conn.createStatement().execute("UPSERT INTO " + t + " VALUES('AA')");
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM " + t + " WHERE k like '_'");
+        assertTrue(rs.next());
+        assertEquals("A", rs.getString(1));
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery(
+                "SELECT * FROM " + t + " WHERE k like '_A'");
+        assertTrue(rs.next());
+        assertEquals("AA", rs.getString(1));
+        assertFalse(rs.next());
+    }
 }
