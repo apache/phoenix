@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
@@ -33,6 +34,6 @@ public class StringBasedRegexpSubstrFunction extends RegexpSubstrFunction {
 
     @Override
     protected AbstractBasePattern compilePatternSpec(String value) {
-        return new JavaPattern(value);
+        return new JavaPattern(value, Pattern.DOTALL);
     }
 }
