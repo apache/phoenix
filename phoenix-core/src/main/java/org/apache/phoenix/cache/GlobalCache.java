@@ -136,7 +136,7 @@ public class GlobalCache extends TenantCacheImpl {
      * @param tenantId the tenant ID or null if not applicable.
      * @return TenantCache
      */
-    public static TenantCache getTenantCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId) {
+    public static TenantCache getTenantCache(RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId) {
         GlobalCache globalCache = GlobalCache.getInstance(env);
         TenantCache tenantCache = tenantId == null ? globalCache : globalCache.getChildTenantCache(tenantId);      
         return tenantCache;
@@ -165,7 +165,7 @@ public class GlobalCache extends TenantCacheImpl {
      * @param tenantId the ID that identifies the tenant
      * @return the existing or newly created TenantCache
      */
-    public TenantCache getChildTenantCache(ImmutableBytesWritable tenantId) {
+    public TenantCache getChildTenantCache(ImmutableBytesPtr tenantId) {
         TenantCache tenantCache = perTenantCacheMap.get(tenantId);
         if (tenantCache == null) {
             int maxTenantMemoryPerc = config.getInt(MAX_TENANT_MEMORY_PERC_ATTRIB, QueryServicesOptions.DEFAULT_MAX_TENANT_MEMORY_PERC);
