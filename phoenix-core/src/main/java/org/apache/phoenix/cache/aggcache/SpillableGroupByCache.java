@@ -35,7 +35,6 @@ import java.util.Map.Entry;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -126,7 +125,7 @@ public class SpillableGroupByCache implements GroupByCache {
      * @param aggs
      * @param ctxt
      */
-    public SpillableGroupByCache(final RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId,
+    public SpillableGroupByCache(final RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId,
             ServerAggregators aggs, final int estSizeNum) {
         totalNumElements = 0;
         this.aggregators = aggs;
@@ -217,7 +216,7 @@ public class SpillableGroupByCache implements GroupByCache {
      * implements an implicit put() of a new key/value tuple and loads it into the cache
      */
     @Override
-    public Aggregator[] cache(ImmutableBytesWritable cacheKey) {
+    public Aggregator[] cache(ImmutableBytesPtr cacheKey) {
         ImmutableBytesPtr key = new ImmutableBytesPtr(cacheKey);
         Aggregator[] rowAggregators = cache.get(key);
         if (rowAggregators == null) {
