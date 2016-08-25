@@ -43,7 +43,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -137,7 +136,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
-            ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
+            ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
             innerScanner =
                     getWrappedScanner(c, innerScanner, offset, scan, dataColumns, tupleProjector, 
                             c.getEnvironment().getRegion(), indexMaintainers == null ? null : indexMaintainers.get(0), viewConstants, p, tempPtr);
@@ -238,7 +237,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         
         private int estDistVals;
         
-        InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
+        InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
             int estValueSize = aggregators.getEstimatedByteSize();
             long estSize = sizeOfUnorderedGroupByMap(estDistVals, estValueSize);
             TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
@@ -256,7 +255,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         }
 
         @Override
-        public Aggregator[] cache(ImmutableBytesWritable cacheKey) {
+        public Aggregator[] cache(ImmutableBytesPtr cacheKey) {
             ImmutableBytesPtr key = new ImmutableBytesPtr(cacheKey);
             Aggregator[] rowAggregators = aggregateMap.get(key);
             if (rowAggregators == null) {
@@ -345,7 +344,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         private GroupByCacheFactory() {
         }
         
-        GroupByCache newCache(RegionCoprocessorEnvironment env, ImmutableBytesWritable tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
+        GroupByCache newCache(RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
             Configuration conf = env.getConfiguration();
             boolean spillableEnabled =
                     conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
@@ -411,7 +410,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                         hasMore = scanner.nextRaw(results);
                         if (!results.isEmpty()) {
                             result.setKeyValues(results);
-                            ImmutableBytesWritable key =
+                            ImmutableBytesPtr key =
                                 TupleUtil.getConcatenatedValue(result, expressions);
                             Aggregator[] rowAggregators = groupByCache.cache(key);
                             // Aggregate values here
@@ -454,7 +453,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         }
         return new BaseRegionScanner(scanner) {
             private long rowCount = 0;
-            private ImmutableBytesWritable currentKey = null;
+            private ImmutableBytesPtr currentKey = null;
 
             @Override
             public boolean next(List<Cell> results) throws IOException {
@@ -462,7 +461,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
                 boolean atLimit;
                 boolean aggBoundary = false;
                 MultiKeyValueTuple result = new MultiKeyValueTuple();
-                ImmutableBytesWritable key = null;
+                ImmutableBytesPtr key = null;
                 Aggregator[] rowAggregators = aggregators.getAggregators();
                 // If we're calculating no aggregate functions, we can exit at the
                 // start of a new row. Otherwise, we have to wait until an agg

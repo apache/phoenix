@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
@@ -47,6 +46,7 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.OffsetResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
@@ -64,11 +64,10 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.tephra.Transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
-import org.apache.tephra.Transaction;
 
 
 /**
@@ -224,7 +223,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     dataColumns, tupleProjector, dataRegion, indexMaintainer, tx,
                     viewConstants, kvSchema, kvSchemaBitSet, j == null ? p : null, ptr);
 
-        final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
+        final ImmutableBytesPtr tenantId = ScanUtil.getTenantId(scan);
         if (j != null) {
             innerScanner = new HashJoinRegionScanner(innerScanner, p, j, tenantId, c.getEnvironment());
         }
@@ -310,7 +309,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
      *  getting the first Tuple (which forces running through the entire region)
      *  since after this everything is held in memory
      */
-    private RegionScanner getTopNScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, final OrderedResultIterator iterator, ImmutableBytesWritable tenantId) throws Throwable {
+    private RegionScanner getTopNScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, final OrderedResultIterator iterator, ImmutableBytesPtr tenantId) throws Throwable {
         final Tuple firstTuple;
         TenantCache tenantCache = GlobalCache.getTenantCache(c.getEnvironment(), tenantId);
         long estSize = iterator.getEstimatedByteSize();

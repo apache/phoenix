@@ -28,7 +28,6 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.GlobalCache;
@@ -64,7 +63,7 @@ public class HashJoinRegionScanner implements RegionScanner {
     private ValueBitSet[] tempSrcBitSet;
     
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesWritable tenantId, RegionCoprocessorEnvironment env) throws IOException {
+    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env) throws IOException {
         this.env = env;
         this.scanner = scanner;
         this.projector = projector;
@@ -196,7 +195,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                 for (Iterator<Tuple> iter = resultQueue.iterator(); iter.hasNext();) {
                     Tuple t = iter.next();
                     postFilter.reset();
-                    ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
+                    ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
                     try {
                         if (!postFilter.evaluate(t, tempPtr)) {
                             iter.remove();
