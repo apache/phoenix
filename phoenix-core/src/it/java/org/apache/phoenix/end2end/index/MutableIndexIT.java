@@ -838,9 +838,9 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
           conn.createStatement().execute(
               "CREATE TABLE IF NOT EXISTS " + fullTableName + 
               "(TENANT_ID CHAR(15) NOT NULL,"+
-              "TYPE VARCHAR(25) NOT NULL,"+
+              "TYPE VARCHAR(25),"+
               "ENTITY_ID CHAR(15) NOT NULL,"+
-              "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (TENANT_ID, TYPE, ENTITY_ID)) MULTI_TENANT=TRUE "
+              "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (TENANT_ID, ENTITY_ID)) MULTI_TENANT=TRUE "
               + (!tableDDLOptions.isEmpty() ? "," + tableDDLOptions : "") );
           // create index
           conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON " + fullTableName + " (ENTITY_ID, TYPE)");
@@ -850,14 +850,23 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
           props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
           // connection is tenant-specific
           try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
-              for (int i=0; i<2; ++i) {
-                  PreparedStatement stmt = tenantConn.prepareStatement(dml);
-                  stmt.setString(1, "00000000000000" + String.valueOf(i));
-                  stmt.setString(2, String.valueOf(i));
-                  assertEquals(1,stmt.executeUpdate());
-              }
+              // upsert one row
+              upsertRow(dml, tenantConn, 0);
+              tenantConn.commit();
+              ResultSet rs = tenantConn.createStatement().executeQuery("SELECT ENTITY_ID FROM " + fullTableName + " ORDER BY TYPE LIMIT 5");
+              assertTrue(rs.next());
+              // upsert two rows which ends up using the tenant cache
+              upsertRow(dml, tenantConn, 1);
+              upsertRow(dml, tenantConn, 2);
               tenantConn.commit();
           }
       }
   }
+
+private void upsertRow(String dml, Connection tenantConn, int i) throws SQLException {
+    PreparedStatement stmt = tenantConn.prepareStatement(dml);
+      stmt.setString(1, "00000000000000" + String.valueOf(i));
+      stmt.setString(2, String.valueOf(i));
+      assertEquals(1,stmt.executeUpdate());
+}
 }
