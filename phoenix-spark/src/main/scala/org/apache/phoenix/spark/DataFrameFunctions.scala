@@ -17,6 +17,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
 import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
+import org.apache.phoenix.query.QueryConstants
 import org.apache.phoenix.schema.types._
 import org.apache.phoenix.util.{ColumnInfo, SchemaUtil}
 import org.apache.spark.Logging
@@ -34,7 +35,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
     // Retrieve the schema field names and normalize to Phoenix, need to do this outside of mapPartitions
     //val fieldArray = data.schema.fieldNames.map(x => SchemaUtil.normalizeIdentifier(x))
     //put it to format name:dataType so that later when constructing column,we can take care of that.
-    val fieldArray = data.schema.fields.map(x=>SchemaUtil.normalizeIdentifier(x.name) +":"
+    val fieldArray = data.schema.fields.map(x=>SchemaUtil.normalizeIdentifier(x.name) + QueryConstants.COLUMN_TYPE_SEPARATOR
       + catalystTypeToPhoenixTypeString(x.dataType))
 
     // Create a configuration object to use for saving

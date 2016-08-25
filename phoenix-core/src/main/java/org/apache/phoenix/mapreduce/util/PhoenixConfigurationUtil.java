@@ -186,7 +186,6 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         configuration.setLong(UPSERT_BATCH_SIZE, batchSize);
     }
-
     /**
      * Sets which HBase cluster a Phoenix MapReduce job should read from
      * @param configuration
@@ -353,7 +352,6 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         return configuration.get(OUTPUT_TABLE_NAME);
     }
-
     /**
      * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will read from
      * @param configuration

@@ -94,7 +94,7 @@ public class ColumnInfo {
         return nameWithoutTypeInfo.substring(index+1).trim();
     }
     private String removeTypeInfo(String toProcess){
-        String[] tokens = toProcess.split(QueryConstants.NAMESPACE_SEPARATOR);
+        String[] tokens = toProcess.split(QueryConstants.COLUMN_TYPE_SEPARATOR);
         if(tokens.length <=0) throw new IllegalArgumentException("Column name should be not null");
         return tokens[0];
     }

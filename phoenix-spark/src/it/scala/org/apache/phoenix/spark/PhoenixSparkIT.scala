@@ -283,7 +283,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
       .parallelize(dataSet)
       .saveToPhoenix(
         "OUTPUT_TEST_TABLE",
-        Seq("ID", "COL1", "COL2", "COL4:INTEGER"),
+        Seq("ID", "COL1", "COL2", "COL4<INTEGER"),
         hbaseConfiguration
       )
 
@@ -306,7 +306,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     //per data set has 4 columns
     val dataSet = List((1L, "1", 2, 3), (2L, "2", 3, 4), (3L, "3", 4, 5))
-    val columnNames = Seq("ID", "COL1", "COL2", "COL5:INTEGER")
+    val columnNames = Seq("ID", "COL1", "COL2", "COL5<INTEGER")
     val targetSet = Seq(Map("ID"-> 1L,"COL1" -> "1","COL2"->2,"COL5" -> 3),
       Map("ID"-> 2L,"COL1" -> "2","COL2"->3,"COL5" -> 4),
       Map("ID"-> 3L,"COL1" -> "3","COL2"->4,"COL5" -> 5))
@@ -342,7 +342,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
       .parallelize(dataSet)
       .saveToPhoenix(
         "OUTPUT_TEST_TABLE",
-        Seq("ID", "COL1", "COL2", "COL5:INTEGER"),
+        Seq("ID", "COL1", "COL2", "COL5<INTEGER"),
         hbaseConfiguration
       )
 
@@ -401,7 +401,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
       .parallelize(dataSet).toDF("ID","COL1","COL2","COL6","COL7")
       .saveToPhoenix("OUTPUT_TEST_TABLE",zkUrl = Some(quorumAddress))
 
-    val df1 = sqlContext.phoenixTableAsDataFrame("OUTPUT_TEST_TABLE", Array("ID", "COL1","COL6:INTEGER", "COL7:VARCHAR"), conf = hbaseConfiguration)
+    val df1 = sqlContext.phoenixTableAsDataFrame("OUTPUT_TEST_TABLE", Array("ID", "COL1","COL6<INTEGER", "COL7<VARCHAR"), conf = hbaseConfiguration)
 
     df1.registerTempTable("sql_table_1")
 

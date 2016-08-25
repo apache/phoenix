@@ -139,6 +139,8 @@ public interface QueryConstants {
     public static final String NULL_SCHEMA_NAME = "";
     public static final String NULL_DISPLAY_TEXT = "<null>";
     public static final long UNSET_TIMESTAMP = -1;
+    //to specify dynamic column type, syntax is used like "COL1<INTEGER"
+    public static final String COLUMN_TYPE_SEPARATOR = "<";
 
     public enum JoinType {INNER, LEFT_OUTER}
     public final static String SYSTEM_SCHEMA_NAME = "SYSTEM";
@@ -356,5 +358,6 @@ public interface QueryConstants {
     public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
     public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
     public static final String LAST_SCAN = "LAST_SCAN";
+
 
 }

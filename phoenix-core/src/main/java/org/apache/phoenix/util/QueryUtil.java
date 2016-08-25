@@ -178,7 +178,7 @@ public final class QueryUtil {
     }
 
     private static String getUpsertDynamicColumnName(String columnName) {
-        String[] tokens = columnName.replaceAll(ESCAPE_CHARACTER,"").split(QueryConstants.NAMESPACE_SEPARATOR);
+        String[] tokens = columnName.replaceAll(ESCAPE_CHARACTER,"").split(QueryConstants.COLUMN_TYPE_SEPARATOR);
         if(tokens.length == 2){
             return ESCAPE_CHARACTER + tokens[0].trim() + ESCAPE_CHARACTER +
                     " " + ESCAPE_CHARACTER + tokens[1].trim() + ESCAPE_CHARACTER;
@@ -187,7 +187,7 @@ public final class QueryUtil {
     }
 
     private static String getSelectDynamicColumnName(String columnName,ArrayList<String> dynamicColumns) {
-        String[] tokens = columnName.replaceAll(ESCAPE_CHARACTER,"").split(QueryConstants.NAMESPACE_SEPARATOR);
+        String[] tokens = columnName.replaceAll(ESCAPE_CHARACTER,"").split(QueryConstants.COLUMN_TYPE_SEPARATOR);
         if(tokens.length == 2){
             dynamicColumns.add(ESCAPE_CHARACTER + tokens[0].trim() + ESCAPE_CHARACTER +
                     " " + ESCAPE_CHARACTER + tokens[1].trim() + ESCAPE_CHARACTER);

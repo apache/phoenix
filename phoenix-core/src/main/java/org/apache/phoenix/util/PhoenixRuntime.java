@@ -485,7 +485,7 @@ public class PhoenixRuntime {
      * @return null if not found matching column, else @see PColumn
      */
     private static PColumn getTableColumn(String columnName, List<PColumn> tableColumns){
-        String pureColumnName = getColumnName(columnName,QueryConstants.NAMESPACE_SEPARATOR);
+        String pureColumnName = getColumnName(columnName,QueryConstants.COLUMN_TYPE_SEPARATOR);
         for(PColumn col: tableColumns){
             if(col.getName().toString().equals(pureColumnName)){
                 return col;
@@ -517,12 +517,12 @@ public class PhoenixRuntime {
             String familyColumn = tokens[1];
             PColumnFamily family = table.getColumnFamily(familyName);
             pColumn = family.getColumn(familyColumn);
-        } else if (columnName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+        } else if (columnName.contains(QueryConstants.COLUMN_TYPE_SEPARATOR)) {
             //now the column is defined as a dynamic column, we create a ColumnInfo for that column
-            String[] tokens = getColumnParts(columnName, QueryConstants.NAMESPACE_SEPARATOR);
+            String[] tokens = getColumnParts(columnName, QueryConstants.COLUMN_TYPE_SEPARATOR);
             String dataType = tokens[1];
             //add DataType to make sure it will be used in prepareStatement
-            String colName = tokens[0] + QueryConstants.NAMESPACE_SEPARATOR + dataType;
+            String colName = tokens[0] + QueryConstants.COLUMN_TYPE_SEPARATOR + dataType;
             return new ColumnInfo(colName,PDataType.fromSqlTypeName(dataType).getSqlType());
         } else {
             pColumn = table.getColumn(columnName);
