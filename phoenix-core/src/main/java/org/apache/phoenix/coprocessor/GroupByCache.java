@@ -19,10 +19,9 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.Closeable;
 
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-
 import org.apache.phoenix.expression.aggregator.Aggregator;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
  * 
@@ -34,6 +33,6 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
  */
 public interface GroupByCache extends Closeable {
     long size();
-    Aggregator[] cache(ImmutableBytesWritable key);
+    Aggregator[] cache(ImmutableBytesPtr key);
     RegionScanner getScanner(RegionScanner s);
 }
