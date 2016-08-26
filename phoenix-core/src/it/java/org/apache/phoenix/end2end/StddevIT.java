@@ -30,14 +30,14 @@ import java.sql.ResultSet;
 
 import org.junit.Test;
 
-public class StddevIT extends BaseHBaseManagedTimeIT {
+public class StddevIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testSTDDEV_POP() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
-        String query = "SELECT STDDEV_POP(A_INTEGER) FROM aTable";
+        String query = "SELECT STDDEV_POP(A_INTEGER) FROM " + tableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
@@ -56,9 +56,9 @@ public class StddevIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSTDDEV_SAMP() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
-        String query = "SELECT STDDEV_SAMP(x_decimal) FROM aTable";
+        String query = "SELECT STDDEV_SAMP(x_decimal) FROM " + tableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
@@ -77,9 +77,9 @@ public class StddevIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSTDDEV_POPOnDecimalColType() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
-        String query = "SELECT STDDEV_POP(x_decimal) FROM aTable";
+        String query = "SELECT STDDEV_POP(x_decimal) FROM " + tableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
@@ -98,9 +98,9 @@ public class StddevIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSTDDEV_SAMPOnDecimalColType() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
 
-        String query = "SELECT STDDEV_SAMP(x_decimal) FROM aTable";
+        String query = "SELECT STDDEV_SAMP(x_decimal) FROM " + tableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {

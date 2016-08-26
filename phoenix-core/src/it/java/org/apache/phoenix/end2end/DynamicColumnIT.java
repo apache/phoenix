@@ -59,31 +59,25 @@ import org.junit.Test;
  */
 
 
-public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
+public class DynamicColumnIT extends BaseHBaseManagedTimeTableReuseIT {
     private static final byte[] FAMILY_NAME_A = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));
     private static final byte[] FAMILY_NAME_B = Bytes.toBytes(SchemaUtil.normalizeIdentifier("B"));
+
+    private static String tableName = "TESTTBL";
 
     @BeforeClass
     public static void doBeforeTestSetup() throws Exception {
         try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices services = pconn.getQueryServices();
             try (HBaseAdmin admin = services.getAdmin()) {
-                HTableDescriptor htd = new HTableDescriptor(TableName.valueOf(HBASE_DYNAMIC_COLUMNS));
+                HTableDescriptor htd = new HTableDescriptor(TableName.valueOf("TESTTBL"));
                 htd.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
                 htd.addFamily(new HColumnDescriptor(FAMILY_NAME_A));
                 htd.addFamily(new HColumnDescriptor(FAMILY_NAME_B));
                 admin.createTable(htd);
             }
-        }
-    }
-    
-    @SuppressWarnings("deprecation")
-    @Before
-    public void createTable() throws Exception {
-        try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
-            ConnectionQueryServices services = pconn.getQueryServices();
-            HTableInterface hTable = services.getTable(Bytes.toBytes(HBASE_DYNAMIC_COLUMNS));
-            try {
+
+            try (HTableInterface hTable = services.getTable(Bytes.toBytes(tableName))) {
                 // Insert rows using standard HBase mechanism with standard HBase "types"
                 List<Row> mutations = new ArrayList<Row>();
                 byte[] dv = Bytes.toBytes("DV");
@@ -93,7 +87,7 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
                 byte[] f2v1 = Bytes.toBytes("F2V1");
                 byte[] f2v2 = Bytes.toBytes("F2V2");
                 byte[] key = Bytes.toBytes("entry1");
-    
+
                 Put put = new Put(key);
                 put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, dv, Bytes.toBytes("default"));
                 put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, first, Bytes.toBytes("first"));
@@ -102,15 +96,14 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
                 put.add(FAMILY_NAME_B, f2v1, Bytes.toBytes("f2value1"));
                 put.add(FAMILY_NAME_B, f2v2, Bytes.toBytes("f2value2"));
                 mutations.add(put);
-    
+
                 hTable.batch(mutations);
-    
+
                 // Create Phoenix table after HBase table was created through the native APIs
                 // The timestamp of the table creation must be later than the timestamp of the data
-                ensureTableCreated(getUrl(), HBASE_DYNAMIC_COLUMNS);
-            } finally {
-                hTable.close();
+                ensureTableCreated(getUrl(), tableName, HBASE_DYNAMIC_COLUMNS);
             }
+
         }
     }
 
@@ -119,7 +112,7 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
      */
     @Test
     public void testDynamicColums() throws Exception {
-        String query = "SELECT * FROM HBASE_DYNAMIC_COLUMNS (DV varchar)";
+        String query = "SELECT * FROM " + tableName + " (DV varchar)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -143,7 +136,7 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
      */
     @Test
     public void testDynamicColumsFamily() throws Exception {
-        String query = "SELECT * FROM HBASE_DYNAMIC_COLUMNS (DV varchar,B.F2V2 varchar)";
+        String query = "SELECT * FROM " + tableName + " (DV varchar,B.F2V2 varchar)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -169,7 +162,7 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testDynamicColumsSpecificQuery() throws Exception {
-        String query = "SELECT entry,F2V2 FROM HBASE_DYNAMIC_COLUMNS (DV varchar,B.F2V2 varchar)";
+        String query = "SELECT entry,F2V2 FROM " + tableName + " (DV varchar,B.F2V2 varchar)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -189,7 +182,7 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
      */
     @Test(expected = ColumnAlreadyExistsException.class)
     public void testAmbiguousStaticSelect() throws Exception {
-        String upsertquery = "Select * FROM HBASE_DYNAMIC_COLUMNS(A.F1V1 INTEGER)";
+        String upsertquery = "Select * FROM " + tableName + "(A.F1V1 INTEGER)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -205,7 +198,7 @@ public class DynamicColumnIT extends BaseHBaseManagedTimeIT {
      */
     @Test(expected = ColumnFamilyNotFoundException.class)
     public void testFakeCFDynamicUpsert() throws Exception {
-        String upsertquery = "Select * FROM HBASE_DYNAMIC_COLUMNS(fakecf.DynCol VARCHAR)";
+        String upsertquery = "Select * FROM " + tableName + "(fakecf.DynCol VARCHAR)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

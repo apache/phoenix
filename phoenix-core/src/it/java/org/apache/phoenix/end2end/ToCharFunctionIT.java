@@ -245,12 +245,13 @@ public class ToCharFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testToCharWithCloneMethod() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-    	String ddl = "create table t (k varchar primary key, v integer[])";
+        String tableName = generateRandomString();
+    	String ddl = "create table " + tableName + " (k varchar primary key, v integer[])";
         conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO T VALUES('x',ARRAY[1234])");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('x',ARRAY[1234])");
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("select to_char(v[1],'000') from t");
+        ResultSet rs = conn.createStatement().executeQuery("select to_char(v[1],'000') from " + tableName);
         assertTrue(rs.next());
         assertEquals("Unexpected value for date ", String.valueOf(1234), rs.getString(1));
         assertFalse(rs.next());

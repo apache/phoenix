@@ -656,8 +656,9 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeTableReuseIT {
     }
     @Test
     public void testSumDouble() throws Exception {
-        initSumDoubleValues(null, getUrl());
-        String query = "SELECT SUM(d) FROM SumDoubleTest";
+        String tableName = "TBL_" + generateRandomString();
+        initSumDoubleValues(tableName, null, getUrl());
+        String query = "SELECT SUM(d) FROM " + tableName ;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -673,8 +674,9 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testSumUnsignedDouble() throws Exception {
-        initSumDoubleValues(null, getUrl());
-        String query = "SELECT SUM(ud) FROM SumDoubleTest";
+        String tableName = "TBL_" + generateRandomString();
+        initSumDoubleValues(tableName, null, getUrl());
+        String query = "SELECT SUM(ud) FROM " + tableName ;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -690,8 +692,9 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testSumFloat() throws Exception {
-        initSumDoubleValues(null, getUrl());
-        String query = "SELECT SUM(f) FROM SumDoubleTest";
+        String tableName = "TBL_" + generateRandomString();
+        initSumDoubleValues(tableName, null, getUrl());
+        String query = "SELECT SUM(f) FROM " + tableName ;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -707,8 +710,9 @@ public class ArithmeticQueryIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testSumUnsignedFloat() throws Exception {
-        initSumDoubleValues(null, getUrl());
-        String query = "SELECT SUM(uf) FROM SumDoubleTest";
+        String tableName = "TBL_" + generateRandomString();
+        initSumDoubleValues(tableName, null, getUrl());
+        String query = "SELECT SUM(uf) FROM " + tableName;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

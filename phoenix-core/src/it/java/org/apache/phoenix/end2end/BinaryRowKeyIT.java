@@ -34,15 +34,16 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class BinaryRowKeyIT extends BaseHBaseManagedTimeIT {
+public class BinaryRowKeyIT extends BaseHBaseManagedTimeTableReuseIT {
 
-    private static void initTableValues() throws SQLException {
+    private static void initTableValues(String tableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         
         try {
-            String ddl = "CREATE TABLE test_table" +
+
+            String ddl = "CREATE TABLE " + tableName +
                     "   (a_binary binary(10) not null, \n" +
                     "    a_string varchar not null, \n" +
                     "    b_binary varbinary \n" +
@@ -52,7 +53,7 @@ public class BinaryRowKeyIT extends BaseHBaseManagedTimeIT {
             String query;
             PreparedStatement stmt;
             
-            query = "UPSERT INTO test_table"
+            query = "UPSERT INTO " + tableName
                     + "(a_binary, a_string) "
                     + "VALUES(?,?)";
             stmt = conn.prepareStatement(query);
@@ -76,11 +77,12 @@ public class BinaryRowKeyIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            initTableValues();
+            String tableName = generateRandomString();
+            initTableValues(tableName);
             conn.setAutoCommit(true);
-            conn.createStatement().execute("DELETE FROM test_table");
+            conn.createStatement().execute("DELETE FROM " + tableName );
            
-            String query = "UPSERT INTO test_table"
+            String query = "UPSERT INTO " + tableName
                     + "(a_binary, a_string) "
                     + "VALUES(?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
@@ -88,7 +90,7 @@ public class BinaryRowKeyIT extends BaseHBaseManagedTimeIT {
             stmt.setString(2, "a");
             stmt.execute();
             
-            ResultSet rs = conn.createStatement().executeQuery("SELECT a_string FROM test_table");
+            ResultSet rs = conn.createStatement().executeQuery("SELECT a_string FROM " + tableName);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
             assertFalse(rs.next());
@@ -103,9 +105,9 @@ public class BinaryRowKeyIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
         try {
-            initTableValues();
-            
-            String query = "SELECT * FROM test_table";
+            String tableName = generateRandomString();
+            initTableValues(tableName);
+            String query = "SELECT * FROM " + tableName;
             PreparedStatement stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             
@@ -129,15 +131,16 @@ public class BinaryRowKeyIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
         try {
-            initTableValues();
+            String tableName = generateRandomString();
+            initTableValues(tableName);
             
-            String query = "UPSERT INTO test_table (a_binary, a_string, b_binary) "
-                    + " SELECT a_binary, a_string, a_binary FROM test_table";
+            String query = "UPSERT INTO " + tableName + " (a_binary, a_string, b_binary) "
+                    + " SELECT a_binary, a_string, a_binary FROM " + tableName;
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.execute();
             conn.commit();
             
-            query = "SELECT a_binary, b_binary FROM test_table";
+            query = "SELECT a_binary, b_binary FROM " + tableName;
             stmt = conn.prepareStatement(query);
             ResultSet rs = stmt.executeQuery();
             
