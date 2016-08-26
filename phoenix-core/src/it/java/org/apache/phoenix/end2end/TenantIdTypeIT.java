@@ -38,7 +38,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class TenantIdTypeIT extends BaseHBaseManagedTimeIT {
+public class TenantIdTypeIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private Connection regularConnection(String url) throws SQLException {
         Properties props = new Properties();
@@ -74,7 +74,7 @@ public class TenantIdTypeIT extends BaseHBaseManagedTimeIT {
         this.dataType = dataType;
         this.tenantId = tenantId;
         this.otherTenantId = otherTenantId;
-        String tbl = "foo" + dataType;
+        String tbl = generateRandomString();
         if(tbl.contains("(")){
             tbl = tbl.substring(0, tbl.indexOf("("));
         }

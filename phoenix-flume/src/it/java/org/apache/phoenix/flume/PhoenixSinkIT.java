@@ -29,7 +29,7 @@ import org.apache.flume.lifecycle.LifecycleState;
 import org.apache.flume.sink.DefaultSinkFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.flume.serializer.EventSerializers;
 import org.apache.phoenix.flume.serializer.CustomSerializer;
 import org.apache.phoenix.flume.sink.NullPhoenixSink;
@@ -48,7 +48,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 
-public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
+public class PhoenixSinkIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private Context sinkContext;
     private PhoenixSink sink;
@@ -128,13 +128,14 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSinkLifecycle () {
-        
-        String ddl = "CREATE TABLE flume_test " +
+        String tableName = generateRandomString();
+
+        String ddl = "CREATE TABLE " + tableName +
                 "  (flume_time timestamp not null, col1 varchar , col2 varchar" +
                 "  CONSTRAINT pk PRIMARY KEY (flume_time))\n";
         
         sinkContext = new Context ();
-        sinkContext.put(FlumeConstants.CONFIG_TABLE, "flume_test");
+        sinkContext.put(FlumeConstants.CONFIG_TABLE,  tableName);
         sinkContext.put(FlumeConstants.CONFIG_JDBC_URL, getUrl());
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER,EventSerializers.REGEX.name());
         sinkContext.put(FlumeConstants.CONFIG_TABLE_DDL, ddl);
@@ -158,12 +159,12 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testCreateTable () throws Exception {
-        
-        String ddl = "CREATE TABLE flume_test " +
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE " + tableName + " " +
                 "  (flume_time timestamp not null, col1 varchar , col2 varchar" +
                 "  CONSTRAINT pk PRIMARY KEY (flume_time))\n";
 
-        final String fullTableName = "FLUME_TEST";
+        final String fullTableName =  tableName;
         sinkContext = new Context ();
         sinkContext.put(FlumeConstants.CONFIG_TABLE, fullTableName);
         sinkContext.put(FlumeConstants.CONFIG_JDBC_URL, getUrl());

@@ -44,7 +44,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -66,30 +66,24 @@ import com.google.common.collect.Maps;
 import com.google.common.primitives.Doubles;
 
 @RunWith(Parameterized.class)
-public class MutableIndexIT extends BaseHBaseManagedTimeIT {
+public class MutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     
     protected final boolean localIndex;
     private final String tableDDLOptions;
-    private final String tableName;
-    private final String indexName;
-    private final String fullTableName;
-    private final String fullIndexName;
+	private  final boolean transactional;
 	
     public MutableIndexIT(boolean localIndex, boolean transactional) {
 		this.localIndex = localIndex;
+		this.transactional = transactional;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (transactional) {
 			optionBuilder.append("TRANSACTIONAL=true");
 		}
 		this.tableDDLOptions = optionBuilder.toString();
-		this.tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + ( transactional ?  "_TXN" : "");
-        this.indexName = "IDX" + ( transactional ?  "_TXN" : "");
-        this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-        this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 	}
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
@@ -110,7 +104,12 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-            createMultiCFTestTable(fullTableName, tableDDLOptions);
+			String tableName = "TBL_" + generateRandomString();
+			String indexName = "IDX_" + generateRandomString();
+			String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+			String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+			createMultiCFTestTable(fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName);
             PreparedStatement stmt = conn.prepareStatement("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName 
             		+ " (char_col1 ASC, int_col1 ASC) INCLUDE (long_col1, long_col2)");
@@ -203,7 +202,12 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testCoveredColumns() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		String tableName = "TBL_" + generateRandomString();
+		String indexName = "IDX_" + generateRandomString();
+		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
@@ -308,6 +312,10 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testCompoundIndexKey() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		String tableName = "TBL_" + generateRandomString();
+		String indexName = "IDX_" + generateRandomString();
+		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -423,6 +431,10 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMultipleUpdatesToSingleRow() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		String tableName = "TBL_" + generateRandomString();
+		String indexName = "IDX_" + generateRandomString();
+		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
 	        String query;
@@ -503,6 +515,9 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testUpsertingNullForIndexedColumns() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+		String tableName = "TBL_" + generateRandomString();
+		String indexName = "IDX_" + generateRandomString();
+		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         String testTableName = tableName + "_" + System.currentTimeMillis();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
@@ -586,8 +601,10 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     public void testAlterTableWithImmutability() throws Exception {
         String query;
         ResultSet rs;
-        String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+		String tableName = "TBL_" + generateRandomString();
+		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
@@ -623,16 +640,19 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(2));
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
         Connection conn1 = DriverManager.getConnection(getUrl());
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+		String tableName = "TBL_" + generateRandomString();
+        String indexName = "IDX_" + generateRandomString();
+		HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         dropTable(admin, conn1);
         try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
-            createTableAndLoadData(conn1, strings, isReverse);
+            createTableAndLoadData(conn1, tableName, indexName, strings, isReverse);
 
             ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertTrue(rs.next());
-            splitDuringScan(conn1, strings, admin, isReverse);
+            splitDuringScan(conn1, tableName, indexName, strings, admin, isReverse);
             dropTable(admin, conn1);
+
        } finally {
            dropTable(admin, conn1);
            if(conn1 != null) conn1.close();
@@ -641,23 +661,22 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     }
 
     private void dropTable(HBaseAdmin admin, Connection conn) throws SQLException, IOException {
-        try {
-            conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
-        } finally {
-            if(admin.tableExists(tableName)) {
-                admin.disableTable(TableName.valueOf(tableName));
-                admin.deleteTable(TableName.valueOf(tableName));
-            }
-            if(!localIndex) {
-                if(admin.tableExists(indexName)) {
-                    admin.disableTable(TableName.valueOf(indexName));
-                    admin.deleteTable(TableName.valueOf(indexName));
-                }
-            }
+
+		String tableName = "TBL_" + generateRandomString();
+		String indexName = "IDX_" + generateRandomString();
+        conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
+        if(admin.tableExists(tableName)) {
+            admin.disableTable(TableName.valueOf(tableName));
+            admin.deleteTable(TableName.valueOf(tableName));
+        } 
+        if(!localIndex && admin.tableExists(indexName)) {
+            admin.disableTable(indexName);
+            admin.deleteTable(indexName);
+
         }
     }
 
-    private void createTableAndLoadData(Connection conn1, String[] strings, boolean isReverse) throws SQLException {
+    private void createTableAndLoadData(Connection conn1, String tableName, String indexName, String[] strings, boolean isReverse) throws SQLException {
         createBaseTable(conn1, tableName, null);
         for (int i = 0; i < 26; i++) {
             conn1.createStatement().execute(
@@ -673,6 +692,8 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     public void testIndexHalfStoreFileReader() throws Exception {
         Connection conn1 = DriverManager.getConnection(getUrl());
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+		String tableName = "TBL_" + generateRandomString();
+		String indexName = "IDX_" + generateRandomString();
         try {
             dropTable(admin, conn1);
             createBaseTable(conn1, tableName, "('e')");
@@ -738,9 +759,11 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
         }
     }
 
-    private List<HRegionInfo> splitDuringScan(Connection conn1, String[] strings, HBaseAdmin admin, boolean isReverse)
+
+    private List<HRegionInfo> splitDuringScan(Connection conn1, String tableName, String indexName, String[] strings, HBaseAdmin admin, boolean isReverse)
             throws SQLException, IOException, InterruptedException {
         ResultSet rs;
+
         String query = "SELECT t_id,k1,v1 FROM " + tableName;
         rs = conn1.createStatement().executeQuery(query);
         String[] tIdColumnValues = new String[26]; 
@@ -815,9 +838,10 @@ public class MutableIndexIT extends BaseHBaseManagedTimeIT {
     
   @Test
   public void testTenantSpecificConnection() throws Exception {
-      String tableName = TestUtil.DEFAULT_DATA_TABLE_NAME + "_" + System.currentTimeMillis();
-      String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-      Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+	  String tableName = "TBL_" + generateRandomString();
+	  String indexName = "IDX_" + generateRandomString();
+	  String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+	  Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
       try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
           conn.setAutoCommit(false);
           // create data table

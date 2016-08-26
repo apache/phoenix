@@ -105,7 +105,7 @@ public interface QueryServices extends SQLCloseable {
 
     public static final String MASTER_INFO_PORT_ATTRIB = "hbase.master.info.port";
     public static final String REGIONSERVER_INFO_PORT_ATTRIB = "hbase.regionserver.info.port";
-    public static final String REGIONSERVER_LEASE_PERIOD_ATTRIB = "hbase.regionserver.lease.period";
+    public static final String HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB = "hbase.client.scanner.timeout.period";
     public static final String RPC_TIMEOUT_ATTRIB = "hbase.rpc.timeout";
     public static final String DYNAMIC_JARS_DIR_KEY = "hbase.dynamic.jars.dir";
     public static final String ZOOKEEPER_QUORUM_ATTRIB = "hbase.zookeeper.quorum";

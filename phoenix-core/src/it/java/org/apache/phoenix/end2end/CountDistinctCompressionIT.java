@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -51,7 +52,7 @@ public class CountDistinctCompressionIT extends BaseOwnClusterHBaseManagedTimeIT
     @Test
     public void testDistinctCountOnColumn() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), (Date)null, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), (Date)null, null, getUrl());
 
         String query = "SELECT count(DISTINCT A_STRING) FROM aTable";
 

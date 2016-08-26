@@ -43,13 +43,13 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class OrderByIT extends BaseHBaseManagedTimeIT {
+public class OrderByIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testMultiOrderByExpr() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
-        String query = "SELECT entity_id FROM aTable ORDER BY b_string, entity_id";
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String query = "SELECT entity_id FROM " + tableName + " ORDER BY b_string, entity_id";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -84,8 +84,8 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testDescMultiOrderByExpr() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
-        String query = "SELECT entity_id FROM aTable ORDER BY b_string || entity_id desc";
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
+        String query = "SELECT entity_id FROM " + tableName + " ORDER BY b_string || entity_id desc";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -123,12 +123,13 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
 
         try {
-            String ddl = "CREATE TABLE t_table " +
+            String tableName = generateRandomString();
+            String ddl = "CREATE TABLE " + tableName +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
-            String dml = "UPSERT INTO t_table VALUES(?, ?)";
+            String dml = "UPSERT INTO " + tableName + " VALUES(?, ?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 40);
@@ -141,7 +142,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select count(*), col1 from t_table group by col1 order by 2";
+            String query = "select count(*), col1 from " + tableName + " group by col1 order by 2";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(1,rs.getInt(1));
@@ -151,7 +152,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             assertEquals(1,rs.getInt(1));  
             assertFalse(rs.next());  
 
-            query = "select a_string x, col1 y from t_table order by x";
+            query = "select a_string x, col1 y from " + tableName + " order by x";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
@@ -164,7 +165,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             assertEquals(30,rs.getInt(2));
             assertFalse(rs.next());  
 
-            query = "select * from t_table order by 2";
+            query = "select * from " + tableName + " order by 2";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("b",rs.getString(1));
@@ -189,11 +190,12 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
 
         try {
-            String ddl = "CREATE TABLE x_table " +
+            String tableName = generateRandomString();
+            String ddl = "CREATE TABLE " + tableName +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer, col2 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
-            String dml = "UPSERT INTO x_table VALUES(?,?,?,?,?,?,?)";
+            String dml = "UPSERT INTO " + tableName + " VALUES(?,?,?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 40);
@@ -221,7 +223,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select * from x_table order by 2, 5";
+            String query = "select * from " + tableName + " order by 2, 5";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("c",rs.getString(1));
@@ -249,7 +251,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             assertEquals(1,rs.getInt(7));         
             assertFalse(rs.next());  
 
-            query = "select * from x_table order by 7";
+            query = "select * from " + tableName + " order by 7";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));  
@@ -288,11 +290,12 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
 
         try {
-            String ddl = "CREATE TABLE s_table " +
+            String tableName1 = generateRandomString();
+            String ddl = "CREATE TABLE " + tableName1 +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer " +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
-            String dml = "UPSERT INTO s_table VALUES(?,?,?,?,?,?)";
+            String dml = "UPSERT INTO " + tableName1 + " VALUES(?,?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 40);
@@ -317,12 +320,13 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            ddl = "CREATE TABLE t_table " +
+            String tableName2 = generateRandomString();
+            ddl = "CREATE TABLE " + tableName2 +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
-            dml = "UPSERT INTO t_table VALUES(?, ?)";
+            dml = "UPSERT INTO " + tableName2 + " VALUES(?, ?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 40);
@@ -335,7 +339,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select t1.* from s_table t1 join t_table t2 on t1.a_string = t2.a_string order by 3";
+            String query = "select t1.* from " + tableName1 + " t1 join " + tableName2 + " t2 on t1.a_string = t2.a_string order by 3";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));  
@@ -360,7 +364,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             assertEquals(60,rs.getInt(6));
             assertFalse(rs.next());  
 
-            query = "select t1.a_string, t2.col1 from s_table t1 join t_table t2 on t1.a_string = t2.a_string order by 2";
+            query = "select t1.a_string, t2.col1 from " + tableName1 + " t1 join " + tableName2 + " t2 on t1.a_string = t2.a_string order by 2";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("b",rs.getString(1));  
@@ -385,11 +389,12 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
 
         try {
-            String ddl = "CREATE TABLE x_table " +
+            String tableName1 = generateRandomString();
+            String ddl = "CREATE TABLE  " + tableName1 +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer " +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
-            String dml = "UPSERT INTO x_table VALUES(?,?,?,?,?,?)";
+            String dml = "UPSERT INTO " + tableName1 + " VALUES(?,?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 40);
@@ -414,12 +419,13 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            ddl = "CREATE TABLE y_table " +
+            String tableName2 = generateRandomString();
+            ddl = "CREATE TABLE " + tableName2 +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
-            dml = "UPSERT INTO y_table VALUES(?, ?)";
+            dml = "UPSERT INTO " + tableName2 + " VALUES(?, ?)";
             stmt = conn.prepareStatement(dml);
             stmt.setString(1, "aa");
             stmt.setInt(2, 40);
@@ -432,7 +438,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select a_string, cf2.d from x_table union all select * from y_table order by 2";
+            String query = "select a_string, cf2.d from " + tableName1 + " union all select * from " + tableName2 + " order by 2";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("bb",rs.getString(1));  
@@ -465,13 +471,14 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
         conn.setAutoCommit(false);
 
         try {
-            String ddl = "CREATE TABLE e_table " +
+            String tableName = generateRandomString();
+            String ddl = "CREATE TABLE " + tableName +
                     "  (a_string varchar not null, col1 integer, col2 integer, col3 timestamp, col4 varchar" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
 
             Date date = new Date(System.currentTimeMillis());
-            String dml = "UPSERT INTO e_table VALUES(?, ?, ?, ?, ?)";
+            String dml = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 40);
@@ -493,7 +500,7 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             conn.commit();
 
-            String query = "SELECT col1+col2, col4, a_string FROM e_table ORDER BY 1, 2";
+            String query = "SELECT col1+col2, col4, a_string FROM " + tableName + " ORDER BY 1, 2";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a", rs.getString(3));
@@ -512,19 +519,20 @@ public class OrderByIT extends BaseHBaseManagedTimeIT {
     public void testOrderByRVC() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table test1 (testpk varchar not null primary key, l_quantity decimal(15,2), l_discount decimal(15,2))";
+        String tableName = generateRandomString();
+        String ddl = "create table " + tableName + " (testpk varchar not null primary key, l_quantity decimal(15,2), l_discount decimal(15,2))";
         conn.createStatement().execute(ddl);
 
-        PreparedStatement stmt = conn.prepareStatement("upsert into test1 values ('a',0.1,0.9)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " values ('a',0.1,0.9)");
         stmt.execute();
-        stmt = conn.prepareStatement(" upsert into test1 values ('b',0.5,0.5)");
+        stmt = conn.prepareStatement(" upsert into " + tableName + " values ('b',0.5,0.5)");
         stmt.execute();
-        stmt = conn.prepareStatement(" upsert into test1 values ('c',0.9,0.1)");
+        stmt = conn.prepareStatement(" upsert into " + tableName + " values ('c',0.9,0.1)");
         stmt.execute();
         conn.commit();
 
         ResultSet rs;
-        stmt = conn.prepareStatement("select l_discount,testpk from test1 order by (l_discount,l_quantity)");
+        stmt = conn.prepareStatement("select l_discount,testpk from " + tableName + " order by (l_discount,l_quantity)");
         rs = stmt.executeQuery();
         assertTrue(rs.next());
         assertEquals(0.1, rs.getDouble(1), 0.01);

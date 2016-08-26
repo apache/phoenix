@@ -40,7 +40,7 @@ import com.google.common.collect.Lists;
  * Tests for the LPAD built-in function.
  */
 
-public class StringIT extends BaseHBaseManagedTimeIT {
+public class StringIT extends BaseHBaseManagedTimeTableReuseIT {
     
     /**
      * Helper to test LPAD function
@@ -51,21 +51,23 @@ public class StringIT extends BaseHBaseManagedTimeIT {
      *            name of column to query
      * @param length
      *            length of the output string
-     * @param fillString
+     * @param fillStringList
      *            fill characters to be used while prepending
      * @param sortOrder
      *            sort order of the pk column
-     * @param expectedOutput
+     * @param expectedOutputList
      *            expected output of LPAD function
+     * @param tableName
+     *            base name of the table
      */
     private void testLpadHelper(Connection conn, String colName, int length, List<String> fillStringList,
-        List<String> expectedOutputList, String sortOrder) throws Exception {
+        List<String> expectedOutputList, String tableName, String sortOrder) throws Exception {
         assertEquals("fillStringList and expectedOutputList should be of equal size", fillStringList.size(),
             expectedOutputList.size());
         for (int id = 0; id < fillStringList.size(); ++id) {
             String fillString = fillStringList.get(id);
             String lPadExpr = fillString != null ? "LPAD(%s,?,?)" : "LPAD(%s,?)";
-            String sql = String.format("SELECT " + lPadExpr + " FROM TEST_TABLE_%s WHERE id=?", colName, sortOrder);
+            String sql = String.format("SELECT " + lPadExpr + " FROM " + tableName + "_%s WHERE id=?", colName, sortOrder);
             PreparedStatement stmt = conn.prepareStatement(sql);
             int index = 1;
             stmt.setInt(index++, length);
@@ -93,16 +95,16 @@ public class StringIT extends BaseHBaseManagedTimeIT {
      *            list of fill string to be used while testing
      * @param colName
      *            name of column to be used as function input
-     * @param expecetedOutputList
+     * @param expectedOutputList
      *            list of expected output values
      * @param expectedOutputList
      *            expected output of lpad function
      */
     private void testLpad(Connection conn, List<String> inputList, int length, List<String> fillStringList,
         String colName, List<String> expectedOutputList) throws Exception {
-        TestUtil.initTables(conn, "VARCHAR", new ArrayList<Object>(inputList));
-        testLpadHelper(conn, colName, length, fillStringList, expectedOutputList, "ASC");
-        testLpadHelper(conn, colName, length, fillStringList, expectedOutputList, "DESC");
+        String tableName = TestUtil.initTables(conn, "VARCHAR", new ArrayList<Object>(inputList));
+        testLpadHelper(conn, colName, length, fillStringList, expectedOutputList, tableName, "ASC");
+        testLpadHelper(conn, colName, length, fillStringList, expectedOutputList, tableName, "DESC");
     }
 
     private void testLpad(Connection conn, List<String> inputList, int length, List<String> fillStringList,
@@ -114,23 +116,23 @@ public class StringIT extends BaseHBaseManagedTimeIT {
     public void testCharPadding() throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        
-        conn.createStatement().execute("CREATE TABLE t (k CHAR(3) PRIMARY KEY)");
-        conn.createStatement().execute("UPSERT INTO t VALUES('a')");
-        conn.createStatement().execute("UPSERT INTO t VALUES('ab')");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k CHAR(3) PRIMARY KEY)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('ab')");
         conn.commit();
-        rs = conn.createStatement().executeQuery("SELECT * FROM t ORDER BY k");
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " ORDER BY k");
         assertTrue(rs.next());
         assertEquals("a", rs.getString(1));
         assertTrue(rs.next());
         assertEquals("ab", rs.getString(1));
         assertFalse(rs.next());
-
-        conn.createStatement().execute("CREATE TABLE tdesc (k CHAR(3) PRIMARY KEY DESC)");
-        conn.createStatement().execute("UPSERT INTO tdesc VALUES('a')");
-        conn.createStatement().execute("UPSERT INTO tdesc VALUES('ab')");
+        String tableNameDesc = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableNameDesc + " (k CHAR(3) PRIMARY KEY DESC)");
+        conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('ab')");
         conn.commit();
-        rs = conn.createStatement().executeQuery("SELECT * FROM tdesc ORDER BY k DESC");
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + tableNameDesc + " ORDER BY k DESC");
         assertTrue(rs.next());
         assertEquals("ab", rs.getString(1));
         assertTrue(rs.next());
@@ -142,23 +144,24 @@ public class StringIT extends BaseHBaseManagedTimeIT {
     public void testBinaryPadding() throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        
-        conn.createStatement().execute("CREATE TABLE t (k BINARY(3) PRIMARY KEY)");
-        conn.createStatement().execute("UPSERT INTO t VALUES('a')");
-        conn.createStatement().execute("UPSERT INTO t VALUES('ab')");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k BINARY(3) PRIMARY KEY)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('ab')");
         conn.commit();
-        rs = conn.createStatement().executeQuery("SELECT * FROM t ORDER BY k");
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " ORDER BY k");
         assertTrue(rs.next());
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
         assertTrue(rs.next());
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("ab"), QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
         assertFalse(rs.next());
 
-        conn.createStatement().execute("CREATE TABLE tdesc (k BINARY(3) PRIMARY KEY DESC)");
-        conn.createStatement().execute("UPSERT INTO tdesc VALUES('a')");
-        conn.createStatement().execute("UPSERT INTO tdesc VALUES('ab')");
+        String tableNameDesc = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " +  tableNameDesc + " (k BINARY(3) PRIMARY KEY DESC)");
+        conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('a')");
+        conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('ab')");
         conn.commit();
-        rs = conn.createStatement().executeQuery("SELECT * FROM tdesc ORDER BY k DESC");
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + tableNameDesc + " ORDER BY k DESC");
         assertTrue(rs.next());
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("ab"), QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
         assertTrue(rs.next());
@@ -242,11 +245,12 @@ public class StringIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testStrConcat() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("create table T (PK1 integer, F1 varchar, F2 varchar, F3 varchar, F4 varchar, constraint PK primary key (PK1))");
-        conn.createStatement().execute("upsert into T(PK1, F1,F3) values(0, 'tortilla', 'chip')");
+        String tableName = generateRandomString();
+        conn.createStatement().execute("create table " + tableName + " (PK1 integer, F1 varchar, F2 varchar, F3 varchar, F4 varchar, constraint PK primary key (PK1))");
+        conn.createStatement().execute("upsert into " + tableName + "(PK1, F1,F3) values(0, 'tortilla', 'chip')");
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("select * from T where (F1||F2||F3||F4)='tortillachip'");
+        ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where (F1||F2||F3||F4)='tortillachip'");
         assertTrue(rs.next());
         assertEquals(0, rs.getInt(1));
         assertFalse(rs.next());

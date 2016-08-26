@@ -1,5 +1,5 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
@@ -9,17 +9,17 @@
   <description>A SQL layer over HBase</description>
 
   <licenses>
-      <license>
-          <name>The Apache Software License, Version 2.0</name>
-          <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-          <distribution>repo</distribution>
-          <comments />
-      </license>
+    <license>
+      <name>The Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+      <comments />
+    </license>
   </licenses>
 
   <organization>
-      <name>Apache Software Foundation</name>
-      <url>http://www.apache.org</url>
+    <name>Apache Software Foundation</name>
+    <url>http://www.apache.org</url>
   </organization>
 
   <modules>
@@ -112,14 +112,14 @@
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
     <maven-surefire-plugin.version>2.19.1</maven-surefire-plugin.version>
     <maven-failsafe-plugin.version>2.19.1</maven-failsafe-plugin.version>
-    
+
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
 
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
     <numForkedIT>5</numForkedIT>
-    
+
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -227,40 +227,40 @@
           <version>${maven-failsafe-plugin.version}</version>
           <executions>
             <execution>
-               <id>ClientManagedTimeTests</id>
-                 <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
-                 <reuseForks>true</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
-                 <shutdown>kill</shutdown>
-               </configuration>
-               <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-               </goals>
+              <id>ClientManagedTimeTests</id>
+              <configuration>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>true</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
+                <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
             </execution>
             <execution>
-               <id>HBaseManagedTimeTests</id>
-                 <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
-                 <reuseForks>true</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
-                 <shutdown>kill</shutdown>
-               </configuration>
-               <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-               </goals>
+              <id>HBaseManagedTimeTests</id>
+              <configuration>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>true</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
+                <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
             </execution>
             <execution>
               <id>HBaseManagedTimeTableReuseTest</id>
@@ -280,23 +280,23 @@
                 <goal>verify</goal>
               </goals>
             </execution>
-	        <execution>
-               <id>NeedTheirOwnClusterTests</id>
-                 <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
-                 <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-                 <shutdown>kill</shutdown>
-               </configuration>
-               <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-               </goals>
+            <execution>
+              <id>NeedTheirOwnClusterTests</id>
+              <configuration>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>false</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+                <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
             </execution>
           </executions>
         </plugin>
@@ -390,7 +390,7 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
+          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>kill</shutdown>
@@ -404,7 +404,7 @@
         <executions>
           <execution>
             <phase>prepare-package
-                </phase>
+            </phase>
             <goals>
               <goal>test-jar</goal>
             </goals>
@@ -433,7 +433,7 @@
             <!-- Header on changelog isn't normal -->
             <exclude>CHANGES</exclude>
             <!-- IDE configuration -->
-	          <exclude>dev/phoenix.importorder</exclude>
+            <exclude>dev/phoenix.importorder</exclude>
             <!-- Release L&N -->
             <exclude>dev/release_files/LICENSE</exclude>
             <exclude>dev/release_files/NOTICE</exclude>
@@ -897,8 +897,8 @@
             <version>1.6</version>
             <executions>
               <execution>
-              <id>sign-artifacts</id>
-              <phase>verify</phase>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
                 <goals>
                   <goal>sign</goal>
                 </goals>

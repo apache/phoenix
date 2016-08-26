@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -54,7 +55,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
-public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
+public class PhoenixRuntimeIT extends BaseHBaseManagedTimeTableReuseIT {
     private static void assertTenantIds(Expression e, HTableInterface htable, Filter filter, String[] tenantIds) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         Scan scan = new Scan();
@@ -95,23 +96,28 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
     }
     
     private void testGetTenantIdExpression(boolean isSalted) throws Exception {
+        //Have to delete metaData tables because BaseHBaseManagedTimeTableReuseIT doesn't delete them after each test case , and tenant list will create issues between test cases
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
+
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        String tableName = "FOO_" + (isSalted ? "SALTED" : "UNSALTED");
+        String tableName = generateRandomString() ;
+        String sequenceName = generateRandomString() ;
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true" + (isSalted ? ",SALT_BUCKETS=3" : ""));
-        conn.createStatement().execute("CREATE SEQUENCE s1");
+        conn.createStatement().execute("CREATE SEQUENCE "  + sequenceName);
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
         
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
         Connection tsconn = DriverManager.getConnection(getUrl(), props);
-        tsconn.createStatement().execute("CREATE SEQUENCE s1");
+        tsconn.createStatement().execute("CREATE SEQUENCE " + sequenceName);
         Expression e1 = PhoenixRuntime.getTenantIdExpression(tsconn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME);
         HTableInterface htable1 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
         assertTenantIds(e1, htable1, new FirstKeyOnlyFilter(), new String[] {"", "t1"} );
-        
-        tsconn.createStatement().execute("CREATE VIEW A.BAR(V1 VARCHAR) AS SELECT * FROM " + tableName);
+
+        String viewName = generateRandomString();
+        tsconn.createStatement().execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
         Expression e2 = PhoenixRuntime.getTenantIdExpression(tsconn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
         HTableInterface htable2 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
         assertTenantIds(e2, htable2, getUserTableAndViewsFilter(), new String[] {"", "t1"} );
@@ -119,29 +125,33 @@ public class PhoenixRuntimeIT extends BaseHBaseManagedTimeIT {
         Expression e3 = PhoenixRuntime.getTenantIdExpression(conn, tableName);
         HTableInterface htable3 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e3, htable3, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
-        
-        conn.createStatement().execute("CREATE TABLE BAS (k1 VARCHAR PRIMARY KEY)");
-        Expression e4 = PhoenixRuntime.getTenantIdExpression(conn, "BAS");
+
+        String basTableName = generateRandomString();
+        conn.createStatement().execute("CREATE TABLE " + basTableName + " (k1 VARCHAR PRIMARY KEY)");
+        Expression e4 = PhoenixRuntime.getTenantIdExpression(conn, basTableName);
         assertNull(e4);
 
-        tsconn.createStatement().execute("CREATE INDEX I1 ON A.BAR(V1)");
-        Expression e5 = PhoenixRuntime.getTenantIdExpression(tsconn, "A.I1");
+        String indexName1 = generateRandomString();
+        tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");
+        Expression e5 = PhoenixRuntime.getTenantIdExpression(tsconn, indexName1);
         HTableInterface htable5 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
         assertTenantIds(e5, htable5, new FirstKeyOnlyFilter(), new String[] {"t1"} );
 
-        conn.createStatement().execute("CREATE INDEX I2 ON " + tableName + "(k2)");
-        Expression e6 = PhoenixRuntime.getTenantIdExpression(conn, "I2");
-        HTableInterface htable6 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("I2"));
+        String indexName2 = generateRandomString();
+        conn.createStatement().execute("CREATE INDEX " + indexName2 + " ON " + tableName + "(k2)");
+        Expression e6 = PhoenixRuntime.getTenantIdExpression(conn, indexName2);
+        HTableInterface htable6 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName2));
         assertTenantIds(e6, htable6, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
         
-        tableName = "BAR_" + (isSalted ? "SALTED" : "UNSALTED");
+        tableName = generateRandomString() + "BAR_" + (isSalted ? "SALTED" : "UNSALTED");
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) " + (isSalted ? "SALT_BUCKETS=3" : ""));
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
         Expression e7 = PhoenixRuntime.getFirstPKColumnExpression(conn, tableName);
         HTableInterface htable7 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e7, htable7, new FirstKeyOnlyFilter(), new String[] {"t1", "t2"} );
-        
+
+
     }
     
 }
