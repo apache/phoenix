@@ -54,7 +54,7 @@ import org.junit.Test;
 
 import com.google.common.base.Objects;
 
-public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
+public class AlterMultiTenantTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties tenantProps = new Properties();
@@ -85,10 +85,11 @@ public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
     @Test
     public void testAddDropColumnToBaseTablePropagatesToEntireViewHierarchy() throws Exception {
         String baseTable = "testViewHierarchy";
-        String view1 = "view1";
-        String view2 = "view2";
-        String view3 = "view3";
-        String view4 = "view4";
+        String baseViewName = generateRandomString();
+        String view1 = baseViewName + "_VIEW1";
+        String view2 = baseViewName + "_VIEW2";
+        String view3 = baseViewName + "_VIEW3";
+        String view4 = baseViewName + "_VIEW4";
         /*                                     baseTable
                                  /                  |               \ 
                          view1(tenant1)    view3(tenant2)          view4(global)
@@ -170,10 +171,11 @@ public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
     @Test
     public void testChangingPKOfBaseTableChangesPKForAllViews() throws Exception {
         String baseTable = "testChangePKOfBaseTable";
-        String view1 = "view1";
-        String view2 = "view2";
-        String view3 = "view3";
-        String view4 = "view4";
+        String baseViewName = generateRandomString();
+        String view1 = baseViewName + "_VIEW1";
+        String view2 = baseViewName + "_VIEW2";
+        String view3 = baseViewName + "_VIEW3";
+        String view4 = baseViewName + "_VIEW4";
         /*                                     baseTable
                                  /                  |               \ 
                          view1(tenant1)    view3(tenant2)          view4(global)
@@ -267,13 +269,14 @@ public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
     @Test
     public void testAddPKColumnToBaseTableWhoseViewsHaveIndices() throws Exception {
         String baseTable = "testAddPKColumnToBaseTableWhoseViewsHaveIndices";
-        String view1 = "view1";
-        String view2 = "view2";
-        String view3 = "view3";
-        String tenant1 = "tenant1";
-        String tenant2 = "tenant2";
-        String view2Index = view2 + "_idx";
-        String view3Index = view3 + "_idx";
+        String baseViewName = generateRandomString();
+        String view1 = baseViewName + "_VIEW1";
+        String view2 = baseViewName + "_VIEW2";
+        String view3 = baseViewName + "_VIEW3";
+        String tenant1 = baseViewName + "_T1";
+        String tenant2 = baseViewName + "_T2";
+        String view2Index = view2 + "_IDX";
+        String view3Index = view3 + "_IDX";
         /*                          baseTable(mutli-tenant)
                                  /                           \                
                          view1(tenant1)                  view3(tenant2, index) 
@@ -407,8 +410,8 @@ public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
     @Test
     public void testAddingPkAndKeyValueColumnsToBaseTableWithDivergedView() throws Exception {
         String baseTable = "testAlteringPkOfBaseTableWithDivergedView".toUpperCase();
-        String view1 = "view1".toUpperCase();
-        String divergedView = "divergedView".toUpperCase();
+        String view1 = generateRandomString();
+        String divergedView = generateRandomString();
         String divergedViewIndex = divergedView + "_IDX";
         /*                                     baseTable
                                  /                  |                
@@ -487,7 +490,7 @@ public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
     @Test
     public void testAddColumnsToSaltedBaseTableWithViews() throws Exception {
         String baseTable = "testAddColumnsToSaltedBaseTableWithViews".toUpperCase();
-        String view1 = "view1".toUpperCase();
+        String view1 = generateRandomString();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
@@ -517,7 +520,7 @@ public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
     @Test
     public void testDropColumnsFromSaltedBaseTableWithViews() throws Exception {
         String baseTable = "testDropColumnsFromSaltedBaseTableWithViews".toUpperCase();
-        String view1 = "view1".toUpperCase();
+        String view1 = generateRandomString();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
@@ -557,7 +560,7 @@ public class AlterMultiTenantTableWithViews extends BaseHBaseManagedTimeIT {
     @Test
     public void testAlteringViewConditionallyModifiesHTableMetadata() throws Exception {
         String baseTable = "testAlteringViewConditionallyModifiesBaseTable".toUpperCase();
-        String view1 = "view1".toUpperCase();
+        String view1 = generateRandomString();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);

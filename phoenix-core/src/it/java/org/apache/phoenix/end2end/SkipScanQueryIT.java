@@ -34,36 +34,40 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
 
-public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
+public class SkipScanQueryIT extends BaseHBaseManagedTimeTableReuseIT {
     
-    private void initIntInTable(Connection conn, List<Integer> data) throws SQLException {
-        String ddl = "CREATE TABLE IF NOT EXISTS inTest (" + 
+    private String initIntInTable(Connection conn, List<Integer> data) throws SQLException {
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + 
                      "  i INTEGER NOT NULL PRIMARY KEY)";
         conn.createStatement().executeUpdate(ddl);
         
         // Test upsert correct values 
-        String query = "UPSERT INTO inTest VALUES(?)";
+        String query = "UPSERT INTO " + tableName + " VALUES(?)";
         PreparedStatement stmt = conn.prepareStatement(query);
         for (Integer i : data) {
             stmt.setInt(1, i);
             stmt.execute();
         }
         conn.commit();
+        return tableName;
     }
     
-    private void initVarCharCrossProductInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
-        String ddl = "CREATE TABLE IF NOT EXISTS inVarTest (" + 
+    private String initVarCharCrossProductInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (" +
                      "  s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (s1,s2))";
         conn.createStatement().executeUpdate(ddl);
         
         // Test upsert correct values 
-        String query = "UPSERT INTO inVarTest VALUES(?,?)";
+        String query = "UPSERT INTO " + tableName + " VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(query);
         for (String s1 : c1) {
             for (String s2 : c2) {
@@ -73,15 +77,17 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             }
         }
         conn.commit();
+        return tableName;
     }
     
-    private void initVarCharParallelListInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
-        String ddl = "CREATE TABLE IF NOT EXISTS inVarTest (" + 
+    private String initVarCharParallelListInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + 
                      "  s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (s1,s2))";
         conn.createStatement().executeUpdate(ddl);
         
         // Test upsert correct values 
-        String query = "UPSERT INTO inVarTest VALUES(?,?)";
+        String query = "UPSERT INTO " + tableName + " VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(query);
         for (int i = 0; i < c1.size(); i++) {
             stmt.setString(1, c1.get(i));
@@ -89,13 +95,15 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
         }
         conn.commit();
+        return tableName;
     }
     
-    private static final String UPSERT_SELECT_AFTER_UPSERT_STATEMENTS = 
-    		"upsert into table1(c1, c2, c3, c4, v1, v2) values('1001', '91', 's1', '2013-09-26', 28397, 23541);\n" + 
-    		"upsert into table1(c1, c2, c3, c4, v1, v2) values('1001', '91', 's2', '2013-09-23', 3369, null);\n";
-    private void initSelectAfterUpsertTable(Connection conn) throws Exception {
-        String ddl = "create table if not exists table1("
+    private static String UPSERT_SELECT_AFTER_UPSERT_STATEMENTS =
+    		"upsert into %s(c1, c2, c3, c4, v1, v2) values('1001', '91', 's1', '2013-09-26', 28397, 23541);\n" +
+    		"upsert into %s(c1, c2, c3, c4, v1, v2) values('1001', '91', 's2', '2013-09-23', 3369, null);\n";
+    private String initSelectAfterUpsertTable(Connection conn) throws Exception {
+        String tableName = generateRandomString();
+        String ddl = "create table if not exists  " + tableName + " ("
                 + "c1 VARCHAR NOT NULL," + "c2 VARCHAR NOT NULL,"
                 + "c3 VARCHAR NOT NULL," + "c4 VARCHAR NOT NULL,"
                 + "v1 integer," + "v2 integer "
@@ -103,18 +111,20 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
         conn.createStatement().execute(ddl);
 
         // Test upsert correct values
-        StringReader reader = new StringReader(UPSERT_SELECT_AFTER_UPSERT_STATEMENTS);
+        StringReader reader = new StringReader(String.format(UPSERT_SELECT_AFTER_UPSERT_STATEMENTS, tableName, tableName));
         PhoenixRuntime.executeStatements(conn, reader, Collections.emptyList());
         reader.close();
         conn.commit();
+        return tableName;
     }
     
     @Test
     public void testSkipScanFilterQuery() throws Exception {
-        String createTableDDL = "CREATE TABLE test" + "(col1 VARCHAR," + "col2 VARCHAR," + "col3 VARCHAR,"
+        String tableName = generateRandomString();
+        String createTableDDL = "CREATE TABLE " + tableName + "(col1 VARCHAR," + "col2 VARCHAR," + "col3 VARCHAR,"
              + "col4 VARCHAR," + "CONSTRAINT pk  " + "PRIMARY KEY (col1,col2,col3,col4))";
-        String upsertQuery = "upsert into test values(?,?,?,?)";
-        String query = "SELECT col1, col2, col3, col4 FROM test WHERE col1 IN ('a','e','f') AND col2 = 'b' AND col4 = '1' ";
+        String upsertQuery = "upsert into  " + tableName + "  values(?,?,?,?)";
+        String query = "SELECT col1, col2, col3, col4 FROM " + tableName + " WHERE col1 IN ('a','e','f') AND col2 = 'b' AND col4 = '1' ";
         String[] col1Values = { "a", "e.f", "f" };
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         createTestTable(getUrl(), createTableDDL);
@@ -143,11 +153,11 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSelectAfterUpsertInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initSelectAfterUpsertTable(conn);
+        String tableName = initSelectAfterUpsertTable(conn);
         try {
             String query;
-            query = "SELECT case when sum(v2)*1.0/sum(v1) is null then 0 else sum(v2)*1.0/sum(v1) END AS val FROM table1 " +
-            		"WHERE c1='1001' AND c2 = '91' " +
+            query = "SELECT case when sum(v2)*1.0/sum(v1) is null then 0 else sum(v2)*1.0/sum(v1) END AS val FROM  " + tableName +
+            		" WHERE c1='1001' AND c2 = '91' " +
             		"AND c3 IN ('s1','s2') AND c4='2013-09-24'";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -160,10 +170,10 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(false);
-        initIntInTable(conn,Arrays.asList(2,7,10));
+        String tableName = initIntInTable(conn,Arrays.asList(2,7,10));
         try {
             String query;
-            query = "SELECT i FROM inTest WHERE i IN (1,2,4,5,7,8,10)";
+            query = "SELECT i FROM " + tableName + " WHERE i IN (1,2,4,5,7,8,10)";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
@@ -181,10 +191,10 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testVarCharParallelListInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(false);
-        initVarCharParallelListInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
+        String tableName = initVarCharParallelListInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
             String query;
-            query = "SELECT s1,s2 FROM inVarTest WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z')";
+            query = "SELECT s1,s2 FROM " + tableName + " WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z')";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("da", rs.getString(1));
@@ -199,10 +209,10 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testVarCharXInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(false);
-        initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
+        String tableName = initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
             String query;
-            query = "SELECT s1,s2 FROM inVarTest WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z')";
+            query = "SELECT s1,s2 FROM " + tableName + " WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z')";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("da", rs.getString(1));
@@ -226,11 +236,11 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     public void testVarCharXIntInQuery() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(false);
-        initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
+        String tableName = initVarCharCrossProductInTable(conn,Arrays.asList("d","da","db"),Arrays.asList("m","mc","tt"));
         try {
             String query;
-            query = "SELECT s1,s2 FROM inVarTest " +
-                    "WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z') " +
+            query = "SELECT s1,s2 FROM " + tableName +
+                    " WHERE s1 IN ('a','b','da','db') AND s2 IN ('c','ma','m','mc','ttt','z') " +
                     "AND s1 > 'd' AND s1 < 'db' AND s2 > 'm'";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -244,17 +254,18 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testPreSplitCompositeFixedKey() throws Exception {
+        String tableName = generateRandomString();
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
+            conn.createStatement().execute("create table " + tableName + "(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
             conn.setAutoCommit(true);
-            conn.createStatement().execute("upsert into test values('000','aaaa','value_1')");
-            conn.createStatement().execute("upsert into test values('000','aabb','value_2')");
-            conn.createStatement().execute("upsert into test values('100','aacc','value_3')");
-            conn.createStatement().execute("upsert into test values('100','aadd','value_4')");
-            conn.createStatement().execute("upsert into test values('200','aaee','value_5')");
-            conn.createStatement().execute("upsert into test values('201','aaff','value_6')");
-            ResultSet rs = conn.createStatement().executeQuery("select * from test where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
+            conn.createStatement().execute("upsert into " + tableName + " values('000','aaaa','value_1')");
+            conn.createStatement().execute("upsert into " + tableName + " values('000','aabb','value_2')");
+            conn.createStatement().execute("upsert into " + tableName + " values('100','aacc','value_3')");
+            conn.createStatement().execute("upsert into " + tableName + " values('100','aadd','value_4')");
+            conn.createStatement().execute("upsert into " + tableName + " values('200','aaee','value_5')");
+            conn.createStatement().execute("upsert into " + tableName + " values('201','aaff','value_6')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
             assertTrue(rs.next());
             assertEquals("000", rs.getString(1));
             assertEquals("aabb", rs.getString(2));
@@ -273,16 +284,17 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testInWithDescKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateRandomString();
         try {
-            conn.createStatement().execute("create table test(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2 desc))");
+            conn.createStatement().execute("create table " + tableName + "(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2 desc))");
             conn.setAutoCommit(true);
-            conn.createStatement().execute("upsert into test values('000','aaaa','value_1')");
-            conn.createStatement().execute("upsert into test values('000','aabb','value_2')");
-            conn.createStatement().execute("upsert into test values('100','aacc','value_3')");
-            conn.createStatement().execute("upsert into test values('100','aadd','value_4')");
-            conn.createStatement().execute("upsert into test values('200','aaee','value_5')");
-            conn.createStatement().execute("upsert into test values('201','aaff','value_6')");
-            ResultSet rs = conn.createStatement().executeQuery("select * from test where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
+            conn.createStatement().execute("upsert into " + tableName + " values('000','aaaa','value_1')");
+            conn.createStatement().execute("upsert into " + tableName + " values('000','aabb','value_2')");
+            conn.createStatement().execute("upsert into " + tableName + " values('100','aacc','value_3')");
+            conn.createStatement().execute("upsert into " + tableName + " values('100','aadd','value_4')");
+            conn.createStatement().execute("upsert into " + tableName + " values('200','aaee','value_5')");
+            conn.createStatement().execute("upsert into " + tableName + " values('201','aaff','value_6')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where key_1>='000' and key_1<'200' and key_2>='aabb' and key_2<'aadd'");
             assertTrue(rs.next());
             assertEquals("000", rs.getString(1));
             assertEquals("aabb", rs.getString(2));
@@ -293,7 +305,7 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             assertEquals("value_3", rs.getString(3));
             assertFalse(rs.next());
 
-            rs = conn.createStatement().executeQuery("select * from test where (key_1,key_2) in (('100','aacc'),('100','aadd'))");
+            rs = conn.createStatement().executeQuery("select * from " + tableName + " where (key_1,key_2) in (('100','aacc'),('100','aadd'))");
             assertTrue(rs.next());
             assertEquals("100", rs.getString(1));
             assertEquals("aadd", rs.getString(2));
@@ -312,8 +324,8 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testSkipScanIntersectionAtEnd() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        
-        PreparedStatement stmt = conn.prepareStatement("create table splits_test "
+        String tableName = generateRandomString();
+        PreparedStatement stmt = conn.prepareStatement("create table " + tableName 
             + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, pk3 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
             + "CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SPLIT ON (?, ?, ?)");
         stmt.setBytes(1, new byte[] {1, 1});
@@ -321,13 +333,13 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
         stmt.setBytes(3, new byte[] {3, 1});
         stmt.execute();
         
-        conn.createStatement().execute("upsert into splits_test values (0, 1, 1, 'a')");
-        conn.createStatement().execute("upsert into splits_test values (1, 1, 1, 'a')");
-        conn.createStatement().execute("upsert into splits_test values (2, 1, 1, 'a')");
-        conn.createStatement().execute("upsert into splits_test values (3, 1, 1, 'a')");
+        conn.createStatement().execute("upsert into " + tableName + " values (0, 1, 1, 'a')");
+        conn.createStatement().execute("upsert into " + tableName + " values (1, 1, 1, 'a')");
+        conn.createStatement().execute("upsert into " + tableName + " values (2, 1, 1, 'a')");
+        conn.createStatement().execute("upsert into " + tableName + " values (3, 1, 1, 'a')");
         conn.commit();
         
-        ResultSet rs = conn.createStatement().executeQuery("select count(kv) from splits_test where pk1 in (0, 1, 2, 3) AND pk2 = 1");
+        ResultSet rs = conn.createStatement().executeQuery("select count(kv) from " + tableName + " where pk1 in (0, 1, 2, 3) AND pk2 = 1");
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         assertFalse(rs.next());
@@ -338,10 +350,12 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
+        String tableName = generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try {
-            createMultiCFTestTable(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME, null);
-            populateMultiCFTestTable(TestUtil.DEFAULT_DATA_TABLE_FULL_NAME);
-            String upsert = "UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME
+            createMultiCFTestTable(fullTableName , null);
+            populateMultiCFTestTable(fullTableName);
+            String upsert = "UPSERT INTO " + fullTableName
                     + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);
             stmt.setString(1, "varchar4");
@@ -398,7 +412,7 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
             stmt.setDate(16, null);
             stmt.executeUpdate();
             conn.commit();
-            String query = "SELECT char_col1, int_col1, long_col2 from " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " where varchar_pk in ('varchar3','varchar6')";
+            String query = "SELECT char_col1, int_col1, long_col2 from " + fullTableName + " where varchar_pk in ('varchar3','varchar6')";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("chara", rs.getString(1));
@@ -418,13 +432,14 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testOrPKWithAndNonPK() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateRandomString();
         try {
-            conn.createStatement().execute("create table bugTable(ID varchar primary key,company varchar)");
+            conn.createStatement().execute("create table " + tableName + "(ID varchar primary key,company varchar)");
             conn.setAutoCommit(true);
-            conn.createStatement().execute("upsert into bugTable values('i1','c1')");
-            conn.createStatement().execute("upsert into bugTable values('i2','c2')");
-            conn.createStatement().execute("upsert into bugTable values('i3','c3')");
-            ResultSet rs = conn.createStatement().executeQuery("select * from bugTable where ID = 'i1' or (ID = 'i2' and company = 'c3')");
+            conn.createStatement().execute("upsert into " + tableName + " values('i1','c1')");
+            conn.createStatement().execute("upsert into " + tableName + " values('i2','c2')");
+            conn.createStatement().execute("upsert into " + tableName + " values('i3','c3')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where ID = 'i1' or (ID = 'i2' and company = 'c3')");
             assertTrue(rs.next());
             assertEquals("i1", rs.getString(1));
             assertEquals("c1", rs.getString(2));
@@ -438,9 +453,10 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testNullInfiniteLoop() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateRandomString();
             conn.setAutoCommit(true);
             conn.createStatement().execute(
-              "create table NULL_TEST"+
+              "create table " + tableName +
               "("+
                      "CREATETIME VARCHAR,"+
                      "ACCOUNTID VARCHAR,"+
@@ -449,9 +465,9 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeIT {
                      "CONSTRAINT pk PRIMARY KEY(CREATETIME,ACCOUNTID,SERVICENAME)"+
               ")");
 
-            conn.createStatement().execute("upsert into NULL_TEST(CREATETIME,SERVICENAME,SPAN.APPID) values('20160116141006','servlet','android')");
-            conn.createStatement().execute("upsert into NULL_TEST(CREATETIME,ACCOUNTID,SERVICENAME,SPAN.APPID) values('20160116151006','2404787','jdbc','ios')");
-            ResultSet rs = conn.createStatement().executeQuery("select * from NULL_TEST where CREATETIME>='20160116121006' and  CREATETIME<='20160116181006' and ACCOUNTID='2404787'");
+            conn.createStatement().execute("upsert into " + tableName + "(CREATETIME,SERVICENAME,SPAN.APPID) values('20160116141006','servlet','android')");
+            conn.createStatement().execute("upsert into " + tableName + "(CREATETIME,ACCOUNTID,SERVICENAME,SPAN.APPID) values('20160116151006','2404787','jdbc','ios')");
+            ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where CREATETIME>='20160116121006' and  CREATETIME<='20160116181006' and ACCOUNTID='2404787'");
             assertTrue(rs.next());
             assertFalse(rs.next());
         }

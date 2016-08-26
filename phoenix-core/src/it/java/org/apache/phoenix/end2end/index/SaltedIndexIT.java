@@ -29,27 +29,24 @@ import java.sql.ResultSet;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.*;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
 
-public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
+public class SaltedIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     private static final int TABLE_SPLITS = 3;
     private static final int INDEX_SPLITS = 4;
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used
@@ -60,15 +57,15 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
-    private static void makeImmutableAndDeleteData() throws Exception {
+    private static void makeImmutableAndDeleteData(String tableName, String fullTableName) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         try {
             conn.setAutoCommit(true);
-            conn.createStatement().execute("DELETE FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME);
-            conn.createStatement().execute("ALTER TABLE " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " SET IMMUTABLE_ROWS=true");
-            conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME).next();
+            conn.createStatement().execute("DELETE FROM " + fullTableName);
+            conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET IMMUTABLE_ROWS=true");
+            conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullTableName).next();
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            assertTrue(pconn.getTable(new PTableKey(pconn.getTenantId(), TestUtil.DEFAULT_DATA_TABLE_FULL_NAME)).isImmutableRows());
+            assertTrue(pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName)).isImmutableRows());
         } finally {
             conn.close();
         }
@@ -76,43 +73,55 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testMutableTableIndexMaintanenceSaltedSalted() throws Exception {
-        testMutableTableIndexMaintanence(TABLE_SPLITS, INDEX_SPLITS);
-        makeImmutableAndDeleteData();
-        testMutableTableIndexMaintanence(TABLE_SPLITS, INDEX_SPLITS);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, TABLE_SPLITS, INDEX_SPLITS);
+        makeImmutableAndDeleteData(tableName, fullTableName);
+        testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, TABLE_SPLITS, INDEX_SPLITS);
     }
 
     @Test
     public void testMutableTableIndexMaintanenceSalted() throws Exception {
-        testMutableTableIndexMaintanence(null, INDEX_SPLITS);
-        makeImmutableAndDeleteData();
-        testMutableTableIndexMaintanence(null, INDEX_SPLITS);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, INDEX_SPLITS);
+        makeImmutableAndDeleteData(tableName, fullTableName);
+        testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, INDEX_SPLITS);
     }
 
     @Test
     public void testMutableTableIndexMaintanenceUnsalted() throws Exception {
-        testMutableTableIndexMaintanence(null, null);
-        makeImmutableAndDeleteData();
-        testMutableTableIndexMaintanence(null, null);
+        String tableName = "TBL_" + generateRandomString();
+        String indexName = "IND_" + generateRandomString();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, null);
+        makeImmutableAndDeleteData(tableName, fullTableName);
+        testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, null);
     }
 
-    private void testMutableTableIndexMaintanence(Integer tableSaltBuckets, Integer indexSaltBuckets) throws Exception {
+    private void testMutableTableIndexMaintanence(String dataTableName , String dataTableFullName, String indexTableName, String indexTableFullName, Integer tableSaltBuckets, Integer indexSaltBuckets) throws Exception {
         String query;
         ResultSet rs;
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)  " +  (tableSaltBuckets == null ? "" : " SALT_BUCKETS=" + tableSaltBuckets));
-        query = "SELECT * FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME;
+        conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)  " +  (tableSaltBuckets == null ? "" : " SALT_BUCKETS=" + tableSaltBuckets));
+        query = "SELECT * FROM " + dataTableFullName;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
         
-        conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + TestUtil.DEFAULT_INDEX_TABLE_NAME + " ON " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " (v DESC)" + (indexSaltBuckets == null ? "" : " SALT_BUCKETS=" + indexSaltBuckets));
-        query = "SELECT * FROM " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME;
+        conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + dataTableFullName + " (v DESC)" + (indexSaltBuckets == null ? "" : " SALT_BUCKETS=" + indexSaltBuckets));
+        query = "SELECT * FROM " + indexTableFullName;
         rs = conn.createStatement().executeQuery(query);
         assertFalse(rs.next());
 
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " VALUES(?,?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?)");
         stmt.setString(1,"a");
         stmt.setString(2, "x");
         stmt.execute();
@@ -121,7 +130,7 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         stmt.execute();
         conn.commit();
 
-        query = "SELECT * FROM " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME;
+        query = "SELECT * FROM " + indexTableFullName;
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("y",rs.getString(1));
@@ -131,7 +140,7 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         assertEquals("a",rs.getString(2));
         assertFalse(rs.next());
 
-        query = "SELECT k,v FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " WHERE v = 'y'";
+        query = "SELECT k,v FROM " + dataTableFullName + " WHERE v = 'y'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
@@ -141,9 +150,10 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         String expectedPlan;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = indexSaltBuckets == null ? 
-             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [~'y']\n" + 
-             "    SERVER FILTER BY FIRST KEY ONLY" : 
-            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [0,~'y'] - ["+(indexSaltBuckets.intValue()-1)+",~'y']\n" + 
+             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [~'y']\n" +
+             "    SERVER FILTER BY FIRST KEY ONLY" :
+            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [0,~'y'] - ["+(indexSaltBuckets.intValue()-1)+",~'y']\n" +
+
              "    SERVER FILTER BY FIRST KEY ONLY\n" +
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
@@ -151,7 +161,7 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         // Will use index, so rows returned in DESC order.
         // This is not a bug, though, because we can
         // return in any order.
-        query = "SELECT k,v FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " WHERE v >= 'x'";
+        query = "SELECT k,v FROM " + dataTableFullName + " WHERE v >= 'x'";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("b",rs.getString(1));
@@ -162,15 +172,16 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = indexSaltBuckets == null ? 
-            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [*] - [~'x']\n"
+            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " [*] - [~'x']\n"
           + "    SERVER FILTER BY FIRST KEY ONLY" :
-            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + TestUtil.DEFAULT_INDEX_TABLE_FULL_NAME + " [0,*] - ["+(indexSaltBuckets.intValue()-1)+",~'x']\n"
-           + "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+            ("CLIENT PARALLEL 4-WAY RANGE SCAN OVER " + indexTableFullName + " [0,*] - ["+(indexSaltBuckets.intValue()-1)+",~'x']\n"
+
+           + "    SERVER FILTER BY FIRST KEY ONLY\n" +
              "CLIENT MERGE SORT");
         assertEquals(expectedPlan,QueryUtil.getExplainPlan(rs));
         
         // Use data table, since point lookup trumps order by
-        query = "SELECT k,v FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " WHERE k = 'a' ORDER BY v";
+        query = "SELECT k,v FROM " + dataTableFullName + " WHERE k = 'a' ORDER BY v";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
@@ -178,10 +189,10 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = tableSaltBuckets == null ? 
-                "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "\n" +
+                "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + dataTableFullName + "\n" +
                 "    SERVER SORTED BY [V]\n" + 
                 "CLIENT MERGE SORT" :
-                    "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "\n" + 
+                    "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + dataTableFullName + "\n" +
                     "    SERVER SORTED BY [V]\n" + 
                     "CLIENT MERGE SORT";
         String explainPlan2 = QueryUtil.getExplainPlan(rs);
@@ -190,7 +201,7 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         // Will use data table now, since there's a LIMIT clause and
         // we're able to optimize out the ORDER BY, unless the data
         // table is salted.
-        query = "SELECT k,v FROM " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + " WHERE v >= 'x' ORDER BY k LIMIT 2";
+        query = "SELECT k,v FROM " + dataTableFullName + " WHERE v >= 'x' ORDER BY k LIMIT 2";
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("a",rs.getString(1));
@@ -201,11 +212,11 @@ public class SaltedIndexIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         expectedPlan = tableSaltBuckets == null ? 
-             "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "\n" +
+             "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableFullName + "\n" +
              "    SERVER FILTER BY V >= 'x'\n" + 
              "    SERVER 2 ROW LIMIT\n" + 
              "CLIENT 2 ROW LIMIT" :
-                 "CLIENT PARALLEL 3-WAY FULL SCAN OVER " + TestUtil.DEFAULT_DATA_TABLE_FULL_NAME + "\n" +
+                 "CLIENT PARALLEL 3-WAY FULL SCAN OVER " + dataTableFullName + "\n" +
                  "    SERVER FILTER BY V >= 'x'\n" + 
                  "    SERVER 2 ROW LIMIT\n" + 
                  "CLIENT MERGE SORT\n" + 

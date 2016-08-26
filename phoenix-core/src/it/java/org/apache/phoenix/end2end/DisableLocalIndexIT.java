@@ -43,9 +43,9 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class DisableLocalIndexIT extends BaseHBaseManagedTimeIT {
+public class DisableLocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // Must update config before starting server
@@ -57,7 +57,11 @@ public class DisableLocalIndexIT extends BaseHBaseManagedTimeIT {
     public void testDisabledLocalIndexes() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        String tableName = "DISABLE_LOCAL_INDEX_TEST";
+        String baseName = generateRandomString();
+        String tableName = baseName+ "_TABLE";
+        String viewName = baseName + "_VIEW";
+        String indexName1 = baseName + "_INDEX1";
+        String indexName2 = baseName + "_INDEX2";
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t1','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('t2','y')");
@@ -78,18 +82,18 @@ public class DisableLocalIndexIT extends BaseHBaseManagedTimeIT {
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
         Connection tsconn = DriverManager.getConnection(getUrl(), props);
         
-        tsconn.createStatement().execute("CREATE VIEW A.BAR(V1 VARCHAR) AS SELECT * FROM " + tableName);
-        tsconn.createStatement().execute("CREATE INDEX I1 ON A.BAR(V1)");
+        tsconn.createStatement().execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
+        tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");
         tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
 
         try {
-            conn.createStatement().execute("CREATE LOCAL INDEX I2 ON " + tableName + "(k2)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName + "(k2)");
             fail("Should not allow creation of local index");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
         }
         try {
-            tsconn.createStatement().execute("CREATE LOCAL INDEX I2 ON A.BAR(k2, v1)");
+            tsconn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + viewName + "(k2, v1)");
             fail("Should not allow creation of local index");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());

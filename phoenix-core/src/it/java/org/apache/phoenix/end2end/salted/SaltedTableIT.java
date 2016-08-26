@@ -58,7 +58,7 @@ public class SaltedTableIT extends BaseClientManagedTimeIT {
         // 4abc123jkl444
         try {
             // Upsert with no column specifies.
-            ensureTableCreated(getUrl(), TABLE_WITH_SALTING, splits, ts-2);
+            ensureTableCreated(getUrl(), TABLE_WITH_SALTING, TABLE_WITH_SALTING, splits, ts-2);
             String query = "UPSERT INTO " + TABLE_WITH_SALTING + " VALUES(?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(query);
             stmt.setInt(1, 1);

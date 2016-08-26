@@ -47,7 +47,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -75,17 +75,11 @@ import org.apache.tephra.hbase.TransactionAwareHTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
-public class TransactionIT extends BaseHBaseManagedTimeIT {
+public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     
-    private static final String FULL_TABLE_NAME = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
-    
-    @Before
-    public void setUp() throws SQLException {
-        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE);
-    }
-    
+
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeIT.class)
+    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
@@ -94,13 +88,16 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         
     @Test
     public void testReadOwnWrites() throws Exception {
-        String selectSql = "SELECT * FROM "+FULL_TABLE_NAME;
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
+        String selectSql = "SELECT * FROM "+ fullTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
             
-            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);
             // upsert two rows
             TestUtil.setRowKeyColumns(stmt, 1);
@@ -126,13 +123,16 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testTxnClosedCorrecty() throws Exception {
-        String selectSql = "SELECT * FROM "+FULL_TABLE_NAME;
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
+        String selectSql = "SELECT * FROM "+fullTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
             
-            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);
             // upsert two rows
             TestUtil.setRowKeyColumns(stmt, 1);
@@ -155,14 +155,17 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testDelete() throws Exception {
-        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
+        String selectSQL = "SELECT * FROM " + fullTableName;
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             conn1.setAutoCommit(false);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
             assertFalse(rs.next());
             
-            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn1.prepareStatement(upsert);
             // upsert two rows
             TestUtil.setRowKeyColumns(stmt, 1);
@@ -173,11 +176,11 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             stmt.execute();
             
             // verify rows can be read even though commit has not been called
-            int rowsDeleted = conn1.createStatement().executeUpdate("DELETE FROM " + FULL_TABLE_NAME);
+            int rowsDeleted = conn1.createStatement().executeUpdate("DELETE FROM " + fullTableName);
             assertEquals(2, rowsDeleted);
             
             // Delete and second upsert not committed yet, so there should be one row.
-            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             
@@ -191,36 +194,45 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testAutoCommitQuerySingleTable() throws Exception {
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
             // verify no rows returned
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME);
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName);
             assertFalse(rs.next());
         }
     }
     
     @Test
     public void testAutoCommitQueryMultiTables() throws Exception {
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
             // verify no rows returned
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " a JOIN " + FULL_TABLE_NAME + " b ON (a.long_pk = b.int_pk)");
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName + " a JOIN " + fullTableName + " b ON (a.long_pk = b.int_pk)");
             assertFalse(rs.next());
         } 
     }
     
     @Test
     public void testColConflicts() throws Exception {
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(false);
-            String selectSql = "SELECT * FROM "+FULL_TABLE_NAME;
+            String selectSql = "SELECT * FROM "+fullTableName;
             conn1.setAutoCommit(false);
             ResultSet rs = conn1.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
             // upsert row using conn1
-            String upsertSql = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, a.int_col1) VALUES(?, ?, ?, ?, ?, ?, ?)";
+            String upsertSql = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, a.int_col1) VALUES(?, ?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn1.prepareStatement(upsertSql);
             TestUtil.setRowKeyColumns(stmt, 1);
             stmt.setInt(7, 10);
@@ -243,24 +255,24 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         }
     }
     
-    private void testRowConflicts() throws Exception {
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+    private void testRowConflicts(String fullTableName) throws Exception {
+        try (Connection conn1 = DriverManager.getConnection(getUrl());
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(false);
-            String selectSql = "SELECT * FROM "+FULL_TABLE_NAME;
+            String selectSql = "SELECT * FROM "+fullTableName;
             conn1.setAutoCommit(false);
             ResultSet rs = conn1.createStatement().executeQuery(selectSql);
-            boolean immutableRows = conn1.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, FULL_TABLE_NAME)).isImmutableRows();
+            boolean immutableRows = conn1.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, fullTableName)).isImmutableRows();
             assertFalse(rs.next());
             // upsert row using conn1
-            String upsertSql = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, a.int_col1) VALUES(?, ?, ?, ?, ?, ?, ?)";
+            String upsertSql = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, a.int_col1) VALUES(?, ?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn1.prepareStatement(upsertSql);
             TestUtil.setRowKeyColumns(stmt, 1);
             stmt.setInt(7, 10);
             stmt.execute();
             // upsert row using conn2
-            upsertSql = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, b.int_col2) VALUES(?, ?, ?, ?, ?, ?, ?)";
+            upsertSql = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, b.int_col2) VALUES(?, ?, ?, ?, ?, ?, ?)";
             stmt = conn2.prepareStatement(upsertSql);
             TestUtil.setRowKeyColumns(stmt, 1);
             stmt.setInt(7, 11);
@@ -281,51 +293,59 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testRowConflictDetected() throws Exception {
-        testRowConflicts();
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
+        testRowConflicts(fullTableName);
     }
     
     @Test
     public void testNoConflictDetectionForImmutableRows() throws Exception {
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("ALTER TABLE " + FULL_TABLE_NAME + " SET IMMUTABLE_ROWS=true");
-        testRowConflicts();
+        conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET IMMUTABLE_ROWS=true");
+        testRowConflicts(fullTableName);
     }
     
     @Test
     public void testNonTxToTxTable() throws Exception {
+        String nonTxTableName = generateRandomString();
+
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE(k INTEGER PRIMARY KEY, v VARCHAR)");
-        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (1)");
-        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (2, 'a')");
-        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (3, 'b')");
+        conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)");
+        conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (1)");
+        conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (2, 'a')");
+        conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (3, 'b')");
         conn.commit();
         
-        conn.createStatement().execute("CREATE INDEX IDX ON NON_TX_TABLE(v)");
+        conn.createStatement().execute("CREATE INDEX IDX ON " + nonTxTableName + "(v)");
         // Reset empty column value to an empty value like it is pre-transactions
-        HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
+        HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes( nonTxTableName));
         List<Put>puts = Lists.newArrayList(new Put(PInteger.INSTANCE.toBytes(1)), new Put(PInteger.INSTANCE.toBytes(2)), new Put(PInteger.INSTANCE.toBytes(3)));
         for (Put put : puts) {
             put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
         }
         htable.put(puts);
         
-        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE SET TRANSACTIONAL=true");
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + " SET TRANSACTIONAL=true");
         
-        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("NON_TX_TABLE"));
+        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes( nonTxTableName));
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
         htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("IDX"));
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
 
-        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (4, 'c')");
-        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ k FROM NON_TX_TABLE WHERE v IS NULL");
-        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "NON_TX_TABLE")).isTransactional());
+        conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (4, 'c')");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ k FROM " + nonTxTableName + " WHERE v IS NULL");
+        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,  nonTxTableName)).isTransactional());
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(1));
         assertFalse(rs.next());
         conn.commit();
         
-        conn.createStatement().execute("UPSERT INTO NON_TX_TABLE VALUES (5, 'd')");
-        rs = conn.createStatement().executeQuery("SELECT k FROM NON_TX_TABLE");
+        conn.createStatement().execute("UPSERT INTO " + nonTxTableName + " VALUES (5, 'd')");
+        rs = conn.createStatement().executeQuery("SELECT k FROM " + nonTxTableName);
         assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "IDX")).isTransactional());
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(1));
@@ -340,7 +360,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         assertFalse(rs.next());
         conn.rollback();
         
-        rs = conn.createStatement().executeQuery("SELECT k FROM NON_TX_TABLE");
+        rs = conn.createStatement().executeQuery("SELECT k FROM " + nonTxTableName);
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(1));
         assertTrue(rs.next());
@@ -355,13 +375,15 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     @Ignore
     @Test
     public void testNonTxToTxTableFailure() throws Exception {
+        String nonTxTableName = generateRandomString();
+
         Connection conn = DriverManager.getConnection(getUrl());
         // Put table in SYSTEM schema to prevent attempts to update the cache after we disable SYSTEM.CATALOG
-        conn.createStatement().execute("CREATE TABLE SYSTEM.NON_TX_TABLE(k INTEGER PRIMARY KEY, v VARCHAR)");
-        conn.createStatement().execute("UPSERT INTO SYSTEM.NON_TX_TABLE VALUES (1)");
+        conn.createStatement().execute("CREATE TABLE SYSTEM." + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)");
+        conn.createStatement().execute("UPSERT INTO SYSTEM." + nonTxTableName + " VALUES (1)");
         conn.commit();
         // Reset empty column value to an empty value like it is pre-transactions
-        HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM.NON_TX_TABLE"));
+        HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM." + nonTxTableName));
         Put put = new Put(PInteger.INSTANCE.toBytes(1));
         put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, ByteUtil.EMPTY_BYTE_ARRAY);
         htable.put(put);
@@ -372,7 +394,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             // This will succeed initially in updating the HBase metadata, but then will fail when
             // the SYSTEM.CATALOG table is attempted to be updated, exercising the code to restore
             // the coprocessors back to the non transactional ones.
-            conn.createStatement().execute("ALTER TABLE SYSTEM.NON_TX_TABLE SET TRANSACTIONAL=true");
+            conn.createStatement().execute("ALTER TABLE SYSTEM." + nonTxTableName + " SET TRANSACTIONAL=true");
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage().contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " is disabled"));
@@ -381,28 +403,30 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             admin.close();
         }
         
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM SYSTEM.NON_TX_TABLE WHERE v IS NULL");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM SYSTEM." + nonTxTableName + " WHERE v IS NULL");
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(1));
         assertFalse(rs.next());
         
-        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM.NON_TX_TABLE"));
+        htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM." + nonTxTableName));
         assertFalse(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
         assertEquals(1,conn.unwrap(PhoenixConnection.class).getQueryServices().
-                getTableDescriptor(Bytes.toBytes("SYSTEM.NON_TX_TABLE")).
+                getTableDescriptor(Bytes.toBytes("SYSTEM." + nonTxTableName)).
                 getFamily(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES).getMaxVersions());
     }
     
     @Test
     public void testProperties() throws Exception {
+        String nonTxTableName = generateRandomString();
+
         Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX idx1 ON NON_TX_TABLE1(a.v, b.v) TTL=1000");
-        conn.createStatement().execute("CREATE INDEX idx2 ON NON_TX_TABLE1(c.v) INCLUDE (a.v, b.v) TTL=1000");
+        conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "1(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX idx1 ON " + nonTxTableName + "1(a.v, b.v) TTL=1000");
+        conn.createStatement().execute("CREATE INDEX idx2 ON " + nonTxTableName + "1(c.v) INCLUDE (a.v, b.v) TTL=1000");
 
-        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE1 SET TRANSACTIONAL=true");
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "1 SET TRANSACTIONAL=true");
 
-        HTableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE1"));
+        HTableDescriptor desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes(nonTxTableName + "1"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
@@ -423,39 +447,39 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
         }
         
-        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
-        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE2 SET TRANSACTIONAL=true, VERSIONS=10");
-        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE2"));
+        conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TRANSACTIONAL=true, VERSIONS=10");
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
             assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
             assertEquals(null, colDesc.getValue(TxConstants.PROPERTY_TTL));
         }
-        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE2 SET TTL=1000");
-        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE2"));
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TTL=1000");
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
             assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
         }
 
-        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
-        conn.createStatement().execute("ALTER TABLE NON_TX_TABLE3 SET TRANSACTIONAL=true, b.VERSIONS=10, c.VERSIONS=20");
-        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("NON_TX_TABLE3"));
+        conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
+        conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "3 SET TRANSACTIONAL=true, b.VERSIONS=10, c.VERSIONS=20");
+        desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "3"));
         assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, desc.getFamily(Bytes.toBytes("A")).getMaxVersions());
         assertEquals(10, desc.getFamily(Bytes.toBytes("B")).getMaxVersions());
         assertEquals(20, desc.getFamily(Bytes.toBytes("C")).getMaxVersions());
 
-        conn.createStatement().execute("CREATE TABLE NON_TX_TABLE4(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
+        conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "4(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
         try {
-            conn.createStatement().execute("ALTER TABLE NON_TX_TABLE4 SET TRANSACTIONAL=true, VERSIONS=1");
+            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "4 SET TRANSACTIONAL=true, VERSIONS=1");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE.getErrorCode(), e.getErrorCode());
         }
 
         try {
-            conn.createStatement().execute("ALTER TABLE NON_TX_TABLE4 SET TRANSACTIONAL=true, b.VERSIONS=1");
+            conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "4 SET TRANSACTIONAL=true, b.VERSIONS=1");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE.getErrorCode(), e.getErrorCode());
@@ -472,6 +496,10 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testCreateTableToBeTransactional() throws Exception {
+
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "CREATE TABLE TEST_TRANSACTIONAL_TABLE (k varchar primary key) transactional=true";
@@ -515,13 +543,15 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     }
 
     public void testCurrentDate() throws Exception {
-        String selectSql = "SELECT current_date() FROM "+FULL_TABLE_NAME;
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        String selectSql = "SELECT current_date() FROM "+fullTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(false);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
             
-            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsert);
             // upsert two rows
             TestUtil.setRowKeyColumns(stmt, 1);
@@ -545,34 +575,36 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testReCreateTxnTableAfterDroppingExistingNonTxnTable() throws SQLException {
+        String tableName = generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         Statement stmt = conn.createStatement();
-        stmt.execute("CREATE TABLE DEMO(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
-        stmt.execute("DROP TABLE DEMO");
-        stmt.execute("CREATE TABLE DEMO(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true");
-        stmt.execute("CREATE INDEX DEMO_IDX ON DEMO (v1) INCLUDE(v2)");
-        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "DEMO")).isTransactional());
-        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, "DEMO_IDX")).isTransactional());
+        stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        stmt.execute("DROP TABLE " + tableName);
+        stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true");
+        stmt.execute("CREATE INDEX " + tableName + "_IDX ON " + tableName + " (v1) INCLUDE(v2)");
+        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).isTransactional());
+        assertTrue(conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,  tableName + "_IDX")).isTransactional());
     }
     
     @Test
     public void testRowTimestampDisabled() throws SQLException {
+        String tableName = generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             Statement stmt = conn.createStatement();
             try {
-                stmt.execute("CREATE TABLE DEMO(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP)) TRANSACTIONAL=true");
+                stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP)) TRANSACTIONAL=true");
                 fail();
             }
             catch(SQLException e) {
                 assertEquals(SQLExceptionCode.CANNOT_CREATE_TXN_TABLE_WITH_ROW_TIMESTAMP.getErrorCode(), e.getErrorCode());
             }
-            stmt.execute("CREATE TABLE DEMO(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP))");
+            stmt.execute("CREATE TABLE " + tableName + "(k VARCHAR, v VARCHAR, d DATE NOT NULL, CONSTRAINT PK PRIMARY KEY(k,d ROW_TIMESTAMP))");
             try {
-                stmt.execute("ALTER TABLE DEMO SET TRANSACTIONAL=true");
+                stmt.execute("ALTER TABLE " + tableName + " SET TRANSACTIONAL=true");
                 fail();
             }
             catch(SQLException e) {
@@ -587,11 +619,11 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
+        String fullTableName = generateRandomString();
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         
         TransactionSystemClient txServiceClient = pconn.getQueryServices().getTransactionSystemClient();
 
-        String fullTableName = "T";
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true");
         HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
@@ -706,9 +738,9 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     public void testCheckpointAndRollback() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String fullTableName = generateRandomString();
         conn.setAutoCommit(false);
         try {
-            String fullTableName = "T";
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) TRANSACTIONAL=true");
             stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
@@ -748,7 +780,10 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testInflightUpdateNotSeen() throws Exception {
-        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
+        String selectSQL = "SELECT * FROM " + fullTableName;
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             conn1.setAutoCommit(false);
@@ -756,7 +791,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
             assertFalse(rs.next());
             
-            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn1.prepareStatement(upsert);
             // upsert two rows
             TestUtil.setRowKeyColumns(stmt, 1);
@@ -766,32 +801,32 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             TestUtil.setRowKeyColumns(stmt, 2);
             stmt.execute();
             
-            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 IS NULL");
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName + " WHERE int_col1 IS NULL");
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             
-            upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, int_col1) VALUES(?, ?, ?, ?, ?, ?, 1)";
+            upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, int_col1) VALUES(?, ?, ?, ?, ?, ?, 1)";
             stmt = conn1.prepareStatement(upsert);
             TestUtil.setRowKeyColumns(stmt, 1);
             stmt.execute();
             
-            rs = conn1.createStatement().executeQuery("SELECT int_col1 FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            rs = conn1.createStatement().executeQuery("SELECT int_col1 FROM " + fullTableName + " WHERE int_col1 = 1");
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
             
-            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName + " WHERE int_col1 = 1");
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
-            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            rs = conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName + " WHERE int_col1 = 1");
             assertFalse(rs.next());
             
             conn1.commit();
             
-            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName + " WHERE int_col1 = 1");
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
-            rs = conn2.createStatement().executeQuery("SELECT * FROM " + FULL_TABLE_NAME + " WHERE int_col1 = 1");
+            rs = conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName + " WHERE int_col1 = 1");
             assertTrue(rs.next());
             assertFalse(rs.next());
         }
@@ -799,7 +834,10 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testInflightDeleteNotSeen() throws Exception {
-        String selectSQL = "SELECT * FROM " + FULL_TABLE_NAME;
+        String transTableName = generateRandomString();
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
+        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
+        String selectSQL = "SELECT * FROM " + fullTableName;
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
             conn1.setAutoCommit(false);
@@ -807,7 +845,7 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
             assertFalse(rs.next());
             
-            String upsert = "UPSERT INTO " + FULL_TABLE_NAME + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
+            String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = conn1.prepareStatement(upsert);
             // upsert two rows
             TestUtil.setRowKeyColumns(stmt, 1);
@@ -817,28 +855,28 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
             
             conn1.commit();
             
-            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             
-            String delete = "DELETE FROM " + FULL_TABLE_NAME + " WHERE varchar_pk = 'varchar1'";
+            String delete = "DELETE FROM " + fullTableName + " WHERE varchar_pk = 'varchar1'";
             stmt = conn1.prepareStatement(delete);
             int count = stmt.executeUpdate();
             assertEquals(1,count);
             
-            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            rs = conn1.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
             
-            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
             
             conn1.commit();
             
-            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + FULL_TABLE_NAME);
+            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName);
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
@@ -899,23 +937,23 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
     public void testInflightPartialEval() throws SQLException {
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String transactTableName = "TR";
+            String transactTableName = "TR" + generateRandomString();
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + transactTableName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " +
                 "TRANSACTIONAL=true");
             
             try (Connection conn1 = DriverManager.getConnection(getUrl()); Connection conn2 = DriverManager.getConnection(getUrl())) {
-                conn1.createStatement().execute("UPSERT INTO tr VALUES ('a','b','x')");
+                conn1.createStatement().execute("UPSERT INTO " + transactTableName + " VALUES ('a','b','x')");
                 // Select to force uncommitted data to be written
-                ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM tr");
+                ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + transactTableName);
                 assertTrue(rs.next());
                 assertEquals("a", rs.getString(1));
                 assertEquals("b", rs.getString(2));
                 assertFalse(rs.next());
                 
-                conn2.createStatement().execute("UPSERT INTO tr VALUES ('a','c','x')");
+                conn2.createStatement().execute("UPSERT INTO " + transactTableName + " VALUES ('a','c','x')");
                 // Select to force uncommitted data to be written
-                rs = conn2.createStatement().executeQuery("SELECT * FROM tr");
+                rs = conn2.createStatement().executeQuery("SELECT * FROM " + transactTableName );
                 assertTrue(rs.next());
                 assertEquals("a", rs.getString(1));
                 assertEquals("c", rs.getString(2));
@@ -924,14 +962,14 @@ public class TransactionIT extends BaseHBaseManagedTimeIT {
                 // If the AndExpression were to see the uncommitted row from conn2, the filter would
                 // filter the row out early and no longer continue to evaluate other cells due to
                 // the way partial evaluation holds state.
-                rs = conn1.createStatement().executeQuery("SELECT * FROM tr WHERE v1 != 'c' AND v2 = 'x'");
+                rs = conn1.createStatement().executeQuery("SELECT * FROM " +  transactTableName + " WHERE v1 != 'c' AND v2 = 'x'");
                 assertTrue(rs.next());
                 assertEquals("a", rs.getString(1));
                 assertEquals("b", rs.getString(2));
                 assertFalse(rs.next());
                 
                 // Same as above for conn1 data
-                rs = conn2.createStatement().executeQuery("SELECT * FROM tr WHERE v1 != 'b' AND v2 = 'x'");
+                rs = conn2.createStatement().executeQuery("SELECT * FROM " + transactTableName + " WHERE v1 != 'b' AND v2 = 'x'");
                 assertTrue(rs.next());
                 assertEquals("a", rs.getString(1));
                 assertEquals("c", rs.getString(2));

@@ -27,12 +27,12 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Test;
 
-public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
+public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
 
-    private void initTableWithVarArray(Connection conn, String type, Object[] objectArray, String value) throws SQLException {
-        conn.createStatement().execute("CREATE TABLE t ( k VARCHAR PRIMARY KEY, a " + type + "[],b " + type + ")");
+    private void initTableWithVarArray(Connection conn, String tableName, String type, Object[] objectArray, String value) throws SQLException {
+        conn.createStatement().execute("CREATE TABLE " + tableName + " ( k VARCHAR PRIMARY KEY, a " + type + "[],b " + type + ")");
         conn.commit();
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?," + value + ")");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?," + value + ")");
         PhoenixArray array = (PhoenixArray) conn.createArrayOf(type, objectArray);
         stmt.setString(1, "a");
         stmt.setArray(2, array);
@@ -41,10 +41,10 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
 
     }
 
-    private void initTables(Connection conn) throws Exception {
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[])";
+    private void initTables(Connection conn, String tableName) throws Exception {
+        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[])";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO regions(region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2) VALUES('SF Bay Area'," +
+        String dml = "UPSERT INTO " + tableName + " (region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2) VALUES('SF Bay Area'," +
                 "ARRAY['2345','46345','23234']," +
                 "ARRAY[2345,46345,23234,456]," +
                 "ARRAY[23.45,46.345,23.234,45.6,5.78]," +
@@ -60,10 +60,10 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
         conn.commit();
     }
 
-    private void initTablesDesc(Connection conn, String type, String val) throws Exception {
-        String ddl = "CREATE TABLE regions (pk " + type + " PRIMARY KEY DESC,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],chars2 CHAR(15)[], bools BOOLEAN[])";
+    private void initTablesDesc(Connection conn, String tableName, String type, String val) throws Exception {
+        String ddl = "CREATE TABLE " + tableName + " (pk " + type + " PRIMARY KEY DESC,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],chars2 CHAR(15)[], bools BOOLEAN[])";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO regions(pk,varchars,integers,doubles,bigints,chars,chars2,bools) VALUES(" + val + "," +
+        String dml = "UPSERT INTO " + tableName + "(pk,varchars,integers,doubles,bigints,chars,chars2,bools) VALUES(" + val + "," +
                 "ARRAY['2345','46345','23234']," +
                 "ARRAY[2345,46345,23234,456]," +
                 "ARRAY[23.45,46.345,23.234,45.6,5.78]," +
@@ -80,10 +80,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInteger() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(1234,integers) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(1234,integers) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Integer[] integers = new Integer[]{1234, 2345, 46345, 23234, 456};
@@ -97,10 +98,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionVarchar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('34567',varchars) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('34567',varchars) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"34567", "2345", "46345", "23234"};
@@ -115,12 +117,13 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayPrependFunctionNulls1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String[] s = new String[]{null, null, "1", "2"};
-        initTableWithVarArray(conn, "VARCHAR", s, null);
+        String tableName = generateRandomString();
+        initTableWithVarArray(conn, tableName, "VARCHAR", s, null);
         String[] s2 = new String[]{null, null, null, "1", "2"};
         PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM t WHERE k = 'a'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");
         assertTrue(rs.next());
         assertEquals(array2, rs.getArray(1));
     }
@@ -129,12 +132,13 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayPrependFunctionNulls2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String[] s = new String[]{"1", "2"};
-        initTableWithVarArray(conn, "VARCHAR", s, null);
+        String tableName = generateRandomString();
+        initTableWithVarArray(conn, tableName, "VARCHAR", s, null);
         String[] s2 = new String[]{null, "1", "2"};
         PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM t WHERE k = 'a'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");
         assertTrue(rs.next());
         assertEquals(array2, rs.getArray(1));
     }
@@ -143,12 +147,13 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayPrependFunctionNulls3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String[] s = new String[]{"176", null, "212"};
-        initTableWithVarArray(conn, "VARCHAR", s, null);
+        String tableName = generateRandomString();
+        initTableWithVarArray(conn, tableName, "VARCHAR", s, null);
         String[] s2 = new String[]{null, "176", null, "212"};
         PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM t WHERE k = 'a'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");
         assertTrue(rs.next());
         assertEquals(array2, rs.getArray(1));
     }
@@ -157,12 +162,13 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     public void testArrayPrependFunctionNulls4() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String[] s = new String[]{"176", null, "212"};
-        initTableWithVarArray(conn, "VARCHAR", s, "'foo'");
+        String tableName = generateRandomString();
+        initTableWithVarArray(conn, tableName, "VARCHAR", s, "'foo'");
         String[] s2 = new String[]{"foo", "176", null, "212"};
         PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM t WHERE k = 'a'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");
         assertTrue(rs.next());
         assertEquals(array2, rs.getArray(1));
     }
@@ -170,10 +176,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionDouble() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(double1,doubles) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(double1,doubles) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Double[] doubles = new Double[]{23.45, 23.45, 46.345, 23.234, 45.6, 5.78};
@@ -187,10 +194,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionDouble2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(23,doubles) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(23,doubles) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Double[] doubles = new Double[]{new Double(23), 23.45, 46.345, 23.234, 45.6, 5.78};
@@ -204,9 +212,10 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionBigint() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(1112,bigints) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(1112,bigints) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Long[] longs = new Long[]{1112l, 12l, 34l, 56l, 78l, 910l};
@@ -220,9 +229,10 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionChar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('fac',chars) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('fac',chars) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"fac", "a", "bbbb", "c", "ddd", "e"};
@@ -236,28 +246,31 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test(expected = TypeMismatchException.class)
     public void testArrayPrependFunctionIntToCharArray() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(234,varchars) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(234,varchars) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
     }
 
     @Test(expected = TypeMismatchException.class)
     public void testArrayPrependFunctionVarcharToIntegerArray() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('234',integers) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('234',integers) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
 
     }
 
     @Test(expected = SQLException.class)
     public void testArrayPrependFunctionChar2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('facfacfacfacfacfacfac',chars) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND('facfacfacfacfacfacfac',chars) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         rs.next();
         rs.getArray(1);
     }
@@ -265,10 +278,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionIntegerToDoubleArray() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(45,doubles) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(45,doubles) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Double[] doubles = new Double[]{45.0, 23.45, 46.345, 23.234, 45.6, 5.78};
@@ -282,10 +296,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithNestedFunctions1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(integers[1],ARRAY[23,45]) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(integers[1],ARRAY[23,45]) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Integer[] integers = new Integer[]{2345, 23, 45};
@@ -299,10 +314,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithNestedFunctions2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(ARRAY_ELEM(ARRAY[2,4],1),integers) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(ARRAY_ELEM(ARRAY[2,4],1),integers) FROM " + tableName+ " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Integer[] integers = new Integer[]{2, 2345, 46345, 23234, 456};
@@ -316,10 +332,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithNestedFunctions3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(ARRAY_ELEM(doubles,2),doubles) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(ARRAY_ELEM(doubles,2),doubles) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Double[] doubles = new Double[]{46.345, 23.45, 46.345, 23.234, 45.6, 5.78};
@@ -333,16 +350,16 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithUpsert1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO regions(region_name,varchars) VALUES('SF Bay Area',ARRAY_PREPEND(':-)',ARRAY['hello','world']))";
+        String dml = "UPSERT INTO " + tableName + " (region_name,varchars) VALUES('SF Bay Area',ARRAY_PREPEND(':-)',ARRAY['hello','world']))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT varchars FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT varchars FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{":-)", "hello", "world"};
@@ -356,16 +373,17 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithUpsert2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateRandomString();
 
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
+        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO regions(region_name,integers) VALUES('SF Bay Area',ARRAY_PREPEND(6,ARRAY[4,5]))";
+        String dml = "UPSERT INTO " + tableName + "(region_name,integers) VALUES('SF Bay Area',ARRAY_PREPEND(6,ARRAY[4,5]))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT integers FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT integers FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Integer[] integers = new Integer[]{6, 4, 5};
@@ -379,16 +397,16 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithUpsert3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-
-        String ddl = "CREATE TABLE regions (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE " + tableName + "(region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO regions(region_name,doubles) VALUES('SF Bay Area',ARRAY_PREPEND(9.0,ARRAY[5.67,7.87]))";
+        String dml = "UPSERT INTO " + tableName + "(region_name,doubles) VALUES('SF Bay Area',ARRAY_PREPEND(9.0,ARRAY[5.67,7.87]))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT doubles FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT doubles FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Double[] doubles = new Double[]{new Double(9), 5.67, 7.87};
@@ -402,26 +420,28 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithUpsertSelect1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-
-        String ddl = "CREATE TABLE source (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
+        String baseTable = generateRandomString();
+        String source = baseTable + "_SOURCE";
+        String target = baseTable + "_TARGET";
+        String ddl = "CREATE TABLE " + source + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
 
-        ddl = "CREATE TABLE target (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
+        ddl = "CREATE TABLE " + target + "(region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO source(region_name,doubles) VALUES('SF Bay Area',ARRAY_PREPEND(9.0,ARRAY[5.67,7.87]))";
+        String dml = "UPSERT INTO " + source + "(region_name,doubles) VALUES('SF Bay Area',ARRAY_PREPEND(9.0,ARRAY[5.67,7.87]))";
         conn.createStatement().execute(dml);
 
-        dml = "UPSERT INTO source(region_name,doubles) VALUES('SF Bay Area2',ARRAY_PREPEND(9.2,ARRAY[56.7,7.87]))";
+        dml = "UPSERT INTO " + source + "(region_name,doubles) VALUES('SF Bay Area2',ARRAY_PREPEND(9.2,ARRAY[56.7,7.87]))";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        dml = "UPSERT INTO target(region_name, doubles) SELECT region_name, ARRAY_PREPEND(5,doubles) FROM source";
+        dml = "UPSERT INTO " + target + "(region_name, doubles) SELECT region_name, ARRAY_PREPEND(5,doubles) FROM " + source;
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT doubles FROM target");
+        rs = conn.createStatement().executeQuery("SELECT doubles FROM " + target);
         assertTrue(rs.next());
 
         Double[] doubles = new Double[]{new Double(5), new Double(9), 5.67, 7.87};
@@ -440,26 +460,28 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionWithUpsertSelect2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-
-        String ddl = "CREATE TABLE source (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
+        String baseTable = generateRandomString();
+        String source = baseTable + "_SOURCE";
+        String target = baseTable + "_TARGET";
+        String ddl = "CREATE TABLE " + source + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        ddl = "CREATE TABLE target (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
+        ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        String dml = "UPSERT INTO source(region_name,varchars) VALUES('SF Bay Area',ARRAY_PREPEND('c',ARRAY['abcd','b']))";
+        String dml = "UPSERT INTO " + source + "(region_name,varchars) VALUES('SF Bay Area',ARRAY_PREPEND('c',ARRAY['abcd','b']))";
         conn.createStatement().execute(dml);
 
-        dml = "UPSERT INTO source(region_name,varchars) VALUES('SF Bay Area2',ARRAY_PREPEND('something',ARRAY['d','fgh']))";
+        dml = "UPSERT INTO " + source + "(region_name,varchars) VALUES('SF Bay Area2',ARRAY_PREPEND('something',ARRAY['d','fgh']))";
         conn.createStatement().execute(dml);
         conn.commit();
 
-        dml = "UPSERT INTO target(region_name, varchars) SELECT region_name, ARRAY_PREPEND('stu',varchars) FROM source";
+        dml = "UPSERT INTO " + target + "(region_name, varchars) SELECT region_name, ARRAY_PREPEND('stu',varchars) FROM " + source;
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT varchars FROM target");
+        rs = conn.createStatement().executeQuery("SELECT varchars FROM " + target);
         assertTrue(rs.next());
 
         String[] strings = new String[]{"stu", "c", "abcd", "b"};
@@ -478,10 +500,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInWhere1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY[123,2345,46345,23234,456]=ARRAY_PREPEND(123,integers)");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName + " WHERE ARRAY[123,2345,46345,23234,456]=ARRAY_PREPEND(123,integers)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -491,10 +514,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInWhere2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE varchars[1]=ANY(ARRAY_PREPEND('1234',ARRAY['2345','46345','23234']))");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName + " WHERE varchars[1]=ANY(ARRAY_PREPEND('1234',ARRAY['2345','46345','23234']))");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -504,10 +528,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInWhere3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY['1234','2345','46345','23234']=ARRAY_PREPEND('1234',ARRAY['2345','46345','23234'])");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName + " WHERE ARRAY['1234','2345','46345','23234']=ARRAY_PREPEND('1234',ARRAY['2345','46345','23234'])");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -517,10 +542,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInWhere4() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY[123.4,23.45,4634.5,2.3234]=ARRAY_PREPEND(123.4,ARRAY[23.45,4634.5,2.3234])");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName + " WHERE ARRAY[123.4,23.45,4634.5,2.3234]=ARRAY_PREPEND(123.4,ARRAY[23.45,4634.5,2.3234])");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -530,10 +556,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInWhere5() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY['foo','2345','46345','23234']=ARRAY_PREPEND('foo',varchars)");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName + " WHERE ARRAY['foo','2345','46345','23234']=ARRAY_PREPEND('foo',varchars)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -543,10 +570,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInWhere6() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE chars2=ARRAY_PREPEND('foo',chars)");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName + " WHERE chars2=ARRAY_PREPEND('foo',chars)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -556,10 +584,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionInWhere7() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String  tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM regions WHERE ARRAY[4,2,3]=ARRAY_PREPEND(4,ARRAY[2,3])");
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName + " WHERE ARRAY[4,2,3]=ARRAY_PREPEND(4,ARRAY[2,3])");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -569,10 +598,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test(expected = SQLException.class)
     public void testArrayPrependFunctionCharLimitCheck() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTables(conn);
+        String tableName = generateRandomString();
+        initTables(conn, tableName);
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(char1,chars) FROM regions WHERE region_name = 'SF Bay Area'");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(char1,chars) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"wert", "a", "bbbb", "c", "ddd", "e"};
@@ -586,10 +616,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionIntegerDesc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTablesDesc(conn, "INTEGER", "23");
+        String tableName = generateRandomString();
+        initTablesDesc(conn, tableName, "INTEGER", "23");
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,integers) FROM regions");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,integers) FROM " + tableName);
         assertTrue(rs.next());
 
         Integer[] integers = new Integer[]{23, 2345, 46345, 23234, 456};
@@ -604,10 +635,11 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionVarcharDesc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTablesDesc(conn, "VARCHAR", "'e'");
+        String tableName = generateRandomString();
+        initTablesDesc(conn, tableName, "VARCHAR", "'e'");
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,varchars) FROM regions");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,varchars) FROM " + tableName);
         assertTrue(rs.next());
 
         String[] strings = new String[]{"e", "2345", "46345", "23234"};
@@ -621,9 +653,10 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionBigIntDesc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTablesDesc(conn, "BIGINT", "1112");
+        String  tableName = generateRandomString();
+        initTablesDesc(conn, tableName, "BIGINT", "1112");
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,bigints) FROM regions");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,bigints) FROM " +  tableName);
         assertTrue(rs.next());
 
         Long[] longs = new Long[]{1112l, 12l, 34l, 56l, 78l, 910l};
@@ -637,9 +670,10 @@ public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testArrayPrependFunctionBooleanDesc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTablesDesc(conn, "BOOLEAN", "false");
+        String tableName = generateRandomString();
+        initTablesDesc(conn, tableName, "BOOLEAN", "false");
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,bools) FROM regions");
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(pk,bools) FROM " + tableName);
         assertTrue(rs.next());
 
         Boolean[] booleans = new Boolean[]{false, true, false};

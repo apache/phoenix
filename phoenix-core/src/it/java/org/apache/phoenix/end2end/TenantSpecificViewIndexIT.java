@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
+import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -34,11 +36,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -69,15 +73,18 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         testUpdatableViewsWithSameNameDifferentTenants(null, true);
     }
 
+
     @Test
     public void testMultiCFViewIndex() throws Exception {
         testMultiCFViewIndex(false, false);
     }
 
+
     @Test
     public void testMultiCFViewIndexWithNamespaceMapping() throws Exception {
         testMultiCFViewIndex(false, true);
     }
+
 
     @Test
     public void testMultiCFViewLocalIndex() throws Exception {
@@ -110,12 +117,18 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     private void testMultiCFViewIndex(boolean localIndex, boolean isNamespaceEnabled) throws Exception {
-        String tableName = "A.MT_BASE";
-        String baseViewName = "acme";
+        String tableName = "XYZ." + generateRandomString();
+        String baseViewName = generateRandomString() ;
         createTableAndValidate(tableName, isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "b", isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "a", isNamespaceEnabled);
-        validateSequence(tableName, isNamespaceEnabled, "-32767,-32767");
+
+        String sequenceNameA = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("a"), isNamespaceEnabled);
+        String sequenceNameB = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("b"), isNamespaceEnabled);
+        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
+        verifySequence(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName, true);
+        verifySequence(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName, true);
+
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "a");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -126,24 +139,9 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             conn.createStatement().execute("DROP VIEW  " + baseViewName + "_b");
         }
         DriverManager.getConnection(getUrl()).createStatement().execute("DROP TABLE " + tableName + " CASCADE");
-        validateSequence(tableName, isNamespaceEnabled, null);
-    }
 
-    private void validateSequence(String tableName, boolean isNamespaceEnabled, String expectedResult)
-            throws SQLException {
-        PhoenixConnection phxConn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
-        ResultSet rs = phxConn.createStatement().executeQuery("SELECT " + PhoenixDatabaseMetaData.CURRENT_VALUE
-                + "  FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE);
-        if (expectedResult != null) {
-            String[] splits = expectedResult.split(",");
-            for (String seq : splits) {
-                assertTrue(rs.next());
-                assertEquals(seq, rs.getString(1));
-            }
-        } else {
-            assertFalse(rs.next());
-        }
-        phxConn.close();
+        verifySequence(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName, false);
+        verifySequence(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName, false);
     }
 
     private void createViewAndIndexesWithTenantId(String tableName,String baseViewName, boolean localIndex, String tenantId,
@@ -250,10 +248,12 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     public void testNonPaddedTenantId() throws Exception {
         String tenantId1 = "org1";
         String tenantId2 = "org2";
-        String ddl = "CREATE TABLE T (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
+        String tableName = generateRandomString();
+        String viewName = generateRandomString();
+        String ddl = "CREATE TABLE " + tableName + " (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO T (tenantId, pk1, pk2, val1) VALUES (?, ?, ?, ?)";
+        String dml = "UPSERT INTO " + tableName + " (tenantId, pk1, pk2, val1) VALUES (?, ?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         
         String pk = "pk1b";
@@ -277,8 +277,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         Connection tenantConn = DriverManager.getConnection(tenantUrl);
         
         // create a tenant specific view.
-        tenantConn.createStatement().execute("CREATE VIEW V AS select * from T");
-        String query = "SELECT val1 FROM V WHERE pk1 = ?";
+        tenantConn.createStatement().execute("CREATE VIEW " + viewName + " AS select * from " + tableName);
+        String query = "SELECT val1 FROM " + viewName + " WHERE pk1 = ?";
         
         // using the tenant connection query the view.
         PreparedStatement stmt2 = tenantConn.prepareStatement(query);
