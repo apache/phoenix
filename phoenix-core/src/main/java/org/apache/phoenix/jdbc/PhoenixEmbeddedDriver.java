@@ -346,28 +346,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     // and not by value. If the user provided a principal and keytab via the JDBC url, we must make sure that the
                     // Kerberos login happens *before* we construct the ConnectionInfo object. Otherwise, the use of ConnectionInfo
                     // to determine when ConnectionQueryServices impl's should be reused will be broken.
-                    Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-                    // Add QueryServices properties
-                    for (Entry<String,String> entry : props) {
-                        config.set(entry.getKey(), entry.getValue());
-                    }
-                    // Add any user-provided properties (via DriverManager)
-                    if (info != null) {
-                        for (Object key : info.keySet()) {
-                            config.set((String) key, info.getProperty((String) key));
-                        }
-                    }
-                    // Set the principal and keytab if provided from the URL (overriding those provided in Properties)
-                    if (null != principal) {
-                        config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
-                    }
-                    if (null != keytab) {
-                        config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
-                    }
                     try {
                         // Check if we need to authenticate with kerberos so that we cache the correct ConnectionInfo
                         UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
                         if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                            final Configuration config = getConfiguration(props, info, principal, keytab);
                             logger.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
                                     config.get(QueryServices.HBASE_CLIENT_KEYTAB));
                             UserGroupInformation.setConfiguration(config);
@@ -387,6 +370,36 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             } // else, no connection, no need to login
             // Will use the current User from UGI
             return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+        }
+
+        /**
+         * Constructs a Configuration object to use when performing a Kerberos login.
+         * @param props QueryServices properties
+         * @param info User-provided properties
+         * @param principal Kerberos user principal
+         * @param keytab Path to Kerberos user keytab
+         * @return Configuration object suitable for Kerberos login
+         */
+        private Configuration getConfiguration(ReadOnlyProps props, Properties info, String principal, String keytab) {
+            final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            // Add QueryServices properties
+            for (Entry<String,String> entry : props) {
+                config.set(entry.getKey(), entry.getValue());
+            }
+            // Add any user-provided properties (via DriverManager)
+            if (info != null) {
+                for (Object key : info.keySet()) {
+                    config.set((String) key, info.getProperty((String) key));
+                }
+            }
+            // Set the principal and keytab if provided from the URL (overriding those provided in Properties)
+            if (null != principal) {
+                config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
+            }
+            if (null != keytab) {
+                config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
+            }
+            return config;
         }
         
         private final Integer port;
