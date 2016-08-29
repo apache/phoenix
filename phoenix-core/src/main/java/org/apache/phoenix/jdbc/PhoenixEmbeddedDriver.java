@@ -198,6 +198,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
      */
     public static class ConnectionInfo {
         private static final org.slf4j.Logger logger = LoggerFactory.getLogger(ConnectionInfo.class);
+        private static final Object KERBEROS_LOGIN_LOCK = new Object();
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
@@ -350,12 +351,19 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                         // Check if we need to authenticate with kerberos so that we cache the correct ConnectionInfo
                         UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
                         if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
-                            final Configuration config = getConfiguration(props, info, principal, keytab);
-                            logger.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
-                                    config.get(QueryServices.HBASE_CLIENT_KEYTAB));
-                            UserGroupInformation.setConfiguration(config);
-                            User.login(config, QueryServices.HBASE_CLIENT_KEYTAB, QueryServices.HBASE_CLIENT_PRINCIPAL, null);
-                            logger.info("Successful login to secure cluster");
+                            synchronized (KERBEROS_LOGIN_LOCK) {
+                                // Double check the current user, might have changed since we checked last. Don't want
+                                // to re-login if it's the same user.
+                                currentUser = UserGroupInformation.getCurrentUser();
+                                if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                                    final Configuration config = getConfiguration(props, info, principal, keytab);
+                                    logger.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
+                                            config.get(QueryServices.HBASE_CLIENT_KEYTAB));
+                                    UserGroupInformation.setConfiguration(config);
+                                    User.login(config, QueryServices.HBASE_CLIENT_KEYTAB, QueryServices.HBASE_CLIENT_PRINCIPAL, null);
+                                    logger.info("Successful login to secure cluster");
+                                }
+                            }
                         } else {
                             // The user already has Kerberos creds, so there isn't anything to change in the ConnectionInfo.
                             logger.info("Already logged in as {}", currentUser);
