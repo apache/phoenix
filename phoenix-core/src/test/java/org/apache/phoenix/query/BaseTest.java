@@ -534,16 +534,18 @@ public abstract class BaseTest {
     }
 
     private static void deleteSnapshotFiles() throws IOException {
-        String path = config.get(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR);
-        File dir = new File(path);
-        if (dir.exists()) {
-            for (File file : dir.listFiles()) {
-                if (!file.isDirectory()) {
-                    file.delete();
-                }
-            }
-        }
-        dir.delete();
+    	String path = config.get(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR);
+    	if (path != null) {
+    		File dir = new File(path);
+    		if (dir.exists()) {
+    			for (File file : dir.listFiles()) {
+    				if (!file.isDirectory()) {
+    					file.delete();
+    				}
+    			}
+    		}
+    		dir.delete();
+    	}
     }
     
     protected static void setupTxManager() throws SQLException, IOException {
