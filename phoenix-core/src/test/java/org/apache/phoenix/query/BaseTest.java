@@ -79,17 +79,18 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
+import static org.apache.phoenix.util.TestUtil.SUM_DOUBLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
-import static org.apache.phoenix.util.TestUtil.SUM_DOUBLE_NAME;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
+import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -157,6 +158,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.tephra.TransactionManager;
+import org.apache.tephra.TxConstants;
+import org.apache.tephra.distributed.TransactionService;
+import org.apache.tephra.metrics.TxMetricsCollector;
+import org.apache.tephra.persist.InMemoryTransactionStateStorage;
 import org.apache.twill.discovery.DiscoveryService;
 import org.apache.twill.discovery.ZKDiscoveryService;
 import org.apache.twill.internal.utils.Networks;
@@ -174,12 +180,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.inject.util.Providers;
-
-import org.apache.tephra.TransactionManager;
-import org.apache.tephra.TxConstants;
-import org.apache.tephra.distributed.TransactionService;
-import org.apache.tephra.metrics.TxMetricsCollector;
-import org.apache.tephra.persist.InMemoryTransactionStateStorage;
 
 /**
  * 
@@ -225,6 +225,7 @@ public abstract class BaseTest {
     protected static TransactionManager txManager;
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
+    public static String tmpFolderpath =  System.getProperty("java.io.tmpdir");
     private static final int dropTableTimeout = 300; // 5 mins should be long enough.
     private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
@@ -515,18 +516,34 @@ public abstract class BaseTest {
         return url;
     }
     
-    private static void teardownTxManager() throws SQLException {
+    private static void teardownTxManager() throws SQLException, IOException {
         try {
             if (txService != null) txService.stopAndWait();
         } finally {
             try {
                 if (zkClient != null) zkClient.stopAndWait();
             } finally {
-                txService = null;
-                zkClient = null;
+                try {
+                    deleteSnapshotFiles();
+                } finally {
+                    txService = null;
+                    zkClient = null;
+                }
             }
         }
-        
+    }
+
+    private static void deleteSnapshotFiles() throws IOException {
+        String path = config.get(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR);
+        File dir = new File(path);
+        if (dir.exists()) {
+            for (File file : dir.listFiles()) {
+                if (!file.isDirectory()) {
+                    file.delete();
+                }
+            }
+        }
+        dir.delete();
     }
     
     protected static void setupTxManager() throws SQLException, IOException {
@@ -534,7 +551,6 @@ public abstract class BaseTest {
         config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
         config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
         config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, Networks.getRandomPort());
-        config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
         config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS);
 
         ConnectionInfo connInfo = ConnectionInfo.create(getUrl());
@@ -736,6 +752,10 @@ public abstract class BaseTest {
     public static Configuration setUpConfigForMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
         assertNotNull(conf);
         setDefaultTestConfig(conf, overrideProps);
+        String directoryPath = tmpFolderpath + BaseTest.generateRandomString();
+        File f = new File(directoryPath);
+        f.mkdir();
+        conf.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, directoryPath);
         /*
          * The default configuration of mini cluster ends up spawning a lot of threads
          * that are not really needed by phoenix for test purposes. Limiting these threads
