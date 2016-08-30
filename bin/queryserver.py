@@ -73,6 +73,7 @@ else:
 # HBase/Phoenix client side property override
 hbase_config_path = phoenix_utils.hbase_conf_dir
 hadoop_config_path = phoenix_utils.hadoop_conf
+hadoop_classpath = phoenix_utils.hadoop_classpath
 
 # TODO: add windows support
 phoenix_file_basename = '%s-queryserver' % getpass.getuser()
@@ -119,7 +120,8 @@ out_file_path = os.path.join(log_dir, phoenix_out_file)
 
 # The command is run through subprocess so environment variables are automatically inherited
 java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + hadoop_config_path + os.pathsep + \
-    phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_queryserver_jar  + \
+    phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_queryserver_jar + \
+    os.pathsep + hadoop_classpath + \
     " -Dproc_phoenixserver" + \
     " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " -Dpsql.root.logger=%(root_logger)s" + \
