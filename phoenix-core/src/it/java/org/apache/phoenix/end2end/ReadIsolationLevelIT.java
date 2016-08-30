@@ -42,7 +42,7 @@ public class ReadIsolationLevelIT extends BaseClientManagedTimeIT {
 
     protected static void initTableValues(long ts, byte[][] splits) throws Exception {
         String tenantId = getOrganizationId();
-        ensureTableCreated(getUrl(),ATABLE_NAME,splits, ts-2);
+        ensureTableCreated(getUrl(),ATABLE_NAME, ATABLE_NAME, splits, ts-2);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));

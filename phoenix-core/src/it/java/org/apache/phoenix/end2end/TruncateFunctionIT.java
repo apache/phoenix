@@ -57,7 +57,7 @@ public class TruncateFunctionIT extends BaseClientManagedTimeIT {
     public void testTruncate() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        ensureTableCreated(getUrl(), ATABLE_NAME, ts-5);
+        ensureTableCreated(getUrl(), ATABLE_NAME,ATABLE_NAME, ts-5);
         Properties props = new Properties();
         props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts-3));
         Connection conn = DriverManager.getConnection(getUrl(), props);

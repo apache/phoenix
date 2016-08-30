@@ -32,7 +32,7 @@ import java.sql.SQLException;
 import org.junit.Test;
 
 
-public class ModulusExpressionIT extends BaseHBaseManagedTimeIT {
+public class ModulusExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
     
     private static final long SMALL_VALUE = 31L;
     private static final long LARGE_VALUE = 0x5dec6f3847021a9bL;
@@ -40,10 +40,11 @@ public class ModulusExpressionIT extends BaseHBaseManagedTimeIT {
     private static final long[] DIVIDENDS = {Long.MAX_VALUE, LARGE_VALUE, SMALL_VALUE, 0, -SMALL_VALUE, -LARGE_VALUE, Long.MIN_VALUE};
     private static final long[] DIVISORS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 31, 127, 1024};
     
-    private void initTable(Connection conn, long value) throws SQLException {
-        String ddl = "CREATE TABLE MODULUS_TEST (pk BIGINT NOT NULL PRIMARY KEY, kv BIGINT)";
+    private void initTable(Connection conn, long value, String tableName) throws SQLException {
+
+        String ddl = "CREATE TABLE " + tableName + " (pk BIGINT NOT NULL PRIMARY KEY, kv BIGINT)";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO MODULUS_TEST VALUES(?)";
+        String dml = "UPSERT INTO " + tableName + " VALUES(?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setLong(1, value);
         stmt.execute();
@@ -52,11 +53,12 @@ public class ModulusExpressionIT extends BaseHBaseManagedTimeIT {
     
     private void testDividend(long dividend) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, dividend);
-        
+        String tableName = generateRandomString();
+        initTable(conn, dividend, tableName);
+
         for(long divisor : DIVISORS) {
             long remainder = dividend % divisor;
-            String sql = "SELECT pk % " + divisor + " FROM MODULUS_TEST";
+            String sql = "SELECT pk % " + divisor + " FROM " + tableName;
             
             ResultSet rs = conn.createStatement().executeQuery(sql);
             assertTrue(rs.next());
@@ -103,16 +105,17 @@ public class ModulusExpressionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testZeroDivisor() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, 0);
+        String tableName = generateRandomString();
+        initTable(conn, 0, tableName);
         
         for(long dividend : DIVIDENDS) {
             try {
-                String sql = "SELECT " + dividend + " % pk FROM MODULUS_TEST";
+                String sql = "SELECT " + dividend + " % pk FROM " + tableName;
 
                 // workaround for parser not being able to parse Long.MIN_VALUE
                 // see: https://issues.apache.org/jira/browse/PHOENIX-1061
                 if(dividend == Long.MIN_VALUE) {
-                    sql = "SELECT (" + (dividend + 1) + " + -1) % pk FROM MODULUS_TEST";
+                    sql = "SELECT (" + (dividend + 1) + " + -1) % pk FROM " + tableName;
                 }
 
                 ResultSet rs = conn.createStatement().executeQuery(sql);
@@ -129,10 +132,11 @@ public class ModulusExpressionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testNullDividend() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, SMALL_VALUE);
+        String tableName = generateRandomString();
+        initTable(conn, SMALL_VALUE, tableName);
         
         for(long divisor : DIVISORS) {
-            String sql = "SELECT kv % " + divisor + " FROM MODULUS_TEST";
+            String sql = "SELECT kv % " + divisor + " FROM " + tableName;
             
             ResultSet rs = conn.createStatement().executeQuery(sql);
             assertTrue(rs.next());
@@ -144,15 +148,16 @@ public class ModulusExpressionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testNullDivisor() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, SMALL_VALUE);
+        String tableName = generateRandomString();
+        initTable(conn, SMALL_VALUE, tableName);
         
         for(long dividend : DIVIDENDS) {
-            String sql = "SELECT " + dividend + " % kv FROM MODULUS_TEST";
+            String sql = "SELECT " + dividend + " % kv FROM " + tableName;
             
             // workaround for parser not being able to parse Long.MIN_VALUE
             // see: https://issues.apache.org/jira/browse/PHOENIX-1061
             if(dividend == Long.MIN_VALUE) {
-                sql = "SELECT (" + (dividend + 1) + " + -1) % kv FROM MODULUS_TEST";
+                sql = "SELECT (" + (dividend + 1) + " + -1) % kv FROM " + tableName;
             }
             
             ResultSet rs = conn.createStatement().executeQuery(sql);
@@ -165,21 +170,23 @@ public class ModulusExpressionIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testNullEverything() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        initTable(conn, SMALL_VALUE);
+        String tableName = generateRandomString();
+        initTable(conn, SMALL_VALUE, tableName);
         
-        String sql = "SELECT null % kv FROM MODULUS_TEST";
+        String sql = "SELECT null % kv FROM " + tableName;
         
         ResultSet rs = conn.createStatement().executeQuery(sql);
         assertTrue(rs.next());
         assertNull(rs.getObject(1));
         assertFalse(rs.next());
         
-        sql = "SELECT kv % null FROM MODULUS_TEST";
+        sql = "SELECT kv % null FROM " + tableName;
         
         rs = conn.createStatement().executeQuery(sql);
         assertTrue(rs.next());
         assertNull(rs.getObject(1));
         assertFalse(rs.next());
     }
-    
+
+
 }

@@ -58,7 +58,7 @@ import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.REGIONSERVER_LEASE_PERIOD_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THRESHOLD_MILLISECONDS;
@@ -555,7 +555,7 @@ public class QueryServicesOptions {
     }
 
     public QueryServicesOptions setRegionServerLeasePeriodMs(int period) {
-        return set(REGIONSERVER_LEASE_PERIOD_ATTRIB, period);
+        return set(HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB, period);
     }
 
     public QueryServicesOptions setRpcTimeoutMs(int timeout) {

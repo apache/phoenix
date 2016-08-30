@@ -122,7 +122,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testGetByteBitExpression() throws SQLException {
-        ensureTableCreated(getUrl(), TestUtil.BINARY_NAME);
+        ensureTableCreated(getUrl(), TestUtil.BINARY_NAME, TestUtil.BINARY_NAME);
         int result = 1;
         String query = "select * from " + BINARY_NAME + " where GET_BYTE(a_binary, 0)=" + result;
         Scan scan = compileStatement(query).getScan();
@@ -1044,7 +1044,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
      */
     @Test
     public void testValueComparisonInt() throws SQLException {
-        ensureTableCreated(getUrl(),"PKIntValueTest");
+        ensureTableCreated(getUrl(),"PKIntValueTest", "PKIntValueTest");
         String query;
         // int <-> long
         // Case 1: int = long, comparison always false, key is degenerated.
@@ -1070,7 +1070,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testValueComparisonUnsignedInt() throws SQLException {
-        ensureTableCreated(getUrl(), "PKUnsignedIntValueTest");
+        ensureTableCreated(getUrl(), "PKUnsignedIntValueTest", "PKUnsignedIntValueTest");
         String query;
         // unsigned_int <-> negative int/long
         // Case 1: unsigned_int = negative int, always false;
@@ -1102,7 +1102,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
 
     @Test
     public void testValueComparisonUnsignedLong() throws SQLException {
-        ensureTableCreated(getUrl(), "PKUnsignedLongValueTest");
+        ensureTableCreated(getUrl(), "PKUnsignedLongValueTest", "PKUnsignedLongValueTest");
         String query;
         // unsigned_long <-> positive int/long
         // Case 1: unsigned_long = negative int/long, always false;
@@ -1256,7 +1256,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     
     @Test
     public void testForceRangeScanKeepsFilters() throws SQLException {
-        ensureTableCreated(getUrl(), TestUtil.ENTITY_HISTORY_TABLE_NAME);
+        ensureTableCreated(getUrl(), TestUtil.ENTITY_HISTORY_TABLE_NAME, TestUtil.ENTITY_HISTORY_TABLE_NAME);
         String tenantId = "000000000000001";
         String keyPrefix = "002";
         String query = "select /*+ RANGE_SCAN */ ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID from " + TestUtil.ENTITY_HISTORY_TABLE_NAME + 

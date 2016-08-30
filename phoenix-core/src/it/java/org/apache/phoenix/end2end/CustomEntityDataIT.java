@@ -43,7 +43,7 @@ import org.junit.Test;
 public class CustomEntityDataIT extends BaseClientManagedTimeIT {
     
     protected static void initTableValues(String tenantId, byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),CUSTOM_ENTITY_DATA_FULL_NAME,null, ts-2);
+        ensureTableCreated(getUrl(),CUSTOM_ENTITY_DATA_FULL_NAME,CUSTOM_ENTITY_DATA_FULL_NAME, ts-2);
             
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

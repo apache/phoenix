@@ -28,6 +28,7 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
+import java.util.Map.Entry;
 import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
@@ -37,6 +38,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -48,6 +50,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -194,6 +197,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
      * @since 0.1.1
      */
     public static class ConnectionInfo {
+        private static final org.slf4j.Logger logger = LoggerFactory.getLogger(ConnectionInfo.class);
+        private static final Object KERBEROS_LOGIN_LOCK = new Object();
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
@@ -283,7 +288,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile);
         }
         
-        public ConnectionInfo normalize(ReadOnlyProps props) throws SQLException {
+        public ConnectionInfo normalize(ReadOnlyProps props, Properties info) throws SQLException {
             String zookeeperQuorum = this.getZookeeperQuorum();
             Integer port = this.getPort();
             String rootNode = this.getRootNode();
@@ -333,7 +338,76 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             		 keytab = props.get(QueryServices.HBASE_CLIENT_KEYTAB);
             	 }
             }
+            if (!isConnectionless()) {
+                boolean credsProvidedInUrl = null != principal && null != keytab;
+                boolean credsProvidedInProps = info.containsKey(QueryServices.HBASE_CLIENT_PRINCIPAL) && info.containsKey(QueryServices.HBASE_CLIENT_KEYTAB);
+                if (credsProvidedInUrl || credsProvidedInProps) {
+                    // PHOENIX-3189 Because ConnectionInfo is immutable, we must make sure all parts of it are correct before
+                    // construction; this also requires the Kerberos user credentials object (since they are compared by reference
+                    // and not by value. If the user provided a principal and keytab via the JDBC url, we must make sure that the
+                    // Kerberos login happens *before* we construct the ConnectionInfo object. Otherwise, the use of ConnectionInfo
+                    // to determine when ConnectionQueryServices impl's should be reused will be broken.
+                    try {
+                        // Check if we need to authenticate with kerberos so that we cache the correct ConnectionInfo
+                        UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
+                        if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                            synchronized (KERBEROS_LOGIN_LOCK) {
+                                // Double check the current user, might have changed since we checked last. Don't want
+                                // to re-login if it's the same user.
+                                currentUser = UserGroupInformation.getCurrentUser();
+                                if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                                    final Configuration config = getConfiguration(props, info, principal, keytab);
+                                    logger.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
+                                            config.get(QueryServices.HBASE_CLIENT_KEYTAB));
+                                    UserGroupInformation.setConfiguration(config);
+                                    User.login(config, QueryServices.HBASE_CLIENT_KEYTAB, QueryServices.HBASE_CLIENT_PRINCIPAL, null);
+                                    logger.info("Successful login to secure cluster");
+                                }
+                            }
+                        } else {
+                            // The user already has Kerberos creds, so there isn't anything to change in the ConnectionInfo.
+                            logger.debug("Already logged in as {}", currentUser);
+                        }
+                    } catch (IOException e) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
+                            .setRootCause(e).build().buildException();
+                    }
+                } else {
+                    logger.debug("Principal and keytab not provided, not attempting Kerberos login");
+                }
+            } // else, no connection, no need to login
+            // Will use the current User from UGI
             return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+        }
+
+        /**
+         * Constructs a Configuration object to use when performing a Kerberos login.
+         * @param props QueryServices properties
+         * @param info User-provided properties
+         * @param principal Kerberos user principal
+         * @param keytab Path to Kerberos user keytab
+         * @return Configuration object suitable for Kerberos login
+         */
+        private Configuration getConfiguration(ReadOnlyProps props, Properties info, String principal, String keytab) {
+            final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            // Add QueryServices properties
+            for (Entry<String,String> entry : props) {
+                config.set(entry.getKey(), entry.getValue());
+            }
+            // Add any user-provided properties (via DriverManager)
+            if (info != null) {
+                for (Object key : info.keySet()) {
+                    config.set((String) key, info.getProperty((String) key));
+                }
+            }
+            // Set the principal and keytab if provided from the URL (overriding those provided in Properties)
+            if (null != principal) {
+                config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
+            }
+            if (null != keytab) {
+                config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
+            }
+            return config;
         }
         
         private final Integer port;
@@ -363,6 +437,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
         	this(zookeeperQuorum, port, rootNode, null, null);
+        }
+
+        /**
+         * Copy constructor for all members except {@link #user}.
+         *
+         * @param other The instance to copy
+         */
+        public ConnectionInfo(ConnectionInfo other) {
+            this(other.zookeeperQuorum, other.port, other.rootNode, other.principal, other.keytab);
         }
 
         public ReadOnlyProps asProps() {
@@ -406,6 +489,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 
         public String getPrincipal() {
             return principal;
+        }
+
+        public User getUser() {
+            return user;
         }
 
         @Override

@@ -34,21 +34,26 @@ import org.junit.Test;
 /**
  * End to end tests for {@link ExpFunction}
  */
-public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
+public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-8;
+    private String signedTableName;
+    private String unsignedTableName;
 
     @Before
     public void initTable() throws Exception {
         Connection conn = null;
         PreparedStatement stmt = null;
+        signedTableName = generateRandomString();
+        unsignedTableName = generateRandomString();
+
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE testSigned (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
+            ddl = "CREATE TABLE " + signedTableName + " (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
             conn.createStatement().execute(ddl);
-            ddl = "CREATE TABLE testUnsigned (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
+            ddl = "CREATE TABLE " + unsignedTableName + " (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -57,7 +62,8 @@ public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
 
     private void updateSignedTable(Connection conn, double data) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testSigned VALUES (?, ?, ?, ?, ?, ?, ?)");
+
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + signedTableName + " VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, KEY);
         Double d = Double.valueOf(data);
         stmt.setDouble(2, d.doubleValue());
@@ -71,7 +77,7 @@ public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
 
     private void updateUnsignedTable(Connection conn, double data) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testUnsigned VALUES (?, ?, ?, ?, ?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + unsignedTableName + " VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, KEY);
         Double d = Double.valueOf(data);
         stmt.setDouble(2, d.doubleValue());
@@ -86,7 +92,7 @@ public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
 
     private void testSignedNumberSpec(Connection conn, double data) throws Exception {
         updateSignedTable(conn, data);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT EXP(doub),EXP(fl),EXP(inte),EXP(lon),EXP(smalli),EXP(tinyi) FROM testSigned");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT EXP(doub),EXP(fl),EXP(inte),EXP(lon),EXP(smalli),EXP(tinyi) FROM " + signedTableName);
         assertTrue(rs.next());
         Double d = Double.valueOf(data);
         assertTrue(Math.abs(rs.getDouble(1) - Math.exp(d.doubleValue())) < ZERO);
@@ -100,7 +106,7 @@ public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
 
     private void testUnsignedNumberSpec(Connection conn, double data) throws Exception {
         updateUnsignedTable(conn, data);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT EXP(doub),EXP(fl),EXP(inte),EXP(lon),EXP(smalli),EXP(tinyi) FROM testUnsigned");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT EXP(doub),EXP(fl),EXP(inte),EXP(lon),EXP(smalli),EXP(tinyi) FROM " + unsignedTableName);
         assertTrue(rs.next());
         Double d = Double.valueOf(data);
         assertTrue(Math.abs(rs.getDouble(1) - Math.exp(d.doubleValue())) < ZERO);

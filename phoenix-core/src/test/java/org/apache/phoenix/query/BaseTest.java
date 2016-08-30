@@ -83,9 +83,11 @@ import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
+import static org.apache.phoenix.util.TestUtil.SUM_DOUBLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -193,6 +195,7 @@ import org.apache.tephra.persist.InMemoryTransactionStateStorage;
  * make sure to shutdown the mini cluster in a method annotated by @AfterClass.  
  *
  */
+
 public abstract class BaseTest {
     protected static final String TEST_TABLE_SCHEMA = "(" +
             "   varchar_pk VARCHAR NOT NULL, " +
@@ -227,7 +230,7 @@ public abstract class BaseTest {
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
     private static final ExecutorService dropHTableService = Executors
             .newSingleThreadExecutor(factory);
-    
+
     static {
         ImmutableMap.Builder<String,String> builder = ImmutableMap.builder();
         builder.put(ENTITY_HISTORY_TABLE_NAME,"create table " + ENTITY_HISTORY_TABLE_NAME +
@@ -442,7 +445,7 @@ public abstract class BaseTest {
         builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
         builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
         builder.put(TRANSACTIONAL_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
-        builder.put("SumDoubleTest","create table SumDoubleTest" +
+        builder.put(SUM_DOUBLE_NAME,"create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
                 "   (\"order_id\" varchar(15) not null primary key, " +
@@ -803,24 +806,31 @@ public abstract class BaseTest {
     }
 
     protected static void ensureTableCreated(String url, String tableName) throws SQLException {
-        ensureTableCreated(url, tableName, null, null);
+        ensureTableCreated(url, tableName, tableName, null, null);
     }
 
-    public static void ensureTableCreated(String url, String tableName, byte[][] splits) throws SQLException {
-        ensureTableCreated(url, tableName, splits, null);
+    protected static void ensureTableCreated(String url, String tableName, String tableDDLType) throws SQLException {
+        ensureTableCreated(url, tableName, tableDDLType, null, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, Long ts) throws SQLException {
-        ensureTableCreated(url, tableName, null, ts);
+    public static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits) throws SQLException {
+        ensureTableCreated(url, tableName, tableDDLType, splits, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, byte[][] splits, Long ts) throws SQLException {
-        String ddl = tableDDLMap.get(tableName);
+    protected static void ensureTableCreated(String url, String tableName, String tableDDLType, Long ts) throws SQLException {
+        ensureTableCreated(url, tableName, tableDDLType, null, ts);
+    }
+
+    protected static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits, Long ts) throws SQLException {
+        String ddl = tableDDLMap.get(tableDDLType);
+        if(!tableDDLType.equals(tableName)) {
+           ddl =  ddl.replace(tableDDLType, tableName);
+        }
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
     }
 
-    protected static String generateRandomString() {
+    public static String generateRandomString() {
       return RandomStringUtils.randomAlphabetic(20).toUpperCase();
     }
 
@@ -1052,16 +1062,20 @@ public abstract class BaseTest {
         }
         rs.close();
     }
-    
+
     protected static void initSumDoubleValues(byte[][] splits, String url) throws Exception {
-        ensureTableCreated(url, "SumDoubleTest", splits);
+        initSumDoubleValues(SUM_DOUBLE_NAME, splits, url);
+    }
+
+    protected static void initSumDoubleValues(String tableName, byte[][] splits, String url) throws Exception {
+        ensureTableCreated(url, tableName, SUM_DOUBLE_NAME, splits);
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(url, props);
         try {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                    "SumDoubleTest(" +
+                    "upsert into " + tableName +
+                    "(" +
                     "    id, " +
                     "    d, " +
                     "    f, " +
@@ -1108,22 +1122,32 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-    
-    protected static void initATableValues(String tenantId, byte[][] splits, String url) throws Exception {
-        initATableValues(tenantId, splits, null, url);
+
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
+        return initATableValues(tenantId, splits, date, ts, getUrl());
     }
     
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
-        initATableValues(tenantId, splits, date, null, url);
+    protected static String initATableValues(String tenantId, byte[][] splits, String url) throws Exception {
+        return initATableValues(tenantId, splits, null, url);
     }
     
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, String url) throws Exception {
+        return initATableValues(tenantId, splits, date, null, url);
+    }
+
+    protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+        return initATableValues(null, tenantId, splits, date, ts, url);
+    }
     
-    
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+        if(tableName == null) {
+            tableName = generateRandomString();
+        }
+        String tableDDLType = ATABLE_NAME;
         if (ts == null) {
-            ensureTableCreated(url, ATABLE_NAME, splits);
+            ensureTableCreated(url, tableName, tableDDLType, splits);
         } else {
-            ensureTableCreated(url, ATABLE_NAME, splits, ts-5);
+            ensureTableCreated(url, tableName, tableDDLType, splits, ts-5);
         }
         
         Properties props = new Properties();
@@ -1134,8 +1158,8 @@ public abstract class BaseTest {
         try {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " +
-                    "ATABLE(" +
+                    "upsert into " + tableName +
+                    "(" +
                     "    ORGANIZATION_ID, " +
                     "    ENTITY_ID, " +
                     "    A_STRING, " +
@@ -1322,12 +1346,10 @@ public abstract class BaseTest {
             conn.commit();
         } finally {
             conn.close();
+            return tableName;
         }
     }
-    
-    protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        initATableValues(tenantId, splits, date, ts, getUrl());
-    }
+
     
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
         initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
@@ -1347,9 +1369,9 @@ public abstract class BaseTest {
     
     private static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits);
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, splits, ts-2);
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits, ts-2);
         }
         
         Properties props = new Properties();
@@ -1451,9 +1473,9 @@ public abstract class BaseTest {
     
     protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, splits);
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2);
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2);
         }
         
         Properties props = new Properties();
@@ -1555,15 +1577,15 @@ public abstract class BaseTest {
     
     protected static void initJoinTableValues(String url, byte[][] splits, Long ts) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_ITEM_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_SUPPLIER_TABLE_FULL_NAME, splits);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_ORDER_TABLE_FULL_NAME, splits);
         } else {
-            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_ITEM_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_SUPPLIER_TABLE_FULL_NAME, splits, ts - 2);
+            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_ORDER_TABLE_FULL_NAME, splits, ts - 2);
         }
         
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -2063,5 +2085,29 @@ public abstract class BaseTest {
         } finally {
             conn.close();
         }
-    }  
+    }
+
+    protected static void verifySequence(String tenantID, String sequenceName, String sequenceSchemaName, boolean exists) throws SQLException {
+
+        PhoenixConnection phxConn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+        String ddl = "SELECT "
+                + PhoenixDatabaseMetaData.TENANT_ID + ","
+                + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME
+                + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
+                + " WHERE ";
+
+        ddl += " TENANT_ID  " + ((tenantID == null ) ? "IS NULL " : " = '" + tenantID + "'");
+        ddl += " AND SEQUENCE_NAME " + ((sequenceName == null) ? "IS NULL " : " = '" +  sequenceName + "'");
+        ddl += " AND SEQUENCE_SCHEMA " + ((sequenceSchemaName == null) ? "IS NULL " : " = '" + sequenceSchemaName + "'" );
+
+        ResultSet rs = phxConn.createStatement().executeQuery(ddl);
+
+        if(exists) {
+            assertTrue(rs.next());
+        } else {
+            assertFalse(rs.next());
+        }
+        phxConn.close();
+    }
 }

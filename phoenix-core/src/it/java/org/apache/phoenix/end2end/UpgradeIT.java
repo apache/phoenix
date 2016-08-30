@@ -51,6 +51,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class UpgradeIT extends BaseHBaseManagedTimeIT {
@@ -59,64 +60,74 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testUpgradeForTenantViewWithSameColumnsAsBaseTable() throws Exception {
-        testViewUpgrade(true, TENANT_ID, null, "TABLEWITHVIEW1", null, "VIEW1", ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", "TABLEWITHVIEW", null, "VIEW2",
+        String tableWithViewName = generateRandomString();
+        String viewTableName = generateRandomString();
+        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.EQUAL);
+        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, null, "TABLEWITHVIEW3", "VIEWSCHEMA", "VIEW3",
+        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "3", viewTableName + "SCHEMA", viewTableName + "3",
             ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", "TABLEWITHVIEW4", "VIEWSCHEMA", "VIEW4",
+        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "4", viewTableName + "SCHEMA", viewTableName + "4",
             ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", "TABLEWITHVIEW5", "SAMESCHEMA", "VIEW5",
+        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.EQUAL);
     }
 
     @Test
     public void testUpgradeForTenantViewWithMoreColumnsThanBaseTable() throws Exception {
-        testViewUpgrade(true, TENANT_ID, null, "TABLEWITHVIEW1", null, "VIEW1", ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", "TABLEWITHVIEW", null, "VIEW2",
+        String tableWithViewName = generateRandomString();
+        String viewTableName = generateRandomString();
+        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
+        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, null, "TABLEWITHVIEW3", "VIEWSCHEMA", "VIEW3",
+        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3",
             ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", "TABLEWITHVIEW4", "VIEWSCHEMA", "VIEW4",
+        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
             ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", "TABLEWITHVIEW5", "SAMESCHEMA", "VIEW5",
+        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.MORE);
     }
 
     @Test
     public void testUpgradeForViewWithSameColumnsAsBaseTable() throws Exception {
-        testViewUpgrade(false, null, null, "TABLEWITHVIEW1", null, "VIEW1", ColumnDiff.EQUAL);
-        testViewUpgrade(false, null, "TABLESCHEMA", "TABLEWITHVIEW", null, "VIEW2",
+        String tableWithViewName = generateRandomString();
+        String viewTableName = generateRandomString();
+        testViewUpgrade(false, null, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.EQUAL);
+        testViewUpgrade(false, null, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.EQUAL);
-        testViewUpgrade(false, null, null, "TABLEWITHVIEW3", "VIEWSCHEMA", "VIEW3",
+        testViewUpgrade(false, null, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3",
             ColumnDiff.EQUAL);
-        testViewUpgrade(false, null, "TABLESCHEMA", "TABLEWITHVIEW4", "VIEWSCHEMA", "VIEW4",
+        testViewUpgrade(false, null, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
             ColumnDiff.EQUAL);
-        testViewUpgrade(false, null, "SAMESCHEMA", "TABLEWITHVIEW5", "SAMESCHEMA", "VIEW5",
+        testViewUpgrade(false, null, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.EQUAL);
     }
 
     @Test
     public void testUpgradeForViewWithMoreColumnsThanBaseTable() throws Exception {
-        testViewUpgrade(false, null, null, "TABLEWITHVIEW1", null, "VIEW1", ColumnDiff.MORE);
-        testViewUpgrade(false, null, "TABLESCHEMA", "TABLEWITHVIEW", null, "VIEW2", ColumnDiff.MORE);
-        testViewUpgrade(false, null, null, "TABLEWITHVIEW3", "VIEWSCHEMA", "VIEW3", ColumnDiff.MORE);
-        testViewUpgrade(false, null, "TABLESCHEMA", "TABLEWITHVIEW4", "VIEWSCHEMA", "VIEW4",
+        String tableWithViewName = generateRandomString();
+        String viewTableName = generateRandomString();
+        testViewUpgrade(false, null, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
+        testViewUpgrade(false, null, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2", ColumnDiff.MORE);
+        testViewUpgrade(false, null, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3", ColumnDiff.MORE);
+        testViewUpgrade(false, null, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
             ColumnDiff.MORE);
-        testViewUpgrade(false, null, "SAMESCHEMA", "TABLEWITHVIEW5", "SAMESCHEMA", "VIEW5",
+        testViewUpgrade(false, null, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.MORE);
     }
 
     @Test
     public void testSettingBaseColumnCountWhenBaseTableColumnDropped() throws Exception {
-        testViewUpgrade(true, TENANT_ID, null, "TABLEWITHVIEW1", null, "VIEW1", ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", "TABLEWITHVIEW", null, "VIEW2",
+        String tableWithViewName = generateRandomString();
+        String viewTableName = generateRandomString();
+        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
+        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.LESS);
-        testViewUpgrade(true, TENANT_ID, null, "TABLEWITHVIEW3", "VIEWSCHEMA", "VIEW3",
+        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3",
             ColumnDiff.LESS);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", "TABLEWITHVIEW4", "VIEWSCHEMA", "VIEW4",
+        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
             ColumnDiff.LESS);
-        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", "TABLEWITHVIEW5", "SAMESCHEMA", "VIEW5",
+        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.LESS);
     }
 
@@ -127,12 +138,16 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String schemaName = "TEST";
-            String phoenixFullTableName = schemaName + ".S_NEW";
-            String indexName = "IDX";
-            String localIndexName = "LIDX";
+            String phoenixFullTableName = schemaName + "." + generateRandomString();
+            String indexName = "IDX_" + generateRandomString();
+            String localIndexName = "LIDX_" + generateRandomString();
+
+            String viewName = "VIEW_" + generateRandomString();
+            String viewIndexName = "VIDX_" + generateRandomString();
+
             String[] tableNames = new String[] { phoenixFullTableName, schemaName + "." + indexName,
-                    schemaName + "." + localIndexName, "diff.v", "test.v","v"};
-            String[] viewIndexes = new String[] { "diff.v_idx", "test.v_idx" };
+                    schemaName + "." + localIndexName, "diff." + viewName, "test." + viewName, viewName};
+            String[] viewIndexes = new String[] { "diff." + viewIndexName, "test." + viewIndexName };
             conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
                     + "(k VARCHAR PRIMARY KEY, v INTEGER, f INTEGER, g INTEGER NULL, h INTEGER NULL)");
             PreparedStatement upsertStmt = conn
@@ -150,13 +165,13 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             // creating global index
             conn.createStatement().execute("create index " + indexName + " on " + phoenixFullTableName + "(k)");
             // creating view in schema 'diff'
-            conn.createStatement().execute("CREATE VIEW diff.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW diff." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // creating view in schema 'test'
-            conn.createStatement().execute("CREATE VIEW test.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            conn.createStatement().execute("CREATE VIEW v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW test." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW " + viewName + "(col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // Creating index on views
-            conn.createStatement().execute("create index v_idx on diff.v(col)");
-            conn.createStatement().execute("create index v_idx on test.v(col)");
+            conn.createStatement().execute("create index " + viewIndexName + "  on diff." + viewName + "(col)");
+            conn.createStatement().execute("create index " + viewIndexName + " on test." + viewName + "(col)");
 
             // validate data
             for (String tableName : tableNames) {
@@ -243,13 +258,18 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             IllegalArgumentException, IOException, InterruptedException {
         String[] strings = new String[] { "a", "b", "c", "d" };
         String schemaName = "TEST";
-        String phoenixFullTableName = schemaName + ".S_NEW1";
+        String phoenixFullTableName = schemaName + "." + generateRandomString();
         String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
                 .getNameAsString();
-        String indexName = "IDX";
-        String[] tableNames = new String[] { phoenixFullTableName, "diff.v1", "test.v1", "v1" };
-        String[] viewIndexes = new String[] { "test.v_idx", "diff.v_idx" };
-        String[] tenantViewIndexes = new String[] { "test.v1_idx", "diff.v1_idx" };
+        String indexName = "IDX_" + generateRandomString();
+        String viewName = "V_" + generateRandomString();
+        String viewName1 = "V1_" + generateRandomString();
+        String viewIndexName = "V_IDX_" + generateRandomString();
+        String tenantViewIndexName = "V1_IDX_" + generateRandomString();
+
+        String[] tableNames = new String[] { phoenixFullTableName, "diff." + viewName1, "test." + viewName1, viewName1 };
+        String[] viewIndexes = new String[] { "test." + viewIndexName, "diff." + viewIndexName };
+        String[] tenantViewIndexes = new String[] { "test." + tenantViewIndexName, "diff." + tenantViewIndexName };
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
                     + "(k VARCHAR not null, v INTEGER not null, f INTEGER, g INTEGER NULL, h INTEGER NULL CONSTRAINT pk PRIMARY KEY(k,v)) MULTI_TENANT=true");
@@ -266,13 +286,13 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             // creating global index
             conn.createStatement().execute("create index " + indexName + " on " + phoenixFullTableName + "(f)");
             // creating view in schema 'diff'
-            conn.createStatement().execute("CREATE VIEW diff.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW diff." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // creating view in schema 'test'
-            conn.createStatement().execute("CREATE VIEW test.v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            conn.createStatement().execute("CREATE VIEW v (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW test." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW " + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // Creating index on views
-            conn.createStatement().execute("create local index v_idx on diff.v(col)");
-            conn.createStatement().execute("create local index v_idx on test.v(col)");
+            conn.createStatement().execute("create local index " + viewIndexName + " on diff." + viewName + "(col)");
+            conn.createStatement().execute("create local index " + viewIndexName + " on test." + viewName + "(col)");
         }
         Properties props = new Properties();
         String tenantId = "a";
@@ -289,14 +309,14 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             conn.commit();
             // creating view in schema 'diff'
             conn.createStatement()
-                    .execute("CREATE VIEW diff.v1 (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+                    .execute("CREATE VIEW diff." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // creating view in schema 'test'
             conn.createStatement()
-                    .execute("CREATE VIEW test.v1 (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
-            conn.createStatement().execute("CREATE VIEW v1 (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+                    .execute("CREATE VIEW test." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW " + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // Creating index on views
-            conn.createStatement().execute("create index v1_idx on diff.v1(col)");
-            conn.createStatement().execute("create index v1_idx on test.v1(col)");
+            conn.createStatement().execute("create index " + tenantViewIndexName + " on diff." + viewName1 + "(col)");
+            conn.createStatement().execute("create index " + tenantViewIndexName + " on test." + viewName1 + "(col)");
         }
 
         props = new Properties();
@@ -352,7 +372,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
         assertTrue(rs.getString(1).contains(hbaseTableName));
     }
     
-    
+
     @Test
     public void testSettingBaseColumnCountForMultipleViewsOnTable() throws Exception {
         String baseSchema = "XYZ";
@@ -361,13 +381,13 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + fullBaseTableName + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 INTEGER, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true";
             conn.createStatement().execute(baseTableDDL);
-            
+
             for (int i = 1; i <=2; i++) {
                 // Create views for tenants;
                 String tenant = "tenant" + i;
                 try (Connection tenantConn = createTenantConnection(tenant)) {
                     String view = "TENANT_VIEW1";
-                    
+
                     // view with its own column
                     String viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
                     tenantConn.createStatement().execute(viewDDL);
@@ -392,11 +412,11 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
                     removeBaseColumnCountKV(tenant, null, view);
                 }
             }
-            
+
             // create global views
             try (Connection globalConn = DriverManager.getConnection(getUrl())) {
                 String view = "GLOBAL_VIEW1";
-                
+
                 // view with its own column
                 String viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
                 globalConn.createStatement().execute(viewDDL);
