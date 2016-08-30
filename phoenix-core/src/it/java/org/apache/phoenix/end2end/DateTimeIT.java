@@ -805,4 +805,30 @@ public class DateTimeIT extends BaseHBaseManagedTimeTableReuseIT {
         assertNull(rs.getDate(1, GregorianCalendar.getInstance()));
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testColumnDateTimestampUnequal() throws Exception {
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS T1 (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO T1 VALUES (1, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 15:10:20'), " +
+                "TO_TIME('2008-05-16 20:40:30'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (2, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 10:10:20'), " +
+                "TO_TIME('2008-05-16 20:40:30'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO T1 VALUES (3, TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'), TO_TIMESTAMP('2006-04-12 08:10:20'), " +
+                "TO_TIME('2008-05-16 20:40:30'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = timestamps FROM T1");
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
 }
