@@ -268,6 +268,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private ScheduledExecutorService renewLeaseExecutor;
     private final boolean renewLeaseEnabled;
 
+    private static volatile boolean isLoggedIn = false;
+    private static Object kerbLoginLock = new Object();
+
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
     }
@@ -377,11 +380,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // check if we need to authenticate with kerberos
             String clientKeytab = this.getProps().get(HBASE_CLIENT_KEYTAB);
             String clientPrincipal = this.getProps().get(HBASE_CLIENT_PRINCIPAL);
-            if (clientKeytab != null && clientPrincipal != null) {
-                logger.info("Trying to connect to a secure cluster with keytab:" + clientKeytab);
-                UserGroupInformation.setConfiguration(config);
-                User.login(config, HBASE_CLIENT_KEYTAB, HBASE_CLIENT_PRINCIPAL, null);
-                logger.info("Successfull login to secure cluster!!");
+            if (clientKeytab != null && clientPrincipal != null && !isLoggedIn) {
+                synchronized (kerbLoginLock) {
+                    if(!isLoggedIn) {
+                        logger.info("Trying to connect to a secure cluster with keytab:" + clientKeytab);
+                        UserGroupInformation.setConfiguration(config);
+                        User.login(config, HBASE_CLIENT_KEYTAB, HBASE_CLIENT_PRINCIPAL, null);
+                        logger.info("Successfull login to secure cluster!!");
+                        isLoggedIn = true;
+                    }
+                }
             }
 			boolean transactionsEnabled = props.getBoolean(
 					QueryServices.TRANSACTIONS_ENABLED,
