@@ -100,7 +100,7 @@ public class RoundDecimalExpression extends ScalarFunction {
         if(scaleValue != null) {
             if (scaleType.isCoercibleTo(PInteger.INSTANCE, scaleValue)) {
                 int scale = (Integer) PInteger.INSTANCE.toObject(scaleValue, scaleType);
-                if (scale >=0 && scale <= PDataType.MAX_PRECISION) {
+                if (scale <= PDataType.MAX_PRECISION) {
                     this.scale = scale;
                     return;
                 }
