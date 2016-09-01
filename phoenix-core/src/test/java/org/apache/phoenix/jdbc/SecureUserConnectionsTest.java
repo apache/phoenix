@@ -22,6 +22,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -35,6 +36,8 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.authentication.util.KerberosName;
+import org.apache.hadoop.security.authentication.util.KerberosUtil;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.util.InstanceResolver;
@@ -94,6 +97,16 @@ public class SecureUserConnectionsTest {
                 return copy;
             }
         });
+        updateDefaultRealm();
+    }
+
+    private static void updateDefaultRealm() throws Exception {
+        // (at least) one other phoenix test triggers the caching of this field before the KDC is up
+        // which causes principal parsing to fail.
+        Field f = KerberosName.class.getDeclaredField("defaultRealm");
+        f.setAccessible(true);
+        // Default realm for MiniKDC
+        f.set(null, "EXAMPLE.COM");
     }
 
     @AfterClass
