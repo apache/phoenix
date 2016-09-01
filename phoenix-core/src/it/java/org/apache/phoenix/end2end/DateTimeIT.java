@@ -794,4 +794,15 @@ public class DateTimeIT extends BaseHBaseManagedTimeTableReuseIT {
         assertEquals(false, rs.getBoolean(1));
         assertFalse(rs.next());
     }
+    
+    @Test
+    public void testFunctionOnNullDate() throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT YEAR(a_date), entity_id from " + this.tableName + " WHERE entity_id = '" + ROW10 + "'");
+        assertNotNull(rs);
+        assertTrue(rs.next());
+        assertEquals(ROW10, rs.getString(2));
+        assertNull(rs.getDate(1));
+        assertNull(rs.getDate(1, GregorianCalendar.getInstance()));
+        assertFalse(rs.next());
+    }
 }
