@@ -6,13 +6,16 @@ import java.sql.NClob;
 import java.sql.ResultSetMetaData;
 import java.sql.RowId;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
+import java.sql.Savepoint;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.avatica.AvaticaConnection;
@@ -32,7 +35,10 @@ import org.apache.calcite.jdbc.CalciteFactory;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Ord;
+import org.apache.calcite.schema.SchemaPlus;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
@@ -135,6 +141,73 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             return super.enumerable(handle, signature);
         }
 
+        public void abort(final Executor executor) throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.abort(executor);
+                }});
+        }
+
+        @Override
+        public void rollback() throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.rollback();
+                }});
+        }
+
+        @Override
+        public void setReadOnly(final boolean readOnly) throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.setReadOnly(readOnly);
+                }});
+            super.setReadOnly(readOnly);
+        }
+
+        @Override
+        public void setTransactionIsolation(final int level) throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.setTransactionIsolation(level);
+                }});
+            super.setTransactionIsolation(level);
+        }
+
+        @Override
+        public void clearWarnings() throws SQLException {
+            call(new PhoenixConnectionCallable() {
+                @Override
+                public void call(PhoenixConnection conn) throws SQLException {
+                    conn.clearWarnings();
+                }});
+            super.clearWarnings();
+        }
+
+        @Override
+        public Savepoint setSavepoint() throws SQLException {
+            throw new SQLFeatureNotSupportedException();
+        }
+
+        @Override
+        public Savepoint setSavepoint(String name) throws SQLException {
+            throw new SQLFeatureNotSupportedException();
+        }
+
+        @Override
+        public void rollback(final Savepoint savepoint) throws SQLException {
+            throw new SQLFeatureNotSupportedException();
+        }
+
+        @Override
+        public void releaseSavepoint(Savepoint savepoint) throws SQLException {
+            throw new SQLFeatureNotSupportedException();
+        }
+
         public void setAutoCommit(final boolean isAutoCommit) throws SQLException {
             call(new PhoenixConnectionCallable() {
                 @Override
@@ -157,6 +230,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                 public void call(PhoenixConnection conn) throws SQLException {
                     conn.close();
                 }});
+            super.close();
         }
         
         private void call(PhoenixConnectionCallable callable) throws SQLException {
@@ -172,6 +246,26 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         
         private static interface PhoenixConnectionCallable {
             void call(PhoenixConnection conn) throws SQLException;
+        }
+        
+        @SuppressWarnings("unchecked")
+        @Override
+        public <T> T unwrap(Class<T> iface) throws SQLException {
+            if (iface.isInstance(this)) {
+                return (T) this;
+            }
+
+            if (iface.isAssignableFrom(PhoenixConnection.class)) {
+                SchemaPlus schema = getRootSchema().getSubSchema(this.getSchema());
+                try {
+                    return (T) (schema.unwrap(PhoenixSchema.class).pc);
+                } catch (ClassCastException e) {
+                }
+            }
+
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CLASS_NOT_UNWRAPPABLE)
+                .setMessage(this.getClass().getName() + " not unwrappable from " + iface.getName())
+                .build().buildException();
         }
     }
 

@@ -77,7 +77,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         return new Start(props) {
             Connection createConnection() throws Exception {
                 return DriverManager.getConnection(
-                        getUrl(), 
+                        getOldUrl(), 
                         props);
             }
             
@@ -96,9 +96,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         }
 
         Connection createConnection() throws Exception {
-            return DriverManager.getConnection(
-                    "jdbc:phoenixcalcite:" 
-                            + getUrl().substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1), 
+            return DriverManager.getConnection(getUrl(), 
                     props);
         }
         
@@ -407,9 +405,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     
     protected static final String SCORES_TABLE_NAME = "scores";
     
-    protected void initArrayTable() throws Exception {
+    protected void initArrayTable(String url) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + SCORES_TABLE_NAME
@@ -450,9 +448,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     protected static final String SALTED_TABLE_NOSALT_INDEX_NAME = "idx_salted_test_table";
     protected static final String SALTED_TABLE_SALTED_INDEX_NAME = "idxsalted_salted_test_table";
     
-    protected void initSaltedTables(String index) throws SQLException {
+    protected void initSaltedTables(String url, String index) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + NOSALT_TABLE_NAME + " (mypk0 INTEGER NOT NULL, mypk1 INTEGER NOT NULL, col0 INTEGER, col1 INTEGER CONSTRAINT pk PRIMARY KEY (mypk0, mypk1))");
@@ -504,9 +502,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     protected static final String KEY_ORDERING_TABLE_1_NAME = "key_ordering_test_table_1";
     protected static final String KEY_ORDERING_TABLE_2_NAME = "key_ordering_test_table_2";
     
-    protected void initKeyOrderingTable() throws Exception {
+    protected void initKeyOrderingTable(String url) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + KEY_ORDERING_TABLE_1_NAME
@@ -624,9 +622,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     protected static final String MULTI_TENANT_VIEW2 = "s2.multitenant_test_view2";
     protected static final String MULTI_TENANT_VIEW2_INDEX = "idx_multitenant_test_view2";
     
-    protected void initMultiTenantTables(String index) throws SQLException {
+    protected void initMultiTenantTables(String url, String index) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + MULTI_TENANT_TABLE + " (tenant_id VARCHAR NOT NULL, id VARCHAR NOT NULL, col0 INTEGER, col1 INTEGER, col2 INTEGER CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true");

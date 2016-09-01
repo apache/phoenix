@@ -62,8 +62,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     private static final String DELIMITERS = TERMINATOR + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-    private static final String TEST_URL_AT_END =  "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
-    private static final String TEST_URL_IN_MIDDLE = TEST_URL_AT_END + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 
     private final static DriverPropertyInfo[] EMPTY_INFO = new DriverPropertyInfo[0];
     public final static String MAJOR_VERSION_PROP = "DriverMajorVersion";
@@ -329,14 +327,20 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final boolean isConnectionless;
         private final String principal;
         private final String keytab;
+        private final boolean isCalciteEnabled;
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+         this(zookeeperQuorum, port, rootNode, principal, keytab, false);
+        }
+        
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab, boolean isCalciteEnabled) {
             this.zookeeperQuorum = zookeeperQuorum;
             this.port = port;
             this.rootNode = rootNode;
             this.isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(zookeeperQuorum);
             this.principal = principal;
             this.keytab = keytab;
+            this.isCalciteEnabled = isCalciteEnabled;
         }
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
@@ -431,12 +435,12 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 		}
 
         public String toUrl() {
-            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
-                    + toString();
+            return (isCalciteEnabled? PhoenixRuntime.JDBC_PROTOCOL_CALCITE : PhoenixRuntime.JDBC_PROTOCOL)
+                    + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + toString();
         }
     }
 
     public static boolean isTestUrl(String url) {
-        return url.endsWith(TEST_URL_AT_END) || url.contains(TEST_URL_IN_MIDDLE);
+        return false;
     }
 }

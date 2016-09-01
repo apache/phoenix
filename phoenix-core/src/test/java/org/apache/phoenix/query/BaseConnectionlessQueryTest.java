@@ -42,9 +42,9 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.calcite.jdbc.PhoenixCalciteEmbeddedDriver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.parse.BindableStatement;
@@ -89,7 +89,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         assertNull(driver);
         // only load the test driver if we are testing locally - for integration tests, we want to
         // test on a wider scale
-        if (PhoenixEmbeddedDriver.isTestUrl(url)) {
+        if (PhoenixCalciteEmbeddedDriver.isTestUrl(url)) {
             driver = initDriver(ReadOnlyProps.EMPTY_PROPS);
             assertTrue(DriverManager.getDriver(url) == driver);
             driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));

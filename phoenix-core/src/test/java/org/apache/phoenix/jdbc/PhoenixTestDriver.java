@@ -25,7 +25,9 @@ import java.util.concurrent.ThreadPoolExecutor;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
+import org.apache.phoenix.calcite.jdbc.PhoenixCalciteEmbeddedDriver;
 import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
@@ -43,8 +45,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
  * @since 0.1
  */
 @ThreadSafe
-public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    
+public class PhoenixTestDriver extends PhoenixCalciteEmbeddedDriver {
     @GuardedBy("this")
     private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
@@ -64,8 +65,11 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         overrideProps = props;
         queryServices = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
     }
+    
+    protected ReadOnlyProps getDefaultProps() {
+        return PhoenixEmbeddedDriver.DEFFAULT_PROPS;
+    }
 
-    @Override
     public synchronized QueryServices getQueryServices() {
         checkClosed();
         return queryServices;
@@ -83,7 +87,6 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         return super.connect(url, info);
     }
     
-    @Override // public for testing
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
         checkClosed();
         if (connectionQueryServices != null) { return connectionQueryServices; }

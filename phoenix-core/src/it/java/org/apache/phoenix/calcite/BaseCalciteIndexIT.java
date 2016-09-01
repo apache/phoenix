@@ -33,11 +33,11 @@ public class BaseCalciteIndexIT extends BaseCalciteIT {
     
     @Before
     public void initTable() throws Exception {
-        final String url = getUrl();
+        final String url = getOldUrl();
         final String index = localIndex ? "LOCAL INDEX" : "INDEX";
         initATableValues(getOrganizationId(), null, url);
-        initSaltedTables(index);
-        initMultiTenantTables(index);
+        initSaltedTables(url, index);
+        initMultiTenantTables(url, index);
         Connection connection = DriverManager.getConnection(url);
         connection.createStatement().execute("CREATE " + index + " IF NOT EXISTS IDX1 ON aTable (a_string) INCLUDE (b_string, x_integer)");
         connection.createStatement().execute("CREATE " + index + " IF NOT EXISTS IDX2 ON aTable (b_string) INCLUDE (a_string, y_integer)");

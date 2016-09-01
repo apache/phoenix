@@ -109,7 +109,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] SYSTEM_SEQUENCE_SCHEMA_BYTES = Bytes.toBytes(SYSTEM_SEQUENCE_SCHEMA);
     public static final String SYSTEM_SEQUENCE_TABLE = "SEQUENCE";
     public static final byte[] SYSTEM_SEQUENCE_TABLE_BYTES = Bytes.toBytes(SYSTEM_SEQUENCE_TABLE);
-    public static final String SYSTEM_SEQUENCE = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_SEQUENCE_TABLE + "\"";
+    public static final String SYSTEM_SEQUENCE = "\"" + SYSTEM_CATALOG_SCHEMA + "\".\"" + SYSTEM_SEQUENCE_TABLE + "\"";
     public static final String SYSTEM_SEQUENCE_NAME = SchemaUtil.getTableName(SYSTEM_SEQUENCE_SCHEMA, SYSTEM_SEQUENCE_TABLE);
     public static final byte[] SYSTEM_SEQUENCE_NAME_BYTES = Bytes.toBytes(SYSTEM_SEQUENCE_NAME);
     
