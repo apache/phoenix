@@ -275,6 +275,7 @@
                   <excludes>
                     <exclude>org.apache.commons.csv.**</exclude>
                     <exclude>org.apache.commons.logging.**</exclude>
+                    <exclude>org.apache.commons.configuration.**</exclude>
                   </excludes>
                 </relocation>
                 <relocation>
