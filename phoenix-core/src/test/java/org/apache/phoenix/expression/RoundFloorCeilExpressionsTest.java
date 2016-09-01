@@ -79,6 +79,20 @@ public class RoundFloorCeilExpressionsTest {
     }
 
     @Test
+    public void testRoundNegativePrecisionDecimalExpression() throws Exception {
+        LiteralExpression decimalLiteral = LiteralExpression.newConstant(444.44, PDecimal.INSTANCE);
+        Expression roundDecimalExpression = RoundDecimalExpression.create(decimalLiteral, -2);
+
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        roundDecimalExpression.evaluate(null, ptr);
+        Object result = roundDecimalExpression.getDataType().toObject(ptr);
+
+        assertTrue(result instanceof BigDecimal);
+        BigDecimal resultDecimal = (BigDecimal)result;
+        assertEquals(0, BigDecimal.valueOf(400).compareTo(resultDecimal));
+    }
+
+    @Test
     public void testRoundDecimalExpressionNoop() throws Exception {
         LiteralExpression decimalLiteral = LiteralExpression.newConstant(5, PInteger.INSTANCE);
         Expression roundDecimalExpression = RoundDecimalExpression.create(decimalLiteral, 3);
