@@ -688,6 +688,51 @@ public class DateTimeIT extends BaseHBaseManagedTimeTableReuseIT {
         assertFalse(rs.next());
     }
 
+    /*
+    Reference for dates used in the test
+    2013-04-09 - Tuesday (2)
+     2014-05-18 - Sunday (7)
+    2015-06-27 - Saturday (6)
+     */
+    @Test
+    public void testDayOfWeekFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2012-03-08 11:01:10'), TO_TIMESTAMP('2013-06-16 12:02:20'), TO_TIME('2014-09-23 13:03:30'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('2013-04-09 11:02:10'), TO_TIMESTAMP('2014-05-18 12:03:20'), TO_TIME('2015-06-27 13:04:30'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, DAYOFWEEK(dates), DAYOFWEEK(timestamps) FROM " + tableName + " where DAYOFWEEK(times)=6");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+        assertEquals(7, rs.getInt(3));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testDayOfYearFuncAgainstColumns() throws Exception {
+        String tableName = generateRandomString();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2012-03-01 11:01:10'), TO_TIMESTAMP('2013-02-01 12:02:20'), TO_TIME('2014-01-15 13:03:30'))";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO " + tableName + " VALUES (2, TO_DATE('2013-04-09 11:02:10'), TO_TIMESTAMP('2014-05-18 12:03:20'), TO_TIME('2015-06-27 13:04:30'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, DAYOFYEAR(dates), DAYOFYEAR(timestamps) FROM " + tableName + " where DAYOFYEAR(times)=15");
+
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(61, rs.getInt(2));
+        assertEquals(32, rs.getInt(3));
+        assertFalse(rs.next());
+    }
+
     @Test
     public void testNullDate() throws Exception {
 
