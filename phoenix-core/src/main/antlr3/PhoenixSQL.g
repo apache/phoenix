@@ -1223,7 +1223,8 @@ FIELDCHAR
     :    LETTER
     |    DIGIT
     |    '_'
-    |    '\u0080'..'\ufffe'
+    |    '\u0080'..'\u2001'
+    |    '\u2003'..'\ufffe'
     ;
 
 // A Letter is a lower or upper case ascii character.
@@ -1283,7 +1284,7 @@ CHAR_ESC
 
 // whitespace (skip)
 WS
-    :   ( ' ' | '\t' ) { $channel=HIDDEN; }
+    :   ( ' ' | '\t' | '\u2002' ) { $channel=HIDDEN; }
     ;
     
 EOL
