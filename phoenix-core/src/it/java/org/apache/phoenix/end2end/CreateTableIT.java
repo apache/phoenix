@@ -501,11 +501,16 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         String ddl = "CREATE TABLE T_DEFAULT (pk INTEGER PRIMARY KEY, test1 INTEGER, test2 INTEGER DEFAULT 5)";
         String dml = "UPSERT INTO T_DEFAULT VALUES (0)";
 
-        Connection conn = DriverManager.getConnection(getUrl());
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(ddl);
         conn.createStatement().execute(dml);
         conn.commit();
 
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs = conn.createStatement().executeQuery("SELECT * from T_DEFAULT");
         assertTrue(rs.next());
         assertEquals(0, rs.getInt(1));
