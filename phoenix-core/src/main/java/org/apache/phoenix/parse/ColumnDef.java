@@ -43,6 +43,7 @@ public class ColumnDef {
     private final Boolean isNull;
     private final Integer maxLength;
     private final Integer scale;
+    private final LiteralParseNode defaultVal;
     private boolean isPK;
     private final SortOrder sortOrder;
     private final boolean isArray;
@@ -51,7 +52,7 @@ public class ColumnDef {
     private final boolean isRowTimestamp;
 
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
-            Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
+            Integer scale, LiteralParseNode defaultVal, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
         try {
             Preconditions.checkNotNull(sortOrder);
             PDataType baseType;
@@ -121,6 +122,7 @@ public class ColumnDef {
             }
             this.maxLength = maxLength;
             this.scale = scale;
+            this.defaultVal = defaultVal;
             this.isPK = isPK;
             this.sortOrder = sortOrder;
             this.dataType = dataType;
@@ -133,7 +135,7 @@ public class ColumnDef {
 
     ColumnDef(ColumnName columnDefName, String sqlTypeName, Boolean isNull, Integer maxLength,
             Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
-        this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, isPK, sortOrder, expressionStr, isRowTimestamp);
+        this(columnDefName, sqlTypeName, false, 0, isNull, maxLength, scale, null, isPK, sortOrder, expressionStr, isRowTimestamp);
     }
 
     public ColumnName getColumnDefName() {
@@ -160,6 +162,10 @@ public class ColumnDef {
 
     public Integer getScale() {
         return scale;
+    }
+
+    public LiteralParseNode getDefaultValue() {
+        return defaultVal;
     }
 
     public boolean isPK() {
