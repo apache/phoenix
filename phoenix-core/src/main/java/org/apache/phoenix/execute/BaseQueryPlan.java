@@ -217,7 +217,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
 
     public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-        if (context.getScanRanges() == ScanRanges.NOTHING) {
+		/*
+		 * For aggregate queries, we still need to let the AggregationPlan to
+		 * proceed so that we can give proper aggregates even if there are no
+		 * row to be scanned.
+		 */
+        if (context.getScanRanges() == ScanRanges.NOTHING && !getStatement().isAggregate()) {
             return ResultIterator.EMPTY_ITERATOR;
         }
         
