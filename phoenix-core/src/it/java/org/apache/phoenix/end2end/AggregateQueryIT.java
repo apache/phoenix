@@ -191,6 +191,42 @@ public class AggregateQueryIT extends BaseQueryIT {
             conn.close();
         }
     }
+    
+    
+    @Test
+    public void testCountWithNoScanRanges() throws Exception {
+        String query = "SELECT count(1) FROM aTable WHERE organization_id = 'not_existing_organization_id'";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
+		Connection conn = DriverManager.getConnection(getUrl(), props);
+		try {
+			PreparedStatement statement = conn.prepareStatement(query);
+			ResultSet rs = statement.executeQuery();
+			assertTrue(rs.next());
+			assertEquals(0, rs.getLong(1));
+			assertFalse(rs.next());
+			query = "SELECT count(1) FROM aTable WHERE organization_id = 'not_existing_organization_id' having count(*)>0";
+			rs = conn.prepareStatement(query).executeQuery();
+			assertFalse(rs.next());
+			query = "SELECT count(1) FROM aTable WHERE organization_id = 'not_existing_organization_id' limit 1 offset 1";
+			rs = conn.prepareStatement(query).executeQuery();
+			assertFalse(rs.next());
+			query = "SELECT count(1),123 FROM aTable WHERE organization_id = 'not_existing_organization_id'";
+			rs = conn.prepareStatement(query).executeQuery();
+			assertTrue(rs.next());
+			assertEquals(0, rs.getLong(1));
+			assertEquals("123", rs.getString(2));
+			assertFalse(rs.next());
+			query = "SELECT count(1),sum(x_decimal) FROM aTable WHERE organization_id = 'not_existing_organization_id'";
+			rs = conn.prepareStatement(query).executeQuery();
+			assertTrue(rs.next());
+			assertEquals(0, rs.getLong(1));
+			assertEquals(null, rs.getBigDecimal(2));
+			assertFalse(rs.next());
+		} finally {
+			conn.close();
+		}
+	}
 
     @Test
     public void testCountIsNotNull() throws Exception {
