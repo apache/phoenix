@@ -62,6 +62,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     private static final String DELIMITERS = TERMINATOR + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+    private static final String TEST_URL_AT_END =  "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+    private static final String TEST_URL_IN_MIDDLE = TEST_URL_AT_END + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 
     private final static DriverPropertyInfo[] EMPTY_INFO = new DriverPropertyInfo[0];
     public final static String MAJOR_VERSION_PROP = "DriverMajorVersion";
@@ -441,6 +443,6 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     }
 
     public static boolean isTestUrl(String url) {
-        return false;
+        return url.endsWith(TEST_URL_AT_END) || url.contains(TEST_URL_IN_MIDDLE);
     }
 }

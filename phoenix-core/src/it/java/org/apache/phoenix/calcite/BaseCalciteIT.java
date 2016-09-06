@@ -18,7 +18,6 @@
 package org.apache.phoenix.calcite;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -46,10 +45,10 @@ import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import com.google.common.collect.Lists;
@@ -158,7 +157,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             String explain = QueryUtil.getExplainPlan(resultSet);
             resultSet.close();
             statement.close();
-            assertEquals(explain, expected);
+            Assert.assertEquals(explain, expected);
             return this;
         }
 
@@ -246,7 +245,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
                 Object[] row = expected[i];
                 for (int j = 0; j < row.length; j++) {
                     Object obj = resultSet.getObject(j + 1);
-                    assertEquals(canonicalize(row[j]), canonicalize(obj));
+                    Assert.assertEquals(canonicalize(row[j]), canonicalize(obj));
                 }
             }
             assertFalse("Got more rows than expected.", resultSet.next());            
@@ -272,7 +271,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
                 Object[] row = expected[actualResults.size()];
                 for (int i = 0; i < orderedCount; i++) {
                     Object obj = resultSet.getObject(i + 1);
-                    assertEquals(canonicalize(row[i]), canonicalize(obj));
+                    Assert.assertEquals(canonicalize(row[i]), canonicalize(obj));
                 }
                 // check the unordered part
                 List<Object> result = Lists.newArrayList();

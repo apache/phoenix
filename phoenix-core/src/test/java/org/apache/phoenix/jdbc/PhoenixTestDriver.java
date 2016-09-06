@@ -25,9 +25,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
-import org.apache.phoenix.calcite.jdbc.PhoenixCalciteEmbeddedDriver;
 import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
@@ -45,7 +43,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
  * @since 0.1
  */
 @ThreadSafe
-public class PhoenixTestDriver extends PhoenixCalciteEmbeddedDriver {
+public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     @GuardedBy("this")
     private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
@@ -64,10 +62,6 @@ public class PhoenixTestDriver extends PhoenixCalciteEmbeddedDriver {
     public PhoenixTestDriver(ReadOnlyProps props) {
         overrideProps = props;
         queryServices = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
-    }
-    
-    protected ReadOnlyProps getDefaultProps() {
-        return PhoenixEmbeddedDriver.DEFFAULT_PROPS;
     }
 
     public synchronized QueryServices getQueryServices() {

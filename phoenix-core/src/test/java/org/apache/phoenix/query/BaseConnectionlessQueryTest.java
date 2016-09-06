@@ -42,9 +42,10 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.calcite.jdbc.PhoenixCalciteEmbeddedDriver;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.jdbc.PhoenixCalciteTestDriver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.parse.BindableStatement;
@@ -76,11 +77,15 @@ public class BaseConnectionlessQueryTest extends BaseTest {
     public static Expression X_DECIMAL;
     
     protected static String getUrl() {
-        return TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
+        return TestUtil.PHOENIX_CONNECTIONLESS_CALCITE_JDBC_URL;
     }
     
     protected static String getUrl(String tenantId) {
         return getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
+    }
+    
+    protected static String getOldUrl() {
+        return TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
     }
     
     protected static PhoenixTestDriver driver;
@@ -89,7 +94,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         assertNull(driver);
         // only load the test driver if we are testing locally - for integration tests, we want to
         // test on a wider scale
-        if (PhoenixCalciteEmbeddedDriver.isTestUrl(url)) {
+        if (PhoenixEmbeddedDriver.isTestUrl(url)) {
             driver = initDriver(ReadOnlyProps.EMPTY_PROPS);
             assertTrue(DriverManager.getDriver(url) == driver);
             driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
@@ -100,25 +105,28 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         if (driver == null) {
             driver = new PhoenixTestDriver(props);
             DriverManager.registerDriver(driver);
+            // Register Calcite-Phoenix Test Driver
+            DriverManager.registerDriver(new PhoenixCalciteTestDriver());
         }
         return driver;
     }
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        startServer(getUrl());
-        ensureTableCreated(getUrl(), ATABLE_NAME);
-        ensureTableCreated(getUrl(), ENTITY_HISTORY_TABLE_NAME);
-        ensureTableCreated(getUrl(), FUNKY_NAME);
-        ensureTableCreated(getUrl(), PTSDB_NAME);
-        ensureTableCreated(getUrl(), PTSDB2_NAME);
-        ensureTableCreated(getUrl(), PTSDB3_NAME);
-        ensureTableCreated(getUrl(), MULTI_CF_NAME);
-        ensureTableCreated(getUrl(), JOIN_ORDER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_CUSTOMER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_ITEM_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), JOIN_SUPPLIER_TABLE_FULL_NAME);
-        ensureTableCreated(getUrl(), TABLE_WITH_ARRAY);
+    	String url = getUrl();
+        startServer(getOldUrl());
+        ensureTableCreated(url, ATABLE_NAME);
+        ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME);
+        ensureTableCreated(url, FUNKY_NAME);
+        ensureTableCreated(url, PTSDB_NAME);
+        ensureTableCreated(url, PTSDB2_NAME);
+        ensureTableCreated(url, PTSDB3_NAME);
+        ensureTableCreated(url, MULTI_CF_NAME);
+        ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME);
+        ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME);
+        ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        ensureTableCreated(url, TABLE_WITH_ARRAY);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(HConstants.LATEST_TIMESTAMP));
         PhoenixConnection conn = DriverManager.getConnection(PHOENIX_CONNECTIONLESS_JDBC_URL, props).unwrap(PhoenixConnection.class);

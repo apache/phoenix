@@ -137,15 +137,16 @@ import org.apache.hadoop.hbase.master.LoadBalancer;
 import org.apache.hadoop.hbase.regionserver.LocalIndexMerger;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.calcite.jdbc.PhoenixCalciteEmbeddedDriver;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.balancer.IndexLoadBalancer;
 import org.apache.phoenix.hbase.index.master.IndexMasterObserver;
+import org.apache.phoenix.jdbc.PhoenixCalciteTestDriver;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
@@ -511,15 +512,15 @@ public abstract class BaseTest {
     protected static final Configuration config = HBaseConfiguration.create(); 
     
     protected static String getUrl() {
+        String url = getOldUrl();
+        return url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL, PhoenixRuntime.JDBC_PROTOCOL_CALCITE);
+    }
+    
+    protected static String getOldUrl() {
         if (!clusterInitialized) {
             throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
         }
         return url;
-    }
-    
-    protected static String getOldUrl() {
-        String url = getUrl();
-        return url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL_CALCITE, PhoenixRuntime.JDBC_PROTOCOL);
     }
     
     private static void teardownTxManager() throws SQLException {
@@ -651,7 +652,7 @@ public abstract class BaseTest {
             try {
                 utility.startMiniCluster(NUM_SLAVES_BASE);
                 utility.startMiniMapReduceCluster();
-                url = QueryUtil.getConnectionUrl(new Properties(), utility.getConfiguration(), true);
+                url = QueryUtil.getConnectionUrl(new Properties(), utility.getConfiguration(), false);
             } catch (Throwable t) {
                 throw new RuntimeException(t);
             }
@@ -693,7 +694,7 @@ public abstract class BaseTest {
     }
 
     protected static String getLocalClusterUrl(HBaseTestingUtility util) throws Exception {
-        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(), true);
+        String url = QueryUtil.getConnectionUrl(new Properties(), util.getConfiguration(), false);
         return url + PHOENIX_TEST_DRIVER_URL_PARAM;
     }
     
@@ -777,6 +778,9 @@ public abstract class BaseTest {
     public static PhoenixTestDriver initAndRegisterTestDriver(String url, ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(newDriver);
+        // Register Calcite-Phoenix test driver at the same time.
+        PhoenixCalciteTestDriver newCalciteDriver = new PhoenixCalciteTestDriver();
+        DriverManager.registerDriver(newCalciteDriver);
         Driver oldDriver = DriverManager.getDriver(url); 
         if (oldDriver != newDriver) {
             destroyDriver(oldDriver);
@@ -790,8 +794,8 @@ public abstract class BaseTest {
     //Close and unregister the driver.
     protected static boolean destroyDriver(Driver driver) {
         if (driver != null) {
-            assert(driver instanceof PhoenixCalciteEmbeddedDriver);
-            PhoenixCalciteEmbeddedDriver pdriver = (PhoenixCalciteEmbeddedDriver)driver;
+            assert(driver instanceof PhoenixEmbeddedDriver);
+            PhoenixEmbeddedDriver pdriver = (PhoenixEmbeddedDriver)driver;
             try {
                 try {
                     pdriver.close();
@@ -876,11 +880,13 @@ public abstract class BaseTest {
     }
     
     protected static byte[][] getDefaultSplits(String tenantId) {
-        return new byte[][] { 
-            Bytes.toBytes(tenantId + "00A"),
-            Bytes.toBytes(tenantId + "00B"),
-            Bytes.toBytes(tenantId + "00C"),
-            };
+    	return null;
+    	// TODO CALCITE-1319
+//        return new byte[][] { 
+//            Bytes.toBytes(tenantId + "00A"),
+//            Bytes.toBytes(tenantId + "00B"),
+//            Bytes.toBytes(tenantId + "00C"),
+//            };
     }
     
     protected static void deletePriorTables(long ts, String url) throws Exception {
