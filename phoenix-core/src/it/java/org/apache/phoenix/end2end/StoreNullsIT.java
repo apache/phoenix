@@ -34,7 +34,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -63,6 +62,8 @@ public class StoreNullsIT extends BaseHBaseManagedTimeTableReuseIT {
     private static final Log LOG = LogFactory.getLog(StoreNullsIT.class);
     private static final String WITH_NULLS = generateRandomString();
     private static final String WITHOUT_NULLS = generateRandomString();
+    private static final String IMMUTABLE_WITH_NULLS = generateRandomString();
+    private static final String IMMUTABLE_WITHOUT_NULLS = generateRandomString();
 
     private static Connection conn;
     private static Statement stmt;
@@ -81,12 +82,49 @@ public class StoreNullsIT extends BaseHBaseManagedTimeTableReuseIT {
                         "id SMALLINT NOT NULL PRIMARY KEY, " +
                         "name VARCHAR) " +
                 "VERSIONS = 1000, KEEP_DELETED_CELLS = false");
+        stmt.execute("CREATE TABLE " + IMMUTABLE_WITH_NULLS + " ("
+                + "id SMALLINT NOT NULL PRIMARY KEY, name VARCHAR) "
+                + "STORE_NULLS = true, VERSIONS = 1, KEEP_DELETED_CELLS = false, IMMUTABLE_ROWS=true");
+        stmt.execute("CREATE TABLE " + IMMUTABLE_WITHOUT_NULLS + " ("
+                + "id SMALLINT NOT NULL PRIMARY KEY, name VARCHAR) "
+                + "VERSIONS = 1, KEEP_DELETED_CELLS = false, IMMUTABLE_ROWS=true");
     }
 
     @After
     public void tearDown() throws SQLException {
         stmt.close();
         conn.close();
+    }
+
+    @Test
+    public void testStoringNulls() throws SQLException, InterruptedException, IOException {
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITH_NULLS + " VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITHOUT_NULLS + " VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITH_NULLS + " VALUES (2, null)");
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITHOUT_NULLS + " VALUES (2, null)");
+
+        ensureNullsNotStored(IMMUTABLE_WITH_NULLS);
+        ensureNullsNotStored(IMMUTABLE_WITHOUT_NULLS);
+    }
+
+    private void ensureNullsNotStored(String tableName) throws IOException {
+        tableName = SchemaUtil.normalizeIdentifier(tableName);
+        HTable htable = new HTable(getUtility().getConfiguration(), tableName);
+        Scan s = new Scan();
+        s.setRaw(true);
+        ResultScanner scanner = htable.getScanner(s);
+        // first row has a value for name
+        Result rs = scanner.next();
+        assertTrue(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("NAME")));
+        assertTrue(rs.size() == 2);
+        // 2nd row has not
+        rs = scanner.next();
+        assertFalse(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("NAME")));
+        // and no delete marker either
+        assertTrue(rs.size() == 1);
+        assertNull(scanner.next());
+        scanner.close();
+        htable.close();
     }
 
     @Test
