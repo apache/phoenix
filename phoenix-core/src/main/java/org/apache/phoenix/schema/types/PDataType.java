@@ -196,7 +196,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             return Bytes.compareTo(lhsConverted, 0, lhsConverted.length, rhs, rhsOffset, rhsLength);
         }
         // convert to native and compare
-        if (this.isCoercibleTo(PLong.INSTANCE) && rhsType.isCoercibleTo(PLong.INSTANCE)) { // native long to long
+        if (this.isCoercibleTo(PLong.INSTANCE) && rhsType.isCoercibleTo(PLong.INSTANCE)
+                || this.isCastableTo(PLong.INSTANCE) && rhsType.isCastableTo(PLong.INSTANCE)) { // native long to long
                                                                                            // comparison
             return Longs.compare(this.getCodec().decodeLong(lhs, lhsOffset, lhsSortOrder), rhsType.getCodec()
                     .decodeLong(rhs, rhsOffset, rhsSortOrder));
@@ -210,23 +211,26 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             boolean isFloat = false;
             int invert = 1;
 
-            if (this.isCoercibleTo(PLong.INSTANCE)) {
+            if (this.isCoercibleTo(PLong.INSTANCE) || this.isCastableTo(PLong.INSTANCE)) {
                 lvalue = this.getCodec().decodeLong(lhs, lhsOffset, lhsSortOrder);
             } else if (this.getClass() == PFloat.class) {
                 isFloat = true;
                 fvalue = this.getCodec().decodeFloat(lhs, lhsOffset, lhsSortOrder);
-            } else if (this.isCoercibleTo(PDouble.INSTANCE)) {
+            } else if (this.isCoercibleTo(PDouble.INSTANCE) || this.isCastableTo(PDouble.INSTANCE)) {
                 dvalue = this.getCodec().decodeDouble(lhs, lhsOffset, lhsSortOrder);
             }
-            if (rhsType.isCoercibleTo(PLong.INSTANCE)) {
+            if (rhsType.isCoercibleTo(PLong.INSTANCE) || rhsType.isCastableTo(PLong.INSTANCE)) {
                 lvalue = rhsType.getCodec().decodeLong(rhs, rhsOffset, rhsSortOrder);
             } else if (rhsType == PFloat.INSTANCE) {
                 invert = -1;
                 isFloat = true;
                 fvalue = rhsType.getCodec().decodeFloat(rhs, rhsOffset, rhsSortOrder);
-            } else if (rhsType.isCoercibleTo(PDouble.INSTANCE)) {
+            } else if (rhsType.isCoercibleTo(PDouble.INSTANCE) || rhsType.isCastableTo(PDouble.INSTANCE)) {
                 invert = -1;
                 dvalue = rhsType.getCodec().decodeDouble(rhs, rhsOffset, rhsSortOrder);
+            }
+            else {
+                throw new UnsupportedOperationException("Cannot compare " + this.sqlTypeName + " with " + rhsType.sqlTypeName);
             }
             // Invert the comparison if float/double value is on the RHS
             return invert * (isFloat ? compareFloatToLong(fvalue, lvalue) : compareDoubleToLong(dvalue, lvalue));
