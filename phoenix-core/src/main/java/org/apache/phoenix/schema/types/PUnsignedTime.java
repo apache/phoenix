@@ -94,7 +94,7 @@ public class PUnsignedTime extends PDataType<Time> {
 
   @Override
   public boolean isBytesComparableWith(PDataType otherType) {
-    return super.isBytesComparableWith(otherType) || otherType == PUnsignedDate.INSTANCE;
+    return super.isBytesComparableWith(otherType) || otherType == PUnsignedDate.INSTANCE || otherType == PUnsignedTimestamp.INSTANCE;
   }
 
   @Override

@@ -782,6 +782,7 @@ public class PTableImpl implements PTable {
                     if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
                           qualifier, 0, qualifier.length) == 0) {
                         iterator.remove();
+                        break;
                     }
                 }
             }
@@ -798,13 +799,15 @@ public class PTableImpl implements PTable {
             deleteRow = null;
             byte[] family = column.getFamilyName().getBytes();
             byte[] qualifier = column.getName().getBytes();
-            PDataType type = column.getDataType();
+            PDataType<?> type = column.getDataType();
             // Check null, since some types have no byte representation for null
             boolean isNull = type.isNull(byteValue);
-            if (isNull && !getStoreNulls()) {
-                if (!column.isNullable()) {
-                    throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
-                }
+            if (isNull && !column.isNullable()) {
+                throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
+            } else if (isNull && PTableImpl.this.isImmutableRows()) {
+                removeIfPresent(setValues, family, qualifier);
+                removeIfPresent(unsetValues, family, qualifier);
+            } else if (isNull && !getStoreNulls()) {
                 removeIfPresent(setValues, family, qualifier);
                 deleteQuietly(unsetValues, kvBuilder, kvBuilder.buildDeleteColumns(keyPtr, column
                             .getFamilyName().getBytesPtr(), column.getName().getBytesPtr(), ts));

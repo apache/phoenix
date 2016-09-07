@@ -123,7 +123,7 @@ public class PTime extends PDataType<Time> {
 
   @Override
   public boolean isBytesComparableWith(PDataType otherType) {
-    return super.isBytesComparableWith(otherType) || otherType.equals(PDate.INSTANCE);
+    return super.isBytesComparableWith(otherType) || otherType == PDate.INSTANCE || otherType == PTimestamp.INSTANCE || otherType == PLong.INSTANCE;
   }
 
   @Override

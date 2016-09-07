@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.util.List;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
@@ -26,7 +28,6 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.joda.time.DateTime;
-import java.util.List;
 
 /**
  * Implementation of DayOfYearFunction(Date/Timestamp)
@@ -36,7 +37,7 @@ import java.util.List;
  */
 @BuiltInFunction(name=DayOfYearFunction.NAME,
         args={@Argument(allowedTypes={PTimestamp.class})})
-public class DayOfYearFunction extends ScalarFunction {
+public class DayOfYearFunction extends DateScalarFunction {
     public static final String NAME = "DAYOFYEAR";
 
     public DayOfYearFunction() {
@@ -60,7 +61,7 @@ public class DayOfYearFunction extends ScalarFunction {
         if (ptr.getLength() == 0) {
             return true;
         }
-        long dateTime = arg.getDataType().getCodec().decodeLong(ptr, arg.getSortOrder());
+        long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
         DateTime jodaDT = new DateTime(dateTime);
         int day = jodaDT.getDayOfYear();
         PDataType returnDataType = getDataType();

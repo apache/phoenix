@@ -370,6 +370,7 @@ public enum SQLExceptionCode {
     OUTDATED_JARS(2007, "INT09", "Outdated jars."),
     INDEX_METADATA_NOT_FOUND(2008, "INT10", "Unable to find cached index metadata. "),
     UNKNOWN_ERROR_CODE(2009, "INT11", "Unknown error code."),
+    CONCURRENT_UPGRADE_IN_PROGRESS(2010, "INT12", ""),
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {

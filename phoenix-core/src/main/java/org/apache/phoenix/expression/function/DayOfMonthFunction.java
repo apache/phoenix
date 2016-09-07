@@ -38,7 +38,7 @@ import org.joda.time.DateTime;
  */
 @BuiltInFunction(name=DayOfMonthFunction.NAME, 
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class DayOfMonthFunction extends ScalarFunction {
+public class DayOfMonthFunction extends DateScalarFunction {
     public static final String NAME = "DAYOFMONTH";
 
     public DayOfMonthFunction() {
@@ -57,7 +57,7 @@ public class DayOfMonthFunction extends ScalarFunction {
         if ( ptr.getLength() == 0) {
             return true; //means null
         }
-        long dateTime = expression.getDataType().getCodec().decodeLong(ptr, expression.getSortOrder());
+        long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
         DateTime dt = new DateTime(dateTime);
         int day = dt.getDayOfMonth();
         PDataType returnType = getDataType();
