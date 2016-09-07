@@ -523,7 +523,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                 byte[] wildcard = {StringUtil.MULTI_CHAR_LIKE};
                 StringUtil.fill(nullExpressionString, 0, pattern.length(), wildcard, 0, 1, false);
                 if (pattern.equals(new String (nullExpressionString))) {
-                    return IsNullExpression.create(lhs, true, context.getTempPtr());
+                    if (node.isNegate()) {
+                        return LiteralExpression.newConstant(false, Determinism.ALWAYS);
+                    }
+                    else {
+                        return IsNullExpression.create(lhs, true, context.getTempPtr());
+                    }
                 }
             }
         }

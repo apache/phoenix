@@ -96,16 +96,16 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl());
         String table = generateRandomString();
         String ddl = "CREATE TABLE " + table
-            + " (k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
+                + " (k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO " + table + " VALUES('aa','bb')");
         conn.createStatement().execute("UPSERT INTO " + table + " VALUES('ab','bc')");
         conn.createStatement().execute("UPSERT INTO " + table + " VALUES(null,'cc')");
         conn.createStatement().execute("UPSERT INTO " + table + " VALUES('dd',null)");
         conn.commit();
-        
+
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT * FROM " + table + " WHERE k1 LIKE '%'");
+                "SELECT * FROM " + table + " WHERE k1 LIKE '%'");
         assertTrue(rs.next());
         assertEquals("aa", rs.getString(1));
         assertEquals("bb", rs.getString(2));
@@ -116,7 +116,7 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         assertEquals("dd", rs.getString(1));
         assertEquals(null, rs.getString(2));
         assertFalse(rs.next());
-        
+
         rs = conn.createStatement().executeQuery("SELECT * FROM " + table + " WHERE k2 LIKE '%'");
         assertTrue(rs.next());
         assertEquals(null, rs.getString(1));
@@ -128,7 +128,25 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         assertEquals("ab", rs.getString(1));
         assertEquals("bc", rs.getString(2));
         assertFalse(rs.next());
-        
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + table + " WHERE k2 LIKE '%%'");
+        assertTrue(rs.next());
+        assertEquals(null, rs.getString(1));
+        assertEquals("cc", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("aa", rs.getString(1));
+        assertEquals("bb", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("ab", rs.getString(1));
+        assertEquals("bc", rs.getString(2));
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + table + " WHERE k2 NOT LIKE '%'");
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + table + " WHERE k2 NOT LIKE '%%'");
+        assertFalse(rs.next());
+
         conn.close();
     }
     
