@@ -18,16 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.hadoop.hbase.HColumnDescriptor.DEFAULT_REPLICATION_SCOPE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.List;
 import java.util.Properties;
 
@@ -501,5 +494,28 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         } catch (SchemaNotFoundException e) {
             fail();
         }
+    }
+
+    @Test
+    public void testCreateTableDefaultColumnValue() throws Exception {
+        String ddl = "CREATE TABLE T_DEFAULT (pk INTEGER PRIMARY KEY, test1 INTEGER, test2 INTEGER DEFAULT 5)";
+        String dml = "UPSERT INTO T_DEFAULT VALUES (0)";
+
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * from T_DEFAULT");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+        assertEquals(0, rs.getInt(2));
+        assertEquals(5, rs.getInt(3));
+        assertFalse(rs.next());
     }
 }

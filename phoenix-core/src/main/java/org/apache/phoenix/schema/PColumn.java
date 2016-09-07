@@ -18,6 +18,8 @@
 package org.apache.phoenix.schema;
 
 
+import org.apache.phoenix.parse.LiteralParseNode;
+
 /**
  * Definition of a Phoenix column
  *
@@ -60,4 +62,6 @@ public interface PColumn extends PDatum {
     boolean isRowTimestamp();
     
     boolean isDynamic();
+
+    LiteralParseNode getDefaultVal();
 }

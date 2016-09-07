@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.HRegionLocator;
@@ -540,6 +541,17 @@ public class UpsertCompiler {
                 // Resize down to allow a subset of columns to be specifiable
                 if (columnNodes.isEmpty() && columnIndexesToBe.length >= nValuesToSet) {
                     nColumnsToSet = nValuesToSet;
+                    // Tail the columns with default values
+                    List<Integer> explicitColumnsToBe = Arrays.asList(ArrayUtils.toObject(columnIndexesToBe)).subList(0, nValuesToSet-1);
+                    for (PColumn column: allColumnsToBe) {
+                        if (!explicitColumnsToBe.contains(column.getPosition()) && null != column.getDefaultVal()) {
+                            nColumnsToSet++;
+                            nValuesToSet++;
+                            columnIndexesToBe[nValuesToSet-1] = column.getPosition();
+                            pkSlotIndexesToBe[nValuesToSet-1] = table.getPKColumns().indexOf(column);
+                            valueNodes.add(column.getDefaultVal());
+                        }
+                    }
                     columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, nValuesToSet);
                     pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, nValuesToSet);
                 }

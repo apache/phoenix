@@ -266,9 +266,14 @@ public class ParseNodeFactory {
         return new ColumnDef(columnDefName, sqlTypeName, isNull, maxLength, scale, isPK, sortOrder, expressionStr, isRowTimestamp);
     }
 
-    public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK, 
+    public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, boolean isPK,
         	SortOrder sortOrder, boolean isRowTimestamp) {
-        return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, isPK, sortOrder, null, isRowTimestamp);
+        return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, null, isPK, sortOrder, null, isRowTimestamp);
+    }
+
+    public ColumnDef columnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength, Integer scale, LiteralParseNode defaultVal, boolean isPK,
+                               SortOrder sortOrder, boolean isRowTimestamp) {
+        return new ColumnDef(columnDefName, sqlTypeName, isArray, arrSize, isNull, maxLength, scale, defaultVal, isPK, sortOrder, null, isRowTimestamp);
     }
     
     public ColumnDefInPkConstraint columnDefInPkConstraint(ColumnName columnDefName, SortOrder sortOrder, boolean isRowTimestamp) {

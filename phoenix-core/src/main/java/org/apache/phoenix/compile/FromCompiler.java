@@ -256,7 +256,7 @@ public class FromCompiler {
         for (PColumn column : table.getColumns()) {
             Expression sourceExpression = projector.getColumnProjector(column.getPosition()).getExpression();
             PColumnImpl projectedColumn = new PColumnImpl(column.getName(), column.getFamilyName(),
-                    sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), sourceExpression.isNullable(),
+                    sourceExpression.getDataType(), sourceExpression.getMaxLength(), sourceExpression.getScale(), column.getDefaultVal(), sourceExpression.isNullable(),
                     column.getPosition(), sourceExpression.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic());
             projectedColumns.add(projectedColumn);
         }
