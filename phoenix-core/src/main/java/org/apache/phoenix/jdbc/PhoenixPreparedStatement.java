@@ -361,11 +361,17 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
+        if (x != null) { // Since Date is mutable, make a copy
+            x = new Date(x.getTime());
+        }
         setParameter(parameterIndex, x);
     }
 
     @Override
     public void setDate(int parameterIndex, Date x, Calendar cal) throws SQLException {
+        if (x != null) { // Since Date is mutable, make a copy
+            x = new Date(x.getTime());
+        }
         cal.setTime(x);
         setParameter(parameterIndex, new Date(cal.getTimeInMillis()));
     }
@@ -475,23 +481,39 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Prepar
 
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
+        if (x != null) { // Since Time is mutable, make a copy
+            x = new Time(x.getTime());
+        }
         setParameter(parameterIndex, x);
     }
 
     @Override
     public void setTime(int parameterIndex, Time x, Calendar cal) throws SQLException {
+        if (x != null) { // Since Time is mutable, make a copy
+            x = new Time(x.getTime());
+        }
         cal.setTime(x);
         setParameter(parameterIndex, new Time(cal.getTimeInMillis()));
     }
 
+    private void setTimestampParameter(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
+        if (x != null) { // Since Timestamp is mutable, make a copy
+            int nanos = x.getNanos();
+            x = new Timestamp(x.getTime());
+            x.setNanos(nanos);
+        }
+        // TODO: deal with Calendar
+        setParameter(parameterIndex, x);
+    }
+    
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException {
-        setParameter(parameterIndex, x);
+        setTimestampParameter(parameterIndex, x, null);
     }
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x, Calendar cal) throws SQLException {
-        setParameter(parameterIndex,  x);
+        setTimestampParameter(parameterIndex, x, cal);
     }
 
     @Override
