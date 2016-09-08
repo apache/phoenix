@@ -32,6 +32,7 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.ToDateParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
@@ -53,6 +54,7 @@ import org.apache.phoenix.util.DateUtil;
 public class ToDateFunction extends ScalarFunction {
     public static final String NAME = "TO_DATE";
     private DateUtil.DateTimeParser dateParser;
+    private PDataCodec codec;
     protected String dateFormat;
     protected String timeZoneId;
 
@@ -80,6 +82,7 @@ public class ToDateFunction extends ScalarFunction {
         // server to evaluate using the local time zone. Instead, we want
         // to use the client local time zone.
         this.timeZoneId = this.dateParser.getTimeZone().getID();
+        this.codec = DateUtil.getCodecFor(getDataType());
     }
 
     @Override
@@ -110,15 +113,18 @@ public class ToDateFunction extends ScalarFunction {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression expression = getExpression();
-        if (!expression.evaluate(tuple, ptr) || ptr.getLength() == 0) {
+        if (!expression.evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength() == 0) {
+            return true;
         }
         PDataType type = expression.getDataType();
         String dateStr = (String)type.toObject(ptr, expression.getSortOrder());
         long epochTime = dateParser.parseDateTime(dateStr);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];
-        returnType.getCodec().encodeLong(epochTime, byteValue, 0);
+        codec.encodeLong(epochTime, byteValue, 0);
         ptr.set(byteValue);
         return true;
      }

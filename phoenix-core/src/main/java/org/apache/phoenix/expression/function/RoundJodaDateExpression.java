@@ -43,6 +43,9 @@ public abstract class RoundJodaDateExpression extends RoundDateExpression{
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (children.get(0).evaluate(tuple, ptr)) {
+            if (ptr.getLength() == 0) {
+                return true; // child evaluated to null
+            }
             PDataType dataType = getDataType();
             long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
             DateTime dt = new DateTime(time,ISOChronology.getInstanceUTC());
