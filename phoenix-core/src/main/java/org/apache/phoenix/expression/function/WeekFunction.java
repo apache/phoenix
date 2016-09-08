@@ -38,7 +38,7 @@ import org.joda.time.DateTime;
  */
 @BuiltInFunction(name=WeekFunction.NAME, 
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class WeekFunction extends ScalarFunction {
+public class WeekFunction extends DateScalarFunction {
     public static final String NAME = "WEEK";
 
     public WeekFunction() {
@@ -57,7 +57,7 @@ public class WeekFunction extends ScalarFunction {
         if ( ptr.getLength() == 0) {
             return true; //means null
         }
-        long dateTime = expression.getDataType().getCodec().decodeLong(ptr, expression.getSortOrder());
+        long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
         DateTime dt = new DateTime(dateTime);
         int week = dt.getWeekOfWeekyear();
         PDataType returnType = getDataType();

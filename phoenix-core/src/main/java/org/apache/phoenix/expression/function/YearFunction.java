@@ -37,7 +37,7 @@ import org.joda.time.DateTime;
  */
 @BuiltInFunction(name=YearFunction.NAME, 
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class YearFunction extends ScalarFunction {
+public class YearFunction extends DateScalarFunction {
     public static final String NAME = "YEAR";
 
     public YearFunction() {
@@ -56,7 +56,7 @@ public class YearFunction extends ScalarFunction {
         if ( ptr.getLength() == 0) {
             return true; //means null
         }
-        long dateTime = expression.getDataType().getCodec().decodeLong(ptr, expression.getSortOrder());
+        long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
         DateTime dt = new DateTime(dateTime);
         int year = dt.getYear();
         PDataType returnType = getDataType();
