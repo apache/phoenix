@@ -2133,28 +2133,6 @@ public class MetaDataClient {
                                 PNameFactory.newName(defaultFamilyName), null,
                         Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema);
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
-            } else if (tableType == PTableType.INDEX && indexId == null) {
-                if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
-                    int nIndexRowKeyColumns = isPK ? 1 : pkColumnsNames.size();
-                    int nIndexKeyValueColumns = columns.size() - nIndexRowKeyColumns;
-                    int nBaseRowKeyColumns = parent.getPKColumns().size() - (parent.getBucketNum() == null ? 0 : 1);
-                    int nBaseKeyValueColumns = parent.getColumns().size() - parent.getPKColumns().size();
-                    /*
-                     * Approximate ratio between index table size and data table size:
-                     * More or less equal to the ratio between the number of key value columns in each. We add one to
-                     * the key value column count to take into account our empty key value. We add 1/4 for any key
-                     * value data table column that was moved into the index table row key.
-                     */
-                    double ratio = (1+nIndexKeyValueColumns + (nIndexRowKeyColumns - nBaseRowKeyColumns)/4d)/(1+nBaseKeyValueColumns);
-                    HTableDescriptor descriptor = connection.getQueryServices().getTableDescriptor(parent.getPhysicalName().getBytes());
-                    if (descriptor != null) { // Is null for connectionless
-                        long maxFileSize = descriptor.getMaxFileSize();
-                        if (maxFileSize == -1) { // If unset, use default
-                            maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
-                        }
-                        tableProps.put(HTableDescriptor.MAX_FILESIZE, (long)(maxFileSize * ratio));
-                    }
-                }
             }
 
             short nextKeySeq = 0;
