@@ -1274,16 +1274,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
 
-        int indexMaxFileSizePerc;
-        // Get percentage to use from table props first and then fallback to config
-        Integer indexMaxFileSizePercProp = (Integer)tableProps.remove(QueryServices.INDEX_MAX_FILESIZE_PERC_ATTRIB);
-        if (indexMaxFileSizePercProp == null) {
-            indexMaxFileSizePerc = this.props.getInt(QueryServices.INDEX_MAX_FILESIZE_PERC_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_MAX_FILESIZE_PERC);
-        } else {
-            indexMaxFileSizePerc = indexMaxFileSizePercProp;
-        }
-        long indexMaxFileSize = maxFileSize * indexMaxFileSizePerc / 100;
-        tableProps.put(HTableDescriptor.MAX_FILESIZE, indexMaxFileSize);
         tableProps.put(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_NAME, TRUE_BYTES_AS_STRING);
         HTableDescriptor desc = ensureTableCreated(physicalIndexName, PTableType.TABLE, tableProps, families, splits,
                 false, isNamespaceMapped);
