@@ -33,7 +33,13 @@ import java.util.TimeZone;
 
 import org.apache.commons.lang.time.FastDateFormat;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataType.PDataCodec;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.joda.time.DateTimeZone;
 import org.joda.time.chrono.ISOChronology;
 import org.joda.time.format.DateTimeFormatter;
@@ -41,6 +47,7 @@ import org.joda.time.format.DateTimeFormatterBuilder;
 import org.joda.time.format.ISODateTimeFormat;
 
 import com.google.common.collect.Lists;
+import com.sun.istack.NotNull;
 
 
 @SuppressWarnings({ "serial", "deprecation" })
@@ -73,6 +80,21 @@ public class DateUtil {
     private DateUtil() {
     }
 
+    @NotNull
+    public static PDataCodec getCodecFor(PDataType type) {
+        PDataCodec codec = type.getCodec();
+        if (codec != null) {
+            return codec;
+        }
+        if (type == PTimestamp.INSTANCE) {
+            return PDate.INSTANCE.getCodec();
+        } else if (type == PUnsignedTimestamp.INSTANCE) {
+            return PUnsignedDate.INSTANCE.getCodec();
+        } else {
+            throw new RuntimeException(TypeMismatchException.newException(PTimestamp.INSTANCE, type));
+        }
+    }
+    
     private static TimeZone getTimeZone(String timeZoneId) {
         TimeZone parserTimeZone;
         if (timeZoneId == null) {

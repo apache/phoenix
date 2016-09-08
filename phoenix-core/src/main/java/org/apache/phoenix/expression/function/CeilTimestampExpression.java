@@ -97,6 +97,9 @@ public class CeilTimestampExpression extends CeilDateExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (children.get(0).evaluate(tuple, ptr)) {
+            if (ptr.getLength() == 0) {
+                return true; // child evaluated to null
+            }
             SortOrder sortOrder = children.get(0).getSortOrder();
             PDataType dataType = getDataType();
             int nanos = dataType.getNanos(ptr, sortOrder);

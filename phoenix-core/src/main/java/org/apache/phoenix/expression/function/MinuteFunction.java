@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
  */
 @BuiltInFunction(name=MinuteFunction.NAME, 
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class MinuteFunction extends ScalarFunction {
+public class MinuteFunction extends DateScalarFunction {
     public static final String NAME = "MINUTE";
 
     public MinuteFunction() {
@@ -56,7 +56,7 @@ public class MinuteFunction extends ScalarFunction {
         if ( ptr.getLength() == 0) {
             return true; //means null
         }
-        long dateTime = expression.getDataType().getCodec().decodeLong(ptr, expression.getSortOrder());
+        long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
         int minute = (int)(((dateTime/1000) % 3600)/60);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];

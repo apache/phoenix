@@ -1837,6 +1837,24 @@ public class PDataTypeTest {
     }
     
     @Test
+    public void testTimestampToDateComparison() {
+        long now = System.currentTimeMillis();
+        Timestamp ts1 = DateUtil.getTimestamp(now,  1111);    
+        final byte[] bytes1 = PTimestamp.INSTANCE.toBytes(ts1);
+        Date ts2 = new Date(now);
+        final byte[] bytes2 = PDate.INSTANCE.toBytes(ts2);
+        assertTrue(PTimestamp.INSTANCE.compareTo(bytes1, 0, bytes1.length, SortOrder.getDefault(), bytes2, 0, bytes2.length, SortOrder.getDefault(), PDate.INSTANCE) > 0);
+
+        Timestamp ts3 = DateUtil.getTimestamp(now,  0);    
+        final byte[] bytes3 = PTimestamp.INSTANCE.toBytes(ts3);
+        assertTrue(PTimestamp.INSTANCE.compareTo(bytes3, 0, bytes3.length, SortOrder.getDefault(), bytes2, 0, bytes2.length, SortOrder.getDefault(), PDate.INSTANCE) == 0);
+
+        Timestamp ts4 = DateUtil.getTimestamp(now,  0);    
+        final byte[] bytes4 = PUnsignedTimestamp.INSTANCE.toBytes(ts4);
+        assertTrue(PUnsignedTimestamp.INSTANCE.compareTo(bytes4, 0, bytes4.length, SortOrder.getDefault(), bytes2, 0, bytes2.length, SortOrder.getDefault(), PDate.INSTANCE) == 0);
+    }
+    
+    @Test
     public void testTimestamp() {
         long now = System.currentTimeMillis();
         Timestamp ts1 = DateUtil.getTimestamp(now,  1111);
