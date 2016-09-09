@@ -156,7 +156,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 }
             }
         };
-        (new Thread(r)).start();
+        Thread t = new Thread(r);
+        t.setDaemon(true);
+        t.start();
 
         if (!enableRebuildIndex && !blockWriteRebuildIndex) {
             LOG.info("Failure Index Rebuild is skipped by configuration.");
