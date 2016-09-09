@@ -19,9 +19,8 @@ package org.apache.phoenix.query;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_1;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -78,7 +77,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HConnection;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -91,7 +89,6 @@ import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
-import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -2328,7 +2325,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (upgradeSystemTables) {
                                     long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                                     sysCatalogTableName = e.getTable().getPhysicalName().getString();
-                                    if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP && acquireUpgradeMutex(currentServerSideTableTimeStamp)) {
+                                    if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP && acquireUpgradeMutex(currentServerSideTableTimeStamp, e.getTable().getPhysicalName().getBytes())) {
                                         snapshotName = getUpgradeSnapshotName(sysCatalogTableName, currentServerSideTableTimeStamp);
                                         createSnapshot(snapshotName, sysCatalogTableName);
                                     }
@@ -2726,9 +2723,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                  * making use of HBase's checkAndPut api.
                  * <p>
                  * This method was added as part of 4.8.1 release. For clients upgrading to 4.8.1, the old value in the
-                 * version cell will be null i.e. the QueryConstants#VERSION column will be non-existent. For client's
+                 * version cell will be null i.e. the {@value QueryConstants#UPGRADE_MUTEX} column will be non-existent. For client's
                  * upgrading to a release newer than 4.8.1 the existing version cell will be non-null. The client which
-                 * wins the race will end up setting the version cell to the MetadataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP
+                 * wins the race will end up setting the version cell to the {@value MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP}
                  * for the release.
                  * </p>
                  * 
@@ -2736,19 +2733,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                  * @throws IOException
                  * @throws SQLException
                  */
-                private boolean acquireUpgradeMutex(long currentServerSideTableTimestamp) throws IOException,
+                private boolean acquireUpgradeMutex(long currentServerSideTableTimestamp, byte[] sysCatalogTableName) throws IOException,
                         SQLException {
                     Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-                    try (HTableInterface sysCatalogTable = getTable(SYSTEM_CATALOG_NAME_BYTES)) {
+                    try (HTableInterface sysCatalogTable = getTable(sysCatalogTableName)) {
                         byte[] row = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                                PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+                                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
                         byte[] family = PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-                        byte[] qualifier = QueryConstants.VERSION;
-                        byte[] oldValue = currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0 ? null
-                                : Bytes.toBytes(currentServerSideTableTimestamp);
-                        byte[] newValue = Bytes.toBytes(MIN_SYSTEM_TABLE_TIMESTAMP);
-                        long ts = MIN_SYSTEM_TABLE_TIMESTAMP;
-                        Put put = new Put(row, ts);
+                        byte[] qualifier = QueryConstants.UPGRADE_MUTEX;
+                        byte[] oldValue = currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_8_1 ? null
+                                : PLong.INSTANCE.toBytes(currentServerSideTableTimestamp);
+                        byte[] newValue = PLong.INSTANCE.toBytes(MIN_SYSTEM_TABLE_TIMESTAMP);
+                        // Note that the timestamp for this put doesn't really matter since UPGRADE_MUTEX column isn't used
+                        // to calculate SYSTEM.CATALOG's server side timestamp.
+                        Put put = new Put(row);
                         put.add(family, qualifier, newValue);
                         boolean acquired = sysCatalogTable.checkAndPut(row, family, qualifier, oldValue, put);
                         if (!acquired) { throw new UpgradeInProgressException(
