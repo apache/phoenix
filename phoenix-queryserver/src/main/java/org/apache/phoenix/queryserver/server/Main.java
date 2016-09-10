@@ -286,10 +286,6 @@ public final class Main extends Configured implements Tool, Runnable {
       // LoadingCache will create a new instance for us if one isn't cached.
       UserGroupInformation proxyUser = createProxyUser(remoteUserName);
 
-      // Check if this user is allowed to be impersonated.
-      // Will throw AuthorizationException if the impersonation as this user is not allowed
-      ProxyUsers.authorize(proxyUser, remoteAddress);
-
       // Execute the actual call as this proxy user
       return proxyUser.doAs(new PrivilegedExceptionAction<T>() {
         @Override
