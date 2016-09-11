@@ -105,6 +105,7 @@ import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.SubtractParseNode;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UnsupportedAllParseNodeVisitor;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -121,18 +122,7 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.PArrayDataType;
-import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDecimal;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.schema.types.*;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -147,6 +137,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
     private int nodeCount;
     private int totalNodeCount;
     private final boolean resolveViewConstants;
+    private static final Expression NOT_NULL_STRING = LiteralExpression.newConstant(PVarchar.INSTANCE.toObject(KeyRange.IS_NOT_NULL_RANGE.getLowerRange()));
 
     public ExpressionCompiler(StatementContext context) {
         this(context,GroupBy.EMPTY_GROUP_BY, false);
@@ -519,16 +510,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
                   }
                 }
             } else {
-                byte[] nullExpressionString = new byte[pattern.length()];
+                byte[] wildcardString = new byte[pattern.length()];
                 byte[] wildcard = {StringUtil.MULTI_CHAR_LIKE};
-                StringUtil.fill(nullExpressionString, 0, pattern.length(), wildcard, 0, 1, false);
-                if (pattern.equals(new String (nullExpressionString))) {
-                    if (node.isNegate()) {
-                        return LiteralExpression.newConstant(false, Determinism.ALWAYS);
-                    }
-                    else {
-                        return IsNullExpression.create(lhs, true, context.getTempPtr());
-                    }
+                StringUtil.fill(wildcardString, 0, pattern.length(), wildcard, 0, 1, false);
+                if (pattern.equals(new String (wildcardString))) {
+                    List<Expression> compareChildren = Arrays.asList(lhs, NOT_NULL_STRING);
+                    return new ComparisonExpression(compareChildren, node.isNegate() ? CompareOp.LESS : CompareOp.GREATER_OR_EQUAL);
                 }
             }
         }

@@ -223,4 +223,76 @@ public class LikeExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         assertEquals("AA", rs.getString(1));
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testNull() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String table = generateRandomString();
+        String ddl = "CREATE TABLE " + table
+                + " (pk INTEGER PRIMARY KEY, str VARCHAR)";
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(0,'aa')");
+        conn.createStatement().execute("UPSERT INTO " + table + " VALUES(1, null)");
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT str LIKE '%' FROM " + table);
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.wasNull());
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery(
+                "SELECT str LIKE '%%' FROM " + table);
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.wasNull());
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery(
+                "SELECT str NOT LIKE '%' FROM " + table);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.wasNull());
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery(
+                "SELECT str NOT LIKE '%%' FROM " + table);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.wasNull());
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery(
+                "SELECT NOT (str LIKE '%') FROM " + table);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.wasNull());
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery(
+                "SELECT NOT(str LIKE '%%') FROM " + table);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.wasNull());
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+    }
 }
