@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.calcite;
 
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -45,6 +46,7 @@ import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -95,8 +97,10 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         }
 
         Connection createConnection() throws Exception {
-            return DriverManager.getConnection(getUrl(), 
-                    props);
+        	// FIXME Cannot get correct stats with 'test=true' property
+        	final String testProp = PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+        	final String url = getUrl().replaceAll(testProp, "");
+            return DriverManager.getConnection(url, props);
         }
         
         String getExplainPlanString() {
@@ -340,14 +344,14 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             + "      type: 'custom',\n"
             + "      factory: 'org.apache.phoenix.calcite.PhoenixSchema$Factory',\n"
             + "      operand: {\n"
-            + "        url: \"" + getUrl() + "\"\n"
+            + "        url: \"" + getOldUrl() + "\"\n"
             + "      }\n"
             + "    }";
     }
 
     protected static Connection connectUsingModel(Properties props) throws Exception {
         final File file = File.createTempFile("model", ".json");
-        final String url = getUrl();
+        final String url = getOldUrl();
         final PrintWriter pw = new PrintWriter(new FileWriter(file));
         pw.print(
             "{\n"
@@ -666,7 +670,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             
             conn.close();
             props.setProperty("TenantId", "10");
-            conn = DriverManager.getConnection(getUrl(), props);
+            conn = DriverManager.getConnection(getOldUrl(), props);
             conn.createStatement().execute("CREATE VIEW " + MULTI_TENANT_VIEW1
                     + " AS select * from " + MULTI_TENANT_TABLE);
             conn.commit();
@@ -680,7 +684,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             
             conn.close();
             props.setProperty("TenantId", "20");
-            conn = DriverManager.getConnection(getUrl(), props);
+            conn = DriverManager.getConnection(getOldUrl(), props);
             conn.createStatement().execute("CREATE VIEW " + MULTI_TENANT_VIEW2
                     + " AS select * from " + MULTI_TENANT_TABLE + " where col2 > 7");
             conn.commit();

@@ -505,6 +505,7 @@ public abstract class BaseTest {
     }
     
     protected static String url;
+    protected static String calciteUrl;
     protected static PhoenixTestDriver driver;
     protected static PhoenixDriver realDriver;
     protected static boolean clusterInitialized = false;
@@ -512,8 +513,10 @@ public abstract class BaseTest {
     protected static final Configuration config = HBaseConfiguration.create(); 
     
     protected static String getUrl() {
-        String url = getOldUrl();
-        return url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL, PhoenixRuntime.JDBC_PROTOCOL_CALCITE);
+        if (!clusterInitialized) {
+            throw new IllegalStateException("Cluster must be initialized before attempting to get the URL");
+        }
+        return calciteUrl;
     }
     
     protected static String getOldUrl() {
@@ -568,6 +571,7 @@ public abstract class BaseTest {
     protected static String checkClusterInitialized(ReadOnlyProps overrideProps) throws Exception {
         if (!clusterInitialized) {
             url = setUpTestCluster(config, overrideProps);
+            calciteUrl = url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL, PhoenixRuntime.JDBC_PROTOCOL_CALCITE);
             clusterInitialized = true;
         }
         return url;
@@ -653,6 +657,7 @@ public abstract class BaseTest {
                 utility.startMiniCluster(NUM_SLAVES_BASE);
                 utility.startMiniMapReduceCluster();
                 url = QueryUtil.getConnectionUrl(new Properties(), utility.getConfiguration(), false);
+                calciteUrl = url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL, PhoenixRuntime.JDBC_PROTOCOL_CALCITE);
             } catch (Throwable t) {
                 throw new RuntimeException(t);
             }
@@ -779,8 +784,7 @@ public abstract class BaseTest {
         PhoenixTestDriver newDriver = new PhoenixTestDriver(props);
         DriverManager.registerDriver(newDriver);
         // Register Calcite-Phoenix test driver at the same time.
-        PhoenixCalciteTestDriver newCalciteDriver = new PhoenixCalciteTestDriver();
-        DriverManager.registerDriver(newCalciteDriver);
+        Class.forName(PhoenixCalciteTestDriver.class.getName());
         Driver oldDriver = DriverManager.getDriver(url); 
         if (oldDriver != newDriver) {
             destroyDriver(oldDriver);
@@ -1250,15 +1254,15 @@ public abstract class BaseTest {
     }
     
     protected static void initATableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        initATableValues(tenantId, splits, date, ts, getUrl());
+        initATableValues(tenantId, splits, date, ts, getOldUrl());
     }
     
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        initEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+        initEntityHistoryTableValues(tenantId, splits, date, ts, getOldUrl());
     }
     
     protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
-        initSaltedEntityHistoryTableValues(tenantId, splits, date, ts, getUrl());
+        initSaltedEntityHistoryTableValues(tenantId, splits, date, ts, getOldUrl());
     }
         
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, String url) throws Exception {
@@ -1495,7 +1499,7 @@ public abstract class BaseTest {
         if (ts != null) {
             props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
         }
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getOldUrl(), props);
         try {
             //conn.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS my.seq");
             // Insert into customer table
@@ -1890,7 +1894,7 @@ public abstract class BaseTest {
     // Populate the test table with data.
     public static void populateTestTable(String fullTableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = DriverManager.getConnection(getOldUrl(), props)) {
         	upsertRows(conn, fullTableName, 3);
             conn.commit();
         }
@@ -1917,7 +1921,7 @@ public abstract class BaseTest {
                 "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
                 + (options!=null? options : "");
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            Connection conn = DriverManager.getConnection(getUrl(), props);
+            Connection conn = DriverManager.getConnection(getOldUrl(), props);
             conn.createStatement().execute(ddl);
             conn.close();
     }
@@ -1930,7 +1934,7 @@ public abstract class BaseTest {
     // Populate the test table with data.
     protected static void populateMultiCFTestTable(String tableName, Date date) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getOldUrl(), props);
         try {
             String upsert = "UPSERT INTO " + tableName
                     + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";

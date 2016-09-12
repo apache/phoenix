@@ -106,7 +106,7 @@ public class BaseConnectionlessQueryTest extends BaseTest {
             driver = new PhoenixTestDriver(props);
             DriverManager.registerDriver(driver);
             // Register Calcite-Phoenix Test Driver
-            DriverManager.registerDriver(new PhoenixCalciteTestDriver());
+            Class.forName(org.apache.phoenix.jdbc.PhoenixCalciteTestDriver.class.getName());
         }
         return driver;
     }
