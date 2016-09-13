@@ -31,6 +31,7 @@ import java.io.EOFException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -751,7 +752,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             boolean clearedCache = false;
             for (List<Pair<Scan,Future<PeekingResultIterator>>> future : reverseIfNecessary(futures,isReverse)) {
                 List<PeekingResultIterator> concatIterators = Lists.newArrayListWithExpectedSize(future.size());
-                for (Pair<Scan,Future<PeekingResultIterator>> scanPair : reverseIfNecessary(future,isReverse)) {
+                Iterator<Pair<Scan, Future<PeekingResultIterator>>> scanPairItr = reverseIfNecessary(future,isReverse).iterator();
+                while (scanPairItr.hasNext()) {
+                    Pair<Scan,Future<PeekingResultIterator>> scanPair = scanPairItr.next();
                     try {
                         long timeOutForScan = maxQueryEndTime - System.currentTimeMillis();
                         if (timeOutForScan < 0) {
@@ -773,6 +776,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException e2) {
+                            scanPairItr.remove();
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
                                 services.clearTableRegionCache(physicalTableName);
