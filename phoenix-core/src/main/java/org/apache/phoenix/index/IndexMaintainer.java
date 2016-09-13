@@ -50,6 +50,7 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
@@ -85,18 +86,18 @@ import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+import org.apache.tephra.TxConstants;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-
-import org.apache.tephra.TxConstants;
 
 /**
  * 
@@ -416,7 +417,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 	                this.rowKeyMetaData.setIndexPkPosition(dataPkPos, indexPos);
 	            } else {
 	                indexColByteSize += column.getDataType().isFixedWidth() ? SchemaUtil.getFixedByteSize(column) : ValueSchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-	                this.indexedExpressions.add(expression);
+	                try {
+	                    // Surround constant with cast so that we can still know the original type. Otherwise, if we lose the type,
+	                    // (for example when VARCHAR becomes CHAR), it can lead to problems in the type translation we do between data tables and indexes.
+	                    if (column.isNullable() && ExpressionUtil.isConstant(expression)) {
+	                        expression = CoerceExpression.create(expression, indexColumn.getDataType());
+	                    }
+                        this.indexedExpressions.add(expression);
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e); // Impossible
+                    }
 	            }
             }
             else {

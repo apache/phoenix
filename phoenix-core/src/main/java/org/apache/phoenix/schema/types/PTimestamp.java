@@ -31,13 +31,19 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 
+import com.google.common.base.Preconditions;
+
 public class PTimestamp extends PDataType<Timestamp> {
     public static final int MAX_NANOS_VALUE_EXCLUSIVE = 1000000;
     public static final PTimestamp INSTANCE = new PTimestamp();
 
+    protected PTimestamp(String sqlTypeName, int sqlType, int ordinal) {
+        super(sqlTypeName, sqlType, java.sql.Timestamp.class, null, ordinal);
+    }
+
     private PTimestamp() {
         super("TIMESTAMP", Types.TIMESTAMP, java.sql.Timestamp.class,
-                new PDate.DateCodec(), 9);
+                null, 9);
     }
 
     @Override
@@ -45,6 +51,28 @@ public class PTimestamp extends PDataType<Timestamp> {
         byte[] bytes = new byte[getByteSize()];
         toBytes(object, bytes, 0);
         return bytes;
+    }
+
+    @Override
+    public void coerceBytes(ImmutableBytesWritable ptr, Object o, PDataType actualType, Integer actualMaxLength,
+            Integer actualScale, SortOrder actualModifier, Integer desiredMaxLength, Integer desiredScale,
+            SortOrder expectedModifier) {
+        Preconditions.checkNotNull(actualModifier);
+        Preconditions.checkNotNull(expectedModifier);
+        if (ptr.getLength() == 0) { return; }
+        if (this.isBytesComparableWith(actualType)) { // No coerce necessary
+            if (actualModifier != expectedModifier || (actualType.isFixedWidth() && actualType.getByteSize() < this.getByteSize())) {
+                byte[] b = new byte[this.getByteSize()];
+                System.arraycopy(ptr.get(), ptr.getOffset(), b, 0, actualType.getByteSize());
+                ptr.set(b);
+                
+                if (actualModifier != expectedModifier) {
+                    SortOrder.invert(b, 0, b, 0, b.length);
+                }
+            }
+            return;
+        }
+        super.coerceBytes(ptr, o, actualType, actualMaxLength, actualScale, actualModifier, desiredMaxLength, desiredScale, expectedModifier);
     }
 
     @Override
@@ -61,7 +89,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         java.sql.Timestamp value = (java.sql.Timestamp) object;
         // For Timestamp, the getTime() method includes milliseconds that may
         // be stored in the nanos part as well.
-        PDate.INSTANCE.getCodec().encodeLong(value.getTime(), bytes, offset);
+        DateUtil.getCodecFor(this).encodeLong(value.getTime(), bytes, offset);
 
         /*
          * By not getting the stuff that got spilled over from the millis part,
@@ -70,6 +98,11 @@ public class PTimestamp extends PDataType<Timestamp> {
          */
         Bytes.putInt(bytes, offset + Bytes.SIZEOF_LONG, value.getNanos() % MAX_NANOS_VALUE_EXCLUSIVE);
         return getByteSize();
+    }
+
+    @Override
+    public boolean isBytesComparableWith(PDataType otherType) {
+      return super.isBytesComparableWith(otherType) || otherType == PTime.INSTANCE || otherType == PDate.INSTANCE || otherType == PLong.INSTANCE;
     }
 
     @Override
@@ -106,8 +139,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         java.sql.Timestamp v;
         if (equalsAny(actualType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE)) {
             long millisDeserialized =
-                    (actualType == PTimestamp.INSTANCE ? PDate.INSTANCE : PUnsignedDate.INSTANCE).getCodec()
-                    .decodeLong(b, o, sortOrder);
+                    DateUtil.getCodecFor(actualType).decodeLong(b, o, sortOrder);
             v = new java.sql.Timestamp(millisDeserialized);
             int nanosDeserialized =
                     PUnsignedInt.INSTANCE.getCodec().decodeInt(b, o + Bytes.SIZEOF_LONG, sortOrder);
@@ -174,7 +206,7 @@ public class PTimestamp extends PDataType<Timestamp> {
         if (equalsAny(rhsType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE)) {
             return ((java.sql.Timestamp) lhs).compareTo((java.sql.Timestamp) rhs);
         }
-        int c = ((java.util.Date) rhs).compareTo((java.util.Date) lhs);
+        int c = ((java.util.Date) lhs).compareTo((java.util.Date) rhs);
         if (c != 0) return c;
         return ((java.sql.Timestamp) lhs).getNanos();
     }
@@ -205,7 +237,7 @@ public class PTimestamp extends PDataType<Timestamp> {
 
     @Override
     public long getMillis(ImmutableBytesWritable ptr, SortOrder sortOrder) {
-        long millis = PLong.INSTANCE.getCodec().decodeLong(ptr.get(), ptr.getOffset(), sortOrder);
+        long millis = DateUtil.getCodecFor(this).decodeLong(ptr.get(), ptr.getOffset(), sortOrder);
         return millis;
     }
 

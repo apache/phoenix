@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
  */
 @BuiltInFunction(name=SecondFunction.NAME, 
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class SecondFunction extends ScalarFunction {
+public class SecondFunction extends DateScalarFunction {
     public static final String NAME = "SECOND";
 
     public SecondFunction() {
@@ -56,7 +56,7 @@ public class SecondFunction extends ScalarFunction {
         if ( ptr.getLength() == 0) {
             return true; //means null
         }
-        long dateTime = expression.getDataType().getCodec().decodeLong(ptr, expression.getSortOrder());
+        long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
         int sec = (int)((dateTime/1000) % 60);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];

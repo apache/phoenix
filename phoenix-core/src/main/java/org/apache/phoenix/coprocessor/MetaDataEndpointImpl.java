@@ -924,8 +924,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         
         
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
-        List<PTable> indexes = new ArrayList<PTable>();
-        List<PName> physicalTables = new ArrayList<PName>();
+        List<PTable> indexes = Lists.newArrayList();
+        List<PName> physicalTables = Lists.newArrayList();
+        PName parentTableName = tableType == INDEX ? dataTableName : null;
+        PName parentSchemaName = tableType == INDEX ? schemaName : null;
         while (true) {
           results.clear();
           scanner.next(results);
@@ -943,6 +945,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                   addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
               } else if (linkType == LinkType.PHYSICAL_TABLE) {
                   physicalTables.add(famName);
+              } else if (linkType == LinkType.PARENT_TABLE) {
+                  parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(famName.getBytes()));
+                  parentSchemaName = PNameFactory.newName(SchemaUtil.getSchemaNameFromFullName(famName.getBytes()));
               }
           } else {
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
@@ -951,8 +956,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum,
-                pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,
-                tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName,
+                pkName, saltBucketNum, columns, parentSchemaName, parentTableName, indexes, isImmutableRows, physicalTables, defaultFamilyName,
                 viewStatement, disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType,
                 rowKeyOrderOptimizable, transactional, updateCacheFrequency, baseColumnCount,
                 indexDisableTimestamp, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema);
@@ -1718,7 +1722,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Make sure we're not deleting the "wrong" child
-        if (!Arrays.equals(parentTableName, table.getParentTableName() == null ? null : table.getParentTableName().getBytes())) {
+        if (parentTableName!=null && table.getParentTableName() != null && !Arrays.equals(parentTableName, table.getParentTableName().getBytes())) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Since we don't allow back in time DDL, we know if we have a table it's the one

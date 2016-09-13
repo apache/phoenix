@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema;
 
-import static com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static com.google.common.collect.Sets.newLinkedHashSet;
 import static com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
@@ -111,6 +110,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -120,7 +120,6 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -216,7 +215,6 @@ import org.apache.tephra.TxConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
@@ -543,7 +541,7 @@ public class MetaDataClient {
                         // In this case, we update the parent table which may in turn pull
                         // in indexes to add to this table.
                         long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                        if (addIndexesFromPhysicalTable(result, resolvedTimestamp)) {
+                        if (addIndexesFromParentTable(result, resolvedTimestamp)) {
                             connection.addTable(result.getTable(), resolvedTime);
                         }
                         else {
@@ -658,7 +656,7 @@ public class MetaDataClient {
     }
 
     /**
-     * Fault in the physical table to the cache and add any indexes it has to the indexes
+     * Fault in the parent table to the cache and add any indexes it has to the indexes
      * of the table for which we just updated.
      * TODO: combine this round trip with the one that updates the cache for the child table.
      * @param result the result from updating the cache for the current table.
@@ -666,29 +664,30 @@ public class MetaDataClient {
      * @return true if the PTable contained by result was modified and false otherwise
      * @throws SQLException if the physical table cannot be found
      */
-    private boolean addIndexesFromPhysicalTable(MetaDataMutationResult result, Long resolvedTimestamp) throws SQLException {
+    private boolean addIndexesFromParentTable(MetaDataMutationResult result, Long resolvedTimestamp) throws SQLException {
         PTable view = result.getTable();
         // If not a view or if a view directly over an HBase table, there's nothing to do
         if (view.getType() != PTableType.VIEW || view.getViewType() == ViewType.MAPPED) {
             return false;
         }
-        String physicalName = view.getPhysicalName().getString();
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
-        String tableName = SchemaUtil.getTableNameFromFullName(physicalName);
-        MetaDataMutationResult parentResult = updateCache(null, schemaName, tableName, false, resolvedTimestamp);
-        PTable physicalTable = parentResult.getTable();
-        if (physicalTable == null) {
+        // a view on a table will not have a parent name but will have a physical table name (which is the parent)
+        String parentName = view.getParentName().getString();
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(parentName);
+        String tableName = SchemaUtil.getTableNameFromFullName(parentName);
+        MetaDataMutationResult parentResult = updateCache(connection.getTenantId(), schemaName, tableName, false, resolvedTimestamp);
+        PTable parentTable = parentResult.getTable();
+        if (parentTable == null) {
             throw new TableNotFoundException(schemaName, tableName);
         }
         if (!result.wasUpdated() && !parentResult.wasUpdated()) {
             return false;
         }
-        List<PTable> physicalTableIndexes = physicalTable.getIndexes();
-        if (physicalTableIndexes.isEmpty()) {
+        List<PTable> parentTableIndexes = parentTable.getIndexes();
+        if (parentTableIndexes.isEmpty()) {
             return false;
         }
         // Filter out indexes if column doesn't exist in view
-        List<PTable> indexesToAdd = Lists.newArrayListWithExpectedSize(physicalTableIndexes.size() + view.getIndexes().size());
+        List<PTable> indexesToAdd = Lists.newArrayListWithExpectedSize(parentTableIndexes.size() + view.getIndexes().size());
         if (result.wasUpdated()) { // Table from server never contains inherited indexes
             indexesToAdd.addAll(view.getIndexes());
         } else { // Only add original ones, as inherited ones may have changed
@@ -699,11 +698,11 @@ public class MetaDataClient {
                 }
             }
         }
-        for (PTable index : physicalTableIndexes) {
+        for (PTable index : parentTableIndexes) {
             boolean containsAllReqdCols = true;
             // Ensure that all columns required to create index exist in the view too,
             // since view columns may be removed.
-            IndexMaintainer indexMaintainer = index.getIndexMaintainer(physicalTable, connection);
+            IndexMaintainer indexMaintainer = index.getIndexMaintainer(parentTable, connection);
             // Check that the columns required for the index pk are present in the view
             Set<ColumnReference> indexColRefs = indexMaintainer.getIndexedColumns();
             for (ColumnReference colRef : indexColRefs) {
@@ -722,7 +721,7 @@ public class MetaDataClient {
                 }
             }
             // Ensure that constant columns (i.e. columns matched in the view WHERE clause)
-            // all exist in the index on the physical table.
+            // all exist in the index on the parent table. 
             for (PColumn col : view.getColumns()) {
                 if (col.getViewConstant() != null) {
                     try {
@@ -731,17 +730,36 @@ public class MetaDataClient {
                         // would fail to compile.
                         String indexColumnName = IndexUtil.getIndexColumnName(col);
                         index.getColumn(indexColumnName);
-                    } catch (ColumnNotFoundException e) { // Ignore this index and continue with others
-                        containsAllReqdCols = false;
-                        break;
+                    } catch (ColumnNotFoundException e1) { 
+                        PColumn indexCol = null;
+                        try {
+                            String cf = col.getFamilyName()!=null ? col.getFamilyName().getString() : null;
+                            String cq = col.getName().getString();
+                            if (cf!=null) {
+                                indexCol = parentTable.getColumnFamily(cf).getColumn(cq);
+                            }
+                            else {
+                                indexCol = parentTable.getColumn(cq);
+                            }
+                        } catch (ColumnNotFoundException e2) { // Ignore this index and continue with others
+                            containsAllReqdCols = false;
+                            break;
+                        }
+                        if (indexCol.getViewConstant()==null || Bytes.compareTo(indexCol.getViewConstant(), col.getViewConstant())!=0) {
+                            containsAllReqdCols = false;
+                            break;
+                        }
                     }
                 }
             }
             if (containsAllReqdCols) {
                 // Tack on view statement to index to get proper filtering for view
-                String viewStatement = IndexUtil.rewriteViewStatement(connection, index, physicalTable, view.getViewStatement());
-                index = PTableImpl.makePTable(index, viewStatement);
-                indexesToAdd.add(index);
+                String viewStatement = IndexUtil.rewriteViewStatement(connection, index, parentTable, view.getViewStatement());
+                PName modifiedIndexName = PNameFactory.newName(index.getSchemaName().getString() + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR 
+                    + index.getName().getString() + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + view.getName().getString());
+                // add the index table with a new name so that it does not conflict with the existing index table 
+                // also set update cache frequency to never since the renamed index is not present on the server 
+                indexesToAdd.add(PTableImpl.makePTable(index, modifiedIndexName, viewStatement, Long.MAX_VALUE, view.getTenantId()));
             }
         }
         PTable allIndexesTable = PTableImpl.makePTable(view, view.getTimeStamp(), indexesToAdd);
@@ -1446,8 +1464,11 @@ public class MetaDataClient {
         }
 
         if (logger.isInfoEnabled()) logger.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
+        boolean asyncIndexBuildEnabled = connection.getQueryServices().getProps().getBoolean(
+            QueryServices.INDEX_ASYNC_BUILD_ENABLED,
+            QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
         // In async process, we return immediately as the MR job needs to be triggered .
-        if(statement.isAsync()) {
+        if(statement.isAsync() && asyncIndexBuildEnabled) {
             return new MutationState(0, connection);
         }
         
@@ -1883,7 +1904,7 @@ public class MetaDataClient {
             }
 
             List<ColumnDef> colDefs = statement.getColumnDefs();
-            List<PColumn> columns;
+            LinkedHashMap<PColumn,PColumn> columns;
             LinkedHashSet<PColumn> pkColumns;
 
             if (tenantId != null && !sharedTable) {
@@ -1902,7 +1923,7 @@ public class MetaDataClient {
             if (tableType == PTableType.VIEW) {
                 physicalNames = Collections.singletonList(PNameFactory.newName(parent.getPhysicalName().getString()));
                 if (viewType == ViewType.MAPPED) {
-                    columns = newArrayListWithExpectedSize(colDefs.size());
+                    columns = Maps.newLinkedHashMap();
                     pkColumns = newLinkedHashSetWithExpectedSize(colDefs.size());
                 } else {
                     // Propagate property values to VIEW.
@@ -1923,8 +1944,10 @@ public class MetaDataClient {
                     if (saltBucketNum != null) { // Don't include salt column in columns, as it should not have it when created
                         allColumns = allColumns.subList(1, allColumns.size());
                     }
-                    columns = newArrayListWithExpectedSize(allColumns.size() + colDefs.size());
-                    columns.addAll(allColumns);
+                    columns = new LinkedHashMap<PColumn,PColumn>(allColumns.size() + colDefs.size());
+                    for (PColumn column : allColumns) {
+                        columns.put(column, column);
+                    }
                     pkColumns = newLinkedHashSet(parent.getPKColumns());
 
                     // Add row linking from view to its parent table
@@ -1940,7 +1963,7 @@ public class MetaDataClient {
                     linkStatement.execute();
                 }
             } else {
-                columns = newArrayListWithExpectedSize(colDefs.size());
+                columns = new LinkedHashMap<PColumn,PColumn>(colDefs.size());
                 pkColumns = newLinkedHashSetWithExpectedSize(colDefs.size() + 1); // in case salted
             }
 
@@ -2023,11 +2046,9 @@ public class MetaDataClient {
                         throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                     }
                 }
-                if (tableType == PTableType.VIEW && hasColumnWithSameNameAndFamily(columns, column)) {
-                    // we only need to check for dup columns for views because they inherit columns from parent
+                if (columns.put(column, column) != null) {
                     throw new ColumnAlreadyExistsException(schemaName, tableName, column.getName().getString());
                 }
-                columns.add(column);
                 if ((colDef.getDataType() == PVarbinary.INSTANCE || colDef.getDataType().isArrayType())
                         && SchemaUtil.isPKColumn(column)
                         && pkColumnsIterator.hasNext()) {
@@ -2126,48 +2147,26 @@ public class MetaDataClient {
                 PName newSchemaName = PNameFactory.newName(schemaName);
                 PTable table = PTableImpl.makePTable(tenantId,newSchemaName, PNameFactory.newName(tableName), tableType,
                         null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
-                        PNameFactory.newName(QueryConstants.SYSTEM_TABLE_PK_NAME), null, columns, null, null,
+                        PNameFactory.newName(QueryConstants.SYSTEM_TABLE_PK_NAME), null, columns.values(), null, null,
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
                         Boolean.TRUE.equals(disableWAL), false, false, null, indexId, indexType, true, false, 0, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema);
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
-            } else if (tableType == PTableType.INDEX && indexId == null) {
-                if (tableProps.get(HTableDescriptor.MAX_FILESIZE) == null) {
-                    int nIndexRowKeyColumns = isPK ? 1 : pkColumnsNames.size();
-                    int nIndexKeyValueColumns = columns.size() - nIndexRowKeyColumns;
-                    int nBaseRowKeyColumns = parent.getPKColumns().size() - (parent.getBucketNum() == null ? 0 : 1);
-                    int nBaseKeyValueColumns = parent.getColumns().size() - parent.getPKColumns().size();
-                    /*
-                     * Approximate ratio between index table size and data table size:
-                     * More or less equal to the ratio between the number of key value columns in each. We add one to
-                     * the key value column count to take into account our empty key value. We add 1/4 for any key
-                     * value data table column that was moved into the index table row key.
-                     */
-                    double ratio = (1+nIndexKeyValueColumns + (nIndexRowKeyColumns - nBaseRowKeyColumns)/4d)/(1+nBaseKeyValueColumns);
-                    HTableDescriptor descriptor = connection.getQueryServices().getTableDescriptor(parent.getPhysicalName().getBytes());
-                    if (descriptor != null) { // Is null for connectionless
-                        long maxFileSize = descriptor.getMaxFileSize();
-                        if (maxFileSize == -1) { // If unset, use default
-                            maxFileSize = HConstants.DEFAULT_MAX_FILE_SIZE;
-                        }
-                        tableProps.put(HTableDescriptor.MAX_FILESIZE, (long)(maxFileSize * ratio));
-                    }
-                }
             }
 
             short nextKeySeq = 0;
             
             List<Mutation> columnMetadata = Lists.newArrayListWithExpectedSize(columns.size());
             try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_CREATE_TABLE)) {
-                for (int i = 0; i < columns.size(); i++) {
-                    PColumn column = columns.get(i);
+                for (Map.Entry<PColumn, PColumn> entry : columns.entrySet()) {
+                    PColumn column = entry.getValue();
                     final int columnPosition = column.getPosition();
                     // For client-side cache, we need to update the column
                     // set the autoPartition column attributes   
                     if (parent != null && parent.getAutoPartitionSeqName() != null
                             && parent.getPKColumns().get(MetaDataUtil.getAutoPartitionColIndex(parent)).equals(column)) {
-                        columns.set(i, column = new DelegateColumn(column) {
+                        entry.setValue(column = new DelegateColumn(column) {
                             @Override
                             public byte[] getViewConstant() {
                                 // set to non-null value so that we will generate a Put that 
@@ -2183,7 +2182,7 @@ public class MetaDataClient {
                     }
                     else if (isViewColumnReferenced != null) {
                         if (viewColumnConstants != null && columnPosition < viewColumnConstants.length) {
-                            columns.set(i, column = new DelegateColumn(column) {
+                            entry.setValue(column = new DelegateColumn(column) {
                                 @Override
                                 public byte[] getViewConstant() {
                                     return viewColumnConstants[columnPosition];
@@ -2194,7 +2193,7 @@ public class MetaDataClient {
                                 }
                             });
                         } else {
-                            columns.set(i, column = new DelegateColumn(column) {
+                            entry.setValue(column = new DelegateColumn(column) {
                                 @Override
                                 public boolean isViewReferenced() {
                                     return isViewColumnReferenced.get(columnPosition);
@@ -2211,7 +2210,6 @@ public class MetaDataClient {
             // add the columns in reverse order since we reverse the list later
             Collections.reverse(columnMetadata);
             tableMetaData.addAll(columnMetadata);
-
             String dataTableName = parent == null || tableType == PTableType.VIEW ? null : parent.getTableName().getString();
             PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : PIndexState.BUILDING;
             PreparedStatement tableUpsert = connection.prepareStatement(CREATE_TABLE);
@@ -2334,19 +2332,12 @@ public class MetaDataClient {
                 // If the parent table of the view has the auto partition sequence name attribute,
                 // set the view statement and relevant partition column attributes correctly
                 if (parent!=null && parent.getAutoPartitionSeqName()!=null) {
-                    int autoPartitionColIndex = -1;
-                    PColumn autoPartitionCol = parent.getPKColumns().get(MetaDataUtil.getAutoPartitionColIndex(parent));
-                    for (int i=0; i<columns.size(); ++i) {
-                        if (autoPartitionCol.getName().equals(columns.get(i).getName())) {
-                            autoPartitionColIndex = i;
-                        }
-                    }
+                    final PColumn autoPartitionCol = parent.getPKColumns().get(MetaDataUtil.getAutoPartitionColIndex(parent));
                     final Long autoPartitionNum = Long.valueOf(result.getAutoPartitionNum());
-                    final PColumn column = columns.get(autoPartitionColIndex);
-                    columns.set(autoPartitionColIndex, new DelegateColumn(column) {
+                    columns.put(autoPartitionCol, new DelegateColumn(autoPartitionCol) {
                         @Override
                         public byte[] getViewConstant() {
-                            PDataType dataType = column.getDataType();
+                            PDataType dataType = autoPartitionCol.getDataType();
                             Object val = dataType.toObject(autoPartitionNum, PLong.INSTANCE);
                             byte[] bytes = new byte [dataType.getByteSize() + 1];
                             dataType.toBytes(val, bytes, 0);
@@ -2368,8 +2359,8 @@ public class MetaDataClient {
                 PName newSchemaName = PNameFactory.newName(schemaName);
                 PTable table =  PTableImpl.makePTable(
                         tenantId, newSchemaName, PNameFactory.newName(tableName), tableType, indexState, timestamp!=null ? timestamp : result.getMutationTime(),
-                        PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns,
-                        dataTableName == null ? null : newSchemaName, dataTableName == null ? null : PNameFactory.newName(dataTableName), Collections.<PTable>emptyList(), isImmutableRows,
+                        PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns.values(),
+                        parent == null ? null : parent.getSchemaName(), parent == null ? null : parent.getTableName(), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
                         indexId, indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
@@ -2379,29 +2370,6 @@ public class MetaDataClient {
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
-    }
-
-    private byte[][] getSplitKeys(List<HRegionLocation> allTableRegions) {
-        if(allTableRegions.size() == 1) return null;
-        byte[][] splitKeys = new byte[allTableRegions.size()-1][];
-        int i = 0;
-        for (HRegionLocation region : allTableRegions) {
-            if (region.getRegionInfo().getStartKey().length != 0) {
-                splitKeys[i] = region.getRegionInfo().getStartKey();
-                i++;
-            }
-        }
-        return splitKeys;
-    }
-
-    private static boolean hasColumnWithSameNameAndFamily(Collection<PColumn> columns, PColumn column) {
-        for (PColumn currColumn : columns) {
-           if (Objects.equal(currColumn.getFamilyName(), column.getFamilyName()) &&
-               Objects.equal(currColumn.getName(), column.getName())) {
-               return true;
-           }
-        }
-        return false;
     }
 
     /**
@@ -2514,7 +2482,6 @@ public class MetaDataClient {
             Delete tableDelete = new Delete(key, clientTimeStamp);
             tableMetaData.add(tableDelete);
             boolean hasViewIndexTable = false;
-            boolean hasLocalIndexTable = false;
             if (parentTableName != null) {
                 byte[] linkKey = MetaDataUtil.getParentLinkKey(tenantIdStr, schemaName, parentTableName, tableName);
                 Delete linkDelete = new Delete(linkKey, clientTimeStamp);
@@ -2555,11 +2522,6 @@ public class MetaDataClient {
                         // PName name, PTableType type, long timeStamp, long sequenceNumber, List<PColumn> columns
                         // All multi-tenant tables have a view index table, so no need to check in that case
                         if (parentTableName == null) {
-                            for (PTable index : table.getIndexes()) {
-                                if (index.getIndexType() == IndexType.LOCAL) {
-                                    hasLocalIndexTable = true;
-                                } 
-                            }
                             hasViewIndexTable = true;// keeping always true for deletion of stats if view index present
                                                      // or not
                             MetaDataUtil.deleteViewIndexSequences(connection, table.getPhysicalName(),
@@ -3182,7 +3144,7 @@ public class MetaDataClient {
         }
     }
 
-    private String dropColumnMutations(PTable table, List<PColumn> columnsToDrop, List<Mutation> tableMetaData) throws SQLException {
+    private String dropColumnMutations(PTable table, List<PColumn> columnsToDrop) throws SQLException {
         String tenantId = connection.getTenantId() == null ? "" : connection.getTenantId().getString();
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3298,7 +3260,9 @@ public class MetaDataClient {
                     columnsToDrop.add(new ColumnRef(columnRef.getTableRef(), columnToDrop.getPosition()));
                 }
 
-                dropColumnMutations(table, tableColumnsToDrop, tableMetaData);
+                dropColumnMutations(table, tableColumnsToDrop);
+                boolean removedIndexTableOrColumn=false;
+                Long timeStamp = table.isTransactional() ? tableRef.getTimeStamp() : null;
                 for (PTable index : table.getIndexes()) {
                     IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
                     // get the columns required for the index pk
@@ -3313,6 +3277,7 @@ public class MetaDataClient {
                             if (index.getViewIndexId()==null) 
                                 indexesToDrop.add(new TableRef(index));
                             connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, index.getName().getString()), index.getParentName() == null ? null : index.getParentName().getString(), index.getTimeStamp());
+                            removedIndexTableOrColumn = true;
                         } 
                         else if (coveredColumns.contains(columnToDropRef)) {
                             String indexColumnName = IndexUtil.getIndexColumnName(columnToDrop);
@@ -3320,15 +3285,18 @@ public class MetaDataClient {
                             indexColumnsToDrop.add(indexColumn);
                             // add the index column to be dropped so that we actually delete the column values
                             columnsToDrop.add(new ColumnRef(new TableRef(index), indexColumn.getPosition()));
+                            removedIndexTableOrColumn = true;
                         }
                     }
                     if(!indexColumnsToDrop.isEmpty()) {
-                        incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(), null, null);
-                        dropColumnMutations(index, indexColumnsToDrop, tableMetaData);
+                        long indexTableSeqNum = incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(), null, null);
+                        dropColumnMutations(index, indexColumnsToDrop);
+                        long clientTimestamp = MutationState.getMutationTimestamp(timeStamp, connection.getSCN());
+                        connection.removeColumn(tenantId, index.getName().getString(),
+                            indexColumnsToDrop, clientTimestamp, indexTableSeqNum,
+                            TransactionUtil.getResolvedTimestamp(connection, index.isTransactional(), clientTimestamp));
                     }
-
                 }
-                Long timeStamp = table.isTransactional() ? tableRef.getTimeStamp() : null;
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
 
@@ -3383,8 +3351,11 @@ public class MetaDataClient {
                     // If we've done any index metadata updates, don't bother trying to update
                     // client-side cache as it would be too painful. Just let it pull it over from
                     // the server when needed.
-                    if (tableColumnsToDrop.size() > 0 && indexesToDrop.isEmpty()) {
-                        connection.removeColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName) , tableColumnsToDrop, result.getMutationTime(), seqNum, TransactionUtil.getResolvedTime(connection, result));
+                    if (tableColumnsToDrop.size() > 0) {
+                        if (removedIndexTableOrColumn)
+                            connection.removeTable(tenantId, tableName, table.getParentName() == null ? null : table.getParentName().getString(), table.getTimeStamp());
+                        else  
+                            connection.removeColumn(tenantId, SchemaUtil.getTableName(schemaName, tableName) , tableColumnsToDrop, result.getMutationTime(), seqNum, TransactionUtil.getResolvedTime(connection, result));
                     }
                     // If we have a VIEW, then only delete the metadata, and leave the table data alone
                     if (table.getType() != PTableType.VIEW) {
@@ -3561,7 +3532,7 @@ public class MetaDataClient {
     }
 
     private PTable addTableToCache(MetaDataMutationResult result) throws SQLException {
-        addIndexesFromPhysicalTable(result, null);
+        addIndexesFromParentTable(result, null);
         PTable table = result.getTable();
         connection.addTable(table, TransactionUtil.getResolvedTime(connection, result));
         return table;
@@ -3713,7 +3684,7 @@ public class MetaDataClient {
                 || useSchemaStatement.getSchemaName().toUpperCase().equals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE)) {
             connection.setSchema(null);
         } else {
-            PSchema schema = FromCompiler.getResolverForSchema(useSchemaStatement, connection)
+            FromCompiler.getResolverForSchema(useSchemaStatement, connection)
                     .resolveSchema(useSchemaStatement.getSchemaName());
             connection.setSchema(useSchemaStatement.getSchemaName());
         }

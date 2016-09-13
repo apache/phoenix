@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
+import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
@@ -49,12 +50,14 @@ public class StatisticsScanner implements InternalScanner {
     private StatisticsCollector tracker;
     private ImmutableBytesPtr family;
     private final Configuration config;
+    private final RegionServerServices regionServerServices;
 
     public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, RegionCoprocessorEnvironment env,
             InternalScanner delegate, ImmutableBytesPtr family) {
         this.tracker = tracker;
         this.statsWriter = stats;
         this.delegate = delegate;
+        this.regionServerServices = env.getRegionServerServices();
         this.region = env.getRegion();
         this.family = family;
         this.config = env.getConfiguration();
@@ -89,9 +92,13 @@ public class StatisticsScanner implements InternalScanner {
 
     @Override
     public void close() throws IOException {
-        boolean async = config.getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
-        StatisticsCollectionRunTracker collectionTracker = StatisticsCollectionRunTracker.getInstance(config);
-        StatisticsScannerCallable callable = new StatisticsScannerCallable();
+        boolean async = getConfig().getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
+        StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
+        StatisticsScannerCallable callable = createCallable();
+        if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
+            LOG.debug("Not updating table statistics because the server is stopping/stopped");
+            return;
+        }
         if (!async) {
             callable.call();
         } else {
@@ -99,12 +106,45 @@ public class StatisticsScanner implements InternalScanner {
         }
     }
 
-    private class StatisticsScannerCallable implements Callable<Void> {
+    // VisibleForTesting
+    StatisticsCollectionRunTracker getStatsCollectionRunTracker(Configuration c) {
+        return StatisticsCollectionRunTracker.getInstance(c);
+    }
+
+    Configuration getConfig() {
+        return config;
+    }
+
+    StatisticsWriter getStatisticsWriter() {
+        return statsWriter;
+    }
+
+    RegionServerServices getRegionServerServices() {
+        return regionServerServices;
+    }
+
+    Region getRegion() {
+        return region;
+    }
+
+    StatisticsScannerCallable createCallable() {
+        return new StatisticsScannerCallable();
+    }
+
+    StatisticsCollector getTracker() {
+        return tracker;
+    }
+
+    InternalScanner getDelegate() {
+        return delegate;
+    }
+
+    class StatisticsScannerCallable implements Callable<Void> {
         @Override
         public Void call() throws IOException {
             IOException toThrow = null;
-            StatisticsCollectionRunTracker collectionTracker = StatisticsCollectionRunTracker.getInstance(config);
-            final HRegionInfo regionInfo = region.getRegionInfo();
+            StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
+            final HRegionInfo regionInfo = getRegion().getRegionInfo();
             try {
                 // update the statistics table
                 // Just verify if this if fine
@@ -114,32 +154,36 @@ public class StatisticsScanner implements InternalScanner {
                     LOG.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
-                statsWriter.deleteStats(region, tracker, family, mutations);
+                getStatisticsWriter().deleteStats(region, tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
-                statsWriter.addStats(tracker, family, mutations);
+                getStatisticsWriter().addStats(tracker, family, mutations);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
                             + " as part of major compaction");
                 }
-                statsWriter.commitStats(mutations, tracker);
+                getStatisticsWriter().commitStats(mutations, tracker);
             } catch (IOException e) {
-                LOG.error("Failed to update statistics table!", e);
-                toThrow = e;
+                if (getRegionServerServices().isStopping() || getRegionServerServices().isStopped()) {
+                    LOG.debug("Ignoring error updating statistics because region is closing/closed");
+                } else {
+                    LOG.error("Failed to update statistics table!", e);
+                    toThrow = e;
+                }
             } finally {
                 try {
                     collectionTracker.removeCompactingRegion(regionInfo);
-                    statsWriter.close();// close the writer
-                    tracker.close();// close the tracker
+                    getStatisticsWriter().close();// close the writer
+                    getTracker().close();// close the tracker
                 } catch (IOException e) {
                     if (toThrow == null) toThrow = e;
                     LOG.error("Error while closing the stats table", e);
                 } finally {
                     // close the delegate scanner
                     try {
-                        delegate.close();
+                        getDelegate().close();
                     } catch (IOException e) {
                         if (toThrow == null) toThrow = e;
                         LOG.error("Error while closing the scanner", e);

@@ -55,6 +55,7 @@ import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
@@ -115,13 +116,13 @@ public class ScanUtil {
     // Use getTenantId and pass in column name to match against
     // in as PSchema attribute. If column name matches in 
     // KeyExpressions, set on scan as attribute
-    public static ImmutableBytesWritable getTenantId(Scan scan) {
+    public static ImmutableBytesPtr getTenantId(Scan scan) {
         // Create Scan with special aggregation column over which to aggregate
         byte[] tenantId = scan.getAttribute(PhoenixRuntime.TENANT_ID_ATTRIB);
         if (tenantId == null) {
             return null;
         }
-        return new ImmutableBytesWritable(tenantId);
+        return new ImmutableBytesPtr(tenantId);
     }
     
     public static void setCustomAnnotations(Scan scan, byte[] annotations) {
