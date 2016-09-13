@@ -17,27 +17,18 @@
  */
 package org.apache.phoenix.schema;
 
-public class PTableRef {
-    private final PTable table;
-    private final int estSize;
-    private final long createTime;
-    private final long resolvedTimeStamp;
-	private volatile long lastAccessTime;
+public abstract class PTableRef {
     
-    public PTableRef(PTable table, long lastAccessTime, int estSize, long resolvedTime) {
-        this.table = table;
+    protected final int estSize;
+    protected final long createTime;
+    protected final long resolvedTimeStamp;
+    protected volatile long lastAccessTime;
+    
+    public PTableRef(long lastAccessTime, long resolvedTime, int estimatedSize) {
         this.lastAccessTime = lastAccessTime;
-        this.estSize = estSize;
+        this.estSize = estimatedSize;
         this.resolvedTimeStamp = resolvedTime;
         this.createTime = lastAccessTime;
-    }
-
-    public PTableRef(PTable table, long lastAccessTime, long resolvedTime) {
-        this (table, lastAccessTime, table.getEstimatedSize(), resolvedTime);
-    }
-
-    public PTableRef(PTableRef tableRef) {
-        this (tableRef.table, tableRef.lastAccessTime, tableRef.estSize, tableRef.resolvedTimeStamp);
     }
     
     /**
@@ -48,23 +39,22 @@ public class PTableRef {
         return createTime;
     }
     
-    public PTable getTable() {
-		return table;
-	}
+    public abstract PTable getTable();
 
-	public long getResolvedTimeStamp() {
-		return resolvedTimeStamp;
-	}
+    public long getResolvedTimeStamp() {
+        return resolvedTimeStamp;
+    }
+    
+    public int getEstimatedSize() {
+        return estSize;
+    }
+
+    public long getLastAccessTime() {
+        return lastAccessTime;
+    }
+
+    public void setLastAccessTime(long lastAccessTime) {
+        this.lastAccessTime = lastAccessTime;
+    }
 	
-    public int getEstSize() {
-		return estSize;
-	}
-
-	public long getLastAccessTime() {
-		return lastAccessTime;
-	}
-
-	public void setLastAccessTime(long lastAccessTime) {
-		this.lastAccessTime = lastAccessTime;
-	}
 }

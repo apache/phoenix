@@ -39,14 +39,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
+import java.sql.*;
 import java.text.Format;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
@@ -731,5 +724,754 @@ public class DateTimeIT extends BaseHBaseManagedTimeIT {
                 ".id, current_time() from t1 op where op.id in (select id from t2)");
         assertTrue(rs.next());
         assertEquals(new java.util.Date().getYear(),rs.getTimestamp(2).getYear());
+    }
+    
+    @Test
+    public void testLiteralDateComparison() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select DATE '2016-05-10 00:00:00' > DATE '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testLiteralTimestampComparison() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select TIMESTAMP '2016-05-10 00:00:00' > TIMESTAMP '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testLiteralDateTimestampComparison() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select DATE '2016-05-10 00:00:00' > TIMESTAMP '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testLiteralDateTimestampComparison2() throws Exception {
+        ResultSet rs =
+                conn.createStatement().executeQuery(
+                    "select TIMESTAMP '2016-05-10 00:00:00' > DATE '2016-05-11 00:00:00'");
+
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testFunctionOnNullDate() throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT YEAR(a_date), entity_id from " + ATABLE_NAME + " WHERE entity_id = '" + ROW10 + "'");
+        assertNotNull(rs);
+        assertTrue(rs.next());
+        assertEquals(ROW10, rs.getString(2));
+        assertNull(rs.getDate(1));
+        assertNull(rs.getDate(1, GregorianCalendar.getInstance()));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedDateTimestampUnequal() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, timestamps TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setDate(2, new Date(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedTimeTimestampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times TIME, timestamps TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIME('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setTime(2, new Time(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT times = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedDateTimeCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, times TIME)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIME('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = times FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedDateUnsignedTimestampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, timestamps UNSIGNED_TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setDate(2, new Date(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedTimeUnsignedTimestampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times TIME, timestamps UNSIGNED_TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIME('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setTime(2, new Time(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT times = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedDateUnsignedTimeCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, times UNSIGNED_TIME)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIME('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = times FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedDateTimestampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, timestamps TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setDate(2, new Date(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedTimeTimestampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times UNSIGNED_TIME, timestamps TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIME('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setTime(2, new Time(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT times = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedDateTimeCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, times TIME)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIME('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = times FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedDateUnsignedTimestampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, timestamps UNSIGNED_TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setDate(2, new Date(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedTimeUnsignedTimestampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times UNSIGNED_TIME, timestamps UNSIGNED_TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIME('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        stmt.setTime(2, new Time(1000));
+        Timestamp ts = new Timestamp(1000);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT times = timestamps FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedDateUnsignedTimeCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, times UNSIGNED_TIME)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_TIME('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT dates = times FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedDateDateCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, date1 DATE, date2 DATE)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_DATE('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_DATE('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_DATE('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT date1 = date2 FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedDateUnsignedDateCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, date1 UNSIGNED_DATE, date2 UNSIGNED_DATE)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_DATE('2004-02-04 00:10:10')," +
+                "TO_DATE('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_DATE('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_DATE('2004-02-04 00:10:10'), " +
+                "TO_DATE('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT date1 = date2 FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedTimeTimeCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, time1 TIME, time2 TIME)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIME('2004-02-04 00:10:10')," +
+                "TO_TIME('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT time1 = time2 FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedTimeUnsignedTimeCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, time1 UNSIGNED_TIME, time2 UNSIGNED_TIME)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIME('2004-02-04 00:10:10')," +
+                "TO_TIME('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (3," +
+                "TO_TIME('2004-02-04 00:10:10'), " +
+                "TO_TIME('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT time1 = time2 FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedTimeStampTimeStampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, timestamp1 TIMESTAMP, timestamp2 TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIMESTAMP('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        Timestamp ts = new Timestamp(1000);
+        stmt.setTimestamp(2, ts);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT timestamp1 = timestamp2 FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testProjectedUnsignedTimeStampUnsignedTimeStampCompare() throws Exception {
+        String tableName = generateRandomString();
+        String ddl =
+                "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, timestamp1 UNSIGNED_TIMESTAMP, timestamp2 UNSIGNED_TIMESTAMP)";
+        conn.createStatement().execute(ddl);
+        // Differ by date
+        String dml = "UPSERT INTO " + tableName + " VALUES (1," +
+                "TO_TIMESTAMP('2004-02-04 00:10:10')," +
+                "TO_TIMESTAMP('2006-04-12 00:10:10'))";
+        conn.createStatement().execute(dml);
+        // Differ by time
+        dml = "UPSERT INTO " + tableName + " VALUES (2," +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 15:10:20'))";
+        conn.createStatement().execute(dml);
+        // Differ by nanoseconds
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)");
+        stmt.setInt(1, 3);
+        Timestamp ts = new Timestamp(1000);
+        stmt.setTimestamp(2, ts);
+        ts.setNanos(100);
+        stmt.setTimestamp(3, ts);
+        stmt.execute();
+        // Equality
+        dml = "UPSERT INTO " + tableName + " VALUES (4," +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'), " +
+                "TO_TIMESTAMP('2004-02-04 00:10:10'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT timestamp1 = timestamp2 FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(false, rs.getBoolean(1));
+        assertTrue(rs.next());
+        assertEquals(true, rs.getBoolean(1));
+        assertFalse(rs.next());
     }
 }

@@ -26,6 +26,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
@@ -39,7 +40,15 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
@@ -52,12 +61,14 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.TransactionUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -817,6 +828,7 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             conn.createStatement().execute("CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, \"V1\" VARCHAR, \"v2\" VARCHAR)"+tableDDLOptions);
             query = "SELECT * FROM "+fullTableName;
             rs = conn.createStatement().executeQuery(query);
+            long ts = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,fullTableName)).getTimeStamp();
             assertFalse(rs.next());
             conn.createStatement().execute(
   	  	          "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + "(\"v2\") INCLUDE (\"V1\")");
@@ -887,7 +899,34 @@ public class IndexIT extends BaseHBaseManagedTimeIT {
             assertEquals("2",rs.getString(5));
             assertEquals("2",rs.getString("v2"));
             assertFalse(rs.next());
+            
+            assertNoIndexDeletes(conn, ts, fullIndexName);
         } 
+    }
+
+    private void assertNoIndexDeletes(Connection conn, long minTimestamp, String fullIndexName) throws IOException, SQLException {
+        if (!this.mutable) {
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            PTable index = pconn.getTable(new PTableKey(null, fullIndexName));
+            byte[] physicalIndexTable = index.getPhysicalName().getBytes();
+            try (HTableInterface hIndex = pconn.getQueryServices().getTable(physicalIndexTable)) {
+                Scan scan = new Scan();
+                scan.setRaw(true);
+                if (this.transactional) {
+                    minTimestamp = TransactionUtil.convertToNanoseconds(minTimestamp);
+                }
+                scan.setTimeRange(minTimestamp, HConstants.LATEST_TIMESTAMP);
+                ResultScanner scanner = hIndex.getScanner(scan);
+                Result result;
+                while ((result = scanner.next()) != null) {
+                    CellScanner cellScanner = result.cellScanner();
+                    while (cellScanner.advance()) {
+                        Cell current = cellScanner.current();
+                        assertEquals (KeyValue.Type.Put.getCode(), current.getTypeByte());
+                    }
+                }
+            };
+        }
     }
 
     @Test

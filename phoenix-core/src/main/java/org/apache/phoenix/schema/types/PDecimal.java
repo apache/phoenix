@@ -28,6 +28,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 
 import com.google.common.base.Preconditions;
@@ -136,9 +137,8 @@ public class PDecimal extends PRealNumber<BigDecimal> {
       return BigDecimal.valueOf(actualType.getCodec().decodeFloat(b, o, sortOrder));
     } else if (equalsAny(actualType, PDouble.INSTANCE, PUnsignedDouble.INSTANCE)) {
       return BigDecimal.valueOf(actualType.getCodec().decodeDouble(b, o, sortOrder));
-    } else if (equalsAny(actualType, PTimestamp.INSTANCE,
-        PUnsignedTimestamp.INSTANCE)) {
-      long millisPart = actualType.getCodec().decodeLong(b, o, sortOrder);
+    } else if (equalsAny(actualType, PTimestamp.INSTANCE, PUnsignedTimestamp.INSTANCE)) {
+      long millisPart = DateUtil.getCodecFor(actualType).decodeLong(b, o, sortOrder);
       int nanoPart = PUnsignedInt.INSTANCE.getCodec().decodeInt(b, o + Bytes.SIZEOF_LONG, sortOrder);
       BigDecimal nanosPart = BigDecimal.valueOf(
           (nanoPart % QueryConstants.MILLIS_TO_NANOS_CONVERTOR)

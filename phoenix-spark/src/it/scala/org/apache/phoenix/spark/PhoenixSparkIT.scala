@@ -621,6 +621,55 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     assert(Math.abs(epoch - dt) < 86400000)
   }
 
+  test("Filter operation doesn't work for column names containing a white space (PHOENIX-2547)") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> SchemaUtil.getEscapedArgument("space"),
+      "zkUrl" -> quorumAddress))
+    val res = df.filter(df.col("first name").equalTo("xyz"))
+    // Make sure we got the right value back
+    assert(res.collectAsList().size() == 1L)
+  }
+
+  test("Spark Phoenix cannot recognize Phoenix view fields (PHOENIX-2290)") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> SchemaUtil.getEscapedArgument("small"),
+      "zkUrl" -> quorumAddress))
+    df.registerTempTable("temp")
+
+    // limitation: filter / where expressions are not allowed with "double quotes", instead of that pass it as column expressions
+    // reason: if the expression contains "double quotes" then spark sql parser, ignoring evaluating .. giving to next level to handle
+
+    val res1 = sqlContext.sql("select * from temp where salary = '10000' ")
+    assert(res1.collectAsList().size() == 1L)
+
+    val res2 = sqlContext.sql("select * from temp where \"salary\" = '10000' ")
+    assert(res2.collectAsList().size() == 0L)
+
+    val res3 = sqlContext.sql("select * from temp where salary > '10000' ")
+    assert(res3.collectAsList().size() == 2L)
+  }
+
+  test("Queries with small case column-names return empty result-set when working with Spark Datasource Plugin (PHOENIX-2336)") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> SchemaUtil.getEscapedArgument("small"),
+      "zkUrl" -> quorumAddress))
+
+    // limitation: filter / where expressions are not allowed with "double quotes", instead of that pass it as column expressions
+    // reason: if the expression contains "double quotes" then spark sql parser, ignoring evaluating .. giving to next level to handle
+
+    val res1 = df.filter(df.col("first name").equalTo("foo"))
+    assert(res1.collectAsList().size() == 1L)
+
+    val res2 = df.filter("\"first name\" = 'foo'")
+    assert(res2.collectAsList().size() == 0L)
+
+    val res3 = df.filter("salary = '10000'")
+    assert(res3.collectAsList().size() == 1L)
+
+    val res4 = df.filter("salary > '10000'")
+    assert(res4.collectAsList().size() == 2L)
+  }
+
   test("Can coerce Phoenix DATE columns to TIMESTAMP through DataFrame API") {
     val sqlContext = new SQLContext(sc)
     val df = sqlContext.read

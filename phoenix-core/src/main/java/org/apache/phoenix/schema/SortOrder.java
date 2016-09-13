@@ -54,6 +54,11 @@ public enum SortOrder {
 		public CompareOp transform(CompareOp op) {
 			return op;
 		}
+
+        @Override
+        public byte normalize(byte b) {
+            return b;
+        }
 	},
 
 	DESC(1) {
@@ -70,6 +75,11 @@ public enum SortOrder {
 			}
 			throw new IllegalArgumentException("Add the missing case statement!");
 		}
+
+        @Override
+        public byte normalize(byte b) {
+            return SortOrder.invert(b);
+        }
 	};
 	
 	/**
@@ -136,4 +146,5 @@ public enum SortOrder {
 	}
 
 	public abstract CompareOp transform(CompareOp op);
+    public abstract byte normalize(byte b);
 }

@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
 import java.util.Properties;
+
 import javax.annotation.Nullable;
 
 import org.apache.commons.csv.CSVRecord;
@@ -30,6 +31,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.DateUtil;
@@ -112,6 +114,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
     static class SimpleDatatypeConversionFunction implements Function<String, Object> {
 
         private final PDataType dataType;
+        private final PDataCodec codec;
         private final DateUtil.DateTimeParser dateTimeParser;
 
         SimpleDatatypeConversionFunction(PDataType dataType, Connection conn) {
@@ -122,7 +125,9 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
                 throw new RuntimeException(e);
             }
             this.dataType = dataType;
+            PDataCodec codec = dataType.getCodec();
             if(dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+                codec = DateUtil.getCodecFor(dataType);
                 // TODO: move to DateUtil
                 String dateFormat;
                 int dateSqlType = dataType.getResultSetSqlType();
@@ -142,6 +147,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
             } else {
                 this.dateTimeParser = null;
             }
+            this.codec = codec;
         }
 
         @Nullable
@@ -153,7 +159,7 @@ public class CsvUpsertExecutor extends UpsertExecutor<CSVRecord, String> {
             if (dateTimeParser != null) {
                 long epochTime = dateTimeParser.parseDateTime(input);
                 byte[] byteValue = new byte[dataType.getByteSize()];
-                dataType.getCodec().encodeLong(epochTime, byteValue, 0);
+                codec.encodeLong(epochTime, byteValue, 0);
                 return dataType.toObject(byteValue);
             } else if (dataType == PBoolean.INSTANCE) {
                 switch (input.toLowerCase()) {

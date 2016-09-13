@@ -20,7 +20,6 @@ package org.apache.phoenix.query;
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD;
 import static org.apache.phoenix.query.QueryServices.ALLOW_ONLINE_TABLE_SCHEMA_UPDATE;
 import static org.apache.phoenix.query.QueryServices.ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE;
-import static org.apache.phoenix.query.QueryServices.ASYNC_INDEX_AUTO_BUILD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_PRODUCER_ATTRIB_NAME;
 import static org.apache.phoenix.query.QueryServices.CALL_QUEUE_ROUND_ROBIN_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
@@ -91,6 +90,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
+import org.apache.phoenix.schema.PTableRefFactory;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -139,7 +139,6 @@ public class QueryServicesOptions {
     public static final long DEFAULT_SCAN_RESULT_CHUNK_SIZE = 2999;
     public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
     public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = true;
-    public static final boolean DEFAULT_ASYNC_INDEX_AUTO_BUILD = false;
 
     //
     // Spillable GroupBy - SPGBY prefix
@@ -153,7 +152,6 @@ public class QueryServicesOptions {
     public static final long DEFAULT_GROUPBY_MAX_CACHE_MAX = 1024L*1024L*100L;  // 100 Mb
 
     public static final long DEFAULT_SEQUENCE_CACHE_SIZE = 100;  // reserve 100 sequences at a time
-    public static final int DEFAULT_INDEX_MAX_FILESIZE_PERC = 50; // % of data table max file size for index table
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS =  60000 * 30; // 30 mins
     public static final long DEFAULT_MAX_SERVER_METADATA_CACHE_SIZE =  1024L*1024L*20L; // 20 Mb
     public static final long DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE =  1024L*1024L*10L; // 10 Mb
@@ -243,6 +241,10 @@ public class QueryServicesOptions {
     // doesn't depend on phoenix-core.
     public static final String DEFAULT_QUERY_SERVER_SERIALIZATION = "PROTOBUF";
     public static final int DEFAULT_QUERY_SERVER_HTTP_PORT = 8765;
+    public static final long DEFAULT_QUERY_SERVER_UGI_CACHE_MAX_SIZE = 1000L;
+    public static final int DEFAULT_QUERY_SERVER_UGI_CACHE_INITIAL_SIZE = 100;
+    public static final int DEFAULT_QUERY_SERVER_UGI_CACHE_CONCURRENCY = 10;
+
     public static final boolean DEFAULT_RENEW_LEASE_ENABLED = true;
     public static final int DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS =
             DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD / 2;
@@ -251,6 +253,10 @@ public class QueryServicesOptions {
     public static final int DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE = 10;
     public static final boolean DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE = true;
     public static final float DEFAULT_LIMITED_QUERY_SERIAL_THRESHOLD = 0.2f;
+    
+    public static final boolean DEFAULT_INDEX_ASYNC_BUILD_ENABLED = true;
+    
+    public static final String DEFAULT_CLIENT_CACHE_ENCODING = PTableRefFactory.Encoding.OBJECT.toString();
 
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
@@ -328,9 +334,7 @@ public class QueryServicesOptions {
             .setIfUnset(RENEW_LEASE_THREAD_POOL_SIZE, DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE)
             .setIfUnset(IS_NAMESPACE_MAPPING_ENABLED, DEFAULT_IS_NAMESPACE_MAPPING_ENABLED)
             .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
-            .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)
-            .setIfUnset(ASYNC_INDEX_AUTO_BUILD_ATTRIB, DEFAULT_ASYNC_INDEX_AUTO_BUILD);
-
+            .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
@@ -588,11 +592,6 @@ public class QueryServicesOptions {
 
     public QueryServicesOptions setExplainChunkCount(boolean showChunkCount) {
         config.setBoolean(EXPLAIN_CHUNK_COUNT_ATTRIB, showChunkCount);
-        return this;
-    }
-
-    public QueryServicesOptions setAsyncIndexAutoBuild(boolean autoAsyncIndexBuild) {
-        config.setBoolean(ASYNC_INDEX_AUTO_BUILD_ATTRIB, autoAsyncIndexBuild);
         return this;
     }
 

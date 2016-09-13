@@ -34,6 +34,8 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
+import com.google.common.base.Joiner;
+
 
 public class QueryParserTest {
     private void parseQuery(String sql) throws IOException, SQLException {
@@ -770,6 +772,14 @@ public class QueryParserTest {
     @Test
     public void testDoubleBackslash() throws Exception {
         String sql = "SELECT * FROM T WHERE A LIKE 'a\\(d'";
+        parseQuery(sql);
+    }
+
+    @Test
+    public void testUnicodeSpace() throws Exception {
+        // U+2002 (8194) is a "EN Space" which looks just like a normal space (0x20 in ascii) 
+        String unicodeEnSpace = String.valueOf(Character.toChars(8194));
+        String sql = Joiner.on(unicodeEnSpace).join(new String[] {"SELECT", "*", "FROM", "T"});
         parseQuery(sql);
     }
 }
