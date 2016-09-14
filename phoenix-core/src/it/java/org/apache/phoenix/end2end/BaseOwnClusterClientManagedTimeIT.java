@@ -24,6 +24,6 @@ public class BaseOwnClusterClientManagedTimeIT extends BaseOwnClusterIT {
     @After
     public void cleanUpAfterTest() throws Exception {
         long ts = nextTimestamp();
-        deletePriorMetaData(ts - 1, getUrl());
+        deletePriorMetaData(ts - 1, getOldUrl());
     }    
 }

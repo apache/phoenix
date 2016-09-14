@@ -44,7 +44,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 @ThreadSafe
 public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
-    
     @GuardedBy("this")
     private ConnectionQueryServices connectionQueryServices;
     private final ReadOnlyProps overrideProps;
@@ -65,7 +64,6 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         queryServices = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
     }
 
-    @Override
     public synchronized QueryServices getQueryServices() {
         checkClosed();
         return queryServices;
@@ -83,7 +81,6 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
         return super.connect(url, info);
     }
     
-    @Override // public for testing
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties info) throws SQLException {
         checkClosed();
         if (connectionQueryServices != null) { return connectionQueryServices; }

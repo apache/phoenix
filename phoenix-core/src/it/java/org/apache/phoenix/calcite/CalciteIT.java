@@ -30,6 +30,7 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Properties;
 
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -41,12 +42,12 @@ public class CalciteIT extends BaseCalciteIT {
     
     @Before
     public void initTable() throws Exception {
-        final String url = getUrl();
-        initATableValues(getOrganizationId(), null, url);
+        final String url = getOldUrl();
+        initATableValues(TestUtil.ATABLE_NAME, getOrganizationId(), null, null, null, url);
         initJoinTableValues(url, null, null);
-        initArrayTable();
-        initSaltedTables(null);
-        initKeyOrderingTable();
+        initArrayTable(url);
+        initSaltedTables(url, null);
+        initKeyOrderingTable(url);
         final Connection connection = DriverManager.getConnection(url);
         connection.createStatement().execute("CREATE VIEW IF NOT EXISTS v AS SELECT * from aTable where a_string = 'a'");
         connection.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS seq0 START WITH 1 INCREMENT BY 1");

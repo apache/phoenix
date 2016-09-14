@@ -21,7 +21,7 @@ public class CalciteDMLIT extends BaseCalciteIT {
     
     @Before
     public void initTable() throws Exception {
-        final String url = getUrl();
+        final String url = getOldUrl();
         ensureTableCreated(url, ATABLE_NAME);
     }
 

@@ -233,53 +233,53 @@ public final class QueryUtil {
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum) {
-        return getUrlInternal(zkQuorum, null, null, null);
+        return getUrlInternal(zkQuorum, null, null, null, false);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, int clientPort) {
-        return getUrlInternal(zkQuorum, clientPort, null, null);
+        return getUrlInternal(zkQuorum, clientPort, null, null, false);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, String znodeParent) {
-        return getUrlInternal(zkQuorum, null, znodeParent, null);
+        return getUrlInternal(zkQuorum, null, znodeParent, null, false);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, int port, String znodeParent, String principal) {
-        return getUrlInternal(zkQuorum, port, znodeParent, principal);
+        return getUrlInternal(zkQuorum, port, znodeParent, principal, false);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, int port, String znodeParent) {
-        return getUrlInternal(zkQuorum, port, znodeParent, null);
+        return getUrlInternal(zkQuorum, port, znodeParent, null, false);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, Integer port, String znodeParent) {
-        return getUrlInternal(zkQuorum, port, znodeParent, null);
+        return getUrlInternal(zkQuorum, port, znodeParent, null, false);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
-    public static String getUrl(String zkQuorum, Integer port, String znodeParent, String principal) {
-        return getUrlInternal(zkQuorum, port, znodeParent, principal);
+    public static String getUrl(String zkQuorum, Integer port, String znodeParent, String principal, boolean isCalciteEnabled) {
+        return getUrlInternal(zkQuorum, port, znodeParent, principal, isCalciteEnabled);
     }
 
-    private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent, String principal) {
-        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent, principal, null).toUrl()
+    private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent, String principal, boolean isCalciteEnabled) {
+        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent, principal, null, isCalciteEnabled).toUrl()
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     }
 
@@ -342,9 +342,15 @@ public final class QueryUtil {
 
     public static String getConnectionUrl(Properties props, Configuration conf)
             throws ClassNotFoundException, SQLException {
-        return getConnectionUrl(props, conf, null);
+        return getConnectionUrl(props, conf, null, false);
     }
+
     public static String getConnectionUrl(Properties props, Configuration conf, String principal)
+            throws ClassNotFoundException, SQLException {
+        return getConnectionUrl(props, conf, principal, false);
+    }
+
+    public static String getConnectionUrl(Properties props, Configuration conf, String principal, boolean isCalciteEnabled)
             throws ClassNotFoundException, SQLException {
         // TODO: props is ignored!
         // read the hbase properties from the configuration
@@ -380,7 +386,7 @@ public final class QueryUtil {
         server = Joiner.on(',').join(servers);
         String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-        String url = getUrl(server, port, znodeParent, principal);
+        String url = getUrl(server, port, znodeParent, principal, isCalciteEnabled);
         // Mainly for testing to tack on the test=true part to ensure driver is found on server
         String extraArgs = conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         if (extraArgs.length() > 0) {

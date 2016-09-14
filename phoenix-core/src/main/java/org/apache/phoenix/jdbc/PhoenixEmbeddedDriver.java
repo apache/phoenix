@@ -417,8 +417,13 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final String principal;
         private final String keytab;
         private final User user;
+        private final boolean isCalciteEnabled;
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
+         this(zookeeperQuorum, port, rootNode, principal, keytab, false);
+        }
+        
+        public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab, boolean isCalciteEnabled) {
             this.zookeeperQuorum = zookeeperQuorum;
             this.port = port;
             this.rootNode = rootNode;
@@ -433,6 +438,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (null == this.user) {
                 throw new RuntimeException("Acquired null user which should never happen");
             }
+            this.isCalciteEnabled = isCalciteEnabled;
         }
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
@@ -544,8 +550,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
 		}
 
         public String toUrl() {
-            return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
-                    + toString();
+            return (isCalciteEnabled? PhoenixRuntime.JDBC_PROTOCOL_CALCITE : PhoenixRuntime.JDBC_PROTOCOL)
+                    + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + toString();
         }
 
         private static ConnectionInfo defaultConnectionInfo(String url) throws SQLException {

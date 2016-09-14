@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.calcite;
 
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -43,22 +43,25 @@ import java.util.Properties;
 import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
-import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
-public class BaseCalciteIT extends BaseClientManagedTimeIT {
+public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String,String> props = getDefaultProps();
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+        props.put(QueryServices.STATS_USE_CURRENT_TIME_ATTRIB, Boolean.FALSE.toString());
         props.put(QueryServices.RUN_UPDATE_STATS_ASYNC, Boolean.FALSE.toString());
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(1000));
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(200));
@@ -77,7 +80,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         return new Start(props) {
             Connection createConnection() throws Exception {
                 return DriverManager.getConnection(
-                        getUrl(), 
+                        getOldUrl(), 
                         props);
             }
             
@@ -96,10 +99,10 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
         }
 
         Connection createConnection() throws Exception {
-            return DriverManager.getConnection(
-                    "jdbc:phoenixcalcite:" 
-                            + getUrl().substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1), 
-                    props);
+        	// FIXME Cannot get correct stats with 'test=true' property
+        	final String testProp = PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM;
+        	final String url = getUrl().replaceAll(testProp, "");
+            return DriverManager.getConnection(url, props);
         }
         
         String getExplainPlanString() {
@@ -160,7 +163,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             String explain = QueryUtil.getExplainPlan(resultSet);
             resultSet.close();
             statement.close();
-            assertEquals(explain, expected);
+            Assert.assertEquals(explain, expected);
             return this;
         }
 
@@ -248,7 +251,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
                 Object[] row = expected[i];
                 for (int j = 0; j < row.length; j++) {
                     Object obj = resultSet.getObject(j + 1);
-                    assertEquals(canonicalize(row[j]), canonicalize(obj));
+                    Assert.assertEquals(canonicalize(row[j]), canonicalize(obj));
                 }
             }
             assertFalse("Got more rows than expected.", resultSet.next());            
@@ -274,7 +277,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
                 Object[] row = expected[actualResults.size()];
                 for (int i = 0; i < orderedCount; i++) {
                     Object obj = resultSet.getObject(i + 1);
-                    assertEquals(canonicalize(row[i]), canonicalize(obj));
+                    Assert.assertEquals(canonicalize(row[i]), canonicalize(obj));
                 }
                 // check the unordered part
                 List<Object> result = Lists.newArrayList();
@@ -343,14 +346,14 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             + "      type: 'custom',\n"
             + "      factory: 'org.apache.phoenix.calcite.PhoenixSchema$Factory',\n"
             + "      operand: {\n"
-            + "        url: \"" + getUrl() + "\"\n"
+            + "        url: \"" + getOldUrl() + "\"\n"
             + "      }\n"
             + "    }";
     }
 
     protected static Connection connectUsingModel(Properties props) throws Exception {
         final File file = File.createTempFile("model", ".json");
-        final String url = getUrl();
+        final String url = getOldUrl();
         final PrintWriter pw = new PrintWriter(new FileWriter(file));
         pw.print(
             "{\n"
@@ -407,9 +410,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     
     protected static final String SCORES_TABLE_NAME = "scores";
     
-    protected void initArrayTable() throws Exception {
+    protected void initArrayTable(String url) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + SCORES_TABLE_NAME
@@ -450,9 +453,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     protected static final String SALTED_TABLE_NOSALT_INDEX_NAME = "idx_salted_test_table";
     protected static final String SALTED_TABLE_SALTED_INDEX_NAME = "idxsalted_salted_test_table";
     
-    protected void initSaltedTables(String index) throws SQLException {
+    protected void initSaltedTables(String url, String index) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + NOSALT_TABLE_NAME + " (mypk0 INTEGER NOT NULL, mypk1 INTEGER NOT NULL, col0 INTEGER, col1 INTEGER CONSTRAINT pk PRIMARY KEY (mypk0, mypk1))");
@@ -504,9 +507,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     protected static final String KEY_ORDERING_TABLE_1_NAME = "key_ordering_test_table_1";
     protected static final String KEY_ORDERING_TABLE_2_NAME = "key_ordering_test_table_2";
     
-    protected void initKeyOrderingTable() throws Exception {
+    protected void initKeyOrderingTable(String url) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + KEY_ORDERING_TABLE_1_NAME
@@ -624,9 +627,9 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
     protected static final String MULTI_TENANT_VIEW2 = "s2.multitenant_test_view2";
     protected static final String MULTI_TENANT_VIEW2_INDEX = "idx_multitenant_test_view2";
     
-    protected void initMultiTenantTables(String index) throws SQLException {
+    protected void initMultiTenantTables(String url, String index) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);
         try {
             conn.createStatement().execute(
                     "CREATE TABLE " + MULTI_TENANT_TABLE + " (tenant_id VARCHAR NOT NULL, id VARCHAR NOT NULL, col0 INTEGER, col1 INTEGER, col2 INTEGER CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true");
@@ -669,7 +672,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             
             conn.close();
             props.setProperty("TenantId", "10");
-            conn = DriverManager.getConnection(getUrl(), props);
+            conn = DriverManager.getConnection(getOldUrl(), props);
             conn.createStatement().execute("CREATE VIEW " + MULTI_TENANT_VIEW1
                     + " AS select * from " + MULTI_TENANT_TABLE);
             conn.commit();
@@ -683,7 +686,7 @@ public class BaseCalciteIT extends BaseClientManagedTimeIT {
             
             conn.close();
             props.setProperty("TenantId", "20");
-            conn = DriverManager.getConnection(getUrl(), props);
+            conn = DriverManager.getConnection(getOldUrl(), props);
             conn.createStatement().execute("CREATE VIEW " + MULTI_TENANT_VIEW2
                     + " AS select * from " + MULTI_TENANT_TABLE + " where col2 > 7");
             conn.commit();

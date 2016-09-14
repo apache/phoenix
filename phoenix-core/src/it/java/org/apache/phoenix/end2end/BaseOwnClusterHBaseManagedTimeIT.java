@@ -24,6 +24,6 @@ import org.junit.After;
 public class BaseOwnClusterHBaseManagedTimeIT extends BaseOwnClusterIT {
     @After
     public void cleanUpAfterTest() throws Exception {
-        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getUrl());
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getOldUrl());
     }
 }

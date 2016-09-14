@@ -105,6 +105,10 @@ public class PhoenixRuntime {
      */
     public final static String JDBC_PROTOCOL = "jdbc:phoenix";
     /**
+     * Root for the JDBC URL that the Phoenix accepts accepts as a Calcite-Phoenix connection.
+     */
+    public final static String JDBC_PROTOCOL_CALCITE = "jdbc:phoenixcalcite";
+    /**
      * Root for the JDBC URL used by the thin driver. Duplicated here to avoid dependencies
      * between modules.
      */

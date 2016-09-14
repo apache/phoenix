@@ -15,23 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.calcite.jdbc;
+package org.apache.phoenix.jdbc;
 
 import java.sql.SQLException;
 
-public class PhoenixCalciteDriver extends PhoenixCalciteEmbeddedDriver {
+import org.apache.phoenix.calcite.jdbc.PhoenixCalciteEmbeddedDriver;
+
+public class PhoenixCalciteTestDriver extends PhoenixCalciteEmbeddedDriver {
     
     static {
-        new PhoenixCalciteDriver().register();
+        new PhoenixCalciteTestDriver().register();
     }
     
-    public PhoenixCalciteDriver() {
+    public PhoenixCalciteTestDriver() {
         super();
     }
 
     @Override
     public boolean acceptsURL(String url) throws SQLException {
-        return super.acceptsURL(url) && !isTestUrl(url);
+        return super.acceptsURL(url) && isTestUrl(url);
     }
 
     @Override
