@@ -49,7 +49,7 @@ import org.junit.Test;
 
 public class ToCharFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     
-    private static String TO_CHAR_TABLE_NAME;
+    private String TO_CHAR_TABLE_NAME;
     
     private Date row1Date;
     private Time row1Time;
@@ -62,15 +62,6 @@ public class ToCharFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     private Integer row2Integer;
     private BigDecimal row2Decimal;
     
-    public static final String TO_CHAR_TABLE_DDL = "create table " + TO_CHAR_TABLE_NAME +
-        "(pk integer not null, \n" + 
-        "col_date date, \n" +
-        "col_time date, \n" +
-        "col_timestamp timestamp, \n" +
-        "col_integer integer, \n" + 
-        "col_decimal decimal\n" + 
-        "CONSTRAINT my_pk PRIMARY KEY (pk))";
-
     @Before
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
             value="DMI_BIGDECIMAL_CONSTRUCTED_FROM_DOUBLE", 

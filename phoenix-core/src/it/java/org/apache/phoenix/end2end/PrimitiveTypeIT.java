@@ -29,23 +29,18 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 
 public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
 
-    private static final String TABLE_NAME = generateRandomString();
     private static final Properties PROPS = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-    private static Connection conn;
 
-    @BeforeClass
-    public static void initTableValues() throws Exception {
-        conn = DriverManager.getConnection(getUrl(), PROPS);
+    public static void initTableValues(Connection conn, String tableName) throws Exception {
         conn.createStatement().execute(
-            "create table " + TABLE_NAME + " (l bigint not null primary key, b boolean)");
+            "create table " + tableName + " (l bigint not null primary key, b boolean)");
         PreparedStatement stmt = conn.prepareStatement(
-                "upsert into " + TABLE_NAME + " VALUES(?)");
+                "upsert into " + tableName + " VALUES(?)");
         stmt.setLong(1, 2);
         stmt.execute();
         conn.commit();
@@ -53,7 +48,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testCompareLongGTDecimal() throws Exception {
-        String query = "SELECT l FROM " + TABLE_NAME + " where l > 1.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l > 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -67,7 +65,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testCompareLongGTEDecimal() throws Exception {
-        String query = "SELECT l FROM " + TABLE_NAME + " where l >= 1.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l >= 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -88,7 +89,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testCompareLongLTDecimal() throws Exception {
-        String query = "SELECT l FROM " + TABLE_NAME + " where l < 1.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l < 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -107,7 +111,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testCompareLongLTEDecimal() throws Exception {
-        String query = "SELECT l FROM " + TABLE_NAME + " where l <= 1.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l <= 1.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -125,7 +132,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
     }
     @Test
     public void testCompareLongGTDecimal2() throws Exception {
-        String query = "SELECT l FROM " + TABLE_NAME + " where l > 2.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l > 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -144,7 +154,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testCompareLongGTEDecimal2() throws Exception {
-        String query = "SELECT l FROM " + TABLE_NAME + " where l >= 2.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l >= 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -163,7 +176,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testCompareLongLTDecimal2() throws Exception {
-        String query = "SELECT l FROM " + TABLE_NAME + " where l < 2.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l < 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -184,9 +200,10 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testCompareLongLTEDecimal2() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT l FROM " + TABLE_NAME + " where l <= 2.5";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "SELECT l FROM " + tableName + " where l <= 2.5";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -207,13 +224,16 @@ public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testBooleanAsObject() throws Exception {
-        String query = "upsert into " + TABLE_NAME + " values (2, ?)";
+        String tableName = generateRandomString();
+        Connection conn = DriverManager.getConnection(getUrl(), PROPS);
+        initTableValues(conn, tableName);
+        String query = "upsert into " + tableName + " values (2, ?)";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.setObject(1, new Boolean("false"));
             statement.execute();
             conn.commit();
-            statement = conn.prepareStatement("SELECT l,b,? FROM " + TABLE_NAME);
+            statement = conn.prepareStatement("SELECT l,b,? FROM " + tableName);
             statement.setObject(1, new Boolean("false"));
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
