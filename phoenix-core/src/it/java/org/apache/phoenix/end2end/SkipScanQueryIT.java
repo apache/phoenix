@@ -353,7 +353,7 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeTableReuseIT {
         String tableName = generateRandomString();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try {
-            createMultiCFTestTable(fullTableName , null);
+            TestUtil.createMultiCFTestTable(conn , fullTableName, null);
             populateMultiCFTestTable(fullTableName);
             String upsert = "UPSERT INTO " + fullTableName
                     + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";

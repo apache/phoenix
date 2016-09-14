@@ -11,8 +11,6 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
-import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
-import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -111,6 +109,11 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         assertEquals(i, rs.getLong(12));
     }
 
+    private void createDataTable(Connection conn, String dataTableName, String tableProps) throws SQLException {
+        String tableDDL = "create table " + dataTableName + TEST_TABLE_SCHEMA + tableProps;
+        conn.createStatement().execute(tableDDL);
+    }
+    
     protected void helpTestCreateAndUpdate(boolean mutable, boolean localIndex) throws Exception {
         String dataTableName = generateRandomString();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
@@ -119,7 +122,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
 
             // create an expression index
             String ddl = "CREATE "
@@ -207,7 +211,7 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         String dataTableName = generateRandomString();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
         String indexName = generateRandomString();
-    	helpTestUpdate(dataTableName, fullDataTableName, indexName, false);
+    	helpTestUpdate(fullDataTableName, indexName, false);
     }
 
     @Test
@@ -215,15 +219,16 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         String dataTableName = generateRandomString();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
         String indexName = generateRandomString();
-        helpTestUpdate(dataTableName, fullDataTableName, indexName, true);
+        helpTestUpdate(fullDataTableName, indexName, true);
     }
     
-    protected void helpTestUpdate(String dataTableName, String fullDataTableName, String indexName, boolean localIndex) throws Exception {
+    protected void helpTestUpdate(String fullDataTableName, String indexName, boolean localIndex) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            populateDataTable(conn, dataTableName, MUTABLE_INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, "");
+            populateDataTable(conn, fullDataTableName);
 
             // create an expression index
             String ddl = "CREATE "
@@ -280,9 +285,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         }
     }
 
-    private void populateDataTable(Connection conn, String dataTable, String tableType) throws SQLException {
-        ensureTableCreated(getUrl(), dataTable, tableType);
-        String upsert = "UPSERT INTO " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTable
+    private void populateDataTable(Connection conn, String dataTable) throws SQLException {
+        String upsert = "UPSERT INTO " + dataTable
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         PreparedStatement stmt1 = conn.prepareStatement(upsert);
         // insert two rows
@@ -320,8 +324,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            ensureTableCreated(getUrl(), dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (2*long_col2)";
             PreparedStatement stmt = conn.prepareStatement(ddl);
@@ -394,8 +398,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            ensureTableCreated(getUrl(), dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) )" + " INCLUDE (long_col1, long_col2)";
             PreparedStatement stmt = conn.prepareStatement(ddl);
@@ -475,7 +479,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+int_col2)";
             PreparedStatement stmt = conn.prepareStatement(ddl);
@@ -530,7 +535,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+1)";
             PreparedStatement stmt = conn.prepareStatement(ddl);
@@ -584,7 +590,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+1)";
 
@@ -634,7 +641,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+1)";
 
@@ -798,7 +806,8 @@ public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.setAutoCommit(false);
-            populateDataTable(conn, dataTableName, mutable ? MUTABLE_INDEX_DATA_TABLE : INDEX_DATA_TABLE);
+            createDataTable(conn, fullDataTableName, mutable ? "" : "IMMUTABLE_ROWS=true");
+            populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+1)";
 

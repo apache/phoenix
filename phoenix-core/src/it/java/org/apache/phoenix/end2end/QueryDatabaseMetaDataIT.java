@@ -34,6 +34,7 @@ import static org.apache.phoenix.util.TestUtil.PTSDB_NAME;
 import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -591,13 +592,15 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testMultiTableColumnsMetadataScan() throws SQLException {
         long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        createGroupByTestTable(conn, GROUPBYTEST_NAME);
         ensureTableCreated(getUrl(), MDTEST_NAME, MDTEST_NAME, ts);
-        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, GROUPBYTEST_NAME, ts);
         ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts);
         ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts);
-        Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn = DriverManager.getConnection(getUrl(), props);
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs = dbmd.getColumns(null, "", "%TEST%", null);
         assertTrue(rs.next());

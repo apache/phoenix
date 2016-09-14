@@ -517,7 +517,7 @@ public class IndexIT extends BaseOwnClusterIT {
 	        conn.setAutoCommit(false);
             Date date = new Date(System.currentTimeMillis());
             
-            createMultiCFTestTable(fullTableName, tableDDLOptions);
+            TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
             String ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (date_col)";
             PreparedStatement stmt = conn.prepareStatement(ddl);
@@ -1011,7 +1011,7 @@ public class IndexIT extends BaseOwnClusterIT {
 	        ResultSet rs;
             Date date = new Date(System.currentTimeMillis());
             
-            createMultiCFTestTable(fullTableName, tableDDLOptions);
+            TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
             String ddl = null;
             ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (decimal_pk) INCLUDE (decimal_col1, decimal_col2)";
