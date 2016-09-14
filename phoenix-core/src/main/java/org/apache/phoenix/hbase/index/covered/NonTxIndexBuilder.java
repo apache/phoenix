@@ -70,8 +70,8 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
 
         batchMutationAndAddUpdates(manager, state, mutation, indexMetaData);
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Found index updates for Mutation: " + mutation + "\n" + manager);
+        if (LOG.isTraceEnabled()) {
+            LOG.trace("Found index updates for Mutation: " + mutation + "\n" + manager);
         }
 
         return manager.toMap();

@@ -209,7 +209,7 @@ public class IndexUpdateManager {
   public String toString() {
     StringBuffer sb = new StringBuffer("Pending Index Updates:\n");
     for (Entry<ImmutableBytesPtr, Collection<Mutation>> entry : map.entrySet()) {
-      String tableName = Bytes.toString(entry.getKey().get());
+      String tableName = Bytes.toStringBinary(entry.getKey().get());
       sb.append("   Table: '" + tableName + "'\n");
       for (Mutation m : entry.getValue()) {
         sb.append("\t");
@@ -218,7 +218,7 @@ public class IndexUpdateManager {
         }
         sb.append(m.getClass().getSimpleName() + ":"
             + ((m instanceof Put) ? m.getTimeStamp() + " " : ""));
-        sb.append(" row=" + Bytes.toString(m.getRow()));
+        sb.append(" row=" + Bytes.toStringBinary(m.getRow()));
         sb.append("\n");
         if (m.getFamilyCellMap().isEmpty()) {
           sb.append("\t\t=== EMPTY ===\n");
