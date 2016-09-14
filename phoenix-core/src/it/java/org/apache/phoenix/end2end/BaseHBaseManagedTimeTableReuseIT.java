@@ -18,8 +18,6 @@
 
 package org.apache.phoenix.end2end;
 
-import javax.annotation.concurrent.NotThreadSafe;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -45,7 +43,6 @@ import org.junit.experimental.categories.Category;
  *
  * @since 0.1
  */
-@NotThreadSafe
 @Category(HBaseManagedTimeTableReuseTest.class)
 public class BaseHBaseManagedTimeTableReuseIT extends BaseTest {
     protected static Configuration getTestClusterConfig() {

@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -47,7 +48,7 @@ import com.google.common.collect.Maps;
  * cluster.
  */
 
-public class SpillableGroupByIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class SpillableGroupByIT extends BaseOwnClusterClientManagedTimeIT {
 
     private static final int NUM_ROWS_INSERTED = 1000;
     
@@ -72,10 +73,8 @@ public class SpillableGroupByIT extends BaseOwnClusterHBaseManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
-    private long createTable() throws Exception {
-        long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), GROUPBYTEST_NAME, GROUPBYTEST_NAME, null, ts - 2);
-        return ts;
+    private void createTable(Connection conn, String tableName) throws Exception {
+        createGroupByTestTable(conn, tableName);
     }
 
     private void loadData(long ts) throws SQLException {
@@ -108,13 +107,19 @@ public class SpillableGroupByIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     @Test
     public void testScanUri() throws Exception {
+        long ts = nextTimestamp();
         SpillableGroupByIT spGpByT = new SpillableGroupByIT();
-        long ts = spGpByT.createTable();
-        spGpByT.loadData(ts);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
-                Long.toString(ts + 10));
+                Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        createTable(conn, GROUPBYTEST_NAME);
+        ts += 2;
+        spGpByT.loadData(ts);
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
+                Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
         try {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery(GROUPBY1);

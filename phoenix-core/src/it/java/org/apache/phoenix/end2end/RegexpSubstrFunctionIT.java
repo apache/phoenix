@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
+import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -41,8 +41,8 @@ public class RegexpSubstrFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Before
     public void doBeforeTestSetup() throws Exception {
         tableName = generateRandomString();
-        ensureTableCreated(getUrl(), tableName, GROUPBYTEST_NAME);
         Connection conn = DriverManager.getConnection(getUrl());
+        createGroupByTestTable(conn, tableName);
         insertRow(conn, "Report1?1", 10);
         insertRow(conn, "Report1?2", 10);
         insertRow(conn, "Report2?1", 30);

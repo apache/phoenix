@@ -23,7 +23,6 @@ import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
-import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -408,14 +407,13 @@ public class PercentileIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testPercentileContOnDescPKColumn() throws Exception {
         String indexDataTableName = generateRandomString();
-        ensureTableCreated(getUrl(), indexDataTableName, INDEX_DATA_TABLE);
-        populateINDEX_DATA_TABLETable(indexDataTableName);
-
-        String query = "SELECT PERCENTILE_CONT(1) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + INDEX_DATA_SCHEMA
-                + QueryConstants.NAME_SEPARATOR + indexDataTableName;
+        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
+        String query = "SELECT PERCENTILE_CONT(1) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + fullTableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
+            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            populateINDEX_DATA_TABLETable(indexDataTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -431,14 +429,12 @@ public class PercentileIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testPercentRankOnDescPKColumn() throws Exception {
         String indexDataTableName = generateRandomString();
-        ensureTableCreated(getUrl(), indexDataTableName, INDEX_DATA_TABLE);
-        populateINDEX_DATA_TABLETable(indexDataTableName);
-
-        String query = "SELECT PERCENT_RANK(2) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + INDEX_DATA_SCHEMA
-                + QueryConstants.NAME_SEPARATOR + indexDataTableName;
-
         Connection conn = DriverManager.getConnection(getUrl());
         try {
+            String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
+            String query = "SELECT PERCENT_RANK(2) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + fullTableName;
+            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            populateINDEX_DATA_TABLETable(indexDataTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -454,14 +450,13 @@ public class PercentileIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testPercentileDiscOnDescPKColumn() throws Exception {
         String indexDataTableName = generateRandomString();
-        ensureTableCreated(getUrl(), indexDataTableName, INDEX_DATA_TABLE);
-        populateINDEX_DATA_TABLETable(indexDataTableName);
-
-        String query = "SELECT PERCENTILE_DISC(0.4) WITHIN GROUP (ORDER BY long_pk DESC) FROM " + INDEX_DATA_SCHEMA
-                + QueryConstants.NAME_SEPARATOR + indexDataTableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
+            String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
+            String query = "SELECT PERCENTILE_DISC(0.4) WITHIN GROUP (ORDER BY long_pk DESC) FROM " + fullTableName;
+            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            populateINDEX_DATA_TABLETable(indexDataTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());

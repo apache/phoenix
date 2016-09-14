@@ -116,7 +116,7 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
             try {
                 queryServices.close();
             } finally {
-                if (executor != null) executor.shutdown();
+                if (executor != null) executor.shutdownNow();
                 connectionQueryServices = null;
             }
         }
