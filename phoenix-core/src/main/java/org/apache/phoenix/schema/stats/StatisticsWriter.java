@@ -28,7 +28,6 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -50,6 +49,7 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PrefixByteDecoder;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TimeKeeper;
 
@@ -73,15 +73,11 @@ public class StatisticsWriter implements Closeable {
         if (clientTimeStamp == HConstants.LATEST_TIMESTAMP) {
             clientTimeStamp = TimeKeeper.SYSTEM.getCurrentTime();
         }
-        HTableInterface statsWriterTable = env
-                .getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES));
+        HTableInterface statsWriterTable = env.getTable(
+                SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, env.getConfiguration()));
         HTableInterface statsReaderTable = ServerUtil.getHTableForCoprocessorScan(env, statsWriterTable);
         StatisticsWriter statsTable = new StatisticsWriter(statsReaderTable, statsWriterTable, tableName,
                 clientTimeStamp);
-        if (clientTimeStamp != DefaultStatisticsCollector.NO_TIMESTAMP) { // Otherwise we do this later as we don't know the ts
-                                                                   // yet
-            statsTable.commitLastStatsUpdatedTime();
-        }
         return statsTable;
     }
 
@@ -193,7 +189,8 @@ public class StatisticsWriter implements Closeable {
         }
     }
 
-    public void commitStats(List<Mutation> mutations) throws IOException {
+    public void commitStats(List<Mutation> mutations, StatisticsCollector statsCollector) throws IOException {
+        commitLastStatsUpdatedTime(statsCollector);
         if (mutations.size() > 0) {
             byte[] row = mutations.get(0).getRow();
             MutateRowsRequest.Builder mrmBuilder = MutateRowsRequest.newBuilder();
@@ -220,10 +217,9 @@ public class StatisticsWriter implements Closeable {
         return put;
     }
 
-    private void commitLastStatsUpdatedTime() throws IOException {
-        // Always use wallclock time for this, as it's a mechanism to prevent
-        // stats from being collected too often.
-        Put put = getLastStatsUpdatedTimePut(clientTimeStamp);
+    private void commitLastStatsUpdatedTime(StatisticsCollector statsCollector) throws IOException {
+        long timeStamp = clientTimeStamp == StatisticsCollector.NO_TIMESTAMP ? statsCollector.getMaxTimeStamp() : clientTimeStamp;
+        Put put = getLastStatsUpdatedTimePut(timeStamp);
         statsWriterTable.put(put);
     }
 

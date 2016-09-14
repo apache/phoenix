@@ -307,7 +307,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         PName tenantId = connection.getTenantId();
         byte[] tenantIdBytes = null;
         if (tenantId != null) {
-            tenantIdBytes = ScanUtil.getTenantIdBytes(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
+            tenantIdBytes = ScanUtil.getTenantIdBytes(table.getRowKeySchema(), table.getBucketNum() != null, tenantId, table.getViewIndexId() != null);
         }
         final boolean isAutoCommit = connection.getAutoCommit();
         ConnectionQueryServices services = connection.getQueryServices();

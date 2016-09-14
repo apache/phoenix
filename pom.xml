@@ -1,35 +1,38 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.8.0-HBase-1.1-SNAPSHOT</version>
+  <version>4.9.0-HBase-1.2-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
 
   <licenses>
-      <license>
-          <name>The Apache Software License, Version 2.0</name>
-          <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-          <distribution>repo</distribution>
-          <comments />
-      </license>
+    <license>
+      <name>The Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+      <comments />
+    </license>
   </licenses>
 
   <organization>
-      <name>Apache Software Foundation</name>
-      <url>http://www.apache.org</url>
+    <name>Apache Software Foundation</name>
+    <url>http://www.apache.org</url>
   </organization>
 
   <modules>
     <module>phoenix-core</module>
     <module>phoenix-flume</module>
     <module>phoenix-pig</module>
-    <module>phoenix-server-client</module>
-    <module>phoenix-server</module>
+    <module>phoenix-queryserver-client</module>
+    <module>phoenix-queryserver</module>
     <module>phoenix-pherf</module>
     <module>phoenix-spark</module>
+    <module>phoenix-hive</module>
+    <module>phoenix-client</module>
+    <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
   </modules>
@@ -61,12 +64,13 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.1.3</hbase.version>
-    <hadoop-two.version>2.5.1</hadoop-two.version>
+    <hbase.version>1.2.0</hbase.version>
+    <hadoop-two.version>2.7.1</hadoop-two.version>
 
     <!-- Dependency versions -->
     <commons-cli.version>1.2</commons-cli.version>
-    <hadoop.version>2.5.1</hadoop.version>
+    <hive.version>1.2.1</hive.version>
+    <hadoop.version>2.7.1</hadoop.version>
     <pig.version>0.13.0</pig.version>
     <jackson.version>1.9.2</jackson.version>
     <antlr.version>3.5.2</antlr.version>
@@ -81,7 +85,8 @@
     <sqlline.version>1.1.9</sqlline.version>
     <guava.version>13.0.1</guava.version>
     <flume.version>1.4.0</flume.version>
-    <findbugs.version>1.3.2</findbugs.version>
+    <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
+    <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
     <snappy.version>0.3</snappy.version>
     <netty.version>4.0.23.Final</netty.version>
@@ -94,8 +99,8 @@
     <avatica.version>1.8.0</avatica.version>
     <calcite.version>1.9.0-SNAPSHOT</calcite.version>
     <jettyVersion>8.1.7.v20120910</jettyVersion>
-    <tephra.version>0.7.0</tephra.version>
-    <spark.version>1.5.2</spark.version>
+    <tephra.version>0.8.0-incubating</tephra.version>
+    <spark.version>1.6.1</spark.version>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
 
@@ -108,15 +113,14 @@
     <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
     <maven-surefire-plugin.version>2.19.1</maven-surefire-plugin.version>
     <maven-failsafe-plugin.version>2.19.1</maven-failsafe-plugin.version>
-    
+
     <maven-dependency-plugin.version>2.1</maven-dependency-plugin.version>
     <maven.assembly.version>2.5.2</maven.assembly.version>
-    <maven.rat.version>0.8</maven.rat.version>
 
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
     <numForkedIT>5</numForkedIT>
-    
+
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -162,6 +166,11 @@
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-install-plugin</artifactId>
+          <version>2.5.2</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-eclipse-plugin</artifactId>
           <version>${maven-eclipse-plugin.version}</version>
         </plugin>
@@ -172,38 +181,8 @@
         <plugin>
           <groupId>org.apache.rat</groupId>
           <artifactId>apache-rat-plugin</artifactId>
-          <version>${maven.rat.version}</version>
-          <configuration>
-            <excludes>
-              <exclude>CHANGES</exclude>
-              <exclude>README.md</exclude>
-              <exclude>README</exclude>
-	          <exclude>dev/phoenix.importorder</exclude>
-              <exclude>dev/release_files/**</exclude>
-              <exclude>**/target/**</exclude>
-              <exclude>**/*.versionsBackup</exclude>
-              <!-- properties files need no license -->
-              <exclude>**/*.properties</exclude>
-              <!-- exclude docs -->
-              <exclude>docs/**</exclude>
-              <!-- exclude examples -->
-              <exclude>examples/**</exclude>
-              <!-- exclude source control files -->
-              <exclude>.gitignore</exclude>
-              <exclude>.git/**</exclude>
-              <!-- exclude IDE files -->
-              <exclude>**/.idea/**</exclude>
-              <exclude>**/*.iml</exclude>
-              <exclude>.project</exclude>
-              <exclude>.classpath</exclude>
-              <exclude>.settings/**</exclude>
-              <exclude>**/java.sql.Driver</exclude>
-              <!-- exclude protobuf files -->
-              <exclude>**/generated/**</exclude>
-              <!-- exclude pre-commit testing work directory -->
-              <exclude>**/patchprocess/**</exclude>
-            </excludes>
-          </configuration>
+          <!-- Avoid defining exclusions in pluginManagement as they are global.
+               We already inherit some from the ASF parent pom. -->
         </plugin>
         <!-- We put slow-running tests into src/it and run them during the
             integration-test phase using the failsafe plugin. This way
@@ -249,58 +228,76 @@
           <version>${maven-failsafe-plugin.version}</version>
           <executions>
             <execution>
-               <id>ClientManagedTimeTests</id>
-                 <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
-                 <reuseForks>true</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
-                 <shutdown>kill</shutdown>
-               </configuration>
-               <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-               </goals>
+              <id>ClientManagedTimeTests</id>
+              <configuration>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>true</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
+                <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
             </execution>
             <execution>
-               <id>HBaseManagedTimeTests</id>
-                 <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
-                 <reuseForks>true</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
-                 <shutdown>kill</shutdown>
-               </configuration>
-               <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-               </goals>
+              <id>HBaseManagedTimeTests</id>
+              <configuration>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>true</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
+                <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
             </execution>
-	        <execution>
-               <id>NeedTheirOwnClusterTests</id>
-                 <configuration>
-                 <encoding>UTF-8</encoding>
-                 <forkCount>${numForkedIT}</forkCount>
-                 <runOrder>alphabetical</runOrder>
-                 <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-                 <shutdown>kill</shutdown>
-               </configuration>
-               <goals>
-                 <goal>integration-test</goal>
-                 <goal>verify</goal>
-               </goals>
+            <execution>
+              <id>HBaseManagedTimeTableReuseTest</id>
+              <configuration>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>true</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.HBaseManagedTimeTableReuseTest</groups>
+                <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>NeedTheirOwnClusterTests</id>
+              <configuration>
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>false</reuseForks>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+                <shutdown>kill</shutdown>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
             </execution>
           </executions>
         </plugin>
@@ -320,6 +317,17 @@
               </configuration>
             </execution>
           </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>2.4.3</version>
+        </plugin>
+        <plugin>
+          <!-- Allows us to get the apache-ds bundle artifacts -->
+          <groupId>org.apache.felix</groupId>
+          <artifactId>maven-bundle-plugin</artifactId>
+          <version>2.5.3</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -389,7 +397,7 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
+          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m
             -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>kill</shutdown>
@@ -403,7 +411,7 @@
         <executions>
           <execution>
             <phase>prepare-package
-                </phase>
+            </phase>
             <goals>
               <goal>test-jar</goal>
             </goals>
@@ -423,6 +431,37 @@
             </plugin>
           </reportPlugins>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <!-- Header on changelog isn't normal -->
+            <exclude>CHANGES</exclude>
+            <!-- IDE configuration -->
+            <exclude>dev/phoenix.importorder</exclude>
+            <!-- Release L&N -->
+            <exclude>dev/release_files/LICENSE</exclude>
+            <exclude>dev/release_files/NOTICE</exclude>
+            <!-- Exclude data files for examples -->
+            <exclude>docs/*.csv</exclude>
+            <exclude>examples/*.csv</exclude>
+            <!-- Exclude SQL files from rat. Sqlline 1.1.9 doesn't work with
+                 comments on the first line of a file. -->
+            <exclude>examples/*.sql</exclude>
+            <exclude>examples/pig/testdata</exclude>
+            <!-- precommit? -->
+            <exclude>**/patchprocess/**</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <!-- Allows us to get the apache-ds bundle artifacts -->
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <extensions>true</extensions>
+        <inherited>true</inherited>
       </plugin>
     </plugins>
   </build>
@@ -459,12 +498,12 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server</artifactId>
+        <artifactId>phoenix-queryserver</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server-client</artifactId>
+        <artifactId>phoenix-queryserver-client</artifactId>
         <version>${project.version}</version>
       </dependency>
 
@@ -484,6 +523,10 @@
           <exclusion>
             <groupId>org.jruby</groupId>
             <artifactId>jruby-complete</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -597,6 +640,45 @@
         <scope>test</scope>
       </dependency>
 
+      <!-- Required for mini-cluster since hbase built against old version of hadoop -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-auth</artifactId>
+        <version>${hadoop-two.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-common</artifactId>
+        <version>${hadoop-two.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+        <version>${hadoop-two.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client</artifactId>
+        <version>${hadoop-two.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <version>${hadoop-two.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-hdfs</artifactId>
+        <version>${hadoop-two.version}</version>
+        <type>test-jar</type> <!-- this does not work which is typical for maven.-->
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop-two.version}</version>
+      </dependency>
+
       <!-- General Dependencies -->
       <dependency>
         <groupId>org.apache.pig</groupId>
@@ -623,12 +705,12 @@
 
       <!-- Transaction dependencies -->
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-api</artifactId>
         <version>${tephra.version}</version>
       </dependency>
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-core</artifactId>
         <version>${tephra.version}</version>
         <exclusions>
@@ -643,7 +725,7 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-core</artifactId>
         <type>test-jar</type>
         <version>${tephra.version}</version>
@@ -660,17 +742,12 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>co.cask.tephra</groupId>
+        <groupId>org.apache.tephra</groupId>
         <artifactId>tephra-hbase-compat-1.1</artifactId>
         <version>${tephra.version}</version>
       </dependency>
 
       <!-- Make sure we have all the antlr dependencies -->
-      <dependency>
-        <groupId>org.antlr</groupId>
-        <artifactId>antlr</artifactId>
-        <version>${antlr.version}</version>
-      </dependency>
       <dependency>
         <groupId>org.antlr</groupId>
         <artifactId>antlr-runtime</artifactId>
@@ -703,9 +780,14 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>net.sourceforge.findbugs</groupId>
-        <artifactId>annotations</artifactId>
-        <version>${findbugs.version}</version>
+        <groupId>com.github.stephenc.findbugs</groupId>
+        <artifactId>findbugs-annotations</artifactId>
+        <version>${findbugs-annotations.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.github.stephenc.jcip</groupId>
+        <artifactId>jcip-annotations</artifactId>
+        <version>${jcip-annotations.version}</version>
       </dependency>
       <dependency>
         <groupId>org.iq80.snappy</groupId>
@@ -862,8 +944,8 @@
             <version>1.6</version>
             <executions>
               <execution>
-              <id>sign-artifacts</id>
-              <phase>verify</phase>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
                 <goals>
                   <goal>sign</goal>
                 </goals>

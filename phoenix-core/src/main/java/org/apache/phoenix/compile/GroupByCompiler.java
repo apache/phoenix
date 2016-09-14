@@ -33,6 +33,8 @@ import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.AliasedNode;
+import org.apache.phoenix.parse.DistinctCountParseNode;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -58,6 +60,8 @@ public class GroupByCompiler {
         private final List<Expression> expressions;
         private final List<Expression> keyExpressions;
         private final boolean isOrderPreserving;
+        private final int orderPreservingColumnCount;
+        private final boolean isUngroupedAggregate;
         public static final GroupByCompiler.GroupBy EMPTY_GROUP_BY = new GroupBy(new GroupByBuilder()) {
             @Override
             public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
@@ -73,7 +77,7 @@ public class GroupByCompiler {
                 return null;
             }
         };
-        public static final GroupByCompiler.GroupBy UNGROUPED_GROUP_BY = new GroupBy(new GroupByBuilder().setIsOrderPreserving(true)) {
+        public static final GroupByCompiler.GroupBy UNGROUPED_GROUP_BY = new GroupBy(new GroupByBuilder().setIsOrderPreserving(true).setIsUngroupedAggregate(true)) {
             @Override
             public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
                 return this;
@@ -96,6 +100,8 @@ public class GroupByCompiler {
                     this.expressions : builder.keyExpressions == null ? null :
                         ImmutableList.copyOf(builder.keyExpressions);
             this.isOrderPreserving = builder.isOrderPreserving;
+            this.orderPreservingColumnCount = builder.orderPreservingColumnCount;
+            this.isUngroupedAggregate = builder.isUngroupedAggregate;
         }
         
         public List<Expression> getExpressions() {
@@ -107,9 +113,13 @@ public class GroupByCompiler {
         }
         
         public String getScanAttribName() {
-            return isOrderPreserving ? 
-                        BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS : 
-                            BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
+            if (isUngroupedAggregate) {
+                return BaseScannerRegionObserver.UNGROUPED_AGG;
+            } else if (isOrderPreserving) {
+                return BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS;
+            } else {
+                return BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
+            }
         }
         
         public boolean isEmpty() {
@@ -120,8 +130,17 @@ public class GroupByCompiler {
             return isOrderPreserving;
         }
         
+        public boolean isUngroupedAggregate() {
+            return isUngroupedAggregate;
+        }
+
+        public int getOrderPreservingColumnCount() {
+            return orderPreservingColumnCount;
+        }
+        
         public GroupBy compile(StatementContext context, TupleProjector tupleProjector) throws SQLException {
             boolean isOrderPreserving = this.isOrderPreserving;
+            int orderPreservingColumnCount = 0;
             if (isOrderPreserving) {
                 OrderPreservingTracker tracker = new OrderPreservingTracker(context, GroupBy.EMPTY_GROUP_BY, Ordering.UNORDERED, expressions.size(), tupleProjector);
                 for (int i = 0; i < expressions.size(); i++) {
@@ -133,11 +152,11 @@ public class GroupByCompiler {
                 // there are no "gaps" in the PK columns positions used (i.e. we start with the first PK
                 // column and use each subsequent one in PK order).
                 isOrderPreserving = tracker.isOrderPreserving();
+                orderPreservingColumnCount = tracker.getOrderPreservingColumnCount();
             }
-            if (isOrderPreserving) {
-                return this;
+            if (isOrderPreserving || isUngroupedAggregate) {
+                return new GroupBy.GroupByBuilder(this).setIsOrderPreserving(isOrderPreserving).setOrderPreservingColumnCount(orderPreservingColumnCount).build();
             }
-            
             List<Expression> expressions = Lists.newArrayListWithExpectedSize(this.expressions.size());
             List<Expression> keyExpressions = expressions;
             List<Pair<Integer,Expression>> groupBys = Lists.newArrayListWithExpectedSize(this.expressions.size());
@@ -232,10 +251,20 @@ public class GroupByCompiler {
         
         public static class GroupByBuilder {
             private boolean isOrderPreserving;
+            private int orderPreservingColumnCount;
             private List<Expression> expressions = Collections.emptyList();
             private List<Expression> keyExpressions = Collections.emptyList();
+            private boolean isUngroupedAggregate;
 
             public GroupByBuilder() {
+            }
+            
+            public GroupByBuilder(GroupBy groupBy) {
+                this.isOrderPreserving = groupBy.isOrderPreserving;
+                this.orderPreservingColumnCount = groupBy.orderPreservingColumnCount;
+                this.expressions = groupBy.expressions;
+                this.keyExpressions = groupBy.keyExpressions;
+                this.isUngroupedAggregate = groupBy.isUngroupedAggregate;
             }
             
             public GroupByBuilder setExpressions(List<Expression> expressions) {
@@ -252,14 +281,26 @@ public class GroupByCompiler {
                 this.isOrderPreserving = isOrderPreserving;
                 return this;
             }
-            
+
+            public GroupByBuilder setIsUngroupedAggregate(boolean isUngroupedAggregate) {
+                this.isUngroupedAggregate = isUngroupedAggregate;
+                return this;
+            }
+
+            public GroupByBuilder setOrderPreservingColumnCount(int orderPreservingColumnCount) {
+                this.orderPreservingColumnCount = orderPreservingColumnCount;
+                return this;
+            }
+
             public GroupBy build() {
                 return new GroupBy(this);
             }
         }
 
         public void explain(List<String> planSteps, Integer limit) {
-            if (isOrderPreserving) {
+            if (isUngroupedAggregate) {
+                planSteps.add("    SERVER AGGREGATE INTO SINGLE ROW");
+            } else if (isOrderPreserving) {
                 planSteps.add("    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
             } else {
                 planSteps.add("    SERVER AGGREGATE INTO DISTINCT ROWS BY " + getExpressions() + (limit == null ? "" : " LIMIT " + limit + " GROUP" + (limit.intValue() == 1 ? "" : "S")));                    
@@ -282,17 +323,36 @@ public class GroupByCompiler {
          * Otherwise, we need to insert a step after the Merge that dedups.
          * Order by only allowed on columns in the select distinct
          */
+        boolean isUngroupedAggregate = false;
         if (groupByNodes.isEmpty()) {
             if (statement.isAggregate()) {
-                return GroupBy.UNGROUPED_GROUP_BY;
-            }
-            if (!statement.isDistinct()) {
+                // do not optimize if
+                // 1. we were asked not to optimize
+                // 2. there's any HAVING clause
+                // TODO: PHOENIX-2989 suggests some ways to optimize the latter case
+                if (statement.getHint().hasHint(Hint.RANGE_SCAN) ||
+                        statement.getHaving() != null) {
+                    return GroupBy.UNGROUPED_GROUP_BY;
+                }
+                groupByNodes = Lists.newArrayListWithExpectedSize(statement.getSelect().size());
+                for (AliasedNode aliasedNode : statement.getSelect()) {
+                    if (aliasedNode.getNode() instanceof DistinctCountParseNode) {
+                        // only add children of DistinctCount nodes
+                        groupByNodes.addAll(aliasedNode.getNode().getChildren());
+                    } else {
+                        // if we found anything else, do not attempt any further optimization
+                        return GroupBy.UNGROUPED_GROUP_BY;
+                    }
+                }
+                isUngroupedAggregate = true;
+            } else if (statement.isDistinct()) {
+                groupByNodes = Lists.newArrayListWithExpectedSize(statement.getSelect().size());
+                for (AliasedNode aliasedNode : statement.getSelect()) {
+                    // for distinct at all select expression as group by conditions
+                    groupByNodes.add(aliasedNode.getNode());
+                }
+            } else {
                 return GroupBy.EMPTY_GROUP_BY;
-            }
-            
-            groupByNodes = Lists.newArrayListWithExpectedSize(statement.getSelect().size());
-            for (AliasedNode aliasedNode : statement.getSelect()) {
-                groupByNodes.add(aliasedNode.getNode());
             }
         }
 
@@ -316,8 +376,10 @@ public class GroupByCompiler {
         if (expressions.isEmpty()) {
             return GroupBy.EMPTY_GROUP_BY;
         }
-        
-        GroupBy groupBy = new GroupBy.GroupByBuilder().setIsOrderPreserving(isOrderPreserving).setExpressions(expressions).setKeyExpressions(expressions).build();
+        GroupBy groupBy = new GroupBy.GroupByBuilder()
+                .setIsOrderPreserving(isOrderPreserving)
+                .setExpressions(expressions).setKeyExpressions(expressions)
+                .setIsUngroupedAggregate(isUngroupedAggregate).build();
         return groupBy;
     }
     

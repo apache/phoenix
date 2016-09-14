@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
@@ -47,6 +46,7 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.OffsetResultIterator;
 import org.apache.phoenix.iterate.OrderedResultIterator;
@@ -60,14 +60,14 @@ import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.tephra.Transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
-import co.cask.tephra.Transaction;
 
 
 /**
@@ -193,7 +193,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         byte[] scanOffsetBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_OFFSET);
         Integer scanOffset = null;
         if (scanOffsetBytes != null) {
-            scanOffset = Bytes.toInt(scanOffsetBytes);
+            scanOffset = (Integer) PInteger.INSTANCE.toObject(scanOffsetBytes);
         }
         RegionScanner innerScanner = s;
 
@@ -208,7 +208,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         if (dataColumns != null) {
             tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-            dataRegion = IndexUtil.getDataRegion(c.getEnvironment());
+            dataRegion = c.getEnvironment().getRegion();
             byte[] localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
             List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
             indexMaintainer = indexMaintainers.get(0);
@@ -224,7 +224,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     dataColumns, tupleProjector, dataRegion, indexMaintainer, tx,
                     viewConstants, kvSchema, kvSchemaBitSet, j == null ? p : null, ptr);
 
-        final ImmutableBytesWritable tenantId = ScanUtil.getTenantId(scan);
+        final ImmutableBytesPtr tenantId = ScanUtil.getTenantId(scan);
         if (j != null) {
             innerScanner = new HashJoinRegionScanner(innerScanner, p, j, tenantId, c.getEnvironment());
         }
@@ -247,15 +247,11 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         final Region region = c.getEnvironment().getRegion();
         region.startRegionOperation();
         try {
-            // Once we return from the first call to next, we've run through and
-            // cached
-            // the topN rows, so we no longer need to start/stop a region
-            // operation.
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
                 List<KeyValue> kvList = new ArrayList<KeyValue>(1);
                 KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
-                        QueryConstants.OFFSET_COLUMN, Bytes.toBytes(iterator.getUnusedOffset()));
+                        QueryConstants.OFFSET_COLUMN, PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
                 kvList.add(kv);
                 Result r = new Result(kvList);
                 firstTuple = new ResultTuple(r);
@@ -314,7 +310,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
      *  getting the first Tuple (which forces running through the entire region)
      *  since after this everything is held in memory
      */
-    private RegionScanner getTopNScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, final OrderedResultIterator iterator, ImmutableBytesWritable tenantId) throws Throwable {
+    private RegionScanner getTopNScanner(final ObserverContext<RegionCoprocessorEnvironment> c, final RegionScanner s, final OrderedResultIterator iterator, ImmutableBytesPtr tenantId) throws Throwable {
         final Tuple firstTuple;
         TenantCache tenantCache = GlobalCache.getTenantCache(c.getEnvironment(), tenantId);
         long estSize = iterator.getEstimatedByteSize();

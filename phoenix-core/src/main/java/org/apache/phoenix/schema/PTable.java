@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.stats.PTableStats;
 
 
@@ -305,6 +306,10 @@ public interface PTable extends PMetaDataEntity {
      */
     public List<PName> getPhysicalNames();
 
+    /**
+     * For a view, return the name of table in HBase that physically stores data.
+     * @return the name of the physical HBase table storing the data.
+     */
     PName getPhysicalName();
     boolean isImmutableRows();
 
@@ -323,7 +328,6 @@ public interface PTable extends PMetaDataEntity {
     PTableKey getKey();
 
     IndexType getIndexType();
-    PTableStats getTableStats();
     int getBaseColumnCount();
 
     /**
@@ -341,4 +345,18 @@ public interface PTable extends PMetaDataEntity {
      */
     int getRowTimestampColPos();
     long getUpdateCacheFrequency();
+
+    boolean isNamespaceMapped();
+    
+    /**
+     * @return The sequence name used to get the unique identifier for views
+     * that are automatically partitioned.
+     */
+    String getAutoPartitionSeqName();
+    
+    /**
+     * @return true if the you can only add (and never delete) columns to the table,
+     * you are also not allowed to delete the table  
+     */
+    boolean isAppendOnlySchema();
 }

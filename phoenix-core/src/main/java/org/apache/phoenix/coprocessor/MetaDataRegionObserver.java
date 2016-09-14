@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -36,7 +35,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -75,6 +73,8 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 
@@ -121,17 +121,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         	QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
     }
     
-    private static String getJdbcUrl(RegionCoprocessorEnvironment env) {
-        String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
-        String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-            Integer.toString(HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT));
-        String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
-            HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
-            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
-            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
-    }
-
     @Override
     public void postOpen(ObserverContext<RegionCoprocessorEnvironment> e) {
         final RegionCoprocessorEnvironment env = e.getEnvironment();
@@ -142,9 +131,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                 HTableInterface metaTable = null;
                 HTableInterface statsTable = null;
                 try {
+                    ReadOnlyProps props=new ReadOnlyProps(env.getConfiguration().iterator());
                     Thread.sleep(1000);
-                    metaTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-                    statsTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME));
+                    metaTable = env.getTable(
+                            SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props));
+                    statsTable = env.getTable(
+                            SchemaUtil.getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, props));
                     if (UpgradeUtil.truncateStats(metaTable, statsTable)) {
                         LOG.info("Stats are successfully truncated for upgrade 4.7!!");
                     }
@@ -282,13 +274,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     if (conn == null) {
                     	final Properties props = new Properties();
-                    	props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
                     	// Set SCN so that we don't ping server and have the upper bound set back to
                     	// the timestamp when the failure occurred.
                     	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
                     	// don't run a second index populations upsert select 
                         props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0"); 
-                        conn = DriverManager.getConnection(getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
+                        conn = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
                         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTable);
                         dataPTable = PhoenixRuntime.getTable(conn, dataTableFullName);
                         indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(dataPTable.getIndexes().size());

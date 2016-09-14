@@ -33,8 +33,8 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
-		
+public class EvaluationOfORIT extends BaseHBaseManagedTimeTableReuseIT{
+
     @Test
     public void testFalseOrFalse() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -48,15 +48,16 @@ public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
 	@Test
 	public void testPKOrNotPKInOREvaluation() throws SQLException {
 	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-	    Connection conn = DriverManager.getConnection(getUrl(), props);	    
+	    Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateRandomString();
 	    conn.setAutoCommit(false);
 	    
-            String create = "CREATE TABLE DIE ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50))";
+            String create = "CREATE TABLE " + tableName + " ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50))";
             PreparedStatement createStmt = conn.prepareStatement(create);
             createStmt.execute();
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " +
-                    "DIE VALUES (?, ?)");
+                     tableName + " VALUES (?, ?)");
 
             stmt.setInt(1, 1);
             stmt.setString(2, "Tester1");
@@ -163,7 +164,7 @@ public class EvaluationOfORIT extends BaseHBaseManagedTimeIT{
             stmt.execute();		   
             conn.commit();
             
-            String select = "Select * from DIE where ID=6 or Name between 'Tester1' and 'Tester3'";
+            String select = "Select * from " + tableName + " where ID=6 or Name between 'Tester1' and 'Tester3'";
             ResultSet rs;
             rs = conn.createStatement().executeQuery(select);
             assertTrue(rs.next());

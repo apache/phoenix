@@ -63,18 +63,19 @@ import org.junit.Test;
 
 public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
+    private String tableName; 
     @Test
     public void testSelect() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
         // Table wildcard query
-        String query = "SELECT * FROM aTable";
+        String query = "SELECT * FROM " + tableName ;
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -99,7 +100,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Select only specific columns
-            query = "SELECT A_STRING, A_INTEGER FROM aTable";
+            query = "SELECT A_STRING, A_INTEGER FROM " + tableName ;
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -132,7 +133,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Select only specific columns with condition on another column (Not in select)
-            query = "SELECT B_STRING, A_SHORT FROM aTable WHERE X_INTEGER = ?";
+            query = "SELECT B_STRING, A_SHORT FROM " + tableName + " WHERE X_INTEGER = ?";
             statement = conn.prepareStatement(query);
             statement.setInt(1, 4);
             rs = statement.executeQuery();
@@ -143,7 +144,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
             // Select only specific columns with condition on another column (Not in select) and one row elements are
             // nulls
-            query = "SELECT X_LONG, X_INTEGER, Y_INTEGER FROM aTable WHERE B_STRING = ?";
+            query = "SELECT X_LONG, X_INTEGER, Y_INTEGER FROM " + tableName + " WHERE B_STRING = ?";
             statement = conn.prepareStatement(query);
             statement.setString(1, E_VALUE);
             rs = statement.executeQuery();
@@ -168,7 +169,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // Select only specific columns with condition on one of the selected column
-            query = "SELECT A_STRING, A_INTEGER FROM aTable WHERE A_INTEGER = ?";
+            query = "SELECT A_STRING, A_INTEGER FROM " + tableName + " WHERE A_INTEGER = ?";
             statement = conn.prepareStatement(query);
             statement.setInt(1, 9);
             rs = statement.executeQuery();
@@ -177,7 +178,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
             assertEquals(9, rs.getInt(2));
 
             // Select all columns with order by on non PK column
-            query = "SELECT * FROM aTable ORDER BY A_INTEGER";
+            query = "SELECT * FROM " + tableName + " ORDER BY A_INTEGER";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -316,7 +317,7 @@ public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
     
     private static void initMultiCFTable(long ts) throws Exception {
         String url = getUrl();
-        ensureTableCreated(url, MULTI_CF_NAME, ts);
+        ensureTableCreated(url, MULTI_CF_NAME, MULTI_CF_NAME, ts);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));

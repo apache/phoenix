@@ -128,7 +128,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
                     PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                     null, null, columns, null, null, Collections.<PTable>emptyList(),
                     false, Collections.<PName>emptyList(), null, null, false, false, false, null,
-                    null, null, true, false, 0, 0);
+                    null, null, true, false, 0, 0, false, null, false);
             this.setTableMapping(new TableMapping(pTable));
         } catch (SQLException e) {
             throw new RuntimeException(e);

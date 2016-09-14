@@ -37,6 +37,7 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -109,6 +110,49 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
 		}
 	}
+	
+    @Test
+    public void testCreateSequenceWhenNamespaceEnabled() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        String sequenceSchemaName = "ALPHA";
+        String sequenceName = sequenceSchemaName + ".M_OMEGA";
+
+        nextConnection(props);
+        try {
+            conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+            fail();
+        } catch (SchemaNotFoundException e) {
+            // expected
+        }
+
+        conn.createStatement().execute("CREATE SCHEMA " + sequenceSchemaName);
+        nextConnection(props);
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        sequenceSchemaName = "TEST_SEQ_SCHEMA";
+        sequenceName = "M_SEQ";
+        conn.createStatement().execute("CREATE SCHEMA " + sequenceSchemaName);
+        nextConnection(props);
+        conn.createStatement().execute("USE " + sequenceSchemaName);
+        conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
+        nextConnection(props);
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='"
+                + sequenceName + "'";
+        ResultSet rs = conn.prepareStatement(query).executeQuery();
+        assertTrue(rs.next());
+        assertEquals(sequenceSchemaName, rs.getString("sequence_schema"));
+        assertEquals(sequenceName, rs.getString("sequence_name"));
+        assertEquals(2, rs.getInt("current_value"));
+        assertEquals(4, rs.getInt("increment_by"));
+        assertFalse(rs.next());
+        try {
+            conn.createStatement().execute(
+                    "CREATE SEQUENCE " + sequenceSchemaName + "." + sequenceName + " START WITH 2 INCREMENT BY 4");
+            fail();
+        } catch (SequenceAlreadyExistsException e) {
+
+        }
+    }
 	
 	@Test
     public void testCreateSequence() throws Exception { 
@@ -696,15 +740,19 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
     }
-    
-    // if nextConnection() is not used to get to get a connection, make sure you call .close() so that connections are not leaked
-    private void nextConnection() throws Exception {
+
+    private void nextConnection(Properties props) throws Exception {
         if (conn != null) conn.close();
         long ts = nextTimestamp();
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         conn = DriverManager.getConnection(getUrl(), props);
-    }   
+    }
+
+    // if nextConnection() is not used to get to get a connection, make sure you call .close() so that connections are
+    // not leaked
+    private void nextConnection() throws Exception {
+        nextConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES));
+    }
     
     @Test
     public void testSequenceDefault() throws Exception {

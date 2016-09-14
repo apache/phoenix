@@ -71,9 +71,9 @@ public class PhoenixEmbeddedDriverTest {
             "jdbc:phoenix:v1,v2,v3:345:LongRunningQueries;test=false",
         };
         ConnectionInfo[] infos = new ConnectionInfo[] {
-            new ConnectionInfo(null,null,null),
-            new ConnectionInfo(null,null,null),
-            new ConnectionInfo(null,null,null),
+            new ConnectionInfo("localhost",2181,"/hbase"),
+            new ConnectionInfo("localhost",2181,"/hbase"),
+            new ConnectionInfo("localhost",2181,"/hbase"),
             new ConnectionInfo(null,null,null),
             new ConnectionInfo("localhost",null,null),
             new ConnectionInfo("localhost",null,null),

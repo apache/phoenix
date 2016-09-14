@@ -5,6 +5,7 @@
 
 # python
 *.pyc
+.checkstyle
 
 # eclipse stuffs
 .settings/*

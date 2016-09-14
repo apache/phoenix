@@ -1,9 +1,7 @@
 /*
- * Copyright 2010 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
- *distributed with this work for additional information
+ * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you maynot use this file except in compliance
@@ -32,8 +30,8 @@ import java.lang.annotation.Target;
  * 
  * Tests using a mini cluster need to be classified either 
  * as {@link HBaseManagedTimeTest} or {@link ClientManagedTimeTest} 
- * or {@link NeedsOwnMiniClusterTest} otherwise they won't be run 
- * when one runs mvn verify or mvn install.
+ * or {@link NeedsOwnMiniClusterTest} or {@link HBaseManagedTimeTableReuseTest}
+ * otherwise they won't be run when one runs mvn verify or mvn install.
  * 
  * @since 4.1
  */

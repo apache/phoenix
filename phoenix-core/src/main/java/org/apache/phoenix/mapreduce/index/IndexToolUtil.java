@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce.index;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -48,7 +49,8 @@ public class IndexToolUtil {
 	public static void updateIndexState(Configuration configuration,PIndexState state) throws SQLException {
 		final String masterTable = PhoenixConfigurationUtil.getInputTableName(configuration);
 		final String indexTable = PhoenixConfigurationUtil.getOutputTableName(configuration);
-		final Connection connection = ConnectionUtil.getOutputConnection(configuration);
+		final Properties overrideProps = new Properties();
+		final Connection connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
 		try {
 			updateIndexState(connection, masterTable, indexTable , state);
 		} finally {

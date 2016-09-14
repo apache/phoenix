@@ -277,6 +277,10 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         assertEquals(2, rs.getInt(1));
         assertEquals("FirstName 2", rs.getString(2));
 
+        rs = stmt.executeQuery("SELECT LAST_NAME FROM TABLE6  where last_name='LastName 1'");
+        assertTrue(rs.next());
+        assertEquals("LastName 1", rs.getString(1));
+
         rs.close();
         stmt.close();
     }

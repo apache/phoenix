@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.memory;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.http.annotation.GuardedBy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,17 +73,7 @@ public class GlobalMemoryManager implements MemoryManager {
         long nBytes;
         synchronized(sync) {
             while (usedMemoryBytes + minBytes > maxMemoryBytes) { // Only wait if minBytes not available
-                try {
-                    logger.debug("Waiting for " + (usedMemoryBytes + minBytes - maxMemoryBytes) + " bytes to be free");
-                    long remainingWaitTimeMs = maxWaitMs - (System.currentTimeMillis() - startTimeMs);
-                    if (remainingWaitTimeMs <= 0) { // Ran out of time waiting for some memory to get freed up
-                        throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated. Using memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
-                    }
-                    sync.wait(remainingWaitTimeMs);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException("Interrupted allocation of " + minBytes + " bytes", ie);
-                }
+                waitForBytesToFree(minBytes, startTimeMs);
             }
             // Allocate at most reqBytes, but at least minBytes
             nBytes = Math.min(reqBytes, maxMemoryBytes - usedMemoryBytes);
@@ -92,6 +83,21 @@ public class GlobalMemoryManager implements MemoryManager {
             usedMemoryBytes += nBytes;
         }
         return nBytes;
+    }
+
+    @VisibleForTesting
+    void waitForBytesToFree(long minBytes, long startTimeMs) {
+        try {
+            logger.debug("Waiting for " + (usedMemoryBytes + minBytes - maxMemoryBytes) + " bytes to be free " + startTimeMs);
+            long remainingWaitTimeMs = maxWaitMs - (System.currentTimeMillis() - startTimeMs);
+            if (remainingWaitTimeMs <= 0) { // Ran out of time waiting for some memory to get freed up
+                throw new InsufficientMemoryException("Requested memory of " + minBytes + " bytes could not be allocated. Using memory of " + usedMemoryBytes + " bytes from global pool of " + maxMemoryBytes + " bytes after waiting for " + maxWaitMs + "ms.");
+            }
+            sync.wait(remainingWaitTimeMs);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted allocation of " + minBytes + " bytes", ie);
+        }
     }
 
     @Override
@@ -105,7 +111,7 @@ public class GlobalMemoryManager implements MemoryManager {
         return allocate(nBytes,nBytes);
     }
 
-    protected MemoryChunk newMemoryChunk(long sizeBytes) {
+    private MemoryChunk newMemoryChunk(long sizeBytes) {
         return new GlobalMemoryChunk(sizeBytes);
     }
 

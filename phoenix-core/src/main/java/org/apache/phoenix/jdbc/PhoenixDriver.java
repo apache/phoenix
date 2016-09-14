@@ -47,10 +47,10 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 
@@ -212,7 +212,8 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             checkClosed();
             ConnectionInfo connInfo = ConnectionInfo.create(url);
             QueryServices services = getQueryServices();
-            ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps());
+            // Also performs the Kerberos login if the URL/properties request this
+            ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
             ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
             if (connectionQueryServices == null) {
                 if (normalizedConnInfo.isConnectionless()) {
@@ -225,23 +226,20 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                     connectionQueryServices = prevValue;
                 }
             }
-            String noUpgradeProp = info.getProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB);
-            if (!Boolean.TRUE.equals(noUpgradeProp)) {
-                boolean success = false;
-                SQLException sqlE = null;
-                try {
-                    connectionQueryServices.init(url, info);
-                    success = true;
-                } catch (SQLException e) {
-                    sqlE = e;
-                }
-                finally {
-                    if (!success) {
-                        // Remove from map, as initialization failed
-                        connectionQueryServicesMap.remove(normalizedConnInfo);
-                        if (sqlE != null) {
-                            throw sqlE;
-                        }
+            boolean success = false;
+            SQLException sqlE = null;
+            try {
+                connectionQueryServices.init(url, info);
+                success = true;
+            } catch (SQLException e) {
+                sqlE = e;
+            }
+            finally {
+                if (!success) {
+                    // Remove from map, as initialization failed
+                    connectionQueryServicesMap.remove(normalizedConnInfo);
+                    if (sqlE != null) {
+                        throw sqlE;
                     }
                 }
             }
@@ -319,5 +317,10 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
         case WRITE:
             closeLock.writeLock().unlock();
         }
+    }
+
+    @VisibleForTesting
+    protected ConcurrentMap<ConnectionInfo,ConnectionQueryServices> getCachedConnections() {
+        return this.connectionQueryServicesMap;
     }
 }

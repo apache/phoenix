@@ -36,6 +36,7 @@ import org.apache.commons.io.output.DeferredFileOutputStream;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
@@ -55,15 +56,28 @@ import org.apache.phoenix.util.TupleUtil;
  *
  * Result iterator that spools the results of a scan to disk once an in-memory threshold has been reached.
  * If the in-memory threshold is not reached, the results are held in memory with no disk writing perfomed.
- *
- *
+ * 
+ * <p>
+ * Spooling is deprecated and shouldn't be used while implementing new features. As of HBase 0.98.17, 
+ * we rely on pacing the server side scanners instead of pulling rows from the server and  potentially 
+ * spooling to a temporary file created on clients.
+ * </p>
+ *  
  * @since 0.1
  */
+@Deprecated
 public class SpoolingResultIterator implements PeekingResultIterator {
     
     private final PeekingResultIterator spoolFrom;
     private final SpoolingMetricsHolder spoolMetrics;
     private final MemoryMetricsHolder memoryMetrics;
+    
+    /**
+     * Spooling is deprecated and shouldn't be used while implementing new features. As of HBase
+     * 0.98.17, we rely on pacing the server side scanners instead of pulling rows from the server
+     * and potentially spooling to a temporary file created on clients.
+     */
+    @Deprecated
     public static class SpoolingResultIteratorFactory implements ParallelIteratorFactory {
         private final QueryServices services;
 
@@ -71,7 +85,7 @@ public class SpoolingResultIterator implements PeekingResultIterator {
             this.services = services;
         }
         @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String physicalTableName) throws SQLException {
+        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String physicalTableName, QueryPlan plan) throws SQLException {
             ReadMetricQueue readRequestMetric = context.getReadMetricsQueue();
             SpoolingMetricsHolder spoolMetrics = new SpoolingMetricsHolder(readRequestMetric, physicalTableName);
             MemoryMetricsHolder memoryMetrics = new MemoryMetricsHolder(readRequestMetric, physicalTableName);

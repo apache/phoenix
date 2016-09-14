@@ -39,7 +39,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -81,6 +80,7 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
                 optionBuilder.append(",");
             optionBuilder.append(" TRANSACTIONAL=true ");
         }
+        optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
     }
     
@@ -126,10 +126,15 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             if (transactional) {
                 // insert two rows in another connection without committing so that they are not visible to other transactions
                 try (Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-                    PreparedStatement stmt2 = conn.prepareStatement(upsertQuery);
+                    conn2.setAutoCommit(false);
+                    PreparedStatement stmt2 = conn2.prepareStatement(upsertQuery);
                     upsertRow(stmt2, 5);
                     upsertRow(stmt2, 6);
                     ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) from "+fullTableName);
+                    assertTrue(rs.next());
+                    assertEquals("Unexpected row count ", 2, rs.getInt(1));
+                    assertFalse(rs.next());
+                    rs = conn2.createStatement().executeQuery("SELECT count(*) from "+fullTableName);
                     assertTrue(rs.next());
                     assertEquals("Unexpected row count ", 4, rs.getInt(1));
                     assertFalse(rs.next());
@@ -144,7 +149,7 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             
             //assert we are pulling from data table.
-            assertEquals(String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s", fullTableName), actualExplainPlan);
+            assertEquals(String.format("CLIENT 3-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s", fullTableName), actualExplainPlan);
             
             rs = stmt1.executeQuery(selectSql);
             assertTrue(rs.next());
@@ -156,8 +161,10 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
            
             //run the index MR job.
             final IndexTool indexingTool = new IndexTool();
-            indexingTool.setConf(new Configuration(getUtility().getConfiguration()));
-            
+            Configuration conf = new Configuration(getUtility().getConfiguration());
+            conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+            indexingTool.setConf(conf);
+
             final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable, directApi);
             int status = indexingTool.run(cmdArgs);
             assertEquals(0, status);
@@ -204,8 +211,8 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         
         String expectedExplainPlan = "";
         if(isLocal) {
-            final String localIndexName = MetaDataUtil.getLocalIndexTableName(SchemaUtil.getTableName(schemaName, dataTable));
-            expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN RANGE SCAN OVER %s [-32768]"
+            final String localIndexName = SchemaUtil.getTableName(schemaName, dataTable);
+            expectedExplainPlan = String.format("CLIENT 3-CHUNK PARALLEL 3-WAY ROUND ROBIN RANGE SCAN OVER %s [1]"
                 + "\n    SERVER FILTER BY FIRST KEY ONLY", localIndexName);
         } else {
             expectedExplainPlan = String.format("CLIENT 1-CHUNK PARALLEL 1-WAY ROUND ROBIN FULL SCAN OVER %s"

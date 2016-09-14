@@ -20,6 +20,9 @@ package org.apache.phoenix.util;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -32,6 +35,7 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -49,7 +53,9 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
@@ -58,6 +64,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
@@ -101,16 +109,20 @@ public class ScanUtil {
         return scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX) != null;
     }
 
+    public static boolean isNonAggregateScan(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY) != null;
+    }
+
     // Use getTenantId and pass in column name to match against
     // in as PSchema attribute. If column name matches in 
     // KeyExpressions, set on scan as attribute
-    public static ImmutableBytesWritable getTenantId(Scan scan) {
+    public static ImmutableBytesPtr getTenantId(Scan scan) {
         // Create Scan with special aggregation column over which to aggregate
         byte[] tenantId = scan.getAttribute(PhoenixRuntime.TENANT_ID_ATTRIB);
         if (tenantId == null) {
             return null;
         }
-        return new ImmutableBytesWritable(tenantId);
+        return new ImmutableBytesPtr(tenantId);
     }
     
     public static void setCustomAnnotations(Scan scan, byte[] annotations) {
@@ -616,6 +628,62 @@ public class ScanUtil {
         }
     }
 
+    /**
+     * prefix region start key to the start row/stop row suffix and set as scan boundaries.
+     * @param scan
+     * @param lowerInclusiveRegionKey
+     * @param upperExclusiveRegionKey
+     */
+    public static void setupLocalIndexScan(Scan scan, byte[] lowerInclusiveRegionKey,
+            byte[] upperExclusiveRegionKey) {
+        byte[] prefix = lowerInclusiveRegionKey.length == 0 ? new byte[upperExclusiveRegionKey.length]: lowerInclusiveRegionKey;
+        int prefixLength = lowerInclusiveRegionKey.length == 0? upperExclusiveRegionKey.length: lowerInclusiveRegionKey.length;
+        if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
+            scan.setStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
+        }
+        if(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)!=null) {
+            scan.setStopRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
+        }
+    }
+
+    public static byte[] getActualStartRow(Scan localIndexScan, HRegionInfo regionInfo) {
+        return localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX) == null ? localIndexScan
+                .getStartRow() : ScanRanges.prefixKey(localIndexScan.getAttribute(SCAN_START_ROW_SUFFIX), 0 ,
+            regionInfo.getStartKey().length == 0 ? new byte[regionInfo.getEndKey().length]
+                    : regionInfo.getStartKey(),
+            regionInfo.getStartKey().length == 0 ? regionInfo.getEndKey().length : regionInfo
+                    .getStartKey().length);
+    }
+
+    /**
+     * Set all attributes required and boundaries for local index scan.
+     * @param keyOffset
+     * @param regionStartKey
+     * @param regionEndKey
+     * @param newScan
+     */
+    public static void setLocalIndexAttributes(Scan newScan, int keyOffset, byte[] regionStartKey, byte[] regionEndKey, byte[] startRowSuffix, byte[] stopRowSuffix) {
+        if(ScanUtil.isLocalIndex(newScan)) {
+             newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
+             newScan.setStartRow(regionStartKey);
+             newScan.setStopRow(regionEndKey);
+             if (keyOffset > 0 ) {
+                 newScan.setAttribute(SCAN_START_ROW_SUFFIX, ScanRanges.stripPrefix(startRowSuffix, keyOffset));
+             } else {
+                 newScan.setAttribute(SCAN_START_ROW_SUFFIX, startRowSuffix);
+             }
+             if (keyOffset > 0) {
+                 newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, ScanRanges.stripPrefix(stopRowSuffix, keyOffset));
+             } else {
+                 newScan.setAttribute(SCAN_STOP_ROW_SUFFIX, stopRowSuffix);
+             }
+         }
+    }
+
+    public static boolean isContextScan(Scan scan, StatementContext context) {
+        return Bytes.compareTo(context.getScan().getStartRow(), scan.getStartRow()) == 0 && Bytes
+                .compareTo(context.getScan().getStopRow(), scan.getStopRow()) == 0;
+    }
     public static int getRowKeyOffset(byte[] regionStartKey, byte[] regionEndKey) {
         return regionStartKey.length > 0 ? regionStartKey.length : regionEndKey.length;
     }
@@ -627,6 +695,9 @@ public class ScanUtil {
         } else if (filter instanceof SkipScanFilter) {
             SkipScanFilter skipScanFilter = (SkipScanFilter)filter;
             skipScanFilter.setOffset(offset);
+        } else if (filter instanceof DistinctPrefixFilter) {
+            DistinctPrefixFilter prefixFilter = (DistinctPrefixFilter) filter;
+            prefixFilter.setOffset(offset);
         }
     }
 
@@ -700,16 +771,16 @@ public class ScanUtil {
         return Bytes.compareTo(key, 0, nBytesToCheck, ZERO_BYTE_ARRAY, 0, nBytesToCheck) != 0;
     }
 
-    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isMultiTenantTable)
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isMultiTenantTable, boolean isSharedIndex)
             throws SQLException {
         return isMultiTenantTable ?
-                  getTenantIdBytes(schema, isSalted, tenantId)
+                  getTenantIdBytes(schema, isSalted, tenantId, isSharedIndex)
                 : tenantId.getBytes();
     }
 
-    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId)
+    public static byte[] getTenantIdBytes(RowKeySchema schema, boolean isSalted, PName tenantId, boolean isSharedIndex)
             throws SQLException {
-        int pkPos = isSalted ? 1 : 0;
+        int pkPos = (isSalted ? 1 : 0) + (isSharedIndex ? 1 : 0); 
         Field field = schema.getField(pkPos);
         PDataType dataType = field.getDataType();
         byte[] convertedValue;
@@ -806,6 +877,22 @@ public class ScanUtil {
 
     public static void addOffsetAttribute(Scan scan, Integer offset) {
         scan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, Bytes.toBytes(offset));
+    }
+    
+    public static final boolean canQueryBeExecutedSerially(PTable table, OrderBy orderBy, StatementContext context) {
+        /*
+         * If ordering by columns not on the PK axis, we can't execute a query serially because we
+         * need to do a merge sort across all the scans which isn't possible with SerialIterators.
+         * Similar reasoning follows for salted and local index tables when ordering rows in a row
+         * key order. Serial execution is OK in other cases since SerialIterators will execute scans
+         * in the correct order.
+         */
+        if (!orderBy.getOrderByExpressions().isEmpty()
+                || ((table.getBucketNum() != null || table.getIndexType() == IndexType.LOCAL) && shouldRowsBeInRowKeyOrder(
+                    orderBy, context))) {
+            return false;
+        }
+        return true;
     }
 
 }

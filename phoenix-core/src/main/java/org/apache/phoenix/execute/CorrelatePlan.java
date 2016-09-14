@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -105,7 +106,12 @@ public class CorrelatePlan extends DelegateQueryPlan {
     }
 
     @Override
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper)
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) 
+                throws SQLException {
+        return iterator(scanGrouper, null);
+    }
+    @Override
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan)
             throws SQLException {
         return new ResultIterator() {
             private final CorrelateVariable variable = runtimeContext.getCorrelateVariable(variableId);

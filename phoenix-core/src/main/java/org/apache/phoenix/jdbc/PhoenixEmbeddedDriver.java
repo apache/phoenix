@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverPropertyInfo;
@@ -27,19 +28,29 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.StringTokenizer;
+import java.util.Map.Entry;
 import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SQLCloseable;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -58,6 +69,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     /**
      * The protocol for Phoenix Network Client 
      */ 
+    private static final Log LOG = LogFactory.getLog(PhoenixEmbeddedDriver.class);
     private final static String DNC_JDBC_PROTOCOL_SUFFIX = "//";
     private final static String DRIVER_NAME = "PhoenixEmbeddedDriver";
     private static final String TERMINATOR = "" + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
@@ -185,6 +197,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
      * @since 0.1.1
      */
     public static class ConnectionInfo {
+        private static final org.slf4j.Logger logger = LoggerFactory.getLogger(ConnectionInfo.class);
+        private static final Object KERBEROS_LOGIN_LOCK = new Object();
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
@@ -214,6 +228,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         
         public static ConnectionInfo create(String url) throws SQLException {
             url = url == null ? "" : url;
+            if (url.isEmpty() || url.equalsIgnoreCase("jdbc:phoenix:")
+                    || url.equalsIgnoreCase("jdbc:phoenix")) {
+                return defaultConnectionInfo(url);
+            }
             url = url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)
                     ? url.substring(PhoenixRuntime.JDBC_PROTOCOL.length())
                     : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
@@ -270,7 +288,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return new ConnectionInfo(quorum,port,rootNode, principal, keytabFile);
         }
         
-        public ConnectionInfo normalize(ReadOnlyProps props) throws SQLException {
+        public ConnectionInfo normalize(ReadOnlyProps props, Properties info) throws SQLException {
             String zookeeperQuorum = this.getZookeeperQuorum();
             Integer port = this.getPort();
             String rootNode = this.getRootNode();
@@ -279,7 +297,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             // Normalize connInfo so that a url explicitly specifying versus implicitly inheriting
             // the default values will both share the same ConnectionQueryServices.
             if (zookeeperQuorum == null) {
-                zookeeperQuorum = props.get(QueryServices.ZOOKEEPER_QUARUM_ATTRIB);
+                zookeeperQuorum = props.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
                 if (zookeeperQuorum == null) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                     .setMessage(this.toString()).build().buildException();
@@ -320,7 +338,76 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             		 keytab = props.get(QueryServices.HBASE_CLIENT_KEYTAB);
             	 }
             }
+            if (!isConnectionless()) {
+                boolean credsProvidedInUrl = null != principal && null != keytab;
+                boolean credsProvidedInProps = info.containsKey(QueryServices.HBASE_CLIENT_PRINCIPAL) && info.containsKey(QueryServices.HBASE_CLIENT_KEYTAB);
+                if (credsProvidedInUrl || credsProvidedInProps) {
+                    // PHOENIX-3189 Because ConnectionInfo is immutable, we must make sure all parts of it are correct before
+                    // construction; this also requires the Kerberos user credentials object (since they are compared by reference
+                    // and not by value. If the user provided a principal and keytab via the JDBC url, we must make sure that the
+                    // Kerberos login happens *before* we construct the ConnectionInfo object. Otherwise, the use of ConnectionInfo
+                    // to determine when ConnectionQueryServices impl's should be reused will be broken.
+                    try {
+                        // Check if we need to authenticate with kerberos so that we cache the correct ConnectionInfo
+                        UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
+                        if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                            synchronized (KERBEROS_LOGIN_LOCK) {
+                                // Double check the current user, might have changed since we checked last. Don't want
+                                // to re-login if it's the same user.
+                                currentUser = UserGroupInformation.getCurrentUser();
+                                if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                                    final Configuration config = getConfiguration(props, info, principal, keytab);
+                                    logger.info("Trying to connect to a secure cluster as {} with keytab {}", config.get(QueryServices.HBASE_CLIENT_PRINCIPAL),
+                                            config.get(QueryServices.HBASE_CLIENT_KEYTAB));
+                                    UserGroupInformation.setConfiguration(config);
+                                    User.login(config, QueryServices.HBASE_CLIENT_KEYTAB, QueryServices.HBASE_CLIENT_PRINCIPAL, null);
+                                    logger.info("Successful login to secure cluster");
+                                }
+                            }
+                        } else {
+                            // The user already has Kerberos creds, so there isn't anything to change in the ConnectionInfo.
+                            logger.debug("Already logged in as {}", currentUser);
+                        }
+                    } catch (IOException e) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
+                            .setRootCause(e).build().buildException();
+                    }
+                } else {
+                    logger.debug("Principal and keytab not provided, not attempting Kerberos login");
+                }
+            } // else, no connection, no need to login
+            // Will use the current User from UGI
             return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+        }
+
+        /**
+         * Constructs a Configuration object to use when performing a Kerberos login.
+         * @param props QueryServices properties
+         * @param info User-provided properties
+         * @param principal Kerberos user principal
+         * @param keytab Path to Kerberos user keytab
+         * @return Configuration object suitable for Kerberos login
+         */
+        private Configuration getConfiguration(ReadOnlyProps props, Properties info, String principal, String keytab) {
+            final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            // Add QueryServices properties
+            for (Entry<String,String> entry : props) {
+                config.set(entry.getKey(), entry.getValue());
+            }
+            // Add any user-provided properties (via DriverManager)
+            if (info != null) {
+                for (Object key : info.keySet()) {
+                    config.set((String) key, info.getProperty((String) key));
+                }
+            }
+            // Set the principal and keytab if provided from the URL (overriding those provided in Properties)
+            if (null != principal) {
+                config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
+            }
+            if (null != keytab) {
+                config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
+            }
+            return config;
         }
         
         private final Integer port;
@@ -329,6 +416,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         private final boolean isConnectionless;
         private final String principal;
         private final String keytab;
+        private final User user;
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode, String principal, String keytab) {
             this.zookeeperQuorum = zookeeperQuorum;
@@ -337,16 +425,33 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             this.isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(zookeeperQuorum);
             this.principal = principal;
             this.keytab = keytab;
+            try {
+                this.user = User.getCurrent();
+            } catch (IOException e) {
+                throw new RuntimeException("Couldn't get the current user!!");
+            }
+            if (null == this.user) {
+                throw new RuntimeException("Acquired null user which should never happen");
+            }
         }
         
         public ConnectionInfo(String zookeeperQuorum, Integer port, String rootNode) {
         	this(zookeeperQuorum, port, rootNode, null, null);
         }
 
+        /**
+         * Copy constructor for all members except {@link #user}.
+         *
+         * @param other The instance to copy
+         */
+        public ConnectionInfo(ConnectionInfo other) {
+            this(other.zookeeperQuorum, other.port, other.rootNode, other.principal, other.keytab);
+        }
+
         public ReadOnlyProps asProps() {
             Map<String, String> connectionProps = Maps.newHashMapWithExpectedSize(3);
             if (getZookeeperQuorum() != null) {
-                connectionProps.put(QueryServices.ZOOKEEPER_QUARUM_ATTRIB, getZookeeperQuorum());
+                connectionProps.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, getZookeeperQuorum());
             }
             if (getPort() != null) {
                 connectionProps.put(QueryServices.ZOOKEEPER_PORT_ATTRIB, getPort().toString());
@@ -386,6 +491,10 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             return principal;
         }
 
+        public User getUser() {
+            return user;
+        }
+
         @Override
         public int hashCode() {
             final int prime = 31;
@@ -395,6 +504,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             result = prime * result + ((rootNode == null) ? 0 : rootNode.hashCode());
             result = prime * result + ((principal == null) ? 0 : principal.hashCode());
             result = prime * result + ((keytab == null) ? 0 : keytab.hashCode());
+            // `user` is guaranteed to be non-null
+            result = prime * result + user.hashCode();
             return result;
         }
 
@@ -404,6 +515,8 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             if (obj == null) return false;
             if (getClass() != obj.getClass()) return false;
             ConnectionInfo other = (ConnectionInfo) obj;
+            // `user` is guaranteed to be non-null
+            if (!other.user.equals(user)) return false;
             if (zookeeperQuorum == null) {
                 if (other.zookeeperQuorum != null) return false;
             } else if (!zookeeperQuorum.equals(other.zookeeperQuorum)) return false;
@@ -433,6 +546,23 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         public String toUrl() {
             return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
                     + toString();
+        }
+
+        private static ConnectionInfo defaultConnectionInfo(String url) throws SQLException {
+            Configuration config =
+                    HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            String quorum = config.get(HConstants.ZOOKEEPER_QUORUM);
+            if (quorum == null || quorum.isEmpty()) {
+                throw getMalFormedUrlException(url);
+            }
+            String clientPort = config.get(HConstants.ZOOKEEPER_CLIENT_PORT);
+            Integer port = clientPort==null ? null : Integer.parseInt(clientPort);
+            if (port == null || port < 0) {
+                throw getMalFormedUrlException(url);
+            }
+            String znodeParent = config.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
+            LOG.debug("Getting default jdbc connection url " + quorum + ":" + port + ":" + znodeParent);
+            return new ConnectionInfo(quorum, port, znodeParent);
         }
     }
 

@@ -38,10 +38,12 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -64,7 +66,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorInWhereWithEqualsExpression() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) = (7, 5)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -89,7 +91,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorInWhereWithGreaterThanExpression() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) >= (4, 4)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -115,7 +117,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorInWhereWithUnEqualNumberArgs() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer, y_integer) >= (7, 5)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -141,7 +143,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testBindVarsInRowValueConstructor() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) = (?, ?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -168,7 +170,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorOnLHSAndLiteralExpressionOnRHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) >= 7";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -192,7 +194,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorOnRHSLiteralExpressionOnLHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND 7 <= (a_integer, x_integer)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -216,7 +218,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorOnLHSBuiltInFunctionOperatingOnIntegerLiteralRHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) >= to_number('7')";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -240,7 +242,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorOnRHSWithBuiltInFunctionOperatingOnIntegerLiteralOnLHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND to_number('7') <= (a_integer, x_integer)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -264,7 +266,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorOnLHSWithBuiltInFunctionOperatingOnColumnRefOnRHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts - 1);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts - 1, getUrl());
         String upsertQuery = "UPSERT INTO aTable(organization_id, entity_id, a_string) values (?, ?, ?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -330,7 +332,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRowValueConstructorOnRHSWithBuiltInFunctionOperatingOnColumnRefOnLHS() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts - 1);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts - 1, getUrl());
         String upsertQuery = "UPSERT INTO aTable(organization_id, entity_id, a_string) values (?, ?, ?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
@@ -652,7 +654,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRVCWithNonLeadingPkColsOfTypesIntegerAndString() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, a_string FROM aTable WHERE ?=organization_id  AND (a_integer, a_string) <= (5, 'a')";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -678,7 +680,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRVCWithNonLeadingPkColsOfTypesTimeStampAndString() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String updateStmt = 
             "upsert into " +
             "ATABLE(" +
@@ -722,7 +724,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testNestedRVCBasic() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         //all the three queries should return the same rows.
         String[] queries = {"SELECT organization_id, entity_id, a_string FROM aTable WHERE ((organization_id, entity_id), a_string) >= ((?, ?), ?)",
                             "SELECT organization_id, entity_id, a_string FROM aTable WHERE (organization_id, entity_id, a_string) >= (?, ?, ?)",
@@ -760,7 +762,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRVCWithInListClausePossibleNullValues() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         //we have a row present in aTable where x_integer = 5 and y_integer = NULL which gets translated to 0 when retriving from HBase. 
         String query = "SELECT x_integer, y_integer FROM aTable WHERE ? = organization_id AND (x_integer, y_integer) IN ((5))";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -782,7 +784,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRVCWithInListClauseUsingSubsetOfPKColsInOrder() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         // Though we have a row present in aTable where organization_id = tenantId and  x_integer = 5,
         // we'd also need to have an entity_id that is null (which we don't have).
         String query = "SELECT organization_id, entity_id FROM aTable WHERE (organization_id, entity_id) IN (('" + tenantId + "')) AND x_integer = 5";
@@ -812,7 +814,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
     public void testRVCWithCeilAndFloorNeededForDecimal() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(tenantId, getDefaultSplits(tenantId), null, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
         String query = "SELECT a_integer, x_integer FROM aTable WHERE ?=organization_id  AND (a_integer, x_integer) < (8.6, 4.5) AND (a_integer, x_integer) > (6.8, 4)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -839,7 +841,7 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
         String tenantId = getOrganizationId();
         Date dateUpserted = DateUtil.parseDate("2012-01-01 14:25:28");
         dateUpserted = new Date(dateUpserted.getTime() + 660); // this makes the dateUpserted equivalent to 2012-01-01 14:25:28.660
-        initATableValues(tenantId, getDefaultSplits(tenantId), dateUpserted, ts);
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), dateUpserted, ts, getUrl());
         String query = "SELECT a_integer, a_date FROM aTable WHERE ?=organization_id  AND (a_integer, a_date) <= (9, ?) AND (a_integer, a_date) >= (6, ?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
@@ -1652,4 +1654,51 @@ public class RowValueConstructorIT extends BaseClientManagedTimeIT {
 		assertEquals("403", rs.getString(4));
 	}
 
+    @Test
+    public void testMultiTenantRVC() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = "mtRVC";
+        String ddl = "CREATE TABLE " + tableName 
+                + " (\n" + 
+                "    pk1 VARCHAR NOT NULL,\n" + 
+                "    pk2 DECIMAL NOT NULL,\n" + 
+                "    v1 VARCHAR\n" + 
+                "    CONSTRAINT PK PRIMARY KEY \n" + 
+                "    (\n" + 
+                "        pk1,\n" + 
+                "        pk2\n" + 
+                "    )\n" + 
+                ") MULTI_TENANT=true,IMMUTABLE_ROWS=true";
+        conn.createStatement().execute(ddl);
+
+        conn = nextConnection(getUrl());
+        ddl = "CREATE INDEX  " + tableName + "_idx"
+                + " ON " + tableName + " (v1)";
+        conn.createStatement().execute(ddl);
+        
+        conn = nextConnection(getUrl());
+        String upsert = "UPSERT INTO " + tableName + " VALUES(?, ?, ?)";
+        PreparedStatement stmt = conn.prepareStatement(upsert);
+        stmt.setString(1, "a");
+        stmt.setInt(2, 1);
+        stmt.setString(3, "value");
+        stmt.execute();
+        stmt.setString(1, "a");
+        stmt.setInt(2, 2);
+        stmt.setString(3, "value");
+        stmt.execute();
+        conn.commit();
+
+        conn = nextConnection(getUrl());
+        String query = "SELECT pk1, pk2, v1 FROM " + tableName + " WHERE pk1 = 'a' AND\n" + 
+                "(pk1, pk2) > ('a', 1)\n" + 
+                "ORDER BY PK1, PK2\n" + 
+                "LIMIT 2";
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertTrue(new BigDecimal("2").compareTo(rs.getBigDecimal(2)) == 0);
+        assertEquals("value", rs.getString(3));
+        assertFalse(rs.next());
+    }
 }

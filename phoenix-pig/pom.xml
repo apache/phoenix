@@ -26,7 +26,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.8.0-HBase-1.1-SNAPSHOT</version>
+    <version>4.9.0-HBase-1.2-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-pig</artifactId>
   <name>Phoenix - Pig</name>
@@ -100,6 +100,12 @@
    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>xom</groupId>
+          <artifactId>xom</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -161,7 +167,7 @@
       <artifactId>junit</artifactId>
     </dependency>
     <dependency>
-      <groupId>co.cask.tephra</groupId>
+      <groupId>org.apache.tephra</groupId>
       <artifactId>tephra-core</artifactId>
       <type>test-jar</type>
       <scope>test</scope>

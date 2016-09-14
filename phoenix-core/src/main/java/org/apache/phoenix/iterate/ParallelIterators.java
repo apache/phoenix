@@ -53,21 +53,23 @@ public class ParallelIterators extends BaseResultIterators {
 	private static final Logger logger = LoggerFactory.getLogger(ParallelIterators.class);
 	private static final String NAME = "PARALLEL";
     private final ParallelIteratorFactory iteratorFactory;
+    private final boolean initFirstScanOnly;
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper)
+    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, ParallelScanGrouper scanGrouper, Scan scan, boolean initFirstScanOnly)
             throws SQLException {
-        super(plan, perScanLimit, null, scanGrouper);
+        super(plan, perScanLimit, null, scanGrouper, scan);
         this.iteratorFactory = iteratorFactory;
+        this.initFirstScanOnly = initFirstScanOnly;
     }   
     
-    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory)
+    public ParallelIterators(QueryPlan plan, Integer perScanLimit, ParallelIteratorFactory iteratorFactory, Scan scan, boolean initOneScanPerRegion)
             throws SQLException {
-        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance());
+        this(plan, perScanLimit, iteratorFactory, DefaultParallelScanGrouper.getInstance(), scan, initOneScanPerRegion);
     }  
 
     @Override
-    protected void submitWork(List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
-            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize) throws SQLException {
+    protected void submitWork(final List<List<Scan>> nestedScans, List<List<Pair<Scan,Future<PeekingResultIterator>>>> nestedFutures,
+            final Queue<PeekingResultIterator> allIterators, int estFlattenedSize, final boolean isReverse, ParallelScanGrouper scanGrouper) throws SQLException {
         // Pre-populate nestedFutures lists so that we can shuffle the scans
         // and add the future to the right nested list. By shuffling the scans
         // we get better utilization of the cluster since our thread executor
@@ -77,11 +79,12 @@ public class ParallelIterators extends BaseResultIterators {
         List<ScanLocator> scanLocations = Lists.newArrayListWithExpectedSize(estFlattenedSize);
         for (int i = 0; i < nestedScans.size(); i++) {
             List<Scan> scans = nestedScans.get(i);
-            List<Pair<Scan,Future<PeekingResultIterator>>> futures = Lists.newArrayListWithExpectedSize(scans.size());
+            int numScans = scans.size();
+            List<Pair<Scan,Future<PeekingResultIterator>>> futures = Lists.newArrayListWithExpectedSize(numScans);
             nestedFutures.add(futures);
-            for (int j = 0; j < scans.size(); j++) {
+            for (int j = 0; j < numScans; j++) {
             	Scan scan = nestedScans.get(i).get(j);
-                scanLocations.add(new ScanLocator(scan, i, j));
+                scanLocations.add(new ScanLocator(scan, i, j, j == 0, (j == numScans - 1)));
                 futures.add(null); // placeholder
             }
         }
@@ -94,24 +97,29 @@ public class ParallelIterators extends BaseResultIterators {
         context.getOverallQueryMetrics().updateNumParallelScans(numScans);
         GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
         final long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
-        for (ScanLocator scanLocation : scanLocations) {
+        for (final ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
             final CombinableMetric scanMetrics = readMetrics.allotMetric(MetricType.SCAN_BYTES, physicalTableName);
             final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(readMetrics, physicalTableName);
-            final TableResultIterator tableResultItr = context.getConnection().getTableResultIteratorFactory().newIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold);
-            context.getConnection().addIterator(tableResultItr);
+            final TableResultIterator tableResultItr = context.getConnection().getTableResultIteratorFactory().newIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold, plan, scanGrouper);
+            context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 
                 @Override
                 public PeekingResultIterator call() throws Exception {
                     long startTime = System.currentTimeMillis();
-                    tableResultItr.initScanner();
                     if (logger.isDebugEnabled()) {
                         logger.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " + (System.currentTimeMillis() - startTime) + "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
                     }
-                    PeekingResultIterator iterator = iteratorFactory.newIterator(context, tableResultItr, scan, physicalTableName);
-                    // Fill the scanner's cache. This helps reduce latency since we are parallelizing the I/O needed.
-                    iterator.peek();
+                    PeekingResultIterator iterator = iteratorFactory.newIterator(context, tableResultItr, scan, physicalTableName, ParallelIterators.this.plan);
+                    if (initFirstScanOnly) {
+                        if ((!isReverse && scanLocation.isFirstScan()) || (isReverse && scanLocation.isLastScan())) {
+                            // Fill the scanner's cache. This helps reduce latency since we are parallelizing the I/O needed.
+                            iterator.peek();
+                        }
+                    } else {
+                        iterator.peek();
+                    }
                     allIterators.add(iterator);
                     return iterator;
                 }
@@ -130,7 +138,7 @@ public class ParallelIterators extends BaseResultIterators {
                 public TaskExecutionMetricsHolder getTaskExecutionMetric() {
                     return taskMetrics;
                 }
-            }, "Parallel scanner for table: " + tableRef.getTable().getName().getString()));
+            }, "Parallel scanner for table: " + tableRef.getTable().getPhysicalName().getString()));
             // Add our future in the right place so that we can concatenate the
             // results of the inner futures versus merge sorting across all of them.
             nestedFutures.get(scanLocation.getOuterListIndex()).set(scanLocation.getInnerListIndex(), new Pair<Scan,Future<PeekingResultIterator>>(scan,future));

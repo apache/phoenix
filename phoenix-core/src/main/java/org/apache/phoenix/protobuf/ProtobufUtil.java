@@ -1,6 +1,4 @@
 /*
- * Copyright 2010 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,13 +30,13 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
+import org.apache.phoenix.schema.PTableType;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcController;
-import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
-import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
-import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.schema.PTableType;
 
 public class ProtobufUtil {
 
@@ -71,6 +69,10 @@ public class ProtobufUtil {
         return getMutations(request.getTableMetadataMutationsList());
     }
 
+    public static List<Mutation> getMutations(MetaDataProtos.DropSchemaRequest request) throws IOException {
+        return getMutations(request.getSchemaMetadataMutationsList());
+    }
+
     public static List<Mutation> getMutations(MetaDataProtos.DropFunctionRequest request)
             throws IOException {
         return getMutations(request.getTableMetadataMutationsList());
@@ -98,6 +100,10 @@ public class ProtobufUtil {
 
     public static List<Mutation> getMutations(MetaDataProtos.UpdateIndexStateRequest request)
             throws IOException {
+        return getMutations(request.getTableMetadataMutationsList());
+    }
+
+    public static List<Mutation> getMutations(MetaDataProtos.CreateSchemaRequest request) throws IOException {
         return getMutations(request.getTableMetadataMutationsList());
     }
 

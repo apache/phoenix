@@ -17,7 +17,10 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.query.BaseTest.generateRandomString;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY_NAME;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
@@ -42,6 +45,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
@@ -55,6 +59,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.AggregationManager;
+import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
@@ -70,7 +76,10 @@ import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.StringBasedLikeExpression;
+import org.apache.phoenix.expression.aggregator.ClientAggregators;
+import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.expression.function.SubstrFunction;
+import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.filter.MultiCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.MultiKeyValueComparisonFilter;
 import org.apache.phoenix.filter.RowKeyComparisonFilter;
@@ -79,13 +88,17 @@ import org.apache.phoenix.filter.SingleKeyValueComparisonFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PLongColumn;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.PTableStats;
@@ -437,8 +450,8 @@ public class TestUtil {
      * @param input
      *            input to be inserted
      */
-    public static void upsertRow(Connection conn, String sortOrder, int id, Object input) throws SQLException {
-        String dml = String.format("UPSERT INTO TEST_TABLE_%s VALUES(?,?)", sortOrder);
+    public static void upsertRow(Connection conn, String tableName, String sortOrder, int id, Object input) throws SQLException {
+        String dml = String.format("UPSERT INTO " + tableName + "_%s VALUES(?,?)", sortOrder);
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setInt(1, id);
         if (input instanceof String)
@@ -459,11 +472,11 @@ public class TestUtil {
         conn.commit();
     }
 
-    private static void createTable(Connection conn, String inputSqlType, String sortOrder) throws SQLException {
+    private static void createTable(Connection conn, String inputSqlType, String tableName, String sortOrder) throws SQLException {
         String dmlFormat =
-            "CREATE TABLE TEST_TABLE_%s" + "(id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s "
+            "CREATE TABLE " + tableName + "_%s (id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s "
                 + "CONSTRAINT PK_CONSTRAINT PRIMARY KEY (id, pk %s))";
-        String ddl = String.format(dmlFormat, sortOrder, inputSqlType, inputSqlType, sortOrder);
+        String ddl = String.format(dmlFormat,sortOrder, inputSqlType, inputSqlType, sortOrder);
         conn.createStatement().execute(ddl);
         conn.commit();
     }
@@ -479,13 +492,15 @@ public class TestUtil {
      * @param inputList
      *            list of values to be inserted into the pk column
      */
-    public static void initTables(Connection conn, String inputSqlType, List<Object> inputList) throws Exception {
-        createTable(conn, inputSqlType, "ASC");
-        createTable(conn, inputSqlType, "DESC");
+    public static String initTables(Connection conn, String inputSqlType, List<Object> inputList) throws Exception {
+        String tableName = generateRandomString();
+        createTable(conn, inputSqlType, tableName, "ASC");
+        createTable(conn, inputSqlType, tableName, "DESC");
         for (int i = 0; i < inputList.size(); ++i) {
-            upsertRow(conn, "ASC", i, inputList.get(i));
-            upsertRow(conn, "DESC", i, inputList.get(i));
+            upsertRow(conn, tableName, "ASC", i, inputList.get(i));
+            upsertRow(conn, tableName, "DESC", i, inputList.get(i));
         }
+        return tableName;
     }
     
     public static List<KeyRange> getAllSplits(Connection conn, String tableName) throws SQLException {
@@ -542,7 +557,9 @@ public class TestUtil {
         }
         pstmt.execute();
         TableRef tableRef = pstmt.getQueryPlan().getTableRef();
-        PTableStats tableStats = tableRef.getTable().getTableStats();
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        long scn = null == pconn.getSCN() ? Long.MAX_VALUE : pconn.getSCN();
+        PTableStats tableStats = pconn.getQueryServices().getTableStats(tableRef.getTable().getName().getBytes(), scn);
         return tableStats.getGuidePosts().values();
     }
 
@@ -621,6 +638,64 @@ public class TestUtil {
         if (transactional!=null)
             tableNameBuilder.append(transactional ? "_TXN" : "_NON_TXN");
         return tableNameBuilder.toString();
+    }
+
+    public static ClientAggregators getSingleSumAggregator(String url, Properties props) throws SQLException {
+        try (PhoenixConnection pconn = DriverManager.getConnection(url, props).unwrap(PhoenixConnection.class)) {
+            PhoenixStatement statement = new PhoenixStatement(pconn);
+            StatementContext context = new StatementContext(statement, null, new Scan(), new SequenceManager(statement));
+            AggregationManager aggregationManager = context.getAggregationManager();
+            SumAggregateFunction func = new SumAggregateFunction(Arrays.<Expression>asList(new KeyValueColumnExpression(new PLongColumn() {
+                @Override
+                public PName getName() {
+                    return SINGLE_COLUMN_NAME;
+                }
+                @Override
+                public PName getFamilyName() {
+                    return SINGLE_COLUMN_FAMILY_NAME;
+                }
+                @Override
+                public int getPosition() {
+                    return 0;
+                }
+                
+                @Override
+                public SortOrder getSortOrder() {
+                	return SortOrder.getDefault();
+                }
+                
+                @Override
+                public Integer getArraySize() {
+                    return 0;
+                }
+                
+                @Override
+                public byte[] getViewConstant() {
+                    return null;
+                }
+                
+                @Override
+                public boolean isViewReferenced() {
+                    return false;
+                }
+                
+                @Override
+                public String getExpressionStr() {
+                    return null;
+                }
+                @Override
+                public boolean isRowTimestamp() {
+                    return false;
+                }
+    			@Override
+    			public boolean isDynamic() {
+    				return false;
+    			}
+            })), null);
+            aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));
+            ClientAggregators aggregators = aggregationManager.getAggregators();
+            return aggregators;
+        }
     }
 }
 

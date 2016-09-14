@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
@@ -30,7 +30,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Properties;
 
-public class ResultBaseTestIT extends BaseHBaseManagedTimeIT {
+public class ResultBaseTestIT extends BaseHBaseManagedTimeTableReuseIT {
     protected static final String matcherScenario = ".*scenario/.*test.*xml";
     protected static final String matcherSchema = ".*datamodel/.*test.*sql";
 

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.closeStmtAndConn;
+import static org.apache.phoenix.util.TestUtil.getTableName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -33,21 +34,25 @@ import org.junit.Test;
 /**
  * End to end tests for {@link SqrtFunction}
  */
-public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
+public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-8;
-
+    String testUnsignedTable;
+    String testSignedTable;
+    
     @Before
     public void initTable() throws Exception {
         Connection conn = null;
         PreparedStatement stmt = null;
+        testUnsignedTable = generateRandomString();
+        testSignedTable = generateRandomString();
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE testSigned (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
+            ddl = "CREATE TABLE " + testSignedTable + " (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
             conn.createStatement().execute(ddl);
-            ddl = "CREATE TABLE testUnsigned (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
+            ddl = "CREATE TABLE " + testUnsignedTable + " (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -56,7 +61,7 @@ public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
 
     private void updateSignedTable(Connection conn, double data) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testSigned VALUES (?, ?, ?, ?, ?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + testSignedTable + " VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, KEY);
         Double d = Double.valueOf(data);
         stmt.setDouble(2, d.doubleValue());
@@ -70,7 +75,7 @@ public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
     }
 
     private void updateUnsignedTable(Connection conn, double data) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO testUnsigned VALUES (?, ?, ?, ?, ?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + testUnsignedTable + " VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt.setString(1, KEY);
         Double d = Double.valueOf(data);
         stmt.setDouble(2, d.doubleValue());
@@ -85,7 +90,7 @@ public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
 
     private void testSignedNumberSpec(Connection conn, double data) throws Exception {
         updateSignedTable(conn, data);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT SQRT(doub),SQRT(fl),SQRT(inte),SQRT(lon),SQRT(smalli),SQRT(tinyi) FROM testSigned");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT SQRT(doub),SQRT(fl),SQRT(inte),SQRT(lon),SQRT(smalli),SQRT(tinyi) FROM " + testSignedTable );
         assertTrue(rs.next());
         Double d = Double.valueOf(data);
         assertTrue(Math.abs(rs.getDouble(1) - Math.sqrt(d.doubleValue())) < ZERO);
@@ -95,7 +100,7 @@ public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertTrue(Math.abs(rs.getDouble(5) - Math.sqrt(d.shortValue())) < ZERO);
         assertTrue(Math.abs(rs.getDouble(6) - Math.sqrt(d.byteValue())) < ZERO);
         assertTrue(!rs.next());
-        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM testSigned WHERE SQRT(doub)>0 AND SQRT(fl)>0 AND SQRT(inte)>0 AND SQRT(lon)>0 AND SQRT(smalli)>0 AND SQRT(tinyi)>0");
+        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM " + testSignedTable + " WHERE SQRT(doub)>0 AND SQRT(fl)>0 AND SQRT(inte)>0 AND SQRT(lon)>0 AND SQRT(smalli)>0 AND SQRT(tinyi)>0");
         rs = stmt.executeQuery();
         if (data > 0) {
             assertTrue(rs.next());
@@ -106,7 +111,7 @@ public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
 
     private void testUnsignedNumberSpec(Connection conn, double data) throws Exception {
         updateUnsignedTable(conn, data);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT SQRT(doub),SQRT(fl),SQRT(inte),SQRT(lon),SQRT(smalli),SQRT(tinyi) FROM testUnsigned");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT SQRT(doub),SQRT(fl),SQRT(inte),SQRT(lon),SQRT(smalli),SQRT(tinyi) FROM " + testUnsignedTable );
         assertTrue(rs.next());
         Double d = Double.valueOf(data);
         assertTrue(Math.abs(rs.getDouble(1) - Math.sqrt(d.doubleValue())) < ZERO);
@@ -116,7 +121,7 @@ public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeIT {
         assertTrue(Math.abs(rs.getDouble(5) - Math.sqrt(d.shortValue())) < ZERO);
         assertTrue(Math.abs(rs.getDouble(6) - Math.sqrt(d.byteValue())) < ZERO);
         assertTrue(!rs.next());
-        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM testUnsigned WHERE SQRT(doub)>0 AND SQRT(fl)>0 AND SQRT(inte)>0 AND SQRT(lon)>0 AND SQRT(smalli)>0 AND SQRT(tinyi)>0");
+        PreparedStatement stmt = conn.prepareStatement("SELECT k FROM " + testUnsignedTable + " WHERE SQRT(doub)>0 AND SQRT(fl)>0 AND SQRT(inte)>0 AND SQRT(lon)>0 AND SQRT(smalli)>0 AND SQRT(tinyi)>0");
         rs = stmt.executeQuery();
         if (data > 0) {
             assertTrue(rs.next());

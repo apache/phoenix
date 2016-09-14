@@ -18,7 +18,6 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.STARTKEY_OFFSET;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -70,6 +69,11 @@ public class ScanRanges {
         return create(schema, ranges, ScanUtil.getDefaultSlotSpans(ranges.size()), KeyRange.EVERYTHING_RANGE, null, true, -1);
     }
     
+    // For testing
+    public static ScanRanges createSingleSpan(RowKeySchema schema, List<List<KeyRange>> ranges, Integer nBuckets, boolean useSkipSan) {
+        return create(schema, ranges, ScanUtil.getDefaultSlotSpans(ranges.size()), KeyRange.EVERYTHING_RANGE, nBuckets, useSkipSan, -1);
+    }
+
     public static ScanRanges create(RowKeySchema schema, List<List<KeyRange>> ranges, int[] slotSpan, KeyRange minMaxRange, Integer nBuckets, boolean useSkipScan, int rowTimestampColIndex) {
         int offset = nBuckets == null ? 0 : SaltingUtil.NUM_SALTING_BYTES;
         int nSlots = ranges.size();
@@ -105,7 +109,7 @@ public class ScanRanges {
             useSkipScan = keyRanges.size() > 1;
             // Treat as binary if descending because we've got a separator byte at the end
             // which is not part of the value.
-            if (keys.size() > 1 || SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, schema.getField(0)) == QueryConstants.DESC_SEPARATOR_BYTE) {
+            if (keys.size() > 1 || SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, schema.getField(schema.getFieldCount()-1)) == QueryConstants.DESC_SEPARATOR_BYTE) {
                 schema = SchemaUtil.VAR_BINARY_SCHEMA;
                 slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
             } else {
@@ -172,12 +176,8 @@ public class ScanRanges {
         this.minMaxRange = minMaxRange;
         this.rowTimestampRange = rowTimestampRange;
         
-        // Only blow out the bucket values if we're using the skip scan. We need all the
-        // bucket values in this case because we use intersect against a key that may have
-        // any of the possible bucket values. Otherwise, we can pretty easily ignore the
-        // bucket values.
-        if (useSkipScanFilter && isSalted && !isPointLookup) {
-        	ranges.set(0, SaltingUtil.generateAllSaltingRanges(bucketNum));
+        if (isSalted && !isPointLookup) {
+            ranges.set(0, SaltingUtil.generateAllSaltingRanges(bucketNum));
         }
         this.ranges = ImmutableList.copyOf(ranges);
         this.slotSpan = slotSpan;
@@ -205,7 +205,7 @@ public class ScanRanges {
         scan.setStopRow(scanRange.getUpperRange());
     }
     
-    private static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
+    public static byte[] prefixKey(byte[] key, int keyOffset, byte[] prefixKey, int prefixKeyOffset) {
         if (key.length > 0) {
             byte[] newKey = new byte[key.length + prefixKeyOffset];
             int totalKeyOffset = keyOffset + prefixKeyOffset;
@@ -214,7 +214,7 @@ public class ScanRanges {
             }
             System.arraycopy(key, keyOffset, newKey, totalKeyOffset, key.length - keyOffset);
             return newKey;
-        }
+        } 
         return key;
     }
     
@@ -230,7 +230,7 @@ public class ScanRanges {
         return temp;
     }
     
-    private static byte[] stripPrefix(byte[] key, int keyOffset) {
+    public static byte[] stripPrefix(byte[] key, int keyOffset) {
         if (key.length == 0) {
             return key;
         }
@@ -245,7 +245,6 @@ public class ScanRanges {
         if (stopKey.length > 0 && Bytes.compareTo(startKey, stopKey) >= 0) { 
             return null; 
         }
-        boolean mayHaveRows = false;
         // Keep the keys as they are if we have a point lookup, as we've already resolved the
         // salt bytes in that case.
         final int scanKeyOffset = this.isSalted && !this.isPointLookup ? SaltingUtil.NUM_SALTING_BYTES : 0;
@@ -270,49 +269,53 @@ public class ScanRanges {
             }
         }
         int scanStartKeyOffset = scanKeyOffset;
-        byte[] scanStartKey = scan == null ? ByteUtil.EMPTY_BYTE_ARRAY : scan.getStartRow();
+        byte[] scanStartKey = scan == null ? this.scanRange.getLowerRange() : scan.getStartRow();
         // Compare ignoring key prefix and salt byte
-        if (scanStartKey.length > 0) {
-            if (startKey.length > 0 && Bytes.compareTo(scanStartKey, scanKeyOffset, scanStartKey.length - scanKeyOffset, startKey, totalKeyOffset, startKey.length - totalKeyOffset) < 0) {
-                scanStartKey = startKey;
-                scanStartKeyOffset = totalKeyOffset;
+        if (scanStartKey.length - scanKeyOffset > 0) {
+            if (startKey.length - totalKeyOffset > 0) {
+                if (Bytes.compareTo(scanStartKey, scanKeyOffset, scanStartKey.length - scanKeyOffset, startKey, totalKeyOffset, startKey.length - totalKeyOffset) < 0) {
+                    scanStartKey = startKey;
+                    scanStartKeyOffset = totalKeyOffset;
+                }
             }
         } else {
-        	scanStartKey = startKey;
+            scanStartKey = startKey;
             scanStartKeyOffset = totalKeyOffset;
-            mayHaveRows = true;
         }
         int scanStopKeyOffset = scanKeyOffset;
-        byte[] scanStopKey = scan == null ? ByteUtil.EMPTY_BYTE_ARRAY : scan.getStopRow();
-        if (scanStopKey.length > 0) {
-            if (stopKey.length > 0 && Bytes.compareTo(scanStopKey, scanKeyOffset, scanStopKey.length - scanKeyOffset, stopKey, totalKeyOffset, stopKey.length - totalKeyOffset) > 0) {
-                scanStopKey = stopKey;
-                scanStopKeyOffset = totalKeyOffset;
+        byte[] scanStopKey = scan == null ? this.scanRange.getUpperRange() : scan.getStopRow();
+        if (scanStopKey.length - scanKeyOffset > 0) {
+            if (stopKey.length - totalKeyOffset > 0) {
+                if (Bytes.compareTo(scanStopKey, scanKeyOffset, scanStopKey.length - scanKeyOffset, stopKey, totalKeyOffset, stopKey.length - totalKeyOffset) > 0) {
+                    scanStopKey = stopKey;
+                    scanStopKeyOffset = totalKeyOffset;
+                }
             }
         } else {
-        	scanStopKey = stopKey;
+            scanStopKey = stopKey;
             scanStopKeyOffset = totalKeyOffset;
-            mayHaveRows = true;
         }
-        mayHaveRows = mayHaveRows || Bytes.compareTo(scanStartKey, scanStartKeyOffset, scanStartKey.length - scanStartKeyOffset, scanStopKey, scanStopKeyOffset, scanStopKey.length - scanStopKeyOffset) < 0;
         
-        if (!mayHaveRows) {
+        // If not scanning anything, return null
+        if (scanStopKey.length - scanStopKeyOffset > 0 && 
+            Bytes.compareTo(scanStartKey, scanStartKeyOffset, scanStartKey.length - scanStartKeyOffset, 
+                            scanStopKey, scanStopKeyOffset, scanStopKey.length - scanStopKeyOffset) >= 0) {
             return null;
         }
         if (originalStopKey.length != 0 && scanStopKey.length == 0) {
             scanStopKey = originalStopKey;
         }
         Filter newFilter = null;
-        // If the scan is using skip scan filter, intersect and replace the filter.
-        if (scan == null || this.useSkipScanFilter()) {
+        // Only if the scan is using skip scan filter, intersect and replace the filter.
+        // For example, we may be forcing a range scan, in which case we do not want to
+        // intersect the start/stop with the filter. Instead, we rely only on the scan
+        // start/stop or the scanRanges start/stop.
+        if (this.useSkipScanFilter()) {
             byte[] skipScanStartKey = scanStartKey;
             byte[] skipScanStopKey = scanStopKey;
             // If we have a keyOffset and we've used the startKey/stopKey that
             // were passed in (which have the prefix) for the above range check,
             // we need to remove the prefix before running our intersect method.
-            // TODO: we could use skipScanFilter.setOffset(keyOffset) if both
-            // the startKey and stopKey were used above *and* our intersect
-            // method honored the skipScanFilter.offset variable.
             if (scanKeyOffset > 0) {
                 if (skipScanStartKey != originalStartKey) { // original already has correct salt byte
                     skipScanStartKey = replaceSaltByte(skipScanStartKey, prefixBytes);
@@ -362,6 +365,10 @@ public class ScanRanges {
                 scanStopKey = ScanUtil.getMaxKey(schema, newSkipScanFilter.getSlots(), slotSpan);
             }
         }
+        // If we've got this far, we know we have an intersection
+        if (scan == null) {
+            return HAS_INTERSECTION;
+        }
         if (newFilter == null) {
             newFilter = scan.getFilter();
         }
@@ -389,37 +396,34 @@ public class ScanRanges {
         newScan.setAttribute(SCAN_ACTUAL_START_ROW, scanStartKey);
         newScan.setStartRow(scanStartKey);
         newScan.setStopRow(scanStopKey);
-        if(keyOffset > 0) {
-            newScan.setAttribute(STARTKEY_OFFSET, Bytes.toBytes(keyOffset));
-        }
-
         return newScan;
     }
 
     /**
-     * Return true if the range formed by the lowerInclusiveKey and upperExclusiveKey
-     * intersects with the scan ranges and false otherwise. We cannot pass in
-     * a KeyRange here, because the underlying compare functions expect lower inclusive
-     * and upper exclusive keys. We cannot get their next key because the key must
-     * conform to the row key schema and if a null byte is added to a lower inclusive
-     * key, it's no longer a valid, real key.
-     * @param lowerInclusiveKey lower inclusive key
-     * @param upperExclusiveKey upper exclusive key
-     * @param crossesRegionBoundary whether or not the upperExclusiveKey spans upto
-     * or after the next region.
+     * Return true if the region with the start and end key
+     * intersects with the scan ranges and false otherwise. 
+     * @param regionStartKey lower inclusive key
+     * @param regionEndKey upper exclusive key
+     * @param isLocalIndex true if the table being scanned is a local index
      * @return true if the scan range intersects with the specified lower/upper key
      * range
      */
-    public boolean intersects(byte[] lowerInclusiveKey, byte[] upperExclusiveKey, int keyOffset, boolean crossesRegionBoundary) {
+    public boolean intersectRegion(byte[] regionStartKey, byte[] regionEndKey, boolean isLocalIndex) {
         if (isEverything()) {
             return true;
         }
         if (isDegenerate()) {
             return false;
         }
+        // Every range intersects all regions of a local index table 
+        if (isLocalIndex) {
+            return true;
+        }
         
-        //return filter.hasIntersect(lowerInclusiveKey, upperExclusiveKey);
-        return intersectScan(null, lowerInclusiveKey, upperExclusiveKey, keyOffset, crossesRegionBoundary) == HAS_INTERSECTION;
+        boolean crossesSaltBoundary = isSalted && ScanUtil.crossesPrefixBoundary(regionEndKey,
+                ScanUtil.getPrefix(regionStartKey, SaltingUtil.NUM_SALTING_BYTES), 
+                SaltingUtil.NUM_SALTING_BYTES);        
+        return intersectScan(null, regionStartKey, regionEndKey, 0, crossesSaltBoundary) == HAS_INTERSECTION;
     }
     
     public SkipScanFilter getSkipScanFilter() {

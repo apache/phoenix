@@ -103,7 +103,8 @@ public class TableMapping {
                     dataTable.isWALDisabled(), false, dataTable.getStoreNulls(),
                     dataTable.getViewType(), null, null, dataTable.rowKeyOrderOptimizable(),
                     dataTable.isTransactional(), dataTable.getUpdateCacheFrequency(),
-                    dataTable.getIndexDisableTimestamp());
+                    dataTable.getIndexDisableTimestamp(), dataTable.isNamespaceMapped(),
+                    dataTable.getAutoPartitionSeqName(), dataTable.isAppendOnlySchema());
             this.extendedTableRef = new TableRef(extendedTable);
         }
     }
@@ -350,7 +351,7 @@ public class TableMapping {
         List<PColumn> columns = Lists.newArrayList(pTable.getColumns());
         if (pTable.getViewIndexId() != null) {
             for (Iterator<PColumn> iter = columns.iterator(); iter.hasNext();) {
-                if (iter.next().getName().getString().equals(MetaDataUtil.VIEW_INDEX_ID_COLUMN_NAME)) {
+                if (iter.next().getName().getString().equals(MetaDataUtil.getViewIndexIdColumnName())) {
                     iter.remove();
                     break;
                 }

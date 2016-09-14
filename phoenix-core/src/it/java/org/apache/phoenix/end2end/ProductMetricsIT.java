@@ -89,7 +89,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     }
     
     private static void initTable(byte[][] splits, long ts) throws Exception {
-        ensureTableCreated(getUrl(),PRODUCT_METRICS_NAME,splits, ts-2);
+        ensureTableCreated(getUrl(), PRODUCT_METRICS_NAME, PRODUCT_METRICS_NAME,splits, ts-2);
     }
 
     private static void assertNoRows(Connection conn) throws SQLException {

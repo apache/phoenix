@@ -36,6 +36,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
@@ -91,7 +92,18 @@ public class OrderByCompiler {
         if (orderByNodes.isEmpty()) {
             return OrderBy.EMPTY_ORDER_BY;
         }
-        ExpressionCompiler compiler = new ExpressionCompiler(context, groupBy);
+        // for ungroupedAggregates as GROUP BY expression, check against an empty group by
+        ExpressionCompiler compiler;
+        if (groupBy.isUngroupedAggregate()) {
+            compiler = new ExpressionCompiler(context, GroupBy.EMPTY_GROUP_BY) {
+                @Override
+                protected Expression addExpression(Expression expression) {return expression;}
+                @Override
+                protected void addColumn(PColumn column) {}
+            };
+        } else {
+            compiler = new ExpressionCompiler(context, groupBy);
+        }
         // accumulate columns in ORDER BY
         OrderPreservingTracker tracker = 
                 new OrderPreservingTracker(context, groupBy, Ordering.ORDERED, orderByNodes.size(), tupleProjector);
@@ -136,8 +148,8 @@ public class OrderByCompiler {
             }
             compiler.reset();
         }
-       
-        if (orderByExpressions.isEmpty()) {
+        // we can remove ORDER BY clauses in case of only COUNT(DISTINCT...) clauses
+        if (orderByExpressions.isEmpty() || groupBy.isUngroupedAggregate()) {
             return OrderBy.EMPTY_ORDER_BY;
         }
         // If we're ordering by the order returned by the scan, we don't need an order by

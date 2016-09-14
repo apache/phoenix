@@ -192,26 +192,30 @@ public abstract class BaseQueryPlan implements QueryPlan {
     
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper);
-    }
-    
-    @Override
-    public final ResultIterator iterator() throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance());
+        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, this.context.getScan());
     }
 
-    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper) throws SQLException {
+    @Override
+    public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, scan);
+    }
+
+    @Override
+    public final ResultIterator iterator() throws SQLException {
+        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance(), this.context.getScan());
+    }
+
+    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         if (context.getScanRanges() == ScanRanges.NOTHING) {
             return ResultIterator.EMPTY_ITERATOR;
         }
         
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
-            return newIterator(scanGrouper);
+            return newIterator(scanGrouper, scan);
         }
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we
         // clone the scan for each parallelized chunk.
-        Scan scan = context.getScan();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
         
@@ -221,6 +225,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
         
         if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
             ScanUtil.setReversed(scan);
+            // Hack for working around PHOENIX-3121 and HBASE-16296.
+            // TODO: remove once PHOENIX-3121 and/or HBASE-16296 are fixed.
+            int scannerCacheSize = context.getStatement().getFetchSize();
+            if (limit != null && limit % scannerCacheSize == 0) {
+                scan.setCaching(scannerCacheSize + 1);
+            }
         }
         
         if (statement.getHint().hasHint(Hint.SMALL)) {
@@ -263,8 +273,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
             tenantIdBytes = connection.getTenantId() == null ? null :
                     ScanUtil.getTenantIdBytes(
                             table.getRowKeySchema(),
-                            table.getBucketNum()!=null,
-                            connection.getTenantId());
+                            table.getBucketNum() != null,
+                            connection.getTenantId(), table.getViewIndexId() != null);
         } else {
             tenantIdBytes = connection.getTenantId() == null ? null : connection.getTenantId().getBytes();
         }
@@ -308,7 +318,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
         }
         
-        ResultIterator iterator = newIterator(scanGrouper);
+        ResultIterator iterator = newIterator(scanGrouper, scan);
         iterator = dependencies.isEmpty() ?
                 iterator : new DelegateResultIterator(iterator) {
             @Override
@@ -437,7 +447,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
     }
 
-    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper) throws SQLException;
+    abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException;
     
     @Override
     public long getEstimatedSize() {

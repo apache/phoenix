@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 
@@ -50,11 +51,13 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
@@ -67,6 +70,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -82,13 +86,12 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SequenceUtil;
+import org.apache.tephra.TransactionManager;
+import org.apache.tephra.TransactionSystemClient;
+import org.apache.tephra.inmemory.InMemoryTxSystemClient;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
-import co.cask.tephra.TransactionManager;
-import co.cask.tephra.TransactionSystemClient;
-import co.cask.tephra.inmemory.InMemoryTxSystemClient;
 
 
 /**
@@ -110,6 +113,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
+    private final TableStatsCache tableStatsCache;
     
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
@@ -136,12 +140,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
         TransactionManager txnManager = new TransactionManager(config);
         this.txSystemClient = new InMemoryTxSystemClient(txnManager);
+        this.tableStatsCache = new TableStatsCache(this, config);
     }
 
     private PMetaData newEmptyMetaData() {
-        long maxSizeBytes = getProps().getLong(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB,
-                QueryServicesOptions.DEFAULT_MAX_CLIENT_METADATA_CACHE_SIZE);
-        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, maxSizeBytes);
+        return new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps());
     }
 
     @Override
@@ -166,37 +169,41 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addTable(PTable table, long resolvedTime) throws SQLException {
-        return metaData = metaData.addTable(table, resolvedTime);
+    public void addTable(PTable table, long resolvedTime) throws SQLException {
+        metaData.addTable(table, resolvedTime);
     }
     
     @Override
-    public PMetaData updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
-        return metaData = metaData.updateResolvedTimestamp(table, resolvedTimestamp);
+    public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
+        metaData.updateResolvedTimestamp(table, resolvedTimestamp);
     }
 
     @Override
-    public PMetaData addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, long resolvedTime) throws SQLException {
-        return metaData = metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, resolvedTime);
+    public void addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
+            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
+            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
+                    throws SQLException {
+        metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
+                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
+                resolvedTime);
     }
 
     @Override
-    public PMetaData removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp)
+    public void removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp)
             throws SQLException {
-        return metaData = metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
+        metaData.removeTable(tenantId, tableName, parentTableName, tableTimeStamp);
     }
 
     @Override
-    public PMetaData removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
+    public void removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp,
             long tableSeqNum, long resolvedTime) throws SQLException {
-        return metaData = metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
+        metaData.removeColumn(tenantId, tableName, columnsToRemove, tableTimeStamp, tableSeqNum, resolvedTime);
     }
 
     
     @Override
     public PhoenixConnection connect(String url, Properties info) throws SQLException {
-        return new PhoenixConnection(this, url, info, metaData);
+        return new PhoenixConnection(this, url, info, metaData.clone());
     }
 
     @Override
@@ -241,7 +248,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
     
     @Override
-    public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType, Map<String,Object> tableProps, List<Pair<byte[],Map<String,Object>>> families, byte[][] splits) throws SQLException {
+    public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
+            Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
+            boolean isNamespaceMapped) throws SQLException {
         if (splits != null) {
             byte[] tableName = getTableName(tableMetaData, physicalName);
             tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
@@ -508,7 +517,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) {
-        return PTableStats.EMPTY_STATS;
+        PTableStats stats = tableStatsCache.getCache().getIfPresent(physicalName);
+        if (null == stats) {
+          return PTableStats.EMPTY_STATS;
+        }
+        return stats;
     }
 
     @Override
@@ -533,14 +546,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PMetaData addFunction(PFunction function) throws SQLException {
-        return metaData = this.metaData.addFunction(function);
+    public void addFunction(PFunction function) throws SQLException {
+        this.metaData.addFunction(function);
     }
 
     @Override
-    public PMetaData removeFunction(PName tenantId, String function, long functionTimeStamp)
+    public void removeFunction(PName tenantId, String function, long functionTimeStamp)
             throws SQLException {
-        return metaData = this.metaData.removeFunction(tenantId, function, functionTimeStamp);
+        this.metaData.removeFunction(tenantId, function, functionTimeStamp);
     }
 
     @Override
@@ -591,5 +604,50 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
        return new HRegionLocation(
                        new HRegionInfo(TableName.valueOf(tableName), HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW),
                        SERVER_NAME, -1);
+    }
+
+    @Override
+    public MetaDataMutationResult createSchema(List<Mutation> schemaMutations, String schemaName) {
+        return new MetaDataMutationResult(MutationCode.SCHEMA_NOT_FOUND, 0l, null);
+    }
+
+    @Override
+    public void addSchema(PSchema schema) throws SQLException {
+        this.metaData.addSchema(schema);
+    }
+
+    @Override
+    public MetaDataMutationResult getSchema(String schemaName, long clientTimestamp) throws SQLException {
+        try {
+            PSchema schema = metaData.getSchema(new PTableKey(null, schemaName));
+            new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, schema, 0);
+        } catch (SchemaNotFoundException e) {}
+        return new MetaDataMutationResult(MutationCode.SCHEMA_NOT_FOUND, 0, null);
+    }
+
+    @Override
+    public void removeSchema(PSchema schema, long schemaTimeStamp) {
+        metaData.removeSchema(schema, schemaTimeStamp);
+    }
+
+    @Override
+    public MetaDataMutationResult dropSchema(List<Mutation> schemaMetaData, String schemaName) {
+        return new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, 0, null);
+    }
+
+    /**
+     * Manually adds {@link PTableStats} for a table to the client-side cache. Not a
+     * {@link ConnectionQueryServices} method. Exposed for testing purposes.
+     *
+     * @param tableName Table name
+     * @param stats Stats instance
+     */
+    public void addTableStats(ImmutableBytesPtr tableName, PTableStats stats) {
+        this.tableStatsCache.put(Objects.requireNonNull(tableName), stats);
+    }
+
+    @Override
+    public void invalidateStats(ImmutableBytesPtr tableName) {
+        this.tableStatsCache.invalidate(Objects.requireNonNull(tableName));
     }
 }

@@ -32,6 +32,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
@@ -41,8 +42,10 @@ import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
@@ -83,15 +86,19 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     private final boolean transactional;
     private final boolean localIndex;
     private final String tableDDLOptions;
+    private final boolean isNamespaceMapped;
+    private String schema = "TEST";
 
-    public MutableIndexFailureIT(boolean transactional, boolean localIndex) {
+    public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped) {
         this.transactional = transactional;
         this.localIndex = localIndex;
         this.tableDDLOptions = transactional ? " TRANSACTIONAL=true " : "";
-        this.tableName = (localIndex ? "L_" : "") + TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "");
+        this.tableName = (localIndex ? "L_" : "") + TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "")
+                + (isNamespaceMapped ? "_NM" : "");
         this.indexName = INDEX_NAME;
-        this.fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-        this.fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+        this.fullTableName = SchemaUtil.getTableName(schema, tableName);
+        this.fullIndexName = SchemaUtil.getTableName(schema, indexName);
+        this.isNamespaceMapped = isNamespaceMapped;
     }
 
     @BeforeClass
@@ -108,9 +115,11 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name = "transactional = {0}, localIndex = {1}")
+    @Parameters(name = "transactional = {0}, localIndex = {1}, isNamespaceMapped = {2}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] { { false, false }, { false, true }, { true, false }, { true, true } });
+        return Arrays.asList(new Boolean[][] { { false, false, true }, { false, false, false }, { false, true, true },
+                { false, true, false }, { true, false, true }, { true, true, true }, { true, false, false },
+                { true, true, false } });
     }
 
     @Test
@@ -120,12 +129,16 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     public void helpTestWriteFailureDisablesIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, String.valueOf(isNamespaceMapped));
         try (Connection conn = driver.connect(url, props)) {
             String query;
             ResultSet rs;
             conn.setAutoCommit(false);
-            conn.createStatement().execute(
-                    "CREATE TABLE " + fullTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "+tableDDLOptions);
+            if (isNamespaceMapped) {
+                conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schema);
+            }
+            conn.createStatement().execute("CREATE TABLE " + fullTableName
+                    + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) " + tableDDLOptions);
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
@@ -139,7 +152,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertFalse(rs.next());
 
             // Verify the metadata for index is correct.
-            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
+            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(schema), indexName,
                     new String[] { PTableType.INDEX.toString() });
             assertTrue(rs.next());
             assertEquals(indexName, rs.getString(3));
@@ -163,8 +176,8 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
 
             query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            String expectedPlan =
-                    "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullTableName;
+            String expectedPlan = "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+                    + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped);
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -199,10 +212,13 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 conn.commit();
                 fail();
             } catch (SQLException e) {
+                System.out.println();
+            }  catch(Exception e) {
+                System.out.println();
             }
 
             // Verify the metadata for index is correct.
-            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
+            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(schema), indexName,
                     new String[] { PTableType.INDEX.toString() });
             assertTrue(rs.next());
             assertEquals(indexName, rs.getString(3));
@@ -230,8 +246,8 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 // Verify previous writes succeeded to data table
                 query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
                 rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                expectedPlan =
-                        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullTableName;
+                expectedPlan = "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
+                        + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped);
                 assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
@@ -257,7 +273,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                 int maxTries = 3, nTries = 0;
                 do {
                     Thread.sleep(15 * 1000); // sleep 15 secs
-                    rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(TestUtil.DEFAULT_SCHEMA_NAME), indexName,
+                    rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(schema), indexName,
                             new String[] { PTableType.INDEX.toString() });
                     assertTrue(rs.next());
                     if(PIndexState.ACTIVE.toString().equals(rs.getString("INDEX_STATE"))){
@@ -279,8 +295,11 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             // verify index table has correct data
             query = "SELECT /*+ INDEX(" + indexName + ") */ k,v1 FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            expectedPlan =
-                    " OVER " + (localIndex ? MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX + tableName : fullIndexName);
+            expectedPlan = " OVER "
+                    + (localIndex
+                            ? Bytes.toString(SchemaUtil
+                                    .getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
+                            : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped).getNameAsString());
             String explainPlan = QueryUtil.getExplainPlan(rs);
             assertTrue(explainPlan.contains(expectedPlan));
             rs = conn.createStatement().executeQuery(query);
@@ -321,6 +340,13 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
             if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().contains(INDEX_NAME) && FAIL_WRITE) {
                 throw new DoNotRetryIOException();
+            }
+            Mutation operation = miniBatchOp.getOperation(0);
+            Set<byte[]> keySet = operation.getFamilyMap().keySet();
+            for(byte[] family: keySet) {
+                if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) && FAIL_WRITE) {
+                    throw new DoNotRetryIOException();
+                }
             }
         }
     }

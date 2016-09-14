@@ -73,16 +73,13 @@ else:
 # HBase/Phoenix client side property override
 hbase_config_path = phoenix_utils.hbase_conf_dir
 hadoop_config_path = phoenix_utils.hadoop_conf
+hadoop_classpath = phoenix_utils.hadoop_classpath
 
-# default paths ## TODO: add windows support
-java_home = os.getenv('JAVA_HOME')
-hbase_pid_dir = os.path.join(tempfile.gettempdir(), 'phoenix')
-phoenix_log_dir = os.path.join(tempfile.gettempdir(), 'phoenix')
-phoenix_file_basename = 'phoenix-%s-server' % getpass.getuser()
+# TODO: add windows support
+phoenix_file_basename = '%s-queryserver' % getpass.getuser()
 phoenix_log_file = '%s.log' % phoenix_file_basename
 phoenix_out_file = '%s.out' % phoenix_file_basename
 phoenix_pid_file = '%s.pid' % phoenix_file_basename
-opts = os.getenv('PHOENIX_QUERYSERVER_OPTS', '')
 
 # load hbase-env.??? to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
 hbase_env_path = None
@@ -104,30 +101,27 @@ if os.path.isfile(hbase_env_path):
         (k, _, v) = x.partition('=')
         hbase_env[k.strip()] = v.strip()
 
-if hbase_env.has_key('JAVA_HOME'):
-    java_home = hbase_env['JAVA_HOME']
-if hbase_env.has_key('HBASE_PID_DIR'):
-    hbase_pid_dir = hbase_env['HBASE_PID_DIR']
-if hbase_env.has_key('HBASE_LOG_DIR'):
-    phoenix_log_dir = hbase_env['HBASE_LOG_DIR']
-if hbase_env.has_key('PHOENIX_QUERYSERVER_OPTS'):
-    opts = hbase_env['PHOENIX_QUERYSERVER_OPTS']
-
-log_file_path = os.path.join(phoenix_log_dir, phoenix_log_file)
-out_file_path = os.path.join(phoenix_log_dir, phoenix_out_file)
-pid_file_path = os.path.join(hbase_pid_dir, phoenix_pid_file)
-
+java_home = hbase_env.get('JAVA_HOME') or os.getenv('JAVA_HOME')
 if java_home:
     java = os.path.join(java_home, 'bin', 'java')
 else:
     java = 'java'
+
+tmp_dir = os.path.join(tempfile.gettempdir(), 'phoenix')
+opts = os.getenv('PHOENIX_QUERYSERVER_OPTS') or hbase_env.get('PHOENIX_QUERYSERVER_OPTS') or ''
+pid_dir = os.getenv('PHOENIX_QUERYSERVER_PID_DIR') or hbase_env.get('HBASE_PID_DIR') or tmp_dir
+log_dir = os.getenv('PHOENIX_QUERYSERVER_LOG_DIR') or hbase_env.get('HBASE_LOG_DIR') or tmp_dir
+pid_file_path = os.path.join(pid_dir, phoenix_pid_file)
+log_file_path = os.path.join(log_dir, phoenix_log_file)
+out_file_path = os.path.join(log_dir, phoenix_out_file)
 
 #    " -Xdebug -Xrunjdwp:transport=dt_socket,address=5005,server=y,suspend=n " + \
 #    " -XX:+UnlockCommercialFeatures -XX:+FlightRecorder -XX:FlightRecorderOptions=defaultrecording=true,dumponexit=true" + \
 
 # The command is run through subprocess so environment variables are automatically inherited
 java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + hadoop_config_path + os.pathsep + \
-    phoenix_utils.phoenix_queryserver_jar + os.pathsep + phoenix_utils.phoenix_client_jar + \
+    phoenix_utils.phoenix_client_jar + os.pathsep + phoenix_utils.phoenix_queryserver_jar + \
+    os.pathsep + hadoop_classpath + \
     " -Dproc_phoenixserver" + \
     " -Dlog4j.configuration=file:" + os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " -Dpsql.root.logger=%(root_logger)s" + \
@@ -137,7 +131,7 @@ java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + hadoop_config_path
     " org.apache.phoenix.queryserver.server.Main " + args
 
 if command == 'makeWinServiceDesc':
-    cmd = java_cmd % {'java': java, 'root_logger': 'INFO,DRFA,console', 'log_dir': phoenix_log_dir, 'log_file': phoenix_log_file}
+    cmd = java_cmd % {'java': java, 'root_logger': 'INFO,DRFA,console', 'log_dir': log_dir, 'log_file': phoenix_log_file}
     slices = cmd.split(' ')
 
     print "<service>"
@@ -168,7 +162,7 @@ if command == 'start':
         with context:
             # this block is the main() for the forked daemon process
             child = None
-            cmd = java_cmd % {'java': java, 'root_logger': 'INFO,DRFA', 'log_dir': phoenix_log_dir, 'log_file': phoenix_log_file}
+            cmd = java_cmd % {'java': java, 'root_logger': 'INFO,DRFA', 'log_dir': log_dir, 'log_file': phoenix_log_file}
 
             # notify the child when we're killed
             def handler(signum, frame):

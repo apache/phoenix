@@ -53,7 +53,7 @@ public abstract class MutatingParallelIteratorFactory implements ParallelIterato
     abstract protected MutationState mutate(StatementContext parentContext, ResultIterator iterator, PhoenixConnection connection) throws SQLException;
     
     @Override
-    public PeekingResultIterator newIterator(final StatementContext parentContext, ResultIterator iterator, Scan scan, String tableName) throws SQLException {
+    public PeekingResultIterator newIterator(final StatementContext parentContext, ResultIterator iterator, Scan scan, String tableName, QueryPlan plan) throws SQLException {
         final PhoenixConnection clonedConnection = new PhoenixConnection(this.connection);
         
         MutationState state = mutate(parentContext, iterator, clonedConnection);

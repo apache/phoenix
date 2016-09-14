@@ -32,6 +32,11 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.HRegionLocator;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -50,6 +55,7 @@ import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -81,11 +87,14 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -104,7 +113,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class UpsertCompiler {
-    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes, PTable table, Map<ImmutableBytesPtr,RowMutationState> mutation, PhoenixStatement statement, boolean useServerTimestamp) {
+    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes,
+            PTable table, Map<ImmutableBytesPtr, RowMutationState> mutation,
+            PhoenixStatement statement, boolean useServerTimestamp, IndexMaintainer maintainer,
+            byte[][] viewConstants) throws SQLException {
         Map<PColumn,byte[]> columnValues = Maps.newHashMapWithExpectedSize(columnIndexes.length);
         byte[][] pkValues = new byte[table.getPKColumns().size()][];
         // If the table uses salting, the first byte is the salting byte, set to an empty array
@@ -135,6 +147,19 @@ public class UpsertCompiler {
         }
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         table.newKey(ptr, pkValues);
+        if (table.getIndexType() == IndexType.LOCAL && maintainer != null) {
+            byte[] rowKey = maintainer.buildDataRowKey(ptr, viewConstants);
+            HRegionLocation region =
+                    statement.getConnection().getQueryServices()
+                            .getTableRegionLocation(table.getParentName().getBytes(), rowKey);
+            byte[] regionPrefix =
+                    region.getRegionInfo().getStartKey().length == 0 ? new byte[region
+                            .getRegionInfo().getEndKey().length] : region.getRegionInfo()
+                            .getStartKey();
+            if (regionPrefix.length != 0) {
+                ptr.set(ScanRanges.prefixKey(ptr.get(), 0, regionPrefix, regionPrefix.length));
+            }
+        } 
         mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo));
     }
     
@@ -151,6 +176,19 @@ public class UpsertCompiler {
         int rowCount = 0;
         Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(batchSize);
         PTable table = tableRef.getTable();
+        IndexMaintainer indexMaintainer = null;
+        byte[][] viewConstants = null;
+        if (table.getIndexType() == IndexType.LOCAL) {
+            PTable parentTable =
+                    statement
+                            .getConnection()
+                            .getMetaDataCache()
+                            .getTableRef(
+                                new PTableKey(statement.getConnection().getTenantId(), table
+                                        .getParentName().getString())).getTable();
+            indexMaintainer = table.getIndexMaintainer(parentTable, connection);
+            viewConstants = IndexUtil.getViewConstants(parentTable);
+        }
         try (ResultSet rs = new PhoenixResultSet(iterator, projector, childContext)) {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             while (rs.next()) {
@@ -176,7 +214,7 @@ public class UpsertCompiler {
                             table.rowKeyOrderOptimizable());
                     values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
-                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp);
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants);
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (isAutoCommit && rowCount % batchSize == 0) {
@@ -325,16 +363,16 @@ public class UpsertCompiler {
                     targetColumns = Lists.newArrayListWithExpectedSize(columnIndexesToBe.length);
                     targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
                     int minPKPos = 0;
-                    if (isTenantSpecific) {
-                        PColumn tenantColumn = table.getPKColumns().get(minPKPos);
-                        columnIndexesToBe[minPKPos] = tenantColumn.getPosition();
-                        targetColumns.set(minPKPos, tenantColumn);
-                        minPKPos++;
-                    }
                     if (isSharedViewIndex) {
                         PColumn indexIdColumn = table.getPKColumns().get(minPKPos);
                         columnIndexesToBe[minPKPos] = indexIdColumn.getPosition();
                         targetColumns.set(minPKPos, indexIdColumn);
+                        minPKPos++;
+                    }
+                    if (isTenantSpecific) {
+                        PColumn tenantColumn = table.getPKColumns().get(minPKPos);
+                        columnIndexesToBe[minPKPos] = tenantColumn.getPosition();
+                        targetColumns.set(minPKPos, tenantColumn);
                         minPKPos++;
                     }
                     for (int i = posOffset, j = 0; i < allColumnsToBe.size(); i++) {
@@ -366,19 +404,19 @@ public class UpsertCompiler {
                     Arrays.fill(pkSlotIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
                     BitSet pkColumnsSet = new BitSet(table.getPKColumns().size());
                     int i = 0;
+                    if (isSharedViewIndex) {
+                        PColumn indexIdColumn = table.getPKColumns().get(i + posOffset);
+                        columnIndexesToBe[i] = indexIdColumn.getPosition();
+                        pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                        targetColumns.set(i, indexIdColumn);
+                        i++;
+                    }
                     // Add tenant column directly, as we don't want to resolve it as this will fail
                     if (isTenantSpecific) {
                         PColumn tenantColumn = table.getPKColumns().get(i + posOffset);
                         columnIndexesToBe[i] = tenantColumn.getPosition();
                         pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
                         targetColumns.set(i, tenantColumn);
-                        i++;
-                    }
-                    if (isSharedViewIndex) {
-                        PColumn indexIdColumn = table.getPKColumns().get(i + posOffset);
-                        columnIndexesToBe[i] = indexIdColumn.getPosition();
-                        pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
-                        targetColumns.set(i, indexIdColumn);
                         i++;
                     }
                     for (ColumnName colName : columnNodes) {
@@ -636,7 +674,11 @@ public class UpsertCompiler {
                     PTable projectedTable = PTableImpl.makePTable(table, projectedColumns);
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
-                    RowProjector aggProjectorToBe = ProjectionCompiler.compile(queryPlan.getContext(), select, GroupBy.EMPTY_GROUP_BY);
+                    StatementContext statementContext = queryPlan.getContext();
+                    RowProjector aggProjectorToBe = ProjectionCompiler.compile(statementContext, select, GroupBy
+                            .EMPTY_GROUP_BY);
+                    statementContext.getAggregationManager().compile(queryPlan.getContext()
+                            ,GroupBy.EMPTY_GROUP_BY);
                     if (queryPlan.getProjector().projectEveryRow()) {
                         aggProjectorToBe = new RowProjector(aggProjectorToBe,true);
                     }
@@ -807,12 +849,12 @@ public class UpsertCompiler {
         /////////////////////////////////////////////////////////////////////
         final byte[][] values = new byte[nValuesToSet][];
         int nodeIndex = 0;
-        if (isTenantSpecific) {
-            PName tenantId = connection.getTenantId();
-            values[nodeIndex++] = ScanUtil.getTenantIdBytes(table.getRowKeySchema(), table.getBucketNum() != null, tenantId);
-        }
         if (isSharedViewIndex) {
             values[nodeIndex++] = MetaDataUtil.getViewIndexIdDataType().toBytes(table.getViewIndexId());
+        }
+        if (isTenantSpecific) {
+            PName tenantId = connection.getTenantId();
+            values[nodeIndex++] = ScanUtil.getTenantIdBytes(table.getRowKeySchema(), table.getBucketNum() != null, tenantId, isSharedViewIndex);
         }
         
         final int nodeIndexOffset = nodeIndex;
@@ -914,7 +956,20 @@ public class UpsertCompiler {
                     }
                 }
                 Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(1);
-                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp);
+                IndexMaintainer indexMaintainer = null;
+                byte[][] viewConstants = null;
+                if (table.getIndexType() == IndexType.LOCAL) {
+                    PTable parentTable =
+                            statement
+                                    .getConnection()
+                                    .getMetaDataCache()
+                                    .getTableRef(
+                                        new PTableKey(statement.getConnection().getTenantId(),
+                                                table.getParentName().getString())).getTable();
+                    indexMaintainer = table.getIndexMaintainer(parentTable, connection);
+                    viewConstants = IndexUtil.getViewConstants(parentTable);
+                }
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants);
                 return new MutationState(tableRef, mutation, 0, maxSize, connection);
             }
 
@@ -1002,11 +1057,11 @@ public class UpsertCompiler {
             return select;
         }
         List<AliasedNode> selectNodes = newArrayListWithCapacity(select.getSelect().size() + 1 + addViewColumns.size());
-        if (table.isMultiTenant() && tenantId != null) {
-            selectNodes.add(new AliasedNode(null, new LiteralParseNode(tenantId)));
-        }
         if (table.getViewIndexId() != null) {
             selectNodes.add(new AliasedNode(null, new LiteralParseNode(table.getViewIndexId())));
+        }
+        if (table.isMultiTenant() && tenantId != null) {
+            selectNodes.add(new AliasedNode(null, new LiteralParseNode(tenantId)));
         }
         selectNodes.addAll(select.getSelect());
         for (PColumn column : addViewColumns) {

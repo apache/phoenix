@@ -57,7 +57,7 @@ public class MultiCfQueryExecIT extends BaseOwnClusterClientManagedTimeIT {
     }
     
     protected static void initTableValues(long ts) throws Exception {
-        ensureTableCreated(getUrl(),MULTI_CF,null, ts-2);
+        ensureTableCreated(getUrl(),MULTI_CF,MULTI_CF,null, ts-2);
         
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

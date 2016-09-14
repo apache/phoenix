@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 
 import java.io.ByteArrayInputStream;
@@ -24,14 +25,17 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -40,10 +44,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.RegionServerServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -77,6 +79,7 @@ import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -89,7 +92,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.collect.Lists;
 
-import co.cask.tephra.TxConstants;
+import org.apache.tephra.TxConstants;
 
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
@@ -142,24 +145,37 @@ public class IndexUtil {
         return name.substring(0,name.indexOf(INDEX_COLUMN_NAME_SEP));
     }
 
+    public static String getActualColumnFamilyName(String name) {
+        if(name.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+            return name.substring(LOCAL_INDEX_COLUMN_FAMILY_PREFIX.length());
+        }
+        return name;
+    }
+
     public static String getCaseSensitiveDataColumnFullName(String name) {
         int index = name.indexOf(INDEX_COLUMN_NAME_SEP) ;
-        return SchemaUtil.getCaseSensitiveColumnDisplayName(name.substring(0, index), name.substring(index+1));
+        return SchemaUtil.getCaseSensitiveColumnDisplayName(getDataColumnFamilyName(name), name.substring(index+1));
     }
 
     public static String getIndexColumnName(String dataColumnFamilyName, String dataColumnName) {
-        return (dataColumnFamilyName == null ? "" : dataColumnFamilyName) + INDEX_COLUMN_NAME_SEP + dataColumnName;
+        return (dataColumnFamilyName == null ? "" : dataColumnFamilyName) + INDEX_COLUMN_NAME_SEP
+                + dataColumnName;
     }
     
     public static byte[] getIndexColumnName(byte[] dataColumnFamilyName, byte[] dataColumnName) {
         return ByteUtil.concat(dataColumnFamilyName == null ?  ByteUtil.EMPTY_BYTE_ARRAY : dataColumnFamilyName, INDEX_COLUMN_NAME_SEP_BYTES, dataColumnName);
     }
-    
+
     public static String getIndexColumnName(PColumn dataColumn) {
         String dataColumnFamilyName = SchemaUtil.isPKColumn(dataColumn) ? null : dataColumn.getFamilyName().getString();
         return getIndexColumnName(dataColumnFamilyName, dataColumn.getName().getString());
     }
 
+    public static String getLocalIndexColumnFamily(String dataColumnFamilyName) {
+        return dataColumnFamilyName == null ? null
+                : QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX + dataColumnFamilyName;
+    }
+    
     public static PColumn getDataColumn(PTable dataTable, String indexColumnName) {
         int pos = indexColumnName.indexOf(INDEX_COLUMN_NAME_SEP);
         if (pos < 0) {
@@ -174,7 +190,7 @@ public class IndexUtil {
         }
         PColumnFamily family;
         try {
-            family = dataTable.getColumnFamily(indexColumnName.substring(0, pos));
+            family = dataTable.getColumnFamily(getDataColumnFamilyName(indexColumnName));                
         } catch (ColumnFamilyNotFoundException e) {
             throw new IllegalArgumentException("Could not find column family \"" +  indexColumnName.substring(0, pos) + "\" in index column name of \"" + indexColumnName + "\"", e);
         }
@@ -223,7 +239,14 @@ public class IndexUtil {
             for (final Mutation dataMutation : dataMutations) {
                 long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
                 ptr.set(dataMutation.getRow());
-                Delete delete = maintainer.buildDeleteMutation(kvBuilder, ptr, ts);
+                byte[] regionStartKey = null;
+                byte[] regionEndkey = null;
+                if(maintainer.isLocalIndex()) {
+                    HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
+                    regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
+                    regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
+                }
+                Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<KeyValue>emptyList(), ts, regionStartKey, regionEndkey);
                 delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY));
                 indexMutations.add(delete);
             }
@@ -288,7 +311,7 @@ public class IndexUtil {
                     byte[] regionStartKey = null;
                     byte[] regionEndkey = null;
                     if(maintainer.isLocalIndex()) {
-                        HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getName().getBytes(), dataMutation.getRow());
+                        HRegionLocation tableRegionLocation = connection.getQueryServices().getTableRegionLocation(table.getPhysicalName().getBytes(), dataMutation.getRow());
                         regionStartKey = tableRegionLocation.getRegionInfo().getStartKey();
                         regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
                     }
@@ -335,55 +358,6 @@ public class IndexUtil {
             }
             
         });
-    }
-
-    public static Region getIndexRegion(RegionCoprocessorEnvironment environment)
-            throws IOException {
-        Region dataRegion = environment.getRegion();
-        return getIndexRegion(dataRegion, environment.getRegionServerServices());
-    }
-
-    public static Region
-            getIndexRegion(Region dataRegion, RegionServerCoprocessorEnvironment env)
-                    throws IOException {
-        return getIndexRegion(dataRegion, env.getRegionServerServices());
-    }
-
-    public static Region getDataRegion(RegionCoprocessorEnvironment env) throws IOException {
-        Region indexRegion = env.getRegion();
-        return getDataRegion(indexRegion, env.getRegionServerServices());
-    }
-
-    public static Region
-            getDataRegion(Region indexRegion, RegionServerCoprocessorEnvironment env)
-                    throws IOException {
-        return getDataRegion(indexRegion, env.getRegionServerServices());
-    }
-
-    public static Region getIndexRegion(Region dataRegion, RegionServerServices rss) throws IOException {
-        TableName indexTableName =
-                TableName.valueOf(MetaDataUtil.getLocalIndexPhysicalName(dataRegion.getTableDesc()
-                        .getName()));
-        List<Region> onlineRegions = rss.getOnlineRegions(indexTableName);
-        for(Region indexRegion : onlineRegions) {
-            if (Bytes.compareTo(dataRegion.getRegionInfo().getStartKey(),
-                    indexRegion.getRegionInfo().getStartKey()) == 0) {
-                return indexRegion;
-            }
-        }
-        return null;
-    }
-
-    public static Region getDataRegion(Region indexRegion, RegionServerServices rss) throws IOException {
-        TableName dataTableName = TableName.valueOf(MetaDataUtil.getUserTableName(indexRegion.getTableDesc().getNameAsString()));
-        List<Region> onlineRegions = rss.getOnlineRegions(dataTableName);
-        for(Region region : onlineRegions) {
-            if (Bytes.compareTo(indexRegion.getRegionInfo().getStartKey(),
-                    region.getRegionInfo().getStartKey()) == 0) {
-                return region;
-            }
-        }
-        return null;
     }
 
     public static ColumnReference[] deserializeDataTableColumnsToJoin(Scan scan) {
@@ -672,5 +646,50 @@ public class IndexUtil {
     public static String getIndexColumnExpressionStr(PColumn col) {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
+    }
+
+    public static byte[][] getViewConstants(PTable dataTable) {
+        if (dataTable.getType() != PTableType.VIEW) return null;
+        int dataPosOffset = (dataTable.getBucketNum() != null ? 1 : 0) + (dataTable.isMultiTenant() ? 1 : 0);
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        List<byte[]> viewConstants = new ArrayList<byte[]>();
+        List<PColumn> dataPkColumns = dataTable.getPKColumns();
+        for (int i = dataPosOffset; i < dataPkColumns.size(); i++) {
+            PColumn dataPKColumn = dataPkColumns.get(i);
+            if (dataPKColumn.getViewConstant() != null) {
+                if (IndexUtil.getViewConstantValue(dataPKColumn, ptr)) {
+                    viewConstants.add(ByteUtil.copyKeyBytesIfNecessary(ptr));
+                } else {
+                    throw new IllegalStateException();
+                }
+            }
+        }
+        return viewConstants.isEmpty() ? null : viewConstants
+                .toArray(new byte[viewConstants.size()][]);
+    }
+
+    public static void writeLocalUpdates(Region region, final List<Mutation> mutations, boolean skipWAL) throws IOException {
+        if(skipWAL) {
+            for (Mutation m : mutations) {
+                m.setDurability(Durability.SKIP_WAL);
+            }
+        }
+        region.batchMutate(
+            mutations.toArray(new Mutation[mutations.size()]),
+            HConstants.NO_NONCE, HConstants.NO_NONCE);
+    }
+
+    public static boolean matchingSplitKeys(byte[][] splitKeys1, byte[][] splitKeys2) throws IOException {
+        if (splitKeys1 != null && splitKeys2 != null
+                && splitKeys1.length == splitKeys2.length) {
+            for (int i = 0; i < splitKeys1.length; i++) {
+                if (Bytes.compareTo(splitKeys1[i], splitKeys2[i]) != 0) {
+                    return false;
+                }
+            }
+        } else {
+            return false;
+        }
+        return true;
     }
 }

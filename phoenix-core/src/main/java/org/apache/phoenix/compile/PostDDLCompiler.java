@@ -35,6 +35,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -44,6 +45,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -118,6 +120,16 @@ public class PostDDLCompiler {
 					public boolean hasUDFs() {
 						return false;
 					}
+
+					@Override
+					public PSchema resolveSchema(String schemaName) throws SQLException {
+						throw new SchemaNotFoundException(schemaName);
+					}
+
+					@Override
+					public List<PSchema> getSchemas() {
+						throw new UnsupportedOperationException();
+					}
                     
                 },
                 scan,
@@ -177,7 +189,17 @@ public class PostDDLCompiler {
                             @Override
                             public boolean hasUDFs() {
                                 return false;
-                            };
+                            }
+
+                            @Override
+                            public List<PSchema> getSchemas() {
+                                throw new UnsupportedOperationException();
+                            }
+
+                            @Override
+                            public PSchema resolveSchema(String schemaName) throws SQLException {
+                                throw new SchemaNotFoundException(schemaName);
+                            }
                         };
                         PhoenixStatement statement = new PhoenixStatement(connection);
                         StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
@@ -231,6 +253,7 @@ public class PostDDLCompiler {
                             }
                             // Need to project all column families into the scan, since we haven't yet created our empty key value
                             RowProjector projector = ProjectionCompiler.compile(context, SelectStatement.COUNT_ONE, GroupBy.EMPTY_GROUP_BY);
+                            context.getAggregationManager().compile(context, GroupBy.EMPTY_GROUP_BY);
                             // Explicitly project these column families and don't project the empty key value,
                             // since at this point we haven't added the empty key value everywhere.
                             if (columnFamilies != null) {

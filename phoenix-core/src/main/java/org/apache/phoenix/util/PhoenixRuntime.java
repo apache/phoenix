@@ -51,6 +51,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -84,13 +85,12 @@ import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.tephra.util.TxUtils;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
-import co.cask.tephra.util.TxUtils;
 
 /**
  *
@@ -211,51 +211,56 @@ public class PhoenixRuntime {
         PhoenixConnection conn = null;
         try {
             Properties props = new Properties();
-            conn = DriverManager.getConnection(jdbcUrl, props)
-                    .unwrap(PhoenixConnection.class);
-
-            if (execCmd.isUpgrade()) {
-                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) {
-                    throw new SQLException("May not specify the CURRENT_SCN property when upgrading");
-                }
-                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) {
-                    throw new SQLException("May not specify the TENANT_ID_ATTRIB property when upgrading");
-                }
+            if (execCmd.isLocalIndexUpgrade()) {
+                props.setProperty(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, "false");
+            }
+            conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
+            if (execCmd.isMapNamespace()) {
+                String srcTable = execCmd.getSrcTable();
+                System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");
+                UpgradeUtil.upgradeTable(conn, srcTable);
+                UpgradeUtil.mapChildViewsToNamespace(conn, srcTable,props);
+            } else if (execCmd.isUpgrade()) {
+                if (conn.getClientInfo(PhoenixRuntime.CURRENT_SCN_ATTRIB) != null) { throw new SQLException(
+                        "May not specify the CURRENT_SCN property when upgrading"); }
+                if (conn.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB) != null) { throw new SQLException(
+                        "May not specify the TENANT_ID_ATTRIB property when upgrading"); }
                 if (execCmd.getInputFiles().isEmpty()) {
                     List<String> tablesNeedingUpgrade = UpgradeUtil.getPhysicalTablesWithDescRowKey(conn);
                     if (tablesNeedingUpgrade.isEmpty()) {
                         String msg = "No tables are required to be upgraded due to incorrect row key order (PHOENIX-2067 and PHOENIX-2120)";
                         System.out.println(msg);
                     } else {
-                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrectly ordered (PHOENIX-2067 and PHOENIX-2120):\n" + Joiner.on(' ').join(tablesNeedingUpgrade);
+                        String msg = "The following tables require upgrade due to a bug causing the row key to be incorrectly ordered (PHOENIX-2067 and PHOENIX-2120):\n"
+                                + Joiner.on(' ').join(tablesNeedingUpgrade);
                         System.out.println("WARNING: " + msg);
                     }
                     List<String> unsupportedTables = UpgradeUtil.getPhysicalTablesWithDescVarbinaryRowKey(conn);
                     if (!unsupportedTables.isEmpty()) {
-                        String msg = "The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n" + Joiner.on(' ').join(unsupportedTables);
+                        String msg = "The following tables use an unsupported VARBINARY DESC construct and need to be changed:\n"
+                                + Joiner.on(' ').join(unsupportedTables);
                         System.out.println("WARNING: " + msg);
                     }
                 } else {
                     UpgradeUtil.upgradeDescVarLengthRowKeys(conn, execCmd.getInputFiles(), execCmd.isBypassUpgrade());
                 }
+            } else if(execCmd.isLocalIndexUpgrade()) {
+                UpgradeUtil.upgradeLocalIndexes(conn);
             } else {
                 for (String inputFile : execCmd.getInputFiles()) {
                     if (inputFile.endsWith(SQL_FILE_EXT)) {
-                        PhoenixRuntime.executeStatements(conn,
-                                new FileReader(inputFile), Collections.emptyList());
+                        PhoenixRuntime.executeStatements(conn, new FileReader(inputFile), Collections.emptyList());
                     } else if (inputFile.endsWith(CSV_FILE_EXT)) {
-    
+
                         String tableName = execCmd.getTableName();
                         if (tableName == null) {
                             tableName = SchemaUtil.normalizeIdentifier(
                                     inputFile.substring(inputFile.lastIndexOf(File.separatorChar) + 1,
                                             inputFile.length() - CSV_FILE_EXT.length()));
                         }
-                        CSVCommonsLoader csvLoader =
-                                new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
-                                        execCmd.isStrict(), execCmd.getFieldDelimiter(),
-                                        execCmd.getQuoteCharacter(), execCmd.getEscapeCharacter(),
-                                        execCmd.getArrayElementSeparator());
+                        CSVCommonsLoader csvLoader = new CSVCommonsLoader(conn, tableName, execCmd.getColumns(),
+                                execCmd.isStrict(), execCmd.getFieldDelimiter(), execCmd.getQuoteCharacter(),
+                                execCmd.getEscapeCharacter(), execCmd.getArrayElementSeparator());
                         csvLoader.upsert(inputFile);
                     }
                 }
@@ -276,6 +281,7 @@ public class PhoenixRuntime {
     }
 
     public static final String PHOENIX_TEST_DRIVER_URL_PARAM = "test=true";
+    public static final String SCHEMA_ATTRIB = "schema";
 
     private PhoenixRuntime() {
     }
@@ -366,6 +372,19 @@ public class PhoenixRuntime {
         };
     }
 
+    public static PTable getTableNoCache(Connection conn, String name) throws SQLException {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+        String tableName = SchemaUtil.getTableNameFromFullName(name);
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
+                schemaName, tableName, true);
+        if(result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+            throw new TableNotFoundException(schemaName, tableName);
+        }
+
+        return result.getTable();
+
+    }
     /**
      * 
      * @param conn
@@ -510,6 +529,9 @@ public class PhoenixRuntime {
         private List<String> inputFiles;
         private boolean isUpgrade;
         private boolean isBypassUpgrade;
+        private boolean mapNamespace;
+        private String srcTable;
+        private boolean localIndexUpgrade;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -548,6 +570,12 @@ public class PhoenixRuntime {
                     "This would only be the case if you have not relied on auto padding for BINARY and CHAR data, " +
                     "but instead have always provided data up to the full max length of the column. See PHOENIX-2067 " +
                     "and PHOENIX-2120 for more information. ");
+            Option mapNamespaceOption = new Option("m", "map-namespace", true,
+                    "Used to map table to a namespace matching with schema, require "+ QueryServices.IS_NAMESPACE_MAPPING_ENABLED +
+                    " to be enabled");
+            Option localIndexUpgradeOption = new Option("l", "local-index-upgrade", false,
+                "Used to upgrade local index data by moving index data from separate table to "
+                + "separate column families in the same table.");
             Options options = new Options();
             options.addOption(tableOption);
             options.addOption(headerOption);
@@ -558,6 +586,8 @@ public class PhoenixRuntime {
             options.addOption(arrayValueSeparatorOption);
             options.addOption(upgradeOption);
             options.addOption(bypassUpgradeOption);
+            options.addOption(mapNamespaceOption);
+            options.addOption(localIndexUpgradeOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -568,7 +598,11 @@ public class PhoenixRuntime {
             }
 
             ExecutionCommand execCmd = new ExecutionCommand();
-
+            execCmd.connectionString = "";
+            if(cmdLine.hasOption(mapNamespaceOption.getOpt())){
+                execCmd.mapNamespace = true;
+                execCmd.srcTable = validateTableName(cmdLine.getOptionValue(mapNamespaceOption.getOpt()));
+            }
             if (cmdLine.hasOption(tableOption.getOpt())) {
                 execCmd.tableName = cmdLine.getOptionValue(tableOption.getOpt());
             }
@@ -608,29 +642,46 @@ public class PhoenixRuntime {
                 }
                 execCmd.isBypassUpgrade = true;
             }
-
+            if(cmdLine.hasOption(localIndexUpgradeOption.getOpt())) {
+                execCmd.localIndexUpgrade = true;
+            }
 
             List<String> argList = Lists.newArrayList(cmdLine.getArgList());
             if (argList.isEmpty()) {
-                usageError("Connection string to HBase must be supplied", options);
+                usageError("At least one input file must be supplied", options);
             }
-            execCmd.connectionString = argList.remove(0);
             List<String> inputFiles = Lists.newArrayList();
+            int i = 0;
             for (String arg : argList) {
                 if (execCmd.isUpgrade || arg.endsWith(CSV_FILE_EXT) || arg.endsWith(SQL_FILE_EXT)) {
                     inputFiles.add(arg);
                 } else {
-                    usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    if (i == 0) {
+                        execCmd.connectionString = arg;
+                    } else {
+                        usageError("Don't know how to interpret argument '" + arg + "'", options);
+                    }
                 }
+                i++;
             }
 
-            if (inputFiles.isEmpty() && !execCmd.isUpgrade) {
+            if (inputFiles.isEmpty() && !execCmd.isUpgrade && !execCmd.isMapNamespace() && !execCmd.isLocalIndexUpgrade()) {
                 usageError("At least one input file must be supplied", options);
             }
 
             execCmd.inputFiles = inputFiles;
 
             return execCmd;
+        }
+
+        private static String validateTableName(String tableName) {
+            if (tableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+                throw new IllegalArgumentException(
+                        "tablename:" + tableName + " cannot have '" + QueryConstants.NAMESPACE_SEPARATOR + "' ");
+            } else {
+                return tableName;
+            }
+
         }
 
         private static char getCharacter(String s) {
@@ -654,6 +705,7 @@ public class PhoenixRuntime {
                             "<path-to-sql-or-csv-file>...",
                     options);
             System.out.println("Examples:\n" +
+                    "  psql my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql\n" +
                     "  psql localhost my_ddl.sql my_table.csv\n" +
                     "  psql -t MY_TABLE my_cluster:1825 my_table2012-Q3.csv\n" +
@@ -704,6 +756,18 @@ public class PhoenixRuntime {
 
         public boolean isBypassUpgrade() {
             return isBypassUpgrade;
+        }
+
+        public boolean isMapNamespace() {
+            return mapNamespace;
+        }
+
+        public String getSrcTable() {
+            return srcTable;
+        }
+
+        public boolean isLocalIndexUpgrade() {
+            return localIndexUpgrade;
         }
     }
     
@@ -1015,7 +1079,8 @@ public class PhoenixRuntime {
             throw new SQLFeatureNotSupportedException();
         }
         
-        int pkPosition = table.getBucketNum() == null ? 0 : 1;
+        // skip salt and viewIndexId columns.
+        int pkPosition = (table.getBucketNum() == null ? 0 : 1) + (table.getViewIndexId() == null ? 0 : 1);
         List<PColumn> pkColumns = table.getPKColumns();
         return new RowKeyColumnExpression(pkColumns.get(pkPosition), new RowKeyValueAccessor(pkColumns, pkPosition));
     }
@@ -1188,5 +1253,10 @@ public class PhoenixRuntime {
      */
     public static long getWallClockTimeFromCellTimeStamp(long tsOfCell) {
         return TxUtils.isPreExistingVersion(tsOfCell) ? tsOfCell : TransactionUtil.convertToMilliseconds(tsOfCell);
+    }
+
+    public static long getCurrentScn(ReadOnlyProps props) {
+        String scn = props.get(CURRENT_SCN_ATTRIB);
+        return scn != null ? Long.parseLong(scn) : HConstants.LATEST_TIMESTAMP;
     }
  }

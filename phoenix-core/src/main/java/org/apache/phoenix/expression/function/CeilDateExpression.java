@@ -76,7 +76,7 @@ public class CeilDateExpression extends RoundDateExpression {
         
     }
     
-    CeilDateExpression(List<Expression> children) {
+    public CeilDateExpression(List<Expression> children) {
         super(children);
     }
     

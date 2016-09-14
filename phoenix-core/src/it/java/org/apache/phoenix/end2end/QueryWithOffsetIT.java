@@ -1,9 +1,7 @@
 /*
- * Copyright 2010 The Apache Software Foundation
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
- *distributed with this work for additional information
+ * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you maynot use this file except in compliance
@@ -38,6 +36,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -50,16 +49,18 @@ import com.google.common.collect.Maps;
 @RunWith(Parameterized.class)
 public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
     
-    private String tableName;
+    private String tableName = "T";
     private final String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
             "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
     private final String ddl;
+    private final boolean isSalted;
 
     public QueryWithOffsetIT(String preSplit) {
         this.tableName=tableName + "_" + preSplit.charAt(2);
         this.ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
                 + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
                 + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) " + preSplit;
+        this.isSalted = preSplit.startsWith(" SALT_BUCKETS");
     }
 
     @BeforeClass
@@ -89,9 +90,10 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         rs = conn.createStatement()
                 .executeQuery("SELECT t_id from " + tableName + " order by t_id limit " + limit + " offset " + offset);
         int i = 0;
-        while (i++ < limit) {
+        while (i < limit) {
             assertTrue(rs.next());
-            assertEquals(strings[offset + i - 1], rs.getString(1));
+            assertEquals("Expected string didn't match for i = " + i, strings[offset + i], rs.getString(1));
+            i++;
         }
 
         limit = 35;
@@ -121,15 +123,27 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         updateStatistics(conn);
         String query = "SELECT t_id from " + tableName + " offset " + offset;
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        rs.next();
-        rs.next();
-        rs.next();
-        assertEquals("    SERVER OFFSET " + offset, rs.getString(1));
+        if(!isSalted){
+            assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER T_P\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    SERVER OFFSET " + offset, QueryUtil.getExplainPlan(rs));
+        }else{
+            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER T_A\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
+        }
         rs = conn.createStatement().executeQuery(query);
         int i = 0;
         while (i++ < strings.length - offset) {
             assertTrue(rs.next());
             assertEquals(strings[offset + i - 1], rs.getString(1));
+        }
+        query = "SELECT t_id from " + tableName + " ORDER BY v1 offset " + offset;
+        rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+        if (!isSalted) {
+            assertEquals("CLIENT PARALLEL 5-WAY FULL SCAN OVER T_P\n" + "    SERVER SORTED BY [C2.V1]\n"
+                    + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
+        } else {
+            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER T_A\n" + "    SERVER SORTED BY [C2.V1]\n"
+                    + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
         }
         conn.close();
     }
@@ -176,20 +190,6 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         conn.close();
     }
 
-    private void initTableValues(Connection conn) throws SQLException {
-        for (int i = 0; i < 26; i++) {
-            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
-                    + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
-        }
-        conn.commit();
-    }
-
-    private void updateStatistics(Connection conn) throws SQLException {
-        String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
-                + "\"=" + Long.toString(500);
-        conn.createStatement().execute(query);
-    }
-
     @Test
     public void testMetaDataWithOffset() throws SQLException {
         Connection conn;
@@ -206,6 +206,20 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         ResultSet rs = stmt.executeQuery();
         ResultSetMetaData md = rs.getMetaData();
         assertEquals(5, md.getColumnCount());
+    }
+    
+    private void initTableValues(Connection conn) throws SQLException {
+        for (int i = 0; i < 26; i++) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
+                    + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+        }
+        conn.commit();
+    }
+
+    private void updateStatistics(Connection conn) throws SQLException {
+        String query = "UPDATE STATISTICS " + tableName + " SET \"" + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB
+                + "\"=" + Long.toString(500);
+        conn.createStatement().execute(query);
     }
 
 }

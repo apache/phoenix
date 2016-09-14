@@ -43,7 +43,7 @@ public class ColumnDef {
     private final Boolean isNull;
     private final Integer maxLength;
     private final Integer scale;
-    private final boolean isPK;
+    private boolean isPK;
     private final SortOrder sortOrder;
     private final boolean isArray;
     private final Integer arrSize;
@@ -185,6 +185,11 @@ public class ColumnDef {
     public boolean isRowTimestamp() {
         return isRowTimestamp;
     }
+    
+    public void setIsPK(boolean isPK) {
+        this.isPK = isPK;
+    }
+    
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder(columnDefName.getColumnNode().toString());

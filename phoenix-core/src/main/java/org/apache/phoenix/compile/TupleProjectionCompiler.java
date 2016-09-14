@@ -147,12 +147,14 @@ public class TupleProjectionCompiler {
             projectedColumns.add(column);
         }
         
-        return PTableImpl.makePTable(table.getTenantId(), table.getSchemaName(), table.getTableName(), PTableType.PROJECTED,
-                table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
-                table.getBucketNum(), projectedColumns, table.getParentSchemaName(),
-                table.getParentName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(),
-                table.getIndexType(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp());
+        return PTableImpl.makePTable(table.getTenantId(), table.getSchemaName(), table.getTableName(),
+                PTableType.PROJECTED, table.getIndexState(), table.getTimeStamp(), table.getSequenceNumber(),
+                table.getPKName(), table.getBucketNum(), projectedColumns, table.getParentSchemaName(),
+                table.getParentName(), table.getIndexes(), table.isImmutableRows(), Collections.<PName> emptyList(),
+                null, null, table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
+                table.getViewIndexId(),
+                table.getIndexType(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(), 
+                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
     }
 
     public static PTable createProjectedTable(TableRef tableRef, List<ColumnRef> sourceColumnRefs, boolean retainPKColumns) throws SQLException {
@@ -180,7 +182,7 @@ public class TupleProjectionCompiler {
                     null, Collections.<PTable>emptyList(), table.isImmutableRows(), Collections.<PName>emptyList(), null, null,
                     table.isWALDisabled(), retainPKColumns ? table.isMultiTenant() : false, table.getStoreNulls(), table.getViewType(),
                     retainPKColumns ? table.getViewIndexId() : null, null, table.rowKeyOrderOptimizable(), table.isTransactional(),
-                    table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp());
+                    table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
     }
 
     // For extracting column references from single select statement

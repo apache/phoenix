@@ -132,6 +132,13 @@ public class SequenceRegionObserver extends BaseRegionObserver {
                     for (Cell cq : entry.getValue()) {
                     	long value = Bytes.toLong(cq.getValueArray(), cq.getValueOffset());
                         get.addColumn(cf, CellUtil.cloneQualifier(cq));
+                        long cellTimestamp = cq.getTimestamp();
+                        // Workaround HBASE-15698 by using the lowest of the timestamps found
+                        // on the Increment or any of its Cells.
+                        if (cellTimestamp > 0 && cellTimestamp < maxTimestamp) {
+                            maxTimestamp = cellTimestamp;
+                            get.setTimeRange(MetaDataProtocol.MIN_TABLE_TIMESTAMP, maxTimestamp);
+                        }
                         validateOnly &= (Sequence.ValueOp.VALIDATE_SEQUENCE.ordinal() == value);
                     }
                 }

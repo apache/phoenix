@@ -21,20 +21,21 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.KeyValueSortReducer;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
@@ -42,7 +43,6 @@ import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -63,8 +63,7 @@ public class FormatToKeyValueReducer
     protected List<String> tableNames;
     protected List<String> logicalNames;
     protected KeyValueBuilder builder;
-    List<List<Pair<byte[], byte[]>>> columnIndexes;
-    List<ImmutableBytesPtr> emptyFamilyName;
+    private Map<Integer, Pair<byte[], byte[]>> columnIndexes;
 
 
     @Override
@@ -76,17 +75,13 @@ public class FormatToKeyValueReducer
         for (Map.Entry<String, String> entry : conf) {
             clientInfos.setProperty(entry.getKey(), entry.getValue());
         }
-
         try {
-            PhoenixConnection conn = (PhoenixConnection) QueryUtil.getConnection(clientInfos, conf);
+            PhoenixConnection conn = (PhoenixConnection) QueryUtil.getConnectionOnServer(clientInfos, conf);
             builder = conn.getKeyValueBuilder();
             final String tableNamesConf = conf.get(FormatToBytesWritableMapper.TABLE_NAMES_CONFKEY);
             final String logicalNamesConf = conf.get(FormatToBytesWritableMapper.LOGICAL_NAMES_CONFKEY);
             tableNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(tableNamesConf);
             logicalNames = TargetTableRefFunctions.NAMES_FROM_JSON.apply(logicalNamesConf);
-
-            columnIndexes = new ArrayList<>(tableNames.size());
-            emptyFamilyName = new ArrayList<>();
             initColumnsMap(conn);
         } catch (SQLException | ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -94,24 +89,33 @@ public class FormatToKeyValueReducer
     }
 
     private void initColumnsMap(PhoenixConnection conn) throws SQLException {
-        for (String tableName : logicalNames) {
-            PTable table = PhoenixRuntime.getTable(conn, tableName);
-            emptyFamilyName.add(SchemaUtil.getEmptyColumnFamilyPtr(table));
+        Map<byte[], Integer> indexMap = new TreeMap(Bytes.BYTES_COMPARATOR);
+        columnIndexes = new HashMap<>();
+        int columnIndex = 0;
+        for (int index = 0; index < logicalNames.size(); index++) {
+            PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
             List<PColumn> cls = table.getColumns();
-            List<Pair<byte[], byte[]>> list = new ArrayList(cls.size());
             for (int i = 0; i < cls.size(); i++) {
                 PColumn c = cls.get(i);
-                if (c.getFamilyName() == null) {
-                    list.add(null); // Skip PK column
-                    continue;
+                byte[] family = new byte[0];
+                if (c.getFamilyName() != null) {
+                    family = c.getFamilyName().getBytes();
                 }
-                byte[] family = c.getFamilyName().getBytes();
                 byte[] name = c.getName().getBytes();
-                list.add(new Pair(family, name));
+                byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES, name);
+                Pair<byte[], byte[]> pair = new Pair(family, name);
+                if (!indexMap.containsKey(cfn)) {
+                    indexMap.put(cfn, new Integer(columnIndex));
+                    columnIndexes.put(new Integer(columnIndex), pair);
+                    columnIndex++;
+                }
             }
-            columnIndexes.add(list);
+            byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
+            Pair<byte[], byte[]> pair = new Pair(emptyColumnFamily, QueryConstants
+                    .EMPTY_COLUMN_BYTES);
+            columnIndexes.put(new Integer(columnIndex), pair);
+            columnIndex++;
         }
-
     }
 
     @Override
@@ -119,15 +123,18 @@ public class FormatToKeyValueReducer
                           Reducer<TableRowkeyPair, ImmutableBytesWritable, TableRowkeyPair, KeyValue>.Context context)
             throws IOException, InterruptedException {
         TreeSet<KeyValue> map = new TreeSet<KeyValue>(KeyValue.COMPARATOR);
-        int tableIndex = tableNames.indexOf(key.getTableName());
-        List<Pair<byte[], byte[]>> columns = columnIndexes.get(tableIndex);
+        ImmutableBytesWritable rowKey = key.getRowkey();
         for (ImmutableBytesWritable aggregatedArray : values) {
             DataInputStream input = new DataInputStream(new ByteArrayInputStream(aggregatedArray.get()));
             while (input.available() != 0) {
-                int index = WritableUtils.readVInt(input);
-                Pair<byte[], byte[]> pair = columns.get(index);
                 byte type = input.readByte();
-                ImmutableBytesWritable value = null;
+                int index = WritableUtils.readVInt(input);
+                ImmutableBytesWritable family;
+                ImmutableBytesWritable name;
+                ImmutableBytesWritable value = QueryConstants.EMPTY_COLUMN_VALUE_BYTES_PTR;
+                Pair<byte[], byte[]> pair = columnIndexes.get(index);
+                family = new ImmutableBytesWritable(pair.getFirst());
+                name = new ImmutableBytesWritable(pair.getSecond());
                 int len = WritableUtils.readVInt(input);
                 if (len > 0) {
                     byte[] array = new byte[len];
@@ -138,24 +145,16 @@ public class FormatToKeyValueReducer
                 KeyValue.Type kvType = KeyValue.Type.codeToType(type);
                 switch (kvType) {
                     case Put: // not null value
-                        kv = builder.buildPut(key.getRowkey(),
-                                new ImmutableBytesWritable(pair.getFirst()),
-                                new ImmutableBytesWritable(pair.getSecond()), value);
+                        kv = builder.buildPut(key.getRowkey(), family, name, value);
                         break;
                     case DeleteColumn: // null value
-                        kv = builder.buildDeleteColumns(key.getRowkey(),
-                                new ImmutableBytesWritable(pair.getFirst()),
-                                new ImmutableBytesWritable(pair.getSecond()));
+                        kv = builder.buildDeleteColumns(key.getRowkey(), family, name);
                         break;
                     default:
                         throw new IOException("Unsupported KeyValue type " + kvType);
                 }
                 map.add(kv);
             }
-            KeyValue empty = builder.buildPut(key.getRowkey(),
-                    emptyFamilyName.get(tableIndex),
-                    QueryConstants.EMPTY_COLUMN_BYTES_PTR, ByteUtil.EMPTY_BYTE_ARRAY_PTR);
-            map.add(empty);
             Closeables.closeQuietly(input);
         }
         context.setStatus("Read " + map.getClass());

@@ -24,6 +24,7 @@ import org.apache.calcite.rel.convert.ConverterImpl;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.util.ImmutableIntList;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.calcite.BuiltInMethod;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementor.ImplementorContext;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -122,6 +123,10 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
             @Override
             public QueryPlan limit(Integer limit) {
                 return delegate.limit(limit);
+            }
+            @Override
+            public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+                return delegate.iterator(scanGrouper, scan);
             }
         };
     }

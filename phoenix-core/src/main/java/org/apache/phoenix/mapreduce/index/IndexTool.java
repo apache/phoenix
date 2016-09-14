@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
@@ -51,6 +52,7 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.util.ColumnInfoToStringEncoderDecoder;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -61,6 +63,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -95,7 +98,7 @@ public class IndexTool extends Configured implements Tool {
     private static final Option OUTPUT_PATH_OPTION = new Option("op", "output-path", true,
             "Output path where the files are written");
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
-    private static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s_INDX_%s";
+    public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s_INDX_%s";
 
     private Options getOptions() {
         final Options options = new Options();
@@ -179,8 +182,8 @@ public class IndexTool extends Configured implements Tool {
             final String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             final String dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
-            final String qDataTable = SchemaUtil.getTableName(schemaName, dataTable);
-            final String qIndexTable = SchemaUtil.getTableName(schemaName, indexTable);
+            final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
+            final String qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
 
             connection = ConnectionUtil.getInputConnection(configuration);
             if (!isValidIndexTable(connection, qDataTable, indexTable)) {
@@ -202,9 +205,11 @@ public class IndexTool extends Configured implements Tool {
 
             // check if the index type is LOCAL, if so, derive and set the physicalIndexName that is
             // computed from the qDataTable name.
-            String physicalIndexTable = qIndexTable;
+            String physicalIndexTable = pindexTable.getPhysicalName().getString();
+            boolean isLocalIndexBuild = false;
             if (IndexType.LOCAL.equals(pindexTable.getIndexType())) {
-                physicalIndexTable = MetaDataUtil.getLocalIndexTableName(qDataTable);
+                physicalIndexTable = qDataTable;
+                isLocalIndexBuild = true;
             }
 
             final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
@@ -226,8 +231,8 @@ public class IndexTool extends Configured implements Tool {
                     PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
-            final Path outputPath =
-                    new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt()), physicalIndexTable);
+            final Path outputPath = CsvBulkImportUtil
+                    .getOutputPath(new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt())), physicalIndexTable);
             FileSystem.get(configuration).delete(outputPath, true);
             
             final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, dataTable, indexTable);
@@ -242,20 +247,18 @@ public class IndexTool extends Configured implements Tool {
             
             boolean useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             if (useDirectApi) {
-                job.setMapperClass(PhoenixIndexImportDirectMapper.class);
                 configureSubmittableJobUsingDirectApi(job, outputPath,
                     cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt()));
             } else {
-                job.setMapperClass(PhoenixIndexImportMapper.class);
-                configureRunnableJobUsingBulkLoad(job, outputPath);
-                // finally update the index state to ACTIVE.
+                configureRunnableJobUsingBulkLoad(job, outputPath, isLocalIndexBuild);
+                // Without direct API, we need to update the index state to ACTIVE from client.
                 IndexToolUtil.updateIndexState(connection, qDataTable, indexTable,
-                    PIndexState.ACTIVE);
+                        PIndexState.ACTIVE);
             }
             return 0;
         } catch (Exception ex) {
-            LOG.error(" An exception occured while performing the indexing job : "
-                    + ExceptionUtils.getStackTrace(ex));
+            LOG.error("An exception occurred while performing the indexing job: "
+                    + ExceptionUtils.getMessage(ex) + " at:\n" + ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
             try {
@@ -263,7 +266,7 @@ public class IndexTool extends Configured implements Tool {
                     connection.close();
                 }
             } catch (SQLException sqle) {
-                LOG.error(" Failed to close connection ", sqle.getMessage());
+                LOG.error("Failed to close connection ", sqle.getMessage());
                 throw new RuntimeException("Failed to close connection");
             }
         }
@@ -276,19 +279,34 @@ public class IndexTool extends Configured implements Tool {
      * @return
      * @throws Exception
      */
-    private int configureRunnableJobUsingBulkLoad(Job job, Path outputPath) throws Exception {
+    private void configureRunnableJobUsingBulkLoad(Job job, Path outputPath, boolean isLocalIndexBuild) throws Exception {
+        job.setMapperClass(PhoenixIndexImportMapper.class);
         job.setMapOutputKeyClass(ImmutableBytesWritable.class);
         job.setMapOutputValueClass(KeyValue.class);
         final Configuration configuration = job.getConfiguration();
-        final String logicalIndexTable =
+        final String physicalIndexTable =
                 PhoenixConfigurationUtil.getPhysicalTableName(configuration);
-        final HTable htable = new HTable(configuration, logicalIndexTable);
+        final HTable htable = new HTable(configuration, physicalIndexTable);
         HFileOutputFormat.configureIncrementalLoad(job, htable);
+        byte[][] splitKeysBeforeJob = null;
+        if(isLocalIndexBuild) {
+            splitKeysBeforeJob = htable.getRegionLocator().getStartKeys();
+        }
         boolean status = job.waitForCompletion(true);
         if (!status) {
-            LOG.error("Failed to run the IndexTool job. ");
+            LOG.error("IndexTool job failed!");
             htable.close();
-            return -1;
+            throw new Exception("IndexTool job failed: " + job.toString());
+        } else {
+            if (isLocalIndexBuild
+                    && !IndexUtil.matchingSplitKeys(splitKeysBeforeJob, htable.getRegionLocator()
+                            .getStartKeys())) {
+                String errMsg = "The index to build is local index and the split keys are not matching"
+                        + " before and after running the job. Please rerun the job otherwise"
+                        + " there may be inconsistencies between actual data and index data";
+                LOG.error(errMsg);
+                throw new Exception(errMsg);
+            }
         }
 
         LOG.info("Loading HFiles from {}", outputPath);
@@ -297,8 +315,6 @@ public class IndexTool extends Configured implements Tool {
         htable.close();
         
         FileSystem.get(configuration).delete(outputPath, true);
-        
-        return 0;
     }
     
     /**
@@ -312,8 +328,10 @@ public class IndexTool extends Configured implements Tool {
      * @return
      * @throws Exception
      */
-    private int configureSubmittableJobUsingDirectApi(Job job, Path outputPath, boolean runForeground)
+    private void configureSubmittableJobUsingDirectApi(Job job, Path outputPath, boolean runForeground)
             throws Exception {
+        job.setMapperClass(PhoenixIndexImportDirectMapper.class);
+        job.setReducerClass(PhoenixIndexImportDirectReducer.class);
         Configuration conf = job.getConfiguration();
         HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
         // Set the Physical Table name for use in DirectHTableWriter#write(Mutation)
@@ -322,7 +340,6 @@ public class IndexTool extends Configured implements Tool {
         
         //Set the Output classes
         job.setMapOutputValueClass(IntWritable.class);
-        job.setReducerClass(PhoenixIndexToolReducer.class);
         job.setOutputKeyClass(NullWritable.class);
         job.setOutputValueClass(NullWritable.class);
         TableMapReduceUtil.addDependencyJars(job);
@@ -331,16 +348,15 @@ public class IndexTool extends Configured implements Tool {
         if (!runForeground) {
             LOG.info("Running Index Build in Background - Submit async and exit");
             job.submit();
-            return 0;
+            return;
         }
         LOG.info("Running Index Build in Foreground. Waits for the build to complete. This may take a long time!.");
         boolean result = job.waitForCompletion(true);
         if (!result) {
-            LOG.error("Job execution failed!");
-            return -1;
+            LOG.error("IndexTool job failed!");
+            throw new Exception("IndexTool job failed: " + job.toString());
         }
         FileSystem.get(conf).delete(outputPath, true);
-        return 0;
     }
 
     /**
@@ -355,7 +371,7 @@ public class IndexTool extends Configured implements Tool {
             final String indexTable) throws SQLException {
         final DatabaseMetaData dbMetaData = connection.getMetaData();
         final String schemaName = SchemaUtil.getSchemaNameFromFullName(masterTable);
-        final String tableName = SchemaUtil.getTableNameFromFullName(masterTable);
+        final String tableName = SchemaUtil.normalizeIdentifier(SchemaUtil.getTableNameFromFullName(masterTable));
 
         ResultSet rs = null;
         try {

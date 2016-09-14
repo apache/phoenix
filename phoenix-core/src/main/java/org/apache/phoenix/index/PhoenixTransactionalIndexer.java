@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -71,16 +72,16 @@ import org.apache.phoenix.trace.util.NullSpan;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TransactionUtil;
+import org.apache.tephra.Transaction;
+import org.apache.tephra.Transaction.VisibilityLevel;
+import org.apache.tephra.TxConstants;
+import org.apache.tephra.hbase.TransactionAwareHTable;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Longs;
-
-import co.cask.tephra.Transaction;
-import co.cask.tephra.Transaction.VisibilityLevel;
-import co.cask.tephra.TxConstants;
-import co.cask.tephra.hbase11.TransactionAwareHTable;
 
 /**
  * Do all the work of managing index updates for a transactional table from a single coprocessor. Since the transaction
@@ -165,7 +166,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
 
             // no index updates, so we are done
             if (!indexUpdates.isEmpty()) {
-                this.writer.write(indexUpdates);
+                this.writer.write(indexUpdates, true);
             }
         } catch (Throwable t) {
             String msg = "Failed to update index with entries:" + indexUpdates;
@@ -174,48 +175,68 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         }
     }
 
+    public static void addMutation(Map<ImmutableBytesPtr, MultiMutation> mutations, ImmutableBytesPtr row, Mutation m) {
+        MultiMutation stored = mutations.get(row);
+        // we haven't seen this row before, so add it
+        if (stored == null) {
+            stored = new MultiMutation(row);
+            mutations.put(row, stored);
+        }
+        stored.addAll(m);
+    }
+    
     private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator, byte[] txRollbackAttribute) throws IOException {
+        Transaction tx = indexMetaData.getTransaction();
+        if (tx == null) {
+            throw new NullPointerException("Expected to find transaction in metadata for " + env.getRegionInfo().getTable().getNameAsString());
+        }
+        boolean isRollback = txRollbackAttribute!=null;
+        boolean isImmutable = indexMetaData.isImmutableRows();
         ResultScanner currentScanner = null;
         TransactionAwareHTable txTable = null;
         // Collect up all mutations in batch
         Map<ImmutableBytesPtr, MultiMutation> mutations =
                 new HashMap<ImmutableBytesPtr, MultiMutation>();
+        Map<ImmutableBytesPtr, MultiMutation> findPriorValueMutations;
+        if (isImmutable && !isRollback) {
+            findPriorValueMutations = new HashMap<ImmutableBytesPtr, MultiMutation>();
+        } else {
+            findPriorValueMutations = mutations;
+        }
         while(mutationIterator.hasNext()) {
             Mutation m = mutationIterator.next();
             // add the mutation to the batch set
             ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
-            MultiMutation stored = mutations.get(row);
-            // we haven't seen this row before, so add it
-            if (stored == null) {
-                stored = new MultiMutation(row);
-                mutations.put(row, stored);
+            if (mutations != findPriorValueMutations && isDeleteMutation(m)) {
+                addMutation(findPriorValueMutations, row, m);
             }
-            stored.addAll(m);
+            addMutation(mutations, row, m);
         }
         
         // Collect the set of mutable ColumnReferences so that we can first
         // run a scan to get the current state. We'll need this to delete
         // the existing index rows.
-        Transaction tx = indexMetaData.getTransaction();
-        if (tx == null) {
-            throw new NullPointerException("Expected to find transaction in metadata for " + env.getRegionInfo().getTable().getNameAsString());
-        }
         List<IndexMaintainer> indexMaintainers = indexMetaData.getIndexMaintainers();
-        Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(indexMaintainers.size() * 10);
+        int estimatedSize = indexMaintainers.size() * 10;
+        Set<ColumnReference> mutableColumns = Sets.newHashSetWithExpectedSize(estimatedSize);
         for (IndexMaintainer indexMaintainer : indexMaintainers) {
             // For transactional tables, we use an index maintainer
             // to aid in rollback if there's a KeyValue column in the index. The alternative would be
             // to hold on to all uncommitted index row keys (even ones already sent to HBase) on the
             // client side.
-            mutableColumns.addAll(indexMaintainer.getAllColumns());
+            Set<ColumnReference> allColumns = indexMaintainer.getAllColumns();
+            mutableColumns.addAll(allColumns);
         }
 
-        boolean isRollback = txRollbackAttribute!=null;
         Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(mutations.size() * 2 * indexMaintainers.size());
         try {
-            if (!mutableColumns.isEmpty()) {
+            // Track if we have row keys with Delete mutations (or Puts that are
+            // Tephra's Delete marker). If there are none, we don't need to do the scan for
+            // prior versions, if there are, we do. Since rollbacks always have delete mutations,
+            // this logic will work there too.
+            if (!findPriorValueMutations.isEmpty()) {
                 List<KeyRange> keys = Lists.newArrayListWithExpectedSize(mutations.size());
-                for (ImmutableBytesPtr ptr : mutations.keySet()) {
+                for (ImmutableBytesPtr ptr : findPriorValueMutations.keySet()) {
                     keys.add(PVarbinary.INSTANCE.getKeyRange(ptr.copyBytesIfNecessary()));
                 }
                 Scan scan = new Scan();
@@ -243,9 +264,9 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 currentScanner = txTable.getScanner(scan);
             }
             if (isRollback) {
-                processRollback(env, indexMetaData, txRollbackAttribute, currentScanner, mutations, tx, mutableColumns, indexUpdates);
+                processRollback(env, indexMetaData, txRollbackAttribute, currentScanner, tx, mutableColumns, indexUpdates, mutations);
             } else {
-                processMutation(env, indexMetaData, txRollbackAttribute, currentScanner, mutations, tx, mutableColumns, indexUpdates);
+                processMutation(env, indexMetaData, txRollbackAttribute, currentScanner, tx, mutableColumns, indexUpdates, mutations, findPriorValueMutations);
             }
         } finally {
             if (txTable != null) txTable.close();
@@ -254,26 +275,39 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         return indexUpdates;
     }
 
+    private static boolean isDeleteMutation(Mutation m) {
+        for (Map.Entry<byte[],List<Cell>> cellMap : m.getFamilyCellMap().entrySet()) {
+            for (Cell cell : cellMap.getValue()) {
+                if (cell.getTypeByte() != KeyValue.Type.Put.getCode() || TransactionUtil.isDelete(cell)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void processMutation(RegionCoprocessorEnvironment env,
             PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
             ResultScanner scanner,
-            Map<ImmutableBytesPtr, MultiMutation> mutations, Transaction tx,
-            Set<ColumnReference> mutableColumns,
-            Collection<Pair<Mutation, byte[]>> indexUpdates) throws IOException {
+            Transaction tx, 
+            Set<ColumnReference> upsertColumns, 
+            Collection<Pair<Mutation, byte[]>> indexUpdates,
+            Map<ImmutableBytesPtr, MultiMutation> mutations,
+            Map<ImmutableBytesPtr, MultiMutation> mutationsToFindPreviousValue) throws IOException {
         if (scanner != null) {
             Result result;
             ColumnReference emptyColRef = new ColumnReference(indexMetaData.getIndexMaintainers().get(0).getDataEmptyKeyValueCF(), QueryConstants.EMPTY_COLUMN_BYTES);
             // Process existing data table rows by removing the old index row and adding the new index row
             while ((result = scanner.next()) != null) {
-                Mutation m = mutations.remove(new ImmutableBytesPtr(result.getRow()));
-                TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m, emptyColRef, result);
+                Mutation m = mutationsToFindPreviousValue.remove(new ImmutableBytesPtr(result.getRow()));
+                TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m, emptyColRef, result);
                 generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
                 generatePuts(indexMetaData, indexUpdates, state);
             }
         }
         // Process new data table by adding new index rows
         for (Mutation m : mutations.values()) {
-            TxTableState state = new TxTableState(env, mutableColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m);
+            TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m);
             generatePuts(indexMetaData, indexUpdates, state);
         }
     }
@@ -281,9 +315,9 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     private void processRollback(RegionCoprocessorEnvironment env,
             PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
             ResultScanner scanner,
-            Map<ImmutableBytesPtr, MultiMutation> mutations, Transaction tx,
-            Set<ColumnReference> mutableColumns,
-            Collection<Pair<Mutation, byte[]>> indexUpdates) throws IOException {
+            Transaction tx, Set<ColumnReference> mutableColumns,
+            Collection<Pair<Mutation, byte[]>> indexUpdates,
+            Map<ImmutableBytesPtr, MultiMutation> mutations) throws IOException {
         if (scanner != null) {
             Result result;
             // Loop through last committed row state plus all new rows associated with current transaction
@@ -318,17 +352,20 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                     boolean hasPuts = false;
                     LinkedList<Cell> singleTimeCells = Lists.newLinkedList();
                     long writePtr;
+                    Cell cell = cells.get(i);
                     do {
-                        Cell cell = cells.get(i);
                         hasPuts |= cell.getTypeByte() == KeyValue.Type.Put.getCode();
                         writePtr = cell.getTimestamp();
+                        ListIterator<Cell> it = singleTimeCells.listIterator();
                         do {
                             // Add at the beginning of the list to match the expected HBase
                             // newest to oldest sort order (which TxTableState relies on
-                            // with the Result.getLatestColumnValue() calls).
-                            singleTimeCells.addFirst(cell);
-                        } while (++i < nCells && cells.get(i).getTimestamp() == writePtr);
-                    } while (i < nCells && cells.get(i).getTimestamp() <= readPtr);
+                            // with the Result.getLatestColumnValue() calls). However, we
+                            // still want to add Cells in the expected order for each time
+                            // bound as otherwise we won't find it in our old state.
+                            it.add(cell);
+                        } while (++i < nCells && (cell=cells.get(i)).getTimestamp() == writePtr);
+                    } while (i < nCells && cell.getTimestamp() <= readPtr);
                     
                     // Generate point delete markers for the prior row deletion of the old index value.
                     // The write timestamp is the next timestamp, not the current timestamp,

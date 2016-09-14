@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -48,7 +49,9 @@ import org.apache.phoenix.parse.WildcardParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PInteger;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
@@ -84,6 +87,7 @@ public final class QueryUtil {
     private static final String SELECT = "SELECT";
     private static final String FROM = "FROM";
     private static final String WHERE = "WHERE";
+    private static final String AND = "AND";
     private static final String[] CompareOpString = new String[CompareOp.values().length];
 
     static {
@@ -229,39 +233,53 @@ public final class QueryUtil {
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum) {
-        return getUrlInternal(zkQuorum, null, null);
+        return getUrlInternal(zkQuorum, null, null, null);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, int clientPort) {
-        return getUrlInternal(zkQuorum, clientPort, null);
+        return getUrlInternal(zkQuorum, clientPort, null, null);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, String znodeParent) {
-        return getUrlInternal(zkQuorum, null, znodeParent);
+        return getUrlInternal(zkQuorum, null, znodeParent, null);
+    }
+
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, int port, String znodeParent, String principal) {
+        return getUrlInternal(zkQuorum, port, znodeParent, principal);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, int port, String znodeParent) {
-        return getUrlInternal(zkQuorum, port, znodeParent);
+        return getUrlInternal(zkQuorum, port, znodeParent, null);
     }
 
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
     public static String getUrl(String zkQuorum, Integer port, String znodeParent) {
-        return getUrlInternal(zkQuorum, port, znodeParent);
+        return getUrlInternal(zkQuorum, port, znodeParent, null);
     }
 
-    private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent) {
-        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent).toUrl()
+    /**
+     * Create the Phoenix JDBC connection URL from the provided cluster connection details.
+     */
+    public static String getUrl(String zkQuorum, Integer port, String znodeParent, String principal) {
+        return getUrlInternal(zkQuorum, port, znodeParent, principal);
+    }
+
+    private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent, String principal) {
+        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent, principal, null).toUrl()
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
     }
 
@@ -291,14 +309,31 @@ public final class QueryUtil {
         return buf.toString();
     }
 
+    /**
+     * @return {@link PhoenixConnection} with NO_UPGRADE_ATTRIB set so that we don't initiate server upgrade
+     */
+    public static Connection getConnectionOnServer(Configuration conf) throws ClassNotFoundException,
+            SQLException {
+        return getConnectionOnServer(new Properties(), conf);
+    }
+
+    /**
+     * @return {@link PhoenixConnection} with NO_UPGRADE_ATTRIB set so that we don't initiate server upgrade
+     */
+    public static Connection getConnectionOnServer(Properties props, Configuration conf)
+            throws ClassNotFoundException,
+            SQLException {
+        props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
+        return getConnection(props, conf);
+    }
+
     public static Connection getConnection(Configuration conf) throws ClassNotFoundException,
             SQLException {
         return getConnection(new Properties(), conf);
     }
-
-    public static Connection getConnection(Properties props, Configuration conf)
-            throws ClassNotFoundException,
-            SQLException {
+    
+    private static Connection getConnection(Properties props, Configuration conf)
+            throws ClassNotFoundException, SQLException {
         String url = getConnectionUrl(props, conf);
         LOG.info("Creating connection with the jdbc url: " + url);
         PropertiesUtil.extractProperties(props, conf);
@@ -306,6 +341,10 @@ public final class QueryUtil {
     }
 
     public static String getConnectionUrl(Properties props, Configuration conf)
+            throws ClassNotFoundException, SQLException {
+        return getConnectionUrl(props, conf, null);
+    }
+    public static String getConnectionUrl(Properties props, Configuration conf, String principal)
             throws ClassNotFoundException, SQLException {
         // TODO: props is ignored!
         // read the hbase properties from the configuration
@@ -341,7 +380,7 @@ public final class QueryUtil {
         server = Joiner.on(',').join(servers);
         String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-        String url = getUrl(server, port, znodeParent);
+        String url = getUrl(server, port, znodeParent, principal);
         // Mainly for testing to tack on the test=true part to ensure driver is found on server
         String extraArgs = conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         if (extraArgs.length() > 0) {
@@ -369,16 +408,20 @@ public final class QueryUtil {
 
     }
 
-    public static byte[] getUnusedOffset(Tuple offsetTuple) {
+    public static Integer getRemainingOffset(Tuple offsetTuple) {
         if (offsetTuple != null) {
             ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr();
             offsetTuple.getKey(rowKeyPtr);
-            if (QueryConstants.offsetRowKeyPtr.compareTo(rowKeyPtr) == 0) {
-                Cell value = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN);
-                return value.getValue();
+            if (QueryConstants.OFFSET_ROW_KEY_PTR.compareTo(rowKeyPtr) == 0) {
+                Cell cell = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN);
+                return PInteger.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(), PInteger.INSTANCE, SortOrder.ASC, null, null);
             }
         }
         return null;
     }
- 
+    
+    public static String getViewPartitionClause(String partitionColumnName, long autoPartitionNum) {
+        return partitionColumnName  + " " + toSQL(CompareOp.EQUAL) + " " + autoPartitionNum;
+    }
+    
 }

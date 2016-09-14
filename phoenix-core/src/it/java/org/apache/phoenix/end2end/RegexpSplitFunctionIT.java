@@ -31,23 +31,32 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 
-public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
+public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+
+    private static final String SPLIT_TEST = generateRandomString();
+
+    @BeforeClass
+    public static void setup() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE " + SPLIT_TEST + " (" +
+            "ID INTEGER NOT NULL PRIMARY KEY," +
+            "VAL VARCHAR," +
+            "SEP VARCHAR," +
+            "ARR VARCHAR ARRAY)";
+        conn.createStatement().execute(ddl);
+    }
 
     private void initTable(Connection conn, String val) throws SQLException {
         initTable(conn, val, ",");
     }
 
     private void initTable(Connection conn, String val, String separator) throws SQLException {
-        String ddl = "CREATE TABLE SPLIT_TEST (" +
-                "ID INTEGER NOT NULL PRIMARY KEY," +
-                "VAL VARCHAR," +
-                "SEP VARCHAR," +
-                "ARR VARCHAR ARRAY)";
-        conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO SPLIT_TEST (ID, SEP, VAL) VALUES (?, ?, ?)";
+        String dml = "UPSERT INTO " + SPLIT_TEST + " (ID, SEP, VAL) VALUES (?, ?, ?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
         stmt.setInt(1, 1);
         if (separator == null) {
@@ -70,9 +79,26 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, ',')[1] FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, ',')[1] FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         assertEquals("ONE", rs.getString(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testArrayLenWithRegExpSplit() throws SQLException {
+    	Connection conn = DriverManager.getConnection(getUrl());
+    	String val = "T";
+    	for(int i = 1; i < Short.MAX_VALUE + 500; i++) {
+    		val += ",T";
+    	}
+    	
+        initTable(conn, val);
+
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT array_length(REGEXP_SPLIT(VAL, ',')) FROM " + SPLIT_TEST);
+        assertTrue(rs.next());
+        assertEquals(33267, rs.getInt(1));
         assertFalse(rs.next());
     }
 
@@ -82,7 +108,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT ID FROM SPLIT_TEST WHERE (REGEXP_SPLIT(VAL, ','))[1] = 'ONE'");
+            "SELECT ID FROM " + SPLIT_TEST + " WHERE (REGEXP_SPLIT(VAL, ','))[1] = 'ONE'");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertFalse(rs.next());
@@ -93,11 +119,12 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl());
         initTable(conn, "ONE,TWO,THREE");
 
-        conn.createStatement().executeUpdate("UPSERT INTO SPLIT_TEST (ID, ARR) SELECT ID, " +
-                "REGEXP_SPLIT(VAL, ',') FROM SPLIT_TEST");
+        conn.createStatement().executeUpdate(
+            "UPSERT INTO " + SPLIT_TEST + " (ID, ARR) SELECT ID, " + "REGEXP_SPLIT(VAL, ',') FROM "
+                + SPLIT_TEST);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ARR FROM SPLIT_TEST");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT ARR FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         Array array = rs.getArray(1);
         String[] values = (String[]) array.getArray();
@@ -110,7 +137,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE:TWO:THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, ':') FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, ':') FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         Array array = rs.getArray(1);
         String[] values = (String[]) array.getArray();
@@ -123,7 +150,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, SEP) FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, SEP) FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         Array array = rs.getArray(1);
         String[] values = (String[]) array.getArray();
@@ -136,7 +163,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "CANNOT BE SPLIT");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, ',') FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, ',') FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         Array array = rs.getArray(1);
         String[] values = (String[]) array.getArray();
@@ -149,7 +176,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE!:TWO:::!THREE::!:FOUR");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, '[:!]+') FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, '[:!]+') FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         Array array = rs.getArray(1);
         String[] values = (String[]) array.getArray();
@@ -162,7 +189,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE|TWO|THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, '\\\\|') FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, '\\\\|') FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         Array array = rs.getArray(1);
         String[] values = (String[]) array.getArray();
@@ -175,7 +202,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, null);
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, ',') FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, ',') FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         assertNull(rs.getString(1));
         assertFalse(rs.next());
@@ -187,7 +214,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE,TWO,THREE");
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, NULL) FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, NULL) FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         assertNull(rs.getString(1));
         assertFalse(rs.next());
@@ -199,7 +226,7 @@ public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeIT {
         initTable(conn, "ONE,TWO,THREE", null);
 
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT REGEXP_SPLIT(VAL, SEP) FROM SPLIT_TEST");
+            "SELECT REGEXP_SPLIT(VAL, SEP) FROM " + SPLIT_TEST);
         assertTrue(rs.next());
         assertNull(rs.getString(1));
         assertFalse(rs.next());

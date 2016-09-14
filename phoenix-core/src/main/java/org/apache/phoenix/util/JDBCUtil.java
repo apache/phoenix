@@ -186,4 +186,9 @@ public class JDBCUtil {
         String batchSizeStr = findProperty(url, overrideProps, PhoenixRuntime.REQUEST_METRIC_ATTRIB);
         return (batchSizeStr == null ? queryServicesProps.getBoolean(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, QueryServicesOptions.DEFAULT_REQUEST_LEVEL_METRICS_ENABLED) : Boolean.parseBoolean(batchSizeStr));
     }
+
+    public static String getSchema(String url, Properties info, String defaultValue) {
+        String schema = findProperty(url, info, PhoenixRuntime.SCHEMA_ATTRIB);
+        return (schema == null || schema.equals("")) ? defaultValue : schema;
+    }
 }

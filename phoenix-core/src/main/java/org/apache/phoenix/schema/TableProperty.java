@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.util.SchemaUtil;
 
 public enum TableProperty {
 
@@ -67,8 +68,16 @@ public enum TableProperty {
 	        return value;
 	    }	    
 	},
+	
+	AUTO_PARTITION_SEQ(PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, false) {
+        @Override
+        public Object getValue(Object value) {
+            return value == null ? null : SchemaUtil.normalizeIdentifier(value.toString());
+        }  
+	},
+	
+	APPEND_ONLY_SCHEMA(PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, true),
     ;
-
 
 	private final String propertyName;
 	private final SQLExceptionCode colFamSpecifiedException;

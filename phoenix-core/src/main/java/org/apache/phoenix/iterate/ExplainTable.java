@@ -37,6 +37,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
@@ -136,6 +137,7 @@ public abstract class ExplainTable {
         PageFilter pageFilter = null;
         FirstKeyOnlyFilter firstKeyOnlyFilter = null;
         BooleanExpressionFilter whereFilter = null;
+        DistinctPrefixFilter distinctFilter = null;
         Iterator<Filter> filterIterator = ScanUtil.getFilterIterator(scan);
         if (filterIterator.hasNext()) {
             do {
@@ -146,6 +148,8 @@ public abstract class ExplainTable {
                     pageFilter = (PageFilter)filter;
                 } else if (filter instanceof BooleanExpressionFilter) {
                     whereFilter = (BooleanExpressionFilter)filter;
+                } else if (filter instanceof DistinctPrefixFilter) {
+                    distinctFilter = (DistinctPrefixFilter)filter;
                 }
             } while (filterIterator.hasNext());
         }
@@ -153,6 +157,9 @@ public abstract class ExplainTable {
             planSteps.add("    SERVER FILTER BY " + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ") + whereFilter.toString());
         } else if (firstKeyOnlyFilter != null) {
             planSteps.add("    SERVER FILTER BY FIRST KEY ONLY");
+        }
+        if (distinctFilter != null) {
+            planSteps.add("    SERVER DISTINCT PREFIX FILTER OVER "+groupBy.getExpressions().toString());
         }
         if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort happens client-side
             planSteps.add("    SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
@@ -176,7 +183,7 @@ public abstract class ExplainTable {
         }
     }
 
-    private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex) {
+    private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex, boolean changeViewIndexId) {
         if (Boolean.TRUE.equals(isNull)) {
             buf.append("null");
             return;
@@ -198,8 +205,14 @@ public abstract class ExplainTable {
             type.coerceBytes(ptr, type, sortOrder, SortOrder.getDefault());
             range = ptr.get();
         }
-        Format formatter = context.getConnection().getFormatter(type);
-        buf.append(type.toStringLiteral(range, formatter));
+        if (changeViewIndexId) {
+            Short s = (Short) type.toObject(range);
+            s = (short) (s + (-Short.MAX_VALUE));
+            buf.append(s.toString());
+        } else {
+            Format formatter = context.getConnection().getFormatter(type);
+            buf.append(type.toStringLiteral(range, formatter));
+        }
     }
     
     private static class RowKeyValueIterator implements Iterator<byte[]> {
@@ -257,6 +270,7 @@ public abstract class ExplainTable {
                 minMaxIterator = new RowKeyValueIterator(schema, minMaxRange.getRange(bound));
             }
         }
+        boolean isLocalIndex = ScanUtil.isLocalIndex(context.getScan());
         boolean forceSkipScan = this.hint.hasHint(Hint.SKIP_SCAN);
         int nRanges = forceSkipScan ? scanRanges.getRanges().size() : scanRanges.getBoundSlotCount();
         for (int i = 0, minPos = 0; minPos < nRanges || minMaxIterator.hasNext(); i++) {
@@ -275,7 +289,11 @@ public abstract class ExplainTable {
                     minMaxIterator = Iterators.emptyIterator();
                 }
             }
-            appendPKColumnValue(buf, b, isNull, i);
+            if (isLocalIndex && i == 0) {
+                appendPKColumnValue(buf, b, isNull, i, true);
+            } else {
+                appendPKColumnValue(buf, b, isNull, i, false);
+            }
             buf.append(',');
         }
     }

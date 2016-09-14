@@ -41,6 +41,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
@@ -48,6 +49,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
@@ -67,6 +69,10 @@ import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -831,6 +837,31 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         } finally {
             conn.close();
         }
+    }
+
+    @Test
+    public void testSelectDistinctAndOrderBy() throws Exception {
+        long ts = nextTimestamp();
+        String query = "select /*+ RANGE_SCAN */ count(distinct organization_id) from atable order by organization_id";
+        String query1 = "select count(distinct organization_id) from atable order by organization_id";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            PreparedStatement statement = conn.prepareStatement(query);
+            statement.executeQuery();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+        try {
+            PreparedStatement statement = conn.prepareStatement(query1);
+            statement.executeQuery();
+            fail();
+        } catch (SQLException e) { // expected
+            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+        }
+        conn.close();
     }
 
     @Test
@@ -2275,5 +2306,125 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
+    @Test
+    public void testOrderByWithNoProjection() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("create table x (id integer primary key, A.i1 integer," +
+                    " B.i2 integer)");
+            Scan scan = projectQuery("select A.i1 from X group by i1 order by avg(B.i2) " +
+                    "desc");
+            ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute
+                    (BaseScannerRegionObserver.AGGREGATORS), null);
+            assertEquals(2,aggregators.getAggregatorCount());
+        } finally {
+            conn.close();
+        }
+    }
 
+    @Test
+    public void testColumnProjectionUnionAll() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t1(k INTEGER PRIMARY KEY,"+
+                    " col1 CHAR(8), col2 VARCHAR(10), col3 decimal(10,2))");
+            conn.createStatement().execute("CREATE TABLE t2(k TINYINT PRIMARY KEY," +
+                    " col1 CHAR(20), col2 CHAR(30), col3 double)");
+            QueryPlan plan = getQueryPlan("SELECT * from t1 union all select * from t2",
+                Collections.emptyList());
+            RowProjector rowProj = plan.getProjector();
+            assertTrue(rowProj.getColumnProjector(0).getExpression().getDataType()
+                instanceof PInteger);
+            assertTrue(rowProj.getColumnProjector(1).getExpression().getDataType()
+                instanceof PChar);
+            assertTrue(rowProj.getColumnProjector(1).getExpression().getMaxLength() == 20);
+            assertTrue(rowProj.getColumnProjector(2).getExpression().getDataType()
+                instanceof PVarchar);
+            assertTrue(rowProj.getColumnProjector(2).getExpression().getMaxLength() == 30);
+            assertTrue(rowProj.getColumnProjector(3).getExpression().getDataType()
+                instanceof PDecimal);
+            assertTrue(rowProj.getColumnProjector(3).getExpression().getScale() == 2);
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testFuncIndexUsage() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("CREATE TABLE t1(k INTEGER PRIMARY KEY,"+
+                    " col1 VARCHAR, col2 VARCHAR)");
+            conn.createStatement().execute("CREATE TABLE t2(k INTEGER PRIMARY KEY," +
+                    " col1 VARCHAR, col2 VARCHAR)");
+            conn.createStatement().execute("CREATE TABLE t3(j INTEGER PRIMARY KEY," +
+                    " col3 VARCHAR, col4 VARCHAR)");
+            conn.createStatement().execute("CREATE INDEX idx ON t1 (col1 || col2)");
+            String query = "SELECT a.k from t1 a where a.col1 || a.col2 = 'foobar'";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY",explainPlan);
+            query = "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'";
+            rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T3\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    PARALLEL INNER-JOIN TABLE 0\n" + 
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")",explainPlan);
+            query = "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'";
+            rs = conn.createStatement().executeQuery("EXPLAIN "+query);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER T2\n" + 
+                    "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    PARALLEL INNER-JOIN TABLE 0\n" + 
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER IDX ['foobar']\n" + 
+                    "            SERVER FILTER BY FIRST KEY ONLY\n" + 
+                    "    DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")",explainPlan);
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testSaltTableJoin() throws Exception{
+
+        PhoenixConnection conn = (PhoenixConnection)DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute("drop table if exists SALT_TEST2900");
+
+            conn.createStatement().execute(
+                "create table SALT_TEST2900"+
+                        "("+
+                        "id UNSIGNED_INT not null primary key,"+
+                        "appId VARCHAR"+
+                    ")SALT_BUCKETS=2");
+
+
+
+            conn.createStatement().execute("drop table if exists RIGHT_TEST2900 ");
+            conn.createStatement().execute(
+                "create table RIGHT_TEST2900"+
+                        "("+
+                        "appId VARCHAR not null primary key,"+
+                        "createTime VARCHAR"+
+                    ")");
+
+            
+            String sql="select * from SALT_TEST2900 a inner join RIGHT_TEST2900 b on a.appId=b.appId where a.id>=3 and a.id<=5";
+            HashJoinPlan plan = (HashJoinPlan)getQueryPlan(sql, Collections.emptyList());
+            ScanRanges ranges=plan.getContext().getScanRanges();
+
+            List<HRegionLocation> regionLocations=
+                    conn.getQueryServices().getAllTableRegions(Bytes.toBytes("SALT_TEST2900"));
+            for (HRegionLocation regionLocation : regionLocations) {
+                assertTrue(ranges.intersectRegion(regionLocation.getRegionInfo().getStartKey(),
+                    regionLocation.getRegionInfo().getEndKey(), false));
+            }
+        } finally {
+            conn.close();
+        }
+    }
 }

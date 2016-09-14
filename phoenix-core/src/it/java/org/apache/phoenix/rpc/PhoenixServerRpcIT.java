@@ -44,7 +44,6 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -209,24 +208,4 @@ public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
 		// verify index and data tables are on different servers
 		assertNotEquals("Tables " + tableName1 + " and " + tableName2 + " should be on different region servers", serverName1, serverName2);
 	}
-    
-    @Test
-    public void testMetadataQos() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = driver.connect(getUrl(), props);
-        try {
-        	ensureTablesOnDifferentRegionServers(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
-            // create the table 
-            conn.createStatement().execute(
-                    "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)");
-            // query the table from another connection, so that SYSTEM.STATS will be used 
-            conn.createStatement().execute("SELECT * FROM "+DATA_TABLE_FULL_NAME);
-            // verify that that metadata queue is at least once 
-            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getMetadataRpcExecutor(), Mockito.atLeastOnce()).dispatch(Mockito.any(CallRunner.class));
-        }
-        finally {
-            conn.close();
-        }
-    }
-
 }
