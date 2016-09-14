@@ -257,9 +257,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES);
                     byte[] indexStat = r.getValue(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.INDEX_STATE_BYTES);
-                    if ((dataTable == null || dataTable.length == 0)
-                            || (indexStat == null || indexStat.length == 0)) {
+                    if ((dataTable == null || dataTable.length == 0) || (indexStat == null || indexStat.length == 0)
+                            || (dataPTable != null
+                                    && !dataPTable.getName().getString().equals(Bytes.toString(dataTable)))) {
                         // data table name can't be empty
+                        // we need to build indexes of same data table. so skip other indexes for this task.
                         continue;
                     }
 
