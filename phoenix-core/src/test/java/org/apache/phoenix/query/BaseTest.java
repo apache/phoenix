@@ -42,11 +42,8 @@ import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_SALTED_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.ENTITY_HISTORY_TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.FUNKY_NAME;
-import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
-import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
-import static org.apache.phoenix.util.TestUtil.INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.JOIN_COITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
@@ -55,7 +52,6 @@ import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
-import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
 import static org.apache.phoenix.util.TestUtil.PARENTID2;
 import static org.apache.phoenix.util.TestUtil.PARENTID3;
@@ -83,7 +79,6 @@ import static org.apache.phoenix.util.TestUtil.SUM_DOUBLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -365,9 +360,6 @@ public abstract class BaseTest {
                 "    e.cpu_utilization decimal(31,10),\n" +
                 "    f.response_time bigint,\n" +
                 "    g.response_time bigint)");
-        builder.put(GROUPBYTEST_NAME,"create table " + GROUPBYTEST_NAME +
-                "   (id varchar not null primary key,\n" +
-                "    uri varchar, appcpu integer)");
         builder.put(HBASE_NATIVE,"create table " + HBASE_NATIVE +
                 "   (uint_key unsigned_int not null," +
                 "    ulong_key unsigned_long not null," +
@@ -443,9 +435,6 @@ public abstract class BaseTest {
         builder.put("KVBigIntValueTest", "create table KVBigIntValueTest" +
                 "   (pk integer not null primary key,\n" +
                 "    kv bigint)\n");
-        builder.put(INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + INDEX_DATA_TABLE + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
-        builder.put(MUTABLE_INDEX_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + MUTABLE_INDEX_DATA_TABLE + TEST_TABLE_SCHEMA);
-        builder.put(TRANSACTIONAL_DATA_TABLE, "create table " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
         builder.put(SUM_DOUBLE_NAME,"create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
         builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
@@ -2010,32 +1999,6 @@ public abstract class BaseTest {
         }
     }
 
-    protected static void createMultiCFTestTable(String tableName, String options) throws SQLException {
-        String ddl = "create table if not exists " + tableName + "(" +
-                "   varchar_pk VARCHAR NOT NULL, " +
-                "   char_pk CHAR(5) NOT NULL, " +
-                "   int_pk INTEGER NOT NULL, "+ 
-                "   long_pk BIGINT NOT NULL, " +
-                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-                "   a.varchar_col1 VARCHAR, " +
-                "   a.char_col1 CHAR(5), " +
-                "   a.int_col1 INTEGER, " +
-                "   a.long_col1 BIGINT, " +
-                "   a.decimal_col1 DECIMAL(31, 10), " +
-                "   b.varchar_col2 VARCHAR, " +
-                "   b.char_col2 CHAR(5), " +
-                "   b.int_col2 INTEGER, " +
-                "   b.long_col2 BIGINT, " +
-                "   b.decimal_col2 DECIMAL, " +
-                "   b.date_col DATE " + 
-                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
-                + (options!=null? options : "");
-            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            Connection conn = DriverManager.getConnection(getUrl(), props);
-            conn.createStatement().execute(ddl);
-            conn.close();
-    }
-        
     // Populate the test table with data.
     protected static void populateMultiCFTestTable(String tableName) throws SQLException {
         populateMultiCFTestTable(tableName, null);
