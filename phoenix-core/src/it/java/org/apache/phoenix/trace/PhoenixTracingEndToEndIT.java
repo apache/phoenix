@@ -48,7 +48,7 @@ import org.cloudera.htrace.Trace;
 import org.cloudera.htrace.TraceScope;
 import org.cloudera.htrace.impl.ProbabilitySampler;
 import org.junit.After;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableMap;
@@ -64,13 +64,15 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     private final String table = "ENABLED_FOR_LOGGING";
     private final String index = "ENABALED_FOR_LOGGING_INDEX";
 
-    private static DisableableMetricsWriter sink;
+    private DisableableMetricsWriter sink;
+    private String tableName;
 
-    @BeforeClass
-    public static void setupMetrics() throws Exception {
+    @Before
+    public void setupMetrics() throws Exception {
         PhoenixMetricsSink pWriter = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        pWriter.initForTesting(conn);
+        tableName = generateRandomString();
+        pWriter.initForTesting(conn, tableName);
         sink = new DisableableMetricsWriter(pWriter);
 
         TracingTestUtil.registerSink(sink);
@@ -80,22 +82,19 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     public void cleanup() {
         sink.disable();
         sink.clear();
-        sink.enable();
-
-        // LISTENABLE.clearListeners();
     }
 
-    private static void waitForCommit(CountDownLatch latch) throws SQLException {
+    private void waitForCommit(CountDownLatch latch) throws SQLException {
         Connection conn = new CountDownConnection(getConnectionWithoutTracing(), latch);
         replaceWriterConnection(conn);
     }
 
-    private static void replaceWriterConnection(Connection conn) throws SQLException {
+    private void replaceWriterConnection(Connection conn) throws SQLException {
         // disable the writer
         sink.disable();
 
         // swap the connection for one that listens
-        sink.getDelegate().initForTesting(conn);
+        sink.getDelegate().initForTesting(conn, tableName);
 
         // enable the writer
         sink.enable();
@@ -461,7 +460,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     }
     
     private boolean checkStoredTraces(Connection conn, TraceChecker checker) throws Exception {
-        TraceReader reader = new TraceReader(conn);
+        TraceReader reader = new TraceReader(conn, tableName);
         int retries = 0;
         boolean found = false;
         outer: while (retries < MAX_RETRIES) {
