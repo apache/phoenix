@@ -44,7 +44,6 @@ import org.apache.htrace.impl.ProbabilitySampler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.metrics.Metrics;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.junit.After;
@@ -61,8 +60,8 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);
     private static final int MAX_RETRIES = 10;
-    private final String table = "ENABLED_FOR_LOGGING";
-    private final String index = "ENABALED_FOR_LOGGING_INDEX";
+    private String enabledForLoggingTable;
+    private String enableForLoggingIndex;
 
     private DisableableMetricsWriter sink;
     private String tableName;
@@ -74,6 +73,8 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         tableName = generateRandomString();
         pWriter.initForTesting(conn, tableName);
         sink = new DisableableMetricsWriter(pWriter);
+        enabledForLoggingTable = "ENABLED_FOR_LOGGING_" + generateRandomString();
+        enableForLoggingIndex = "ENABALED_FOR_LOGGING_INDEX" + generateRandomString();
 
         TracingTestUtil.registerSink(sink);
     }
@@ -184,7 +185,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         // trace the requests we send
         Connection traceable = getTracingConnection();
         LOG.debug("Doing dummy the writes to the tracked table");
-        String insert = "UPSERT INTO " + table + " VALUES (?, ?)";
+        String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = traceable.prepareStatement(insert);
         stmt.setString(1, "key1");
         stmt.setLong(2, 1);
@@ -222,7 +223,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             public boolean foundTrace(TraceHolder trace, SpanInfo span) {
                 String traceInfo = trace.toString();
                 // skip logging traces that are just traces about tracing
-                if (traceInfo.contains(QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME)) {
+                if (traceInfo.contains(tableName)) {
                     return false;
                 }
                 return traceInfo.contains("Completing index");
@@ -235,7 +236,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     private void createTestTable(Connection conn, boolean withIndex) throws SQLException {
         // create a dummy table
         String ddl =
-                "create table if not exists " + table + "(" + "k varchar not null, " + "c1 bigint"
+                "create table if not exists " + enabledForLoggingTable + "(" + "k varchar not null, " + "c1 bigint"
                         + " CONSTRAINT pk PRIMARY KEY (k))";
         conn.createStatement().execute(ddl);
 
@@ -244,7 +245,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             return;
         }
         // create an index on the table - we know indexing has some basic tracing
-        ddl = "CREATE INDEX IF NOT EXISTS " + index + " on " + table + " (c1)";
+        ddl = "CREATE INDEX IF NOT EXISTS " + enableForLoggingIndex + " on " + enabledForLoggingTable + " (c1)";
         conn.createStatement().execute(ddl);
         conn.commit();
     }
@@ -264,7 +265,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
         // update the table, but don't trace these, to simplify the traces we read
         LOG.debug("Doing dummy the writes to the tracked table");
-        String insert = "UPSERT INTO " + table + " VALUES (?, ?)";
+        String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(insert);
         stmt.setString(1, "key1");
         stmt.setLong(2, 1);
@@ -280,7 +281,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         conn.rollback();
 
         // do a scan of the table
-        String read = "SELECT * FROM " + table;
+        String read = "SELECT * FROM " + enabledForLoggingTable;
         ResultSet results = traceable.createStatement().executeQuery(read);
         assertTrue("Didn't get first result", results.next());
         assertTrue("Didn't get second result", results.next());
@@ -314,7 +315,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
         // update the table, but don't trace these, to simplify the traces we read
         LOG.debug("Doing dummy the writes to the tracked table");
-        String insert = "UPSERT INTO " + table + " VALUES (?, ?)";
+        String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(insert);
         stmt.setString(1, "key1");
         stmt.setLong(2, 1);
@@ -330,7 +331,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         conn.rollback();
 
         // do a scan of the table
-        String read = "SELECT COUNT(*) FROM " + table;
+        String read = "SELECT COUNT(*) FROM " + enabledForLoggingTable;
         ResultSet results = traceable.createStatement().executeQuery(read);
         assertTrue("Didn't get count result", results.next());
         // make sure we got the expected count
@@ -367,7 +368,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
         // update the table, but don't trace these, to simplify the traces we read
         LOG.debug("Doing dummy the writes to the tracked table");
-        String insert = "UPSERT INTO " + table + " VALUES (?, ?)";
+        String insert = "UPSERT INTO " + enabledForLoggingTable + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(insert);
         stmt.setString(1, "key1");
         stmt.setLong(2, 1);
@@ -383,7 +384,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         conn.rollback();
 
         // do a scan of the table
-        String read = "SELECT * FROM " + table;
+        String read = "SELECT * FROM " + enabledForLoggingTable;
         ResultSet results = traceable.createStatement().executeQuery(read);
         assertTrue("Didn't get first result", results.next());
         assertTrue("Didn't get second result", results.next());
