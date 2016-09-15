@@ -37,6 +37,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ChunkedResultIterator;
 import org.apache.phoenix.iterate.ConcatResultIterator;
+import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortRowKeyResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
@@ -83,12 +84,12 @@ public class ScanPlan extends BaseQueryPlan {
     private boolean isSerial;
     private boolean isDataToScanWithinThreshold;
     
-    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null);
+    public ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, String cursorName, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter) throws SQLException {
+        this(context, statement, table, projector, cursorName, limit, offset, orderBy, parallelIteratorFactory, allowPageFilter, null);
     }
     
-    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
+    private ScanPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector, String cursorName, Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, Expression dynamicFilter) throws SQLException {
+        super(context, statement, table, projector, cursorName, context.getBindManager().getParameterMetaData(), limit,offset, orderBy, GroupBy.EMPTY_GROUP_BY,
                 parallelIteratorFactory != null ? parallelIteratorFactory :
                         buildResultIteratorFactory(context, statement, table, orderBy, limit, offset, allowPageFilter), dynamicFilter);
         this.allowPageFilter = allowPageFilter;
@@ -256,6 +257,9 @@ public class ScanPlan extends BaseQueryPlan {
 
         if (context.getSequenceManager().getSequenceCount() > 0) {
             scanner = new SequenceResultIterator(scanner, context.getSequenceManager());
+        }
+        if (cursorName != null) {
+            scanner = new CursorResultIterator(scanner, cursorName);
         }
         return scanner;
     }

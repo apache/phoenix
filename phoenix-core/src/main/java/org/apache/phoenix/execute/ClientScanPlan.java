@@ -27,6 +27,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -44,9 +45,9 @@ import com.google.common.collect.Lists;
 public class ClientScanPlan extends ClientProcessingPlan {
 
     public ClientScanPlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, Expression where, OrderBy orderBy,
+            RowProjector projector, String cursorName, Integer limit, Integer offset, Expression where, OrderBy orderBy,
             QueryPlan delegate) {
-        super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
+        super(context, statement, table, projector, cursorName, limit, offset, where, orderBy, delegate);
     }
 
     @Override
@@ -76,6 +77,9 @@ public class ClientScanPlan extends ClientProcessingPlan {
         
         if (context.getSequenceManager().getSequenceCount() > 0) {
             iterator = new SequenceResultIterator(iterator, context.getSequenceManager());
+        }
+        if (cursorName != null){
+            iterator = new CursorResultIterator(iterator, cursorName);
         }
         
         return iterator;

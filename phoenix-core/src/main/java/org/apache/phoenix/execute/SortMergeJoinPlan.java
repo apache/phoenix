@@ -185,6 +185,11 @@ public class SortMergeJoinPlan implements QueryPlan {
     public RowProjector getProjector() {
         return null;
     }
+	
+	@Override
+    public String getCursorName() {
+        return null;
+    }
 
     @Override
     public Integer getLimit() {

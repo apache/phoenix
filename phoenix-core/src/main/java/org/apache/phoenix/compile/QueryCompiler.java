@@ -181,7 +181,7 @@ public class QueryCompiler {
         ColumnResolver resolver = FromCompiler.getResolver(tableRef);
         StatementContext context = new StatementContext(statement, resolver, scan, sequenceManager);
         QueryPlan plan = compileSingleFlatQuery(context, select, statement.getParameters(), false, false, null, null, false);
-        plan = new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(),
+        plan = new UnionPlan(context, select, tableRef, plan.getProjector(), (select.getCursorName() == null ? null : select.getCursorName().getName()), plan.getLimit(),
             plan.getOffset(), plan.getOrderBy(), GroupBy.EMPTY_GROUP_BY, plans,
             context.getBindManager().getParameterMetaData());
         return plan;
@@ -582,12 +582,12 @@ public class QueryCompiler {
         if (plan == null) {
             ParallelIteratorFactory parallelIteratorFactory = asSubquery ? null : this.parallelIteratorFactory;
             plan = select.getFrom() == null
-                    ? new LiteralResultIterationPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                    ? new LiteralResultIterationPlan(context, select, tableRef, projector, (select.getCursorName() == null ? null : select.getCursorName().getName()), limit, offset, orderBy,
                             parallelIteratorFactory)
                     : (select.isAggregate() || select.isDistinct()
-                            ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
+                            ? new AggregatePlan(context, select, tableRef, projector, (select.getCursorName() == null ? null : select.getCursorName().getName()), limit, offset, orderBy,
                                     parallelIteratorFactory, groupBy, having)
-                            : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                            : new ScanPlan(context, select, tableRef, projector, (select.getCursorName() == null ? null : select.getCursorName().getName()), limit, offset, orderBy,
                                     parallelIteratorFactory, allowPageFilter));
         }
         if (!subqueries.isEmpty()) {
@@ -606,9 +606,9 @@ public class QueryCompiler {
                 where = null; // we do not pass "true" as filter
             }
             plan = select.isAggregate() || select.isDistinct()
-                    ? new ClientAggregatePlan(context, select, tableRef, projector, limit, offset, where, orderBy,
+                    ? new ClientAggregatePlan(context, select, tableRef, projector, (select.getCursorName() == null ? null : select.getCursorName().getName()), limit, offset, where, orderBy,
                             groupBy, having, plan)
-                    : new ClientScanPlan(context, select, tableRef, projector, limit, offset, where, orderBy, plan);
+                    : new ClientScanPlan(context, select, tableRef, projector, (select.getCursorName() == null ? null : select.getCursorName().getName()), limit, offset, where, orderBy, plan);
 
         }
 

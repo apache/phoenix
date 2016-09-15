@@ -206,11 +206,16 @@ public class TraceQueryPlan implements QueryPlan {
     }
 
     @Override
-    public Integer getLimit() {
+    public String getCursorName() {
         return null;
     }
 
     @Override
+    public Integer getLimit() {
+        return null;
+    }
+	
+	@Override
     public Integer getOffset() {
         return null;
     }

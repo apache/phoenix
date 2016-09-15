@@ -139,6 +139,82 @@ public class SQLParser {
     }
 
     /**
+     * Parses the input as a SQL declare cursor statement.
+     * Used only in tests
+     * @throws SQLException
+     */
+    public DeclareCursorStatement parseDeclareCursor() throws SQLException {
+        try {
+            DeclareCursorStatement statement = parser.declare_cursor_node();
+            return statement;
+        } catch (RecognitionException e) {
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof SQLException) {
+                throw (SQLException) e.getCause();
+            }
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        }
+    }
+
+    /**
+     * Parses the input as a SQL cursor open statement.
+     * Used only in tests
+     * @throws SQLException
+     */
+    public OpenStatement parseOpen() throws SQLException {
+        try {
+            OpenStatement statement = parser.cursor_open_node();
+            return statement;
+        } catch (RecognitionException e) {
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof SQLException) {
+                throw (SQLException) e.getCause();
+            }
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        }
+    }
+
+    /**
+     * Parses the input as a SQL cursor close statement.
+     * Used only in tests
+     * @throws SQLException
+     */
+    public CloseStatement parseClose() throws SQLException {
+        try {
+            CloseStatement statement = parser.cursor_close_node();
+            return statement;
+        } catch (RecognitionException e) {
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof SQLException) {
+                throw (SQLException) e.getCause();
+            }
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        }
+    }
+
+    /**
+     * Parses the input as a SQL cursor fetch statement.
+     * Used only in tests
+     * @throws SQLException
+     */
+    public FetchStatement parseFetch() throws SQLException {
+        try {
+            FetchStatement statement = parser.cursor_fetch_node();
+            return statement;
+        } catch (RecognitionException e) {
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof SQLException) {
+                throw (SQLException) e.getCause();
+            }
+            throw PhoenixParserException.newException(e, parser.getTokenNames());
+        }
+    }
+
+    /**
      * Parses the input as a SQL select statement.
      * Used only in tests
      * @throws SQLException 

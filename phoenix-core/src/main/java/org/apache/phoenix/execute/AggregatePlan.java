@@ -38,6 +38,7 @@ import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.iterate.AggregatingResultIterator;
 import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ConcatResultIterator;
+import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.DistinctAggregatingResultIterator;
 import org.apache.phoenix.iterate.FilterAggregatingResultIterator;
 import org.apache.phoenix.iterate.GroupedAggregatingResultIterator;
@@ -85,17 +86,17 @@ public class AggregatePlan extends BaseQueryPlan {
     
 
     public AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
+            RowProjector projector, String cursorName, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having) {
-        this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
+        this(context, statement, table, projector, cursorName, limit, offset, orderBy, parallelIteratorFactory, groupBy, having,
                 null);
     }
 
     private AggregatePlan(StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
+            RowProjector projector, String cursorName, Integer limit, Integer offset, OrderBy orderBy,
             ParallelIteratorFactory parallelIteratorFactory, GroupBy groupBy, Expression having,
             Expression dynamicFilter) {
-        super(context, statement, table, projector, context.getBindManager().getParameterMetaData(), limit, offset,
+        super(context, statement, table, projector, cursorName, context.getBindManager().getParameterMetaData(), limit, offset,
                 orderBy, groupBy, parallelIteratorFactory, dynamicFilter);
         this.having = having;
         this.aggregators = context.getAggregationManager().getAggregators();
@@ -257,6 +258,10 @@ public class AggregatePlan extends BaseQueryPlan {
         }
         if (context.getSequenceManager().getSequenceCount() > 0) {
             resultScanner = new SequenceResultIterator(resultScanner, context.getSequenceManager());
+        }
+
+        if (cursorName != null) {
+            resultScanner = new CursorResultIterator(resultScanner, cursorName);
         }
         return resultScanner;
     }
