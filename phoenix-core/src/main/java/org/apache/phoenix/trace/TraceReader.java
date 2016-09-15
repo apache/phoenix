@@ -29,12 +29,12 @@ import java.util.TreeSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.htrace.Span;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.htrace.Span;
 
 import com.google.common.base.Joiner;
 import com.google.common.primitives.Longs;
@@ -62,15 +62,11 @@ public class TraceReader {
     private String table;
     private int pageSize;
 
-    public TraceReader(Connection conn, String statsTableName) throws SQLException {
+    public TraceReader(Connection conn, String tracingTableName) throws SQLException {
         this.conn = conn;
-        this.table = statsTableName;
+        this.table = tracingTableName;
         String ps = conn.getClientInfo(QueryServices.TRACING_PAGE_SIZE_ATTRIB);
         this.pageSize = ps == null ? QueryServicesOptions.DEFAULT_TRACING_PAGE_SIZE : Integer.parseInt(ps);
-    }
-
-    public TraceReader(Connection conn) throws SQLException {
-        this(conn, QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
     }
 
     /**
@@ -87,7 +83,7 @@ public class TraceReader {
         // trace
         // goes together), and then by start time (so parent spans always appear before child spans)
         String query =
-                "SELECT " + knownColumns + " FROM " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME
+                "SELECT " + knownColumns + " FROM " + table
                         + " ORDER BY " + MetricInfo.TRACE.columnName + " DESC, "
                         + MetricInfo.START.columnName + " ASC" + " LIMIT " + pageSize;
         int resultCount = 0;

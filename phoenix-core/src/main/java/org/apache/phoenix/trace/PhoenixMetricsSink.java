@@ -147,11 +147,12 @@ public class PhoenixMetricsSink implements MetricsSink {
      * {@link org.apache.phoenix.query.QueryServicesOptions#DEFAULT_TRACING_STATS_TABLE_NAME}
      *
      * @param conn to store for upserts and to create the table (if necessary)
+     * @param tableName TODO
      * @throws SQLException if any phoenix operation fails
      */
     @VisibleForTesting
-    public void initForTesting(Connection conn) throws SQLException {
-        initializeInternal(conn, QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
+    public void initForTesting(Connection conn, String tableName) throws SQLException {
+        initializeInternal(conn, tableName);
     }
 
     /**
