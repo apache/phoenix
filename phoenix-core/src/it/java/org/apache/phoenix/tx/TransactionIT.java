@@ -788,9 +788,10 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
         String selectSQL = "SELECT * FROM " + fullTableName;
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
-            createTable(conn1, fullTableName);
+            createTable(conn, fullTableName);
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(true);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
