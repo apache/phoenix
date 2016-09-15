@@ -34,7 +34,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.phoenix.util.QueryUtil;
-import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -506,16 +505,17 @@ public class DeleteIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testDeleteForTableWithRowTimestampColServer() throws Exception {
-        testDeleteForTableWithRowTimestampCol(true);
+        String tableName = generateRandomString();
+        testDeleteForTableWithRowTimestampCol(true, tableName);
     }
     
     @Test
     public void testDeleteForTableWithRowTimestampColClient() throws Exception {
-        testDeleteForTableWithRowTimestampCol(false);
+        String tableName = generateRandomString();
+        testDeleteForTableWithRowTimestampCol(false, tableName);
     }
     
-    private void testDeleteForTableWithRowTimestampCol(boolean autoCommit) throws Exception {
-        String tableName = "testDeleteForTableWithRowTimestampCol".toUpperCase();
+    private void testDeleteForTableWithRowTimestampCol(boolean autoCommit, String tableName) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(autoCommit);
             Statement stm = conn.createStatement();

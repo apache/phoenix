@@ -20,6 +20,8 @@ package org.apache.phoenix.end2end;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Properties;
 import java.util.Set;
 
@@ -61,9 +63,10 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     @Override
     public void close() throws SQLException {
         try {
-            Set<PhoenixConnection> connections;
+            Collection<PhoenixConnection> connections;
             synchronized(this) {
-                connections = this.connections;
+                // Make copy to prevent ConcurrentModificationException (TODO: figure out why this is necessary)
+                connections = new ArrayList<>(this.connections);
                 this.connections = Sets.newHashSet();
             }
             SQLCloseables.closeAll(connections);
