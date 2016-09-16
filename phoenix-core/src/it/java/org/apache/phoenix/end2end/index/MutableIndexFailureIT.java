@@ -115,7 +115,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name = "transactional = {0}, localIndex = {1}, isNamespaceMapped = {2}")
+    @Parameters(name = "MutableIndexFailureIT_transactional={0},localIndex={1},isNamespaceMapped={2}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { { false, false, true }, { false, false, false }, { false, true, true },
                 { false, true, false }, { true, false, true }, { true, true, true }, { true, false, false },
