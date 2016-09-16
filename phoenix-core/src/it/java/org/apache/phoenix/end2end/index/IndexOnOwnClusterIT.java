@@ -33,8 +33,9 @@ import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionInfo;
-import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.catalog.CatalogTracker;
+import org.apache.hadoop.hbase.catalog.MetaReader;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
@@ -174,15 +175,14 @@ public class IndexOnOwnClusterIT extends BaseOwnClusterHBaseManagedTimeIT {
             
             HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             for (int i = 1; i < 5; i++) {
-                admin.split(physicalTableName, ByteUtil.concat(Bytes.toBytes(strings[3*i])));
+                CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
+                admin.split(physicalTableName.getName(), ByteUtil.concat(Bytes.toBytes(strings[3*i])));
                 List<HRegionInfo> regionsOfUserTable =
-                        MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
-                                physicalTableName, false);
+                        MetaReader.getTableRegions(ct, physicalTableName, false);
 
                 while (regionsOfUserTable.size() != (4+i)) {
                     Thread.sleep(100);
-                    regionsOfUserTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                            admin.getConnection(), physicalTableName, false);
+                    regionsOfUserTable = MetaReader.getTableRegions(ct, physicalTableName, false);
                 }
                 assertEquals(4+i, regionsOfUserTable.size());
                 String[] tIdColumnValues = new String[26]; 
@@ -244,7 +244,7 @@ public class IndexOnOwnClusterIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn1.close();
         }
     }
-
+    
     // Moved from LocalIndexIT because it was causing parallel runs to hang
     @Test
     public void testLocalIndexScanAfterRegionsMerge() throws Exception {
@@ -271,20 +271,33 @@ public class IndexOnOwnClusterIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertTrue(rs.next());
 
             HBaseAdmin admin = conn1.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            CatalogTracker ct = new CatalogTracker(admin.getConfiguration());
             List<HRegionInfo> regionsOfUserTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
-                        physicalTableName, false);
+                    MetaReader.getTableRegions(ct,
+                            physicalTableName, false);
             admin.mergeRegions(regionsOfUserTable.get(0).getEncodedNameAsBytes(),
                 regionsOfUserTable.get(1).getEncodedNameAsBytes(), false);
             regionsOfUserTable =
-                    MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(), admin.getConnection(),
+                    MetaReader.getTableRegions(ct,
                             physicalTableName, false);
 
             while (regionsOfUserTable.size() != 3) {
                 Thread.sleep(100);
-                regionsOfUserTable = MetaTableAccessor.getTableRegions(getUtility().getZooKeeperWatcher(),
-                        admin.getConnection(), physicalTableName, false);
+                regionsOfUserTable =
+                        MetaReader.getTableRegions(ct,
+                                physicalTableName, false);
             }
+            assertEquals(3, regionsOfUserTable.size());
+            TableName indexTable =
+                    TableName.valueOf(indexPhysicalTableName);
+            List<HRegionInfo> regionsOfIndexTable =
+                    MetaReader.getTableRegions(ct, indexTable, false);
+
+            while (regionsOfIndexTable.size() != 3) {
+                Thread.sleep(100);
+                regionsOfIndexTable = MetaReader.getTableRegions(ct, indexTable, false);
+            }
+            assertEquals(3, regionsOfIndexTable.size());
             String query = "SELECT t_id,k1,v1 FROM " + tableName;
             rs = conn1.createStatement().executeQuery(query);
             Thread.sleep(1000);
