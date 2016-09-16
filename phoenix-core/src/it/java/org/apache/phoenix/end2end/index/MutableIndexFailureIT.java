@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
@@ -79,7 +80,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     private String tableName;
     private String indexName;
-    private String fullTableName;
+    public static volatile String fullTableName;
     private String fullIndexName;
 
     private final boolean transactional;
@@ -150,6 +151,11 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             FAIL_WRITE = false;
             conn.createStatement().execute(
                     "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
+            // Create other index which should be local/global if the other index is global/local to
+            // check the drop index.
+            conn.createStatement().execute(
+                "CREATE INDEX " + indexName + "_3" + " ON "
+                        + fullTableName + " (v2) INCLUDE (v1)");
             conn.createStatement().execute(
                     "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + secondIndexName + " ON " + secondTableName + " (v1) INCLUDE (v2)");
 
@@ -166,7 +172,9 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(secondIndexName, rs.getString(3));
             assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
-            assertFalse(rs.next());
+            assertTrue(rs.next());
+            assertEquals(indexName+"_3", rs.getString(3));
+            assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
             initializeTable(conn, fullTableName);
             initializeTable(conn, secondTableName);
             
@@ -262,7 +270,9 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
             stmt.setString(3, "4");
             stmt.execute();
             conn.commit();
-
+            // To clear the index name from connection.
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            phoenixConn.getMetaDataCache().removeTable(null, fullTableName, null, HConstants.LATEST_TIMESTAMP);
             // verify index table has correct data
             validateDataWithIndex(conn, fullTableName, fullIndexName);
             validateDataWithIndex(conn, secondTableName, secondFullIndexName);
@@ -306,7 +316,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     }
 
     private void validateDataWithIndex(Connection conn, String tableName, String indexName) throws SQLException {
-        String query = "SELECT /*+ INDEX(" + indexName + ") */ k,v1 FROM " + tableName;
+        String query = "SELECT /*+ INDEX(" + indexName + ")  */ k,v1 FROM " + tableName;
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         String expectedPlan = " OVER "
                 + (localIndex
@@ -314,7 +324,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
                                 SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped).getName())
                         : SchemaUtil.getPhysicalTableName(indexName.getBytes(), isNamespaceMapped).getNameAsString());
         String explainPlan = QueryUtil.getExplainPlan(rs);
-        assertTrue(explainPlan.contains(expectedPlan));
+        assertTrue(explainPlan, explainPlan.contains(expectedPlan));
         rs = conn.createStatement().executeQuery(query);
         if (transactional) { // failed commit does not get retried
             assertTrue(rs.next());
@@ -377,17 +387,32 @@ public class MutableIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
     public static class FailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
-            if (c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString().contains(INDEX_NAME) && FAIL_WRITE) {
+            String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+            if (tableName.contains(INDEX_NAME) && !tableName.contains(INDEX_NAME+"_3") && FAIL_WRITE) {
+                dropIndex(c);
                 throw new DoNotRetryIOException();
             }
             Mutation operation = miniBatchOp.getOperation(0);
             Set<byte[]> keySet = operation.getFamilyMap().keySet();
             for(byte[] family: keySet) {
                 if(Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX) && FAIL_WRITE) {
+                    dropIndex(c);
                     throw new DoNotRetryIOException();
                 }
             }
         }
+
+         private void dropIndex(ObserverContext<RegionCoprocessorEnvironment> c) {
+             try {
+                 Connection connection =
+                         QueryUtil.getConnection(c.getEnvironment().getConfiguration());
+                 connection.createStatement().execute(
+                     "DROP INDEX IF EXISTS " + INDEX_NAME + "_3" + " ON "
+                             + fullTableName);
+             } catch (ClassNotFoundException e) {
+             } catch (SQLException e) {
+             }
+         }
     }
 
 }

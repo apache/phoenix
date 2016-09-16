@@ -137,8 +137,9 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 }
             }
 
-            // its a local index table, so we need to convert it to the index table names we should disable
-            if (MetaDataUtil.hasLocalIndexColumnFamily(env.getRegion().getTableDesc())) {
+            // If the data table has local index column families then get local indexes to disable.
+            if (ref.getTableName().equals(env.getRegion().getTableDesc().getNameAsString())
+                    && MetaDataUtil.hasLocalIndexColumnFamily(env.getRegion().getTableDesc())) {
                 for (String tableName : getLocalIndexNames(ref, mutations)) {
                     indexTableNames.put(tableName, minTimeStamp);
                 }
