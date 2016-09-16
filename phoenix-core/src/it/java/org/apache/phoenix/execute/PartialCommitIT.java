@@ -67,8 +67,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-// Needs to extend BaseOwnClusterIT (and not BaseOwnClusterHBaseManagedTimeIT since table data 
-// is created and populated once in the constructor 
+// Needs to extend BaseOwnClusterIT due to installation of FailingRegionObserver coprocessor
 public class PartialCommitIT extends BaseOwnClusterIT {
     
 	private final String A_SUCESS_TABLE;
@@ -93,7 +92,7 @@ public class PartialCommitIT extends BaseOwnClusterIT {
         createTablesWithABitOfData();
     }
     
-    @Parameters(name="transactional = {0}")
+    @Parameters(name="PartialCommitIT_transactional={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
         return Arrays.asList(false, true);
     }

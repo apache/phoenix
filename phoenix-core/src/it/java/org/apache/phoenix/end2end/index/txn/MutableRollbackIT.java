@@ -69,7 +69,7 @@ public class MutableRollbackIT extends BaseHBaseManagedTimeTableReuseIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 	
-	@Parameters(name="localIndex = {0}")
+	@Parameters(name="MutableRollbackIT_localIndex={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
         return Arrays.asList(new Boolean[] { false, true});
     }

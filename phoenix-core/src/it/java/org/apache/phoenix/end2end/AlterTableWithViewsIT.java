@@ -67,7 +67,7 @@ public class AlterTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
         this.isMultiTenant = isMultiTenant;
     }
     
-    @Parameters(name="multiTenant = {0}")
+    @Parameters(name="AlterTableWithViewsIT_multiTenant={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
         return Arrays.asList(false, true);
     }

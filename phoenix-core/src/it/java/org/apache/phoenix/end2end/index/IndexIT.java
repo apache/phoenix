@@ -55,7 +55,6 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
-import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -83,7 +82,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class IndexIT extends BaseOwnClusterIT {
+public class IndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private final boolean localIndex;
     private final boolean transactional;
@@ -114,7 +113,7 @@ public class IndexIT extends BaseOwnClusterIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
-    @Parameters(name="localIndex = {0} , mutable = {1} , transactional = {2}")
+    @Parameters(name="IndexIT_localIndex={0},mutable={1},transactional={2}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
                  { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },

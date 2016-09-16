@@ -70,11 +70,9 @@ public class MutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     
     protected final boolean localIndex;
     private final String tableDDLOptions;
-	private  final boolean transactional;
 	
     public MutableIndexIT(boolean localIndex, boolean transactional) {
 		this.localIndex = localIndex;
-		this.transactional = transactional;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (transactional) {
 			optionBuilder.append("TRANSACTIONAL=true");
@@ -92,7 +90,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 	
-	@Parameters(name="localIndex = {0} , transactional = {1}")
+	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
                 { false, false }, { false, true }, { true, false }, { true, true }
