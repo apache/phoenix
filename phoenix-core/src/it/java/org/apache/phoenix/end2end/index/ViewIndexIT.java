@@ -48,7 +48,7 @@ import org.junit.runners.Parameterized.Parameters;
 public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     private boolean isNamespaceMapped;
 
-    @Parameters(name = "isNamespaceMapped = {0}")
+    @Parameters(name = "ViewIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
         return Arrays.asList(true, false);
     }

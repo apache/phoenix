@@ -86,7 +86,7 @@ public class TxWriteFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 	
-	@Parameters(name="localIndex = {0} , mutable = {1}")
+	@Parameters(name="TxWriteFailureIT_localIndex={0},mutable={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
                  { false, false }, { false, true }, { true, false }, { true, true }

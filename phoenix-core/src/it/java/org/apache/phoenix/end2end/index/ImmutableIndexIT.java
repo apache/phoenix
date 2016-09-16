@@ -72,7 +72,6 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     private final boolean localIndex;
-    private final boolean transactional;
     private final String tableDDLOptions;
 
     private volatile boolean stopThreads = false;
@@ -83,7 +82,6 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     public ImmutableIndexIT(boolean localIndex, boolean transactional) {
         this.localIndex = localIndex;
-        this.transactional = transactional;
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         if (transactional) {
             optionBuilder.append(", TRANSACTIONAL=true");
@@ -103,7 +101,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name="localIndex = {0} , transactional = {1}")
+    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
 		return Arrays.asList(new Boolean[][] { 
 				{ false, false }, { false, true },
