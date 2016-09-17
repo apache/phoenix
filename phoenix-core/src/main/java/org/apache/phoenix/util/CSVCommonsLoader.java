@@ -292,7 +292,7 @@ public class CSVCommonsLoader {
         public void errorOnRecord(CSVRecord csvRecord, Throwable throwable) {
             LOG.error("Error upserting record " + csvRecord, throwable.getMessage());
             if (strict) {
-                throw Throwables.propagate(throwable);
+                Throwables.propagate(throwable);
             }
         }
 

@@ -21,8 +21,6 @@ import java.util.concurrent.Callable;
 
 import org.apache.phoenix.call.CallWrapper;
 
-import com.google.common.base.Throwables;
-
 /**
  * Executes {@code Callable}s using a context classloader that is set up to load classes from
  * Phoenix.
@@ -91,8 +89,10 @@ public class PhoenixContextExecutor {
     public static <T> T callWithoutPropagation(Callable<T> target) {
         try {
             return call(target);
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
-            throw Throwables.propagate(e);
+            throw new RuntimeException(e);
         }
     }
 
