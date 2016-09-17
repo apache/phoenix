@@ -69,7 +69,6 @@ public abstract class BaseViewIT extends BaseOwnClusterHBaseManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Integer.toString(20));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
