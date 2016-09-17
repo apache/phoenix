@@ -43,7 +43,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class OrderByIT extends BaseHBaseManagedTimeTableReuseIT {
+public class OrderByIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMultiOrderByExpr() throws Exception {

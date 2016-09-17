@@ -28,7 +28,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.*;
@@ -37,10 +37,10 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeTableReuseIT {
+public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
     @BeforeClass 
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Drop the HBase table metadata for this test

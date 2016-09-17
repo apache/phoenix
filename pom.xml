@@ -118,7 +118,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
-    <numForkedIT>5</numForkedIT>
+    <numForkedIT>7</numForkedIT>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -227,22 +227,67 @@
           <version>${maven-failsafe-plugin.version}</version>
           <executions>
             <execution>
-              <id>ClientManagedTimeTests</id>
+              <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <encoding>UTF-8</encoding>
                 <forkCount>${numForkedIT}</forkCount>
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <runOrder>alphabetical</runOrder>
+                <!--parallel>methods</parallel>
+                <threadCount>20</threadCount-->
+                <argLine>-enableassertions -Xmx3072m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
                 <shutdown>kill</shutdown>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
                 <goal>verify</goal>
               </goals>
+            </execution>
+            <execution>
+              <id>ParallelStatsDisabledTest</id>
+              <configuration>
+		<!--includes>
+		  <include>TenantIdTypeIT</include>
+		</includes-->
+                <encoding>UTF-8</encoding>
+                <forkCount>${numForkedIT}</forkCount>
+                <runOrder>alphabetical</runOrder>
+                <reuseForks>true</reuseForks>
+                <runOrder>alphabetical</runOrder>
+                <!--parallel>methods</parallel>
+                <threadCount>20</threadCount-->
+                <argLine>-enableassertions -Xmx3072m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                <shutdown>kill</shutdown>
+                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+            <execution>
+               <id>ClientManagedTimeTests</id>
+                 <configuration>
+                 <encoding>UTF-8</encoding>
+                 <forkCount>${numForkedIT}</forkCount>
+                 <runOrder>alphabetical</runOrder>
+                 <reuseForks>true</reuseForks>
+                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
+                 <shutdown>kill</shutdown>
+               </configuration>
+               <goals>
+                 <goal>integration-test</goal>
+                 <goal>verify</goal>
+               </goals>
             </execution>
             <execution>
               <id>HBaseManagedTimeTests</id>
@@ -262,41 +307,23 @@
                 <goal>verify</goal>
               </goals>
             </execution>
-            <execution>
-              <id>HBaseManagedTimeTableReuseTest</id>
-              <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
-                <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                <groups>org.apache.phoenix.end2end.HBaseManagedTimeTableReuseTest</groups>
-                <shutdown>kill</shutdown>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-            <execution>
-              <id>NeedTheirOwnClusterTests</id>
-              <configuration>
-                <encoding>UTF-8</encoding>
-                <forkCount>${numForkedIT}</forkCount>
-                <runOrder>alphabetical</runOrder>
-                <reuseForks>false</reuseForks>
-                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
-                <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
-                <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
-                <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
-                <shutdown>kill</shutdown>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
+	    <execution>
+               <id>NeedTheirOwnClusterTests</id>
+                 <configuration>
+                 <encoding>UTF-8</encoding>
+                 <forkCount>${numForkedIT}</forkCount>
+                 <runOrder>alphabetical</runOrder>
+                 <reuseForks>false</reuseForks>
+                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
+                 <shutdown>kill</shutdown>
+               </configuration>
+               <goals>
+                 <goal>integration-test</goal>
+                 <goal>verify</goal>
+               </goals>
             </execution>
           </executions>
         </plugin>
@@ -394,6 +421,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven-surefire-plugin.version}</version>
         <configuration>
+          <!--skip>true</skip-->
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
           <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m

@@ -32,7 +32,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class AutoCommitIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AutoCommitIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMutationJoin() throws Exception {

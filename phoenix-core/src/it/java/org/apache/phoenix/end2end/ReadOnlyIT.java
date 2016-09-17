@@ -32,7 +32,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class ReadOnlyIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ReadOnlyIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testConnectionReadOnly() throws Exception {

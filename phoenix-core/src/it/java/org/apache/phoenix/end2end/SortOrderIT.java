@@ -55,7 +55,7 @@ import com.google.common.collect.Lists;
  */
 
 
-public class SortOrderIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SortOrderIT extends ParallelStatsDisabledIT {
     private String baseTableName;
     
     @Before

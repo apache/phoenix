@@ -28,7 +28,7 @@ import java.sql.*;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class ArrayFillFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
     private static final String REGIONS = generateRandomString();
 

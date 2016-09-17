@@ -32,7 +32,7 @@ import java.util.Properties;
 import org.junit.Test;
 
 
-public class QueryExecWithoutSCNIT extends BaseHBaseManagedTimeTableReuseIT {
+public class QueryExecWithoutSCNIT extends ParallelStatsDisabledIT {
     @Test
     public void testScanNoSCN() throws Exception {
         long ts = System.currentTimeMillis();

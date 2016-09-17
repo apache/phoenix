@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.junit.Test;
 
 
-public class DecodeFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DecodeFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void shouldPass() throws Exception {

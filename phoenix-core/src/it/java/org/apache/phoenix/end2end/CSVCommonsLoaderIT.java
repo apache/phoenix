@@ -45,7 +45,7 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
-public class CSVCommonsLoaderIT extends BaseHBaseManagedTimeTableReuseIT {
+public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
     private static final String DATATYPE_TABLE = "DATATYPE";
     private static final String DATATYPES_CSV_VALUES = "CKEY, CVARCHAR, CCHAR, CINTEGER, CDECIMAL, CUNSIGNED_INT, CBOOLEAN, CBIGINT, CUNSIGNED_LONG, CTIME, CDATE\n"

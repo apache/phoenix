@@ -41,7 +41,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-public class UseSchemaIT extends BaseHBaseManagedTimeTableReuseIT {
+public class UseSchemaIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUseSchemaCaseInsensitive() throws Exception {

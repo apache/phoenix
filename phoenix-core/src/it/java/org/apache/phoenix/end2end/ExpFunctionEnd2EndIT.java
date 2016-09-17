@@ -34,7 +34,7 @@ import org.junit.Test;
 /**
  * End to end tests for {@link ExpFunction}
  */
-public class ExpFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ExpFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-8;

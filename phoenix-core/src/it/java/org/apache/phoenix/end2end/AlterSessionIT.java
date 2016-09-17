@@ -40,7 +40,7 @@ import static org.junit.Assert.assertTrue;
  * Basic tests for Alter Session Statements
  *
  */
-public class AlterSessionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AlterSessionIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateRandomString();
     private static Connection testConn;

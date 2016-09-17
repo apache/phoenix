@@ -33,7 +33,7 @@ import org.junit.Test;
 /**
  * End to end tests for {@link OctetLengthFunction}
  */
-public class OctetLengthFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final String TABLE_NAME = generateRandomString();

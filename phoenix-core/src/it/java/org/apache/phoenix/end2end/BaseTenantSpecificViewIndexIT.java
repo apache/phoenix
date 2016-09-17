@@ -35,7 +35,7 @@ import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.collect.Lists;
 
-public class BaseTenantSpecificViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
+public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     
     public static final String TENANT1_ID = "tenant1";
     public static final String TENANT2_ID = "tenant2";

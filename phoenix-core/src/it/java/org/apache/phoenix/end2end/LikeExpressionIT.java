@@ -33,7 +33,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class LikeExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     private static final String TEST_TABLE = generateRandomString();
 

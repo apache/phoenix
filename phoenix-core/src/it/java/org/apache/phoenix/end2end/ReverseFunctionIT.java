@@ -30,7 +30,7 @@ import java.sql.ResultSet;
 import org.junit.Test;
 
 
-public class ReverseFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ReverseFunctionIT extends ParallelStatsDisabledIT {
 
     private String initTable(Connection conn, String sortOrder, String s) throws Exception {
         String reverseTest =  generateRandomString();

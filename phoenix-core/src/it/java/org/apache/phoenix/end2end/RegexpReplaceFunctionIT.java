@@ -33,7 +33,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 
-public class RegexpReplaceFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class RegexpReplaceFunctionIT extends ParallelStatsDisabledIT {
 
     private int id;
     protected  String tableName;

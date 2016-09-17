@@ -46,7 +46,7 @@ import org.junit.Test;
  */
 
 
-public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DynamicUpsertIT extends ParallelStatsDisabledIT {
     private String tableName;
 
     @Before

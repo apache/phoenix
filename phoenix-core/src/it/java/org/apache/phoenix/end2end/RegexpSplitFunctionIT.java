@@ -34,7 +34,7 @@ import java.sql.Types;
 import org.junit.Test;
 
 
-public class RegexpSplitFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
 
     private String tableName;
 

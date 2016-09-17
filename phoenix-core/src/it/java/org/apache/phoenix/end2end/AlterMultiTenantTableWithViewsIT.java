@@ -54,7 +54,7 @@ import org.junit.Test;
 
 import com.google.common.base.Objects;
 
-public class AlterMultiTenantTableWithViewsIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
 
     private Connection getTenantConnection(String tenantId) throws Exception {
         Properties tenantProps = new Properties();

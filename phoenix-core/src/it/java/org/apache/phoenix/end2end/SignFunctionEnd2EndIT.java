@@ -36,7 +36,7 @@ import org.junit.Test;
  * End to end tests for {@link SignFunction}
  * @since 4.0.0
  */
-public class SignFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final String TEST_SIGNED = generateRandomString();

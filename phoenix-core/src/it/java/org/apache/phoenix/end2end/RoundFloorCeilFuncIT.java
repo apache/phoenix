@@ -51,7 +51,7 @@ import com.google.common.primitives.Floats;
  * End to end tests for {@link RoundFunction}, {@link FloorFunction}, {@link CeilFunction} 
  *
  */
-public class RoundFloorCeilFuncIT extends BaseHBaseManagedTimeTableReuseIT {
+public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     private static final long millisPart = 660;
     private static final int nanosPart = 500100;
     private static final BigDecimal decimalUpserted = BigDecimal.valueOf(1.264);

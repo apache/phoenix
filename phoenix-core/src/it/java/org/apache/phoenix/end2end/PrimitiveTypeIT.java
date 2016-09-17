@@ -32,7 +32,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
-public class PrimitiveTypeIT extends BaseHBaseManagedTimeTableReuseIT {
+public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
 
     private static final Properties PROPS = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
 

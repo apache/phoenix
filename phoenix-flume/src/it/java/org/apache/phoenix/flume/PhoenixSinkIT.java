@@ -29,7 +29,7 @@ import org.apache.flume.lifecycle.LifecycleState;
 import org.apache.flume.sink.DefaultSinkFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.flume.serializer.EventSerializers;
 import org.apache.phoenix.flume.serializer.CustomSerializer;
 import org.apache.phoenix.flume.sink.NullPhoenixSink;
@@ -48,7 +48,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 
-public class PhoenixSinkIT extends BaseHBaseManagedTimeTableReuseIT {
+public class PhoenixSinkIT extends ParallelStatsDisabledIT {
 
     private Context sinkContext;
     private PhoenixSink sink;

@@ -26,7 +26,7 @@ import java.sql.*;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.Test;
 
-public class ArrayAppendFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     private String initTables(Connection conn) throws Exception {
         String tableName = generateRandomString();
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[])";
