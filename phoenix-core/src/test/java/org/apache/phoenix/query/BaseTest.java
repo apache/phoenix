@@ -138,7 +138,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
@@ -493,7 +492,6 @@ public abstract class BaseTest {
     
     protected static String url;
     protected static PhoenixTestDriver driver;
-    protected static PhoenixDriver realDriver;
     protected static boolean clusterInitialized = false;
     private static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
@@ -593,13 +591,6 @@ public abstract class BaseTest {
                 driver = null;
             }
         }
-        if (realDriver != null) {
-            try {
-                assertTrue(destroyDriver(realDriver));
-            } finally {
-                realDriver = null;
-            }
-        }
         teardownTxManager();
     }
     
@@ -644,27 +635,6 @@ public abstract class BaseTest {
         }
     }
     
-    protected static void setUpRealDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
-        if (!clusterInitialized) {
-            setUpConfigForMiniCluster(config, serverProps);
-            utility = new HBaseTestingUtility(config);
-            try {
-                utility.startMiniCluster(NUM_SLAVES_BASE);
-                utility.startMiniMapReduceCluster();
-                url = QueryUtil.getConnectionUrl(new Properties(), utility.getConfiguration());
-            } catch (Throwable t) {
-                throw new RuntimeException(t);
-            }
-            clusterInitialized = true;
-        }
-        Class.forName(PhoenixDriver.class.getName());
-        realDriver = PhoenixDriver.INSTANCE;
-        DriverManager.registerDriver(realDriver);
-        if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
-            setupTxManager();
-        }
-    }
-
     private static boolean isDistributedClusterModeEnabled(Configuration conf) {
         boolean isDistributedCluster = false;
         //check if the distributed mode was specified as a system property.
