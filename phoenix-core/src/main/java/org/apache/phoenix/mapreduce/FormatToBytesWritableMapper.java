@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
+
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.conf.Configuration;
@@ -379,7 +380,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
             LOG.error("Error on record " + record, throwable);
             context.getCounter(COUNTER_GROUP_NAME, "Errors on records").increment(1L);
             if (!ignoreRecordErrors) {
-                throw Throwables.propagate(throwable);
+                Throwables.propagate(throwable);
             }
         }
     }
