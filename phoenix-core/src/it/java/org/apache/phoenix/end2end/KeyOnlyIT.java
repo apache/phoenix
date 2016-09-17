@@ -52,8 +52,7 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(50));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(100));
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -81,7 +80,7 @@ public class KeyOnlyIT extends BaseOwnClusterClientManagedTimeIT {
         assertEquals(4, rs.getInt(2));
         assertFalse(rs.next());
         List<KeyRange> splits = getAllSplits(conn5, "KEYONLY");
-        assertEquals(2, splits.size());
+        assertEquals(3, splits.size());
         conn5.close();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+60));
