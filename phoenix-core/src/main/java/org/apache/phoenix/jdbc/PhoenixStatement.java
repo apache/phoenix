@@ -311,7 +311,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 }, PhoenixContextExecutor.inContext());
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
-            throw Throwables.propagate(e);
+            Throwables.propagate(e);
+            throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
     }
     
@@ -364,7 +365,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         Tracing.withTracing(connection, this.toString()));
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
-            throw Throwables.propagate(e);
+            Throwables.propagate(e);
+            throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
     }
 

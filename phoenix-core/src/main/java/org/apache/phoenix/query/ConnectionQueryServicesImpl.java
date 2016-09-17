@@ -2783,7 +2783,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             });
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
-            throw Throwables.propagate(e);
+            Throwables.propagate(e);
         }
     }
     
