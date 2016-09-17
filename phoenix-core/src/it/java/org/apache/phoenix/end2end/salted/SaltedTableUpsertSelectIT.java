@@ -31,12 +31,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class SaltedTableUpsertSelectIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpsertIntoSaltedTableFromNormalTable() throws Exception {

@@ -12,11 +12,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
-public class ChildViewsUseParentViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIndexOnParentViewWithTenantSpecificConnection() throws Exception {

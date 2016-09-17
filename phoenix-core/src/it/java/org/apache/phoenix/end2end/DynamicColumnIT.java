@@ -59,7 +59,7 @@ import org.junit.Test;
  */
 
 
-public class DynamicColumnIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DynamicColumnIT extends ParallelStatsDisabledIT {
     private static final byte[] FAMILY_NAME_A = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));
     private static final byte[] FAMILY_NAME_B = Bytes.toBytes(SchemaUtil.normalizeIdentifier("B"));
 

@@ -30,7 +30,7 @@ import java.util.Properties;
 import static org.junit.Assert.*;
 
 
-public class ToDateFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
     private static final long ONE_HOUR_IN_MILLIS = 1000L * 60L * 60L;
 

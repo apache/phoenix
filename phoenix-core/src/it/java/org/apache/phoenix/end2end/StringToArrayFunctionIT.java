@@ -28,7 +28,7 @@ import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class StringToArrayFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateRandomString();
 

@@ -60,7 +60,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-public class AppendOnlySchemaIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
 
     
     private void testTableWithSameSchema(boolean notExists, boolean sameClient) throws Exception {

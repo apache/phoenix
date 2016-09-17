@@ -28,7 +28,7 @@ import java.sql.ResultSet;
 import org.junit.Test;
 
 
-public class LastValueFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class LastValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void unsignedLong() throws Exception {

@@ -30,7 +30,7 @@ import java.util.Properties;
 import org.junit.Test;
 
 
-public class UpsertBigValuesIT extends BaseHBaseManagedTimeTableReuseIT {
+public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
 
     private static final long INTEGER_MIN_MINUS_ONE = (long)Integer.MIN_VALUE - 1;
     private static final long INTEGER_MAX_PLUS_ONE = (long)Integer.MAX_VALUE + 1;

@@ -39,7 +39,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
-public class GroupByCaseIT extends BaseHBaseManagedTimeTableReuseIT {
+public class GroupByCaseIT extends ParallelStatsDisabledIT {
     private static void initData(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("create table " + tableName +
                 "   (id varchar not null primary key,\n" +

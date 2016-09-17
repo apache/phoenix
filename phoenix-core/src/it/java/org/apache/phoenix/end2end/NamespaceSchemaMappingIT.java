@@ -44,7 +44,7 @@ import org.junit.Test;
 /*
  * since 4.8
  */
-public class NamespaceSchemaMappingIT extends BaseHBaseManagedTimeTableReuseIT {
+public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
     /**
      * Tests that when: There is a table created with older version of phoenix and a table created with newer version
      * having {@code QueryServices#IS_NAMESPACE_MAPPING_ENABLED} true, then there is only a flag

@@ -29,7 +29,7 @@ import java.sql.ResultSet;
 import org.junit.Before;
 import org.junit.Test;
 
-public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     private String tableName;
     private Connection conn;
 

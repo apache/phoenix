@@ -35,7 +35,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Lists;
 
-public class EncodeFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class EncodeFunctionIT extends ParallelStatsDisabledIT {
 
     /**
      * Helper to test ENCODE function

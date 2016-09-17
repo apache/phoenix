@@ -36,7 +36,7 @@ import org.junit.Test;
  *
  */
 
-public class ConvertTimezoneFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testConvertTimezoneEurope() throws Exception {

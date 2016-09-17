@@ -55,7 +55,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class PercentileIT extends BaseHBaseManagedTimeTableReuseIT {
+public class PercentileIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPercentile() throws Exception {

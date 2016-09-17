@@ -41,7 +41,7 @@ import static org.junit.Assert.*;
 /**
  * Test that our MapReduce basic tools work as expected
  */
-public class MapReduceIT extends BaseHBaseManagedTimeTableReuseIT {
+public class MapReduceIT extends ParallelStatsDisabledIT {
 
     private static final String STOCK_NAME = "STOCK_NAME";
     private static final String RECORDING_YEAR = "RECORDING_YEAR";

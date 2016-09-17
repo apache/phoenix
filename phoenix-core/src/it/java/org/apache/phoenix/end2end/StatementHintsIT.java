@@ -37,7 +37,7 @@ import org.junit.Test;
  */
 
 
-public class StatementHintsIT extends BaseHBaseManagedTimeTableReuseIT {
+public class StatementHintsIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateRandomString();
 

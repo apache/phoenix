@@ -54,7 +54,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Sets;
 
-public class PhoenixRuntimeIT extends BaseHBaseManagedTimeTableReuseIT {
+public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     private static void assertTenantIds(Expression e, HTableInterface htable, Filter filter, String[] tenantIds) throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         Scan scan = new Scan();

@@ -41,7 +41,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
 
-public class SkipScanQueryIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     private String initIntInTable(Connection conn, List<Integer> data) throws SQLException {
         String tableName = generateRandomString();

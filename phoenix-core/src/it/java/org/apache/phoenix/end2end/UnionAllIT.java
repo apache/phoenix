@@ -37,7 +37,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
-public class UnionAllIT extends BaseHBaseManagedTimeTableReuseIT {
+public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnionAllSelects() throws Exception {

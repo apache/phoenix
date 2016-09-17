@@ -30,7 +30,7 @@ import java.sql.ResultSet;
 import org.junit.Test;
 
 
-public class MD5FunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class MD5FunctionIT extends ParallelStatsDisabledIT {
   
   @Test
   public void testRetrieve() throws Exception {

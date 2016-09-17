@@ -28,7 +28,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringUtils;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.query.QueryConstants;
@@ -38,7 +38,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
-public class IndexExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class IndexExpressionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testImmutableIndexCreateAndUpdate() throws Exception {

@@ -40,7 +40,7 @@ import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 
 
-public class ArithmeticQueryIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDecimalUpsertValue() throws Exception {

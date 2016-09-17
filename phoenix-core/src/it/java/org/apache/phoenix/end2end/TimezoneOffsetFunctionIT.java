@@ -34,7 +34,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.junit.Test;
 
 
-public class TimezoneOffsetFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test
 	public void testTimezoneOffset() throws Exception {

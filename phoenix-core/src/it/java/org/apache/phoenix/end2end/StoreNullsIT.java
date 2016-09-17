@@ -58,7 +58,7 @@ import com.google.common.collect.Lists;
  * functionality allows having row-level versioning (similar to how KEEP_DELETED_CELLS works), but
  * also allows permanently deleting a row.
  */
-public class StoreNullsIT extends BaseHBaseManagedTimeTableReuseIT {
+public class StoreNullsIT extends ParallelStatsDisabledIT {
     private static final Log LOG = LogFactory.getLog(StoreNullsIT.class);
     
     private String WITH_NULLS;

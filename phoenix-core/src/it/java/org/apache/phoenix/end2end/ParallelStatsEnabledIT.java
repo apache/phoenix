@@ -15,28 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.phoenix.end2end;
 
-import java.util.Map;
+import org.junit.experimental.categories.Category;
 
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
+/**
+ * 
+ * Base class for tests that have statistics enabled.
+ *
+ */
+@Category(ParallelStatsEnabledTest.class)
+public abstract class ParallelStatsEnabledIT extends BaseParallelIT {
 
-import com.google.common.collect.Maps;
-
-
-public class InMemoryOrderByIT extends OrderByIT {
-
-    public InMemoryOrderByIT() {
-    }
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1024*1024));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
 }
