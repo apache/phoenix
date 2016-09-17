@@ -35,7 +35,7 @@ import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -53,7 +53,7 @@ import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 
 
-public class IndexMetadataIT extends BaseHBaseManagedTimeTableReuseIT {
+public class IndexMetadataIT extends ParallelStatsDisabledIT {
 
 	private enum Order {ASC, DESC};
 	

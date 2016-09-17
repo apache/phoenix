@@ -47,7 +47,7 @@ import org.junit.Test;
  * @since 0.1
  */
 
-public class ToCharFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     
     private String TO_CHAR_TABLE_NAME;
     

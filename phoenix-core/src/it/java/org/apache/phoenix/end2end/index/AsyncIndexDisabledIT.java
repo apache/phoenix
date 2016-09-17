@@ -27,7 +27,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Map;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -38,7 +38,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class AsyncIndexDisabledIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AsyncIndexDisabledIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {

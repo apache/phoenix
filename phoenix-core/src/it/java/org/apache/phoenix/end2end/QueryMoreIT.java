@@ -44,7 +44,7 @@ import org.junit.Test;
 import com.google.common.collect.Lists;
 
 
-public class QueryMoreIT extends BaseHBaseManagedTimeTableReuseIT {
+public class QueryMoreIT extends ParallelStatsDisabledIT {
     
     private String dataTableName;
     //queryAgainstTenantSpecificView = true, dataTableSalted = true 

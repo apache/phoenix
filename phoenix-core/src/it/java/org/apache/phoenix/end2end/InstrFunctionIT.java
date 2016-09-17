@@ -28,7 +28,7 @@ import java.sql.ResultSet;
 
 import org.junit.Test;
 
-public class InstrFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class InstrFunctionIT extends ParallelStatsDisabledIT {
     private void initTable(Connection conn, String tableName, String sortOrder, String s, String subStr) throws Exception {
         String ddl = "CREATE TABLE " + tableName + " (name VARCHAR NOT NULL PRIMARY KEY " + sortOrder + ", substr VARCHAR)";
         conn.createStatement().execute(ddl);

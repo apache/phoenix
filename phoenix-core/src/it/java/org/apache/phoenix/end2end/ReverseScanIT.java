@@ -52,7 +52,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class ReverseScanIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ReverseScanIT extends ParallelStatsDisabledIT {
 
     private static byte[][] getSplitsAtRowKeys(String tenantId) {
         return new byte[][] { 

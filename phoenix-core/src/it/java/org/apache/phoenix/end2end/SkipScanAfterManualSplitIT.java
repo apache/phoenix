@@ -43,7 +43,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
 
     private static final int BATCH_SIZE = 25;
     private static final int MAX_FILESIZE = 1024 * 10;
@@ -60,7 +60,7 @@ public class SkipScanAfterManualSplitIT extends BaseHBaseManagedTimeTableReuseIT
     private static final int MAX_CHAR = 'z';
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         // needed for 64 region parallelization due to splitting

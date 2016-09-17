@@ -34,7 +34,7 @@ import org.junit.Test;
 /**
  * End to end tests for {@link SqrtFunction}
  */
-public class SqrtFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SqrtFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-8;

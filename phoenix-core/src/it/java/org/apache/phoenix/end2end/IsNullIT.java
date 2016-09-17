@@ -30,7 +30,7 @@ import java.sql.ResultSet;
 import org.junit.Test;
 
 
-public class IsNullIT extends BaseHBaseManagedTimeTableReuseIT {
+public class IsNullIT extends ParallelStatsDisabledIT {
     @Test
     public void testIsNullInPk() throws Exception {
         String tableName = generateRandomString();

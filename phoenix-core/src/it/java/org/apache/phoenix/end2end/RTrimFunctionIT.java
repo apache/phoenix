@@ -33,7 +33,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
-public class RTrimFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class RTrimFunctionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testWithFixedLengthAscPK() throws Exception {

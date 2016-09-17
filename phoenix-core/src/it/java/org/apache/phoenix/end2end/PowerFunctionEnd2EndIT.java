@@ -33,7 +33,7 @@ import org.junit.Test;
 /**
  * End to end tests for {@link PowerFunction}
  */
-public class PowerFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-9;

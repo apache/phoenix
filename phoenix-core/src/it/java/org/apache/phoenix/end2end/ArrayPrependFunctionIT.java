@@ -27,7 +27,7 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Test;
 
-public class ArrayPrependFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
 
     private void initTableWithVarArray(Connection conn, String tableName, String type, Object[] objectArray, String value) throws SQLException {
         conn.createStatement().execute("CREATE TABLE " + tableName + " ( k VARCHAR PRIMARY KEY, a " + type + "[],b " + type + ")");

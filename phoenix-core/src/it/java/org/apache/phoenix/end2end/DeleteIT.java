@@ -37,7 +37,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
-public class DeleteIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DeleteIT extends ParallelStatsDisabledIT {
     private static final int NUMBER_OF_ROWS = 20;
     private static final int NTH_ROW_NULL = 5;
     

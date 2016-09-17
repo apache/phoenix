@@ -32,7 +32,7 @@ import java.sql.SQLException;
 import org.junit.Test;
 
 
-public class ModulusExpressionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     
     private static final long SMALL_VALUE = 31L;
     private static final long LARGE_VALUE = 0x5dec6f3847021a9bL;

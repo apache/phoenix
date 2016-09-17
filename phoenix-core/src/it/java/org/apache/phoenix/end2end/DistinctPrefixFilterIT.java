@@ -35,7 +35,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
     private static final String testTableF = generateRandomString();
     private static final String testTableV = generateRandomString();
     private static final String testSeq = testTableF + "_seq";
@@ -44,7 +44,7 @@ public class DistinctPrefixFilterIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        BaseHBaseManagedTimeTableReuseIT.doSetup();
+        ParallelStatsDisabledIT.doSetup();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);

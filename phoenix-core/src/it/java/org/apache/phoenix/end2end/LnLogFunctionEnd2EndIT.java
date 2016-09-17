@@ -33,7 +33,7 @@ import org.junit.Test;
 /**
  * End to end tests for {@link LnFunction} and {@link LogFunction}
  */
-public class LnLogFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class LnLogFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-9;

@@ -50,7 +50,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 
-public class DateTimeIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DateTimeIT extends ParallelStatsDisabledIT {
 
     protected Connection conn;
     protected Date date;

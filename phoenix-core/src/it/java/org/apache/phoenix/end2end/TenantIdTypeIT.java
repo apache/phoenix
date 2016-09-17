@@ -42,7 +42,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
-public class TenantIdTypeIT extends BaseHBaseManagedTimeTableReuseIT {
+public class TenantIdTypeIT extends ParallelStatsDisabledIT {
 
     private Connection regularConnection(String url) throws SQLException {
         Properties props = new Properties();

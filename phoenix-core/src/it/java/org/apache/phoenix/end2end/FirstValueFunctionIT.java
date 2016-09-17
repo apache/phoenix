@@ -27,7 +27,7 @@ import java.sql.ResultSet;
 
 import org.junit.Test;
 
-public class FirstValueFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void signedLongAsBigInt() throws Exception {

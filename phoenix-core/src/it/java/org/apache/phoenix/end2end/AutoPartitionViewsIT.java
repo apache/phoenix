@@ -47,7 +47,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class AutoPartitionViewsIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 
     private String tableDDLOptions;
     private boolean isMultiTenant;

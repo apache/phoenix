@@ -39,10 +39,10 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class SortMergeJoinMoreIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Forces server cache to be used

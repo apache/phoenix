@@ -33,9 +33,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-
-
-public class EvaluationOfORIT extends BaseHBaseManagedTimeTableReuseIT{
+public class EvaluationOfORIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFalseOrFalse() throws SQLException {

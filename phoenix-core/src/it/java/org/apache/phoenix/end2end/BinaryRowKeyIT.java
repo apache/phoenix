@@ -34,7 +34,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class BinaryRowKeyIT extends BaseHBaseManagedTimeTableReuseIT {
+public class BinaryRowKeyIT extends ParallelStatsDisabledIT {
 
     private static void initTableValues(String tableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

@@ -71,7 +71,7 @@ import org.junit.Test;
  * or at the end of test class.
  *
  */
-public class AlterTableIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AlterTableIT extends ParallelStatsDisabledIT {
     private String schemaName;
     private String dataTableName;
     private String indexTableName;

@@ -49,7 +49,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class MappingTableDataTypeIT extends BaseHBaseManagedTimeTableReuseIT {
+public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
     @Test
     public void testMappingHbaseTableToPhoenixTable() throws Exception {
         String mtest = generateRandomString();
