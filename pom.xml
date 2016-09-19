@@ -34,7 +34,7 @@
     <module>phoenix-client</module>
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
-    <module>phoenix-tracing-webapp</module>
+    <module>phoenix-tracing</module>
   </modules>
 
   <repositories>
@@ -102,6 +102,8 @@
     <spark.version>1.6.1</spark.version>
     <scala.version>2.10.4</scala.version>
     <scala.binary.version>2.10</scala.binary.version>
+    <springboot.version>1.3.6.RELEASE</springboot.version>
+    <zipkin.version>1.5.1</zipkin.version>
 
     <!-- Test Dependencies -->
     <mockito-all.version>1.8.5</mockito-all.version>
