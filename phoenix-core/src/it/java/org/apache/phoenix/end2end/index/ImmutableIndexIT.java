@@ -48,7 +48,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
@@ -69,10 +69,9 @@ import com.google.common.collect.Maps;
 
 
 @RunWith(Parameterized.class)
-public class ImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ImmutableIndexIT extends ParallelStatsDisabledIT {
 
     private final boolean localIndex;
-    private final boolean transactional;
     private final String tableDDLOptions;
 
     private volatile boolean stopThreads = false;
@@ -83,7 +82,6 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     public ImmutableIndexIT(boolean localIndex, boolean transactional) {
         this.localIndex = localIndex;
-        this.transactional = transactional;
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
         if (transactional) {
             optionBuilder.append(", TRANSACTIONAL=true");
@@ -93,7 +91,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
     }
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put("hbase.coprocessor.region.classes", CreateIndexRegionObserver.class.getName());
@@ -103,7 +101,7 @@ public class ImmutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name="localIndex = {0} , transactional = {1}")
+    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
 		return Arrays.asList(new Boolean[][] { 
 				{ false, false }, { false, true },

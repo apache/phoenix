@@ -62,7 +62,7 @@ import org.junit.Test;
         value="RV_RETURN_VALUE_IGNORED", 
         justification="Designed to ignore.")
 
-public class DynamicFamilyIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     private static final String WEB_STATS = generateRandomString();
     private static final String WEB_STATS_SCHEMA_NAME = "";
     private static final byte[] A_CF = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));

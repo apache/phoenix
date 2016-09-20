@@ -40,7 +40,7 @@ import com.google.common.collect.Lists;
  * Tests for the LPAD built-in function.
  */
 
-public class StringIT extends BaseHBaseManagedTimeTableReuseIT {
+public class StringIT extends ParallelStatsDisabledIT {
     
     /**
      * Helper to test LPAD function

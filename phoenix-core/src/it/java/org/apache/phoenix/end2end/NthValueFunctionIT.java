@@ -29,7 +29,7 @@ import java.util.ArrayList;
 import org.junit.Test;
 
 
-public class NthValueFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void simpleTest() throws Exception {

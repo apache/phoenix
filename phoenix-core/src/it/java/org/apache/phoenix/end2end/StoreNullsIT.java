@@ -17,7 +17,20 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.common.collect.Lists;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+import java.util.Properties;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HConstants;
@@ -35,22 +48,9 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.List;
-import java.util.Properties;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import com.google.common.collect.Lists;
 
 /**
  * Tests to demonstrate and verify the STORE_NULLS option on a table,
@@ -58,17 +58,22 @@ import static org.junit.Assert.assertTrue;
  * functionality allows having row-level versioning (similar to how KEEP_DELETED_CELLS works), but
  * also allows permanently deleting a row.
  */
-public class StoreNullsIT extends BaseHBaseManagedTimeTableReuseIT {
-
+public class StoreNullsIT extends ParallelStatsDisabledIT {
     private static final Log LOG = LogFactory.getLog(StoreNullsIT.class);
-    private static final String WITH_NULLS = generateRandomString();
-    private static final String WITHOUT_NULLS = generateRandomString();
+    
+    private String WITH_NULLS;
+    private String WITHOUT_NULLS;
+    private String IMMUTABLE_WITH_NULLS;
+    private String IMMUTABLE_WITHOUT_NULLS;
+    private Connection conn;
+    private Statement stmt;
 
-    private static Connection conn;
-    private static Statement stmt;
-
-    @BeforeClass
-    public static void setUp() throws SQLException {
+    @Before
+    public void setUp() throws SQLException {
+        WITH_NULLS = generateRandomString();
+        WITHOUT_NULLS = generateRandomString();
+        IMMUTABLE_WITH_NULLS = generateRandomString();
+        IMMUTABLE_WITHOUT_NULLS = generateRandomString();
         conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
 
@@ -81,12 +86,49 @@ public class StoreNullsIT extends BaseHBaseManagedTimeTableReuseIT {
                         "id SMALLINT NOT NULL PRIMARY KEY, " +
                         "name VARCHAR) " +
                 "VERSIONS = 1000, KEEP_DELETED_CELLS = false");
+        stmt.execute("CREATE TABLE " + IMMUTABLE_WITH_NULLS + " ("
+                + "id SMALLINT NOT NULL PRIMARY KEY, name VARCHAR) "
+                + "STORE_NULLS = true, VERSIONS = 1, KEEP_DELETED_CELLS = false, IMMUTABLE_ROWS=true");
+        stmt.execute("CREATE TABLE " + IMMUTABLE_WITHOUT_NULLS + " ("
+                + "id SMALLINT NOT NULL PRIMARY KEY, name VARCHAR) "
+                + "VERSIONS = 1, KEEP_DELETED_CELLS = false, IMMUTABLE_ROWS=true");
     }
 
     @After
     public void tearDown() throws SQLException {
         stmt.close();
         conn.close();
+    }
+
+    @Test
+    public void testStoringNulls() throws SQLException, InterruptedException, IOException {
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITH_NULLS + " VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITHOUT_NULLS + " VALUES (1, 'v1')");
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITH_NULLS + " VALUES (2, null)");
+        stmt.executeUpdate("UPSERT INTO " + IMMUTABLE_WITHOUT_NULLS + " VALUES (2, null)");
+
+        ensureNullsNotStored(IMMUTABLE_WITH_NULLS);
+        ensureNullsNotStored(IMMUTABLE_WITHOUT_NULLS);
+    }
+
+    private void ensureNullsNotStored(String tableName) throws IOException {
+        tableName = SchemaUtil.normalizeIdentifier(tableName);
+        HTable htable = new HTable(getUtility().getConfiguration(), tableName);
+        Scan s = new Scan();
+        s.setRaw(true);
+        ResultScanner scanner = htable.getScanner(s);
+        // first row has a value for name
+        Result rs = scanner.next();
+        assertTrue(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("NAME")));
+        assertTrue(rs.size() == 2);
+        // 2nd row has not
+        rs = scanner.next();
+        assertFalse(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("NAME")));
+        // and no delete marker either
+        assertTrue(rs.size() == 1);
+        assertNull(scanner.next());
+        scanner.close();
+        htable.close();
     }
 
     @Test

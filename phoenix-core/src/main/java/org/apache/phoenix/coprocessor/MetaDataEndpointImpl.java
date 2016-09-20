@@ -79,7 +79,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -127,6 +126,7 @@ import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.GlobalCache.FunctionBytesPtr;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
@@ -162,8 +162,10 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -212,7 +214,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -924,8 +925,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         
         
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
-        List<PTable> indexes = new ArrayList<PTable>();
-        List<PName> physicalTables = new ArrayList<PName>();
+        List<PTable> indexes = Lists.newArrayList();
+        List<PName> physicalTables = Lists.newArrayList();
+        PName parentTableName = tableType == INDEX ? dataTableName : null;
+        PName parentSchemaName = tableType == INDEX ? schemaName : null;
         while (true) {
           results.clear();
           scanner.next(results);
@@ -943,6 +946,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                   addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes);
               } else if (linkType == LinkType.PHYSICAL_TABLE) {
                   physicalTables.add(famName);
+              } else if (linkType == LinkType.PARENT_TABLE) {
+                  parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(famName.getBytes()));
+                  parentSchemaName = PNameFactory.newName(SchemaUtil.getSchemaNameFromFullName(famName.getBytes()));
               }
           } else {
               addColumnToTable(results, colName, famName, colKeyValues, columns, saltBucketNum != null);
@@ -951,8 +957,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
         return PTableImpl.makePTable(tenantId, schemaName, tableName, tableType, indexState, timeStamp, tableSeqNum,
-                pkName, saltBucketNum, columns, tableType == INDEX ? schemaName : null,
-                tableType == INDEX ? dataTableName : null, indexes, isImmutableRows, physicalTables, defaultFamilyName,
+                pkName, saltBucketNum, columns, parentSchemaName, parentTableName, indexes, isImmutableRows, physicalTables, defaultFamilyName,
                 viewStatement, disableWAL, multiTenant, storeNulls, viewType, viewIndexId, indexType,
                 rowKeyOrderOptimizable, transactional, updateCacheFrequency, baseColumnCount,
                 indexDisableTimestamp, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema);
@@ -1429,12 +1434,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (parentTable!=null && parentTable.getAutoPartitionSeqName()!=null) {
                     long autoPartitionNum = 1;
                     final Properties props = new Properties();
-                    props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
+                    UpgradeUtil.doNotUpgradeOnFirstConnection(props);
                     try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
-                            Statement stmt = connection.createStatement()) {
+                        Statement stmt = connection.createStatement()) {
                         String seqName = parentTable.getAutoPartitionSeqName();
+                        // Not going through the standard route of using statement.execute() as that code path
+                        // is blocked if the metadata hasn't been been upgraded to the new minor release.
                         String seqNextValueSql = String.format("SELECT NEXT VALUE FOR %s", seqName);
-                        ResultSet rs = stmt.executeQuery(seqNextValueSql);
+                        PhoenixStatement ps = stmt.unwrap(PhoenixStatement.class);
+                        QueryPlan plan = ps.compileQuery(seqNextValueSql);
+                        ResultIterator resultIterator = plan.iterator();
+                        PhoenixResultSet rs = ps.newResultSet(resultIterator, plan.getProjector(), plan.getContext());
                         rs.next();
                         autoPartitionNum = rs.getLong(1);
                     }
@@ -1718,7 +1728,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Make sure we're not deleting the "wrong" child
-        if (!Arrays.equals(parentTableName, table.getParentTableName() == null ? null : table.getParentTableName().getBytes())) {
+        if (parentTableName!=null && table.getParentTableName() != null && !Arrays.equals(parentTableName, table.getParentTableName().getBytes())) {
             return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, EnvironmentEdgeManager.currentTimeMillis(), null);
         }
         // Since we don't allow back in time DDL, we know if we have a table it's the one

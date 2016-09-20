@@ -43,9 +43,9 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class DisableLocalIndexIT extends BaseHBaseManagedTimeTableReuseIT {
+public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         // Must update config before starting server

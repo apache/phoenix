@@ -104,7 +104,7 @@ public class PMetaDataImpl implements PMetaData {
         PTable newParentTable = null;
         PTableRef newParentTableRef = null;
         long parentResolvedTimestamp = resolvedTime;
-        if (table.getParentName() != null) { // Upsert new index table into parent data table list
+        if (table.getType() == PTableType.INDEX) { // Upsert new index table into parent data table list
             String parentName = table.getParentName().getString();
             PTableRef oldParentRef = metaData.get(new PTableKey(table.getTenantId(), parentName));
             // If parentTable isn't cached, that's ok we can skip this

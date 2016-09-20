@@ -35,10 +35,10 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsTag;
+import org.apache.htrace.Span;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
-import org.apache.htrace.Span;
 import org.junit.Test;
 
 /**
@@ -55,7 +55,8 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        sink.initForTesting(conn);
+        String tableName = generateRandomString();
+        sink.initForTesting(conn, tableName);
 
         // create a simple metrics record
         long traceid = 987654;
@@ -64,7 +65,7 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
                     "host-name.value", "test annotation for a span");
 
         // start a reader
-        validateTraces(Collections.singletonList(record), conn, traceid);
+        validateTraces(Collections.singletonList(record), conn, traceid, tableName);
     }
 
     private MetricsRecord createAndFlush(PhoenixMetricsSink sink, long traceid,
@@ -87,7 +88,8 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
         // hook up a phoenix sink
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        sink.initForTesting(conn);
+        String tableName = generateRandomString();
+        sink.initForTesting(conn, tableName);
 
         // create a simple metrics record
         long traceid = 12345;
@@ -119,12 +121,12 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
         sink.flush();
 
         // start a reader
-        validateTraces(records, conn, traceid);
+        validateTraces(records, conn, traceid, tableName);
     }
 
-    private void validateTraces(List<MetricsRecord> records, Connection conn, long traceid)
+    private void validateTraces(List<MetricsRecord> records, Connection conn, long traceid, String tableName)
             throws Exception {
-        TraceReader reader = new TraceReader(conn);
+        TraceReader reader = new TraceReader(conn, tableName);
         Collection<TraceHolder> traces = reader.readAll(1);
         assertEquals("Got an unexpected number of traces!", 1, traces.size());
         // make sure the trace matches what we wrote

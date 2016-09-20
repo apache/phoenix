@@ -61,7 +61,7 @@ import com.google.common.primitives.Floats;
 @RunWith(Parameterized.class)
 public class ScanQueryIT extends BaseQueryIT {
     
-    @Parameters(name="{0}")
+    @Parameters(name="ScanQueryIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
         return QueryIT.data();
     }

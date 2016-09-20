@@ -28,7 +28,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.*;
@@ -37,10 +37,10 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeTableReuseIT {
+public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
     @BeforeClass 
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Drop the HBase table metadata for this test
@@ -333,21 +333,24 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeTableReuseIT 
         String dataTableName = generateRandomString();
         createBaseTable(dataTableName, null, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());
+        String viewName = generateRandomString();
+        String indexOnDataTable = generateRandomString();
         try{
-            conn1.createStatement().execute("CREATE INDEX i1 ON " + dataTableName + "(k2,k1) INCLUDE (v1)");
-            conn1.createStatement().execute("CREATE VIEW v AS SELECT * FROM " + dataTableName + " WHERE v1 = 'a'");
+            conn1.createStatement().execute("CREATE INDEX " + indexOnDataTable + " ON " + dataTableName + "(k2,k1) INCLUDE (v1)");
+            conn1.createStatement().execute("CREATE VIEW " + viewName  + " AS SELECT * FROM " + dataTableName + " WHERE v1 = 'a'");
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('b',1,2,4,'z')");
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('f',1,2,3,'a')");
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('j',2,4,2,'a')");
             conn1.createStatement().execute("UPSERT INTO " + dataTableName + " values('q',3,1,1,'c')");
             conn1.commit();
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM v");
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + viewName);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
-            conn1.createStatement().execute("CREATE INDEX vi1 ON v(k1)");
+            String viewIndex = generateRandomString();
+            conn1.createStatement().execute("CREATE INDEX " + viewIndex + " ON " + viewName + " (k1)");
             
-            String query = "SELECT /*+ INDEX(v vi1)*/ t_id,k1,k2,k3,v1 FROM v where k1 IN (1,2) and k2 IN (3,4)";
+            String query = "SELECT /*+ INDEX(" + viewName + " " + viewIndex + ")*/ t_id,k1,k2,k3,v1 FROM " + viewName + " where k1 IN (1,2) and k2 IN (3,4)";
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             
             String actual = QueryUtil.getExplainPlan(rs);
@@ -357,7 +360,7 @@ public class GlobalIndexOptimizationIT extends BaseHBaseManagedTimeTableReuseIT 
                     "    SKIP-SCAN-JOIN TABLE 0\n" +
                     "        CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER _IDX_" + dataTableName + " \\[-32768,1\\] - \\[-32768,2\\]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY AND \"K2\" IN \\(3,4\\)\n" +
-                    "    DYNAMIC SERVER FILTER BY \\(\"V.T_ID\", \"V.K1\", \"V.K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
+                    "    DYNAMIC SERVER FILTER BY \\(\"" + viewName + ".T_ID\", \"" + viewName + ".K1\", \"" + viewName + ".K2\"\\) IN \\(\\(\\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+, \\$\\d+.\\$\\d+\\)\\)";
             assertTrue("Expected:\n" + expected + "\ndid not match\n" + actual, Pattern.matches(expected,actual));
             
             rs = conn1.createStatement().executeQuery(query);

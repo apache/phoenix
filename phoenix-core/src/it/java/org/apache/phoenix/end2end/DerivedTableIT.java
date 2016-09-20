@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
@@ -32,7 +33,6 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -85,7 +85,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
         }
     }
     
-    @Parameters(name="{0}")
+    @Parameters(name="DerivedTableIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
@@ -223,6 +223,17 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             rs = statement.executeQuery();
             assertTrue (rs.next());
             assertEquals(ROW2,rs.getString(1));
+
+            assertFalse(rs.next());
+            
+            // ((where limit) where limit) limit
+            query = "SELECT u.eid FROM (SELECT t.eid FROM (SELECT entity_id eid, b_string b FROM aTable WHERE a_string = '" + B_VALUE + "' LIMIT 5) AS t WHERE t.b = '" + C_VALUE + "' LIMIT 4) AS u WHERE u.eid >= '" + ROW1 + "' LIMIT 3";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(ROW5,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW8,rs.getString(1));
 
             assertFalse(rs.next());
 

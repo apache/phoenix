@@ -24,8 +24,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.schema.stats.PTableStats;
 
 
 /**
@@ -281,21 +279,21 @@ public interface PTable extends PMetaDataEntity {
     PIndexState getIndexState();
 
     /**
-     * Gets the full name of the data table for an index table.
-     * @return the name of the data table that this index is on
-     *  or null if not an index.
+     * @return the full name of the parent view for a view or data table for an index table 
+     * or null if this is not a view or index table. Also returns null for a view of a data table 
+     * (use @getPhysicalName for this case) 
      */
     PName getParentName();
     /**
-     * Gets the table name of the data table for an index table.
-     * @return the table name of the data table that this index is
-     * on or null if not an index.
+     * @return the table name of the parent view for a view or data table for an index table 
+     * or null if this is not a view or index table. Also returns null for a view of a data table 
+     * (use @getPhysicalTableName for this case) 
      */
     PName getParentTableName();
     /**
-     * Gets the schema name of the data table for an index table.
-     * @return the schema name of the data table that this index is
-     * on or null if not an index.
+     * @return the schema name of the parent view for a view or data table for an index table 
+     * or null if this is not a view or index table. Also returns null for view of a data table 
+     * (use @getPhysicalSchemaName for this case) 
      */
     PName getParentSchemaName();
 

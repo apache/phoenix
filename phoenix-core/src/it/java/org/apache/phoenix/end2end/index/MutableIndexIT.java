@@ -44,7 +44,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -66,15 +66,13 @@ import com.google.common.collect.Maps;
 import com.google.common.primitives.Doubles;
 
 @RunWith(Parameterized.class)
-public class MutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
+public class MutableIndexIT extends ParallelStatsDisabledIT {
     
     protected final boolean localIndex;
     private final String tableDDLOptions;
-	private  final boolean transactional;
 	
     public MutableIndexIT(boolean localIndex, boolean transactional) {
 		this.localIndex = localIndex;
-		this.transactional = transactional;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (transactional) {
 			optionBuilder.append("TRANSACTIONAL=true");
@@ -83,7 +81,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 	}
     
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
@@ -92,7 +90,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 	
-	@Parameters(name="localIndex = {0} , transactional = {1}")
+	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
                 { false, false }, { false, true }, { true, false }, { true, true }
@@ -109,7 +107,7 @@ public class MutableIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 			String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 			String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 
-			createMultiCFTestTable(fullTableName, tableDDLOptions);
+			TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName);
             PreparedStatement stmt = conn.prepareStatement("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName 
             		+ " (char_col1 ASC, int_col1 ASC) INCLUDE (long_col1, long_col2)");

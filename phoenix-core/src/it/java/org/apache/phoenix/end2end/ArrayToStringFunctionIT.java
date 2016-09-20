@@ -21,22 +21,26 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
-public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
-    private static final String REGIONS = generateRandomString();
-    private static Connection conn = null;
+public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
+    private String tableName;
+    private Connection conn;
 
-    @BeforeClass
-    public static void initTables() throws Exception {
+    @Before
+    public void initTables() throws Exception {
         conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE " + REGIONS
+        tableName = generateRandomString();
+        String ddl = "CREATE TABLE " + tableName
             + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,varchar1 VARCHAR,nullcheck INTEGER,chars2 CHAR(15)[])";
         conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO " + REGIONS
+        String dml = "UPSERT INTO " + tableName
             + "(region_name,varchars,integers,doubles,bigints,chars,double1,varchar1,nullcheck,chars2) VALUES('SF Bay Area',"
             +
                 "ARRAY['2345','46345','23234']," +
@@ -58,7 +62,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionVarchar1() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(varchars, ',','*') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(varchars, ',','*') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -72,7 +76,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionVarchar2() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(varchars, ',') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(varchars, ',') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -86,7 +90,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionVarchar3() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY['hello', 'hello'], ',') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY['hello', 'hello'], ',') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -100,7 +104,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionInt() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(integers, ',') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(integers, ',') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -114,7 +118,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionDouble1() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(doubles, ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(doubles, ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -128,7 +132,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionDouble2() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY[2.3, 4.5], ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY[2.3, 4.5], ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -142,7 +146,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionBigint() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(bigints, ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(bigints, ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -156,7 +160,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionChar1() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(chars, ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(chars, ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -170,7 +174,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionChar2() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(chars2, ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(chars2, ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -184,7 +188,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionChar3() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(chars2, varchar1) FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(chars2, varchar1) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -198,7 +202,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionWithNestedFunctions1() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY[integers[1],integers[1]], ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY[integers[1],integers[1]], ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -213,7 +217,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
             "SELECT ARRAY_TO_STRING(ARRAY[ARRAY_ELEM(ARRAY[2,4],1),ARRAY_ELEM(ARRAY[2,4],2)], ', ') FROM "
-                + REGIONS + " WHERE region_name = 'SF Bay Area'");
+                + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "2, 4";
@@ -227,7 +231,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
             "SELECT ARRAY_TO_STRING(ARRAY[ARRAY_ELEM(doubles, 1), ARRAY_ELEM(doubles, 1)], ', ') FROM "
-                + REGIONS + " WHERE region_name = 'SF Bay Area'");
+                + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "23.45, 23.45";
@@ -241,7 +245,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
             "SELECT ARRAY_ELEM(ARRAY_APPEND(ARRAY['abc','bcd'], ARRAY_TO_STRING(ARRAY['a','b'], 'c')), 3) FROM "
-                + REGIONS + " WHERE region_name = 'SF Bay Area'");
+                + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "acb";
@@ -465,7 +469,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testArrayToStringFunctionInWhere1() throws Exception {
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE '2345,46345,23234,456' = ARRAY_TO_STRING(integers,',')");
         assertTrue(rs.next());
 
@@ -476,7 +480,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testArrayToStringFunctionInWhere2() throws Exception {
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE 'a,b,c' = ARRAY_TO_STRING(ARRAY['a', 'b', 'c'], ',')");
         assertTrue(rs.next());
 
@@ -487,7 +491,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testArrayToStringFunctionInWhere3() throws Exception {
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE '1.1,2.2,3.3' = ARRAY_TO_STRING(ARRAY[1.1, 2.2, 3.3], ',')");
         assertTrue(rs.next());
 
@@ -498,7 +502,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testArrayToStringFunctionInWhere4() throws Exception {
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE 'true,true,true' = ARRAY_TO_STRING(ARRAY[true, true, true], ',')");
         assertTrue(rs.next());
 
@@ -510,7 +514,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionInWhere5() throws Exception {
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE 'a, bbbb, c, ddd, e' = ARRAY_TO_STRING(ARRAY['a', 'bbbb', 'c' , 'ddd', 'e'], ', ')");
         assertTrue(rs.next());
 
@@ -521,7 +525,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testArrayToStringFunctionInWhere6() throws Exception {
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE ARRAY_TO_STRING(ARRAY[1,2,3], varchar1) = '1, 2, 3'");
         assertTrue(rs.next());
 
@@ -532,7 +536,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testArrayToStringFunctionInWhere7() throws Exception {
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + REGIONS
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE ARRAY_TO_STRING(varchars, varchar1) = '2345, 46345, 23234'");
         assertTrue(rs.next());
 
@@ -544,7 +548,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionWithNulls1() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY['a', NULL, 'b'], ', ','*') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY['a', NULL, 'b'], ', ','*') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -558,7 +562,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionWithNulls2() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY['a', NULL, 'b'], ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY['a', NULL, 'b'], ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -572,7 +576,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionWithNulls3() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY[NULL, 'a', 'b'], ', ', '*') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY[NULL, 'a', 'b'], ', ', '*') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -586,7 +590,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionWithNulls4() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY[NULL, 'a', 'b'], ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY[NULL, 'a', 'b'], ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -600,7 +604,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionWithNulls5() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY['a', 'b', NULL], ', ', '*') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY['a', 'b', NULL], ', ', '*') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -614,7 +618,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testArrayToStringFunctionWithNulls6() throws Exception {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_TO_STRING(ARRAY['a', 'b', NULL], ', ') FROM " + REGIONS
+            "SELECT ARRAY_TO_STRING(ARRAY['a', 'b', NULL], ', ') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -629,7 +633,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
             "SELECT ARRAY_TO_STRING(ARRAY[NULL, NULL, 'a', 'b', NULL, 'c', 'd', NULL, 'e', NULL, NULL], ', ', '*') FROM "
-                + REGIONS + " WHERE region_name = 'SF Bay Area'");
+                + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "*, *, a, b, *, c, d, *, e, *, *";
@@ -643,7 +647,7 @@ public class ArrayToStringFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
             "SELECT ARRAY_TO_STRING(ARRAY[NULL, NULL, 'a', 'b', NULL, 'c', 'd', NULL, 'e', NULL, NULL], ', ') FROM "
-                + REGIONS + " WHERE region_name = 'SF Bay Area'");
+                + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "a, b, c, d, e";

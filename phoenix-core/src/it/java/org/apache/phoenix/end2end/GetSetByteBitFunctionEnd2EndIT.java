@@ -39,7 +39,7 @@ import org.junit.Test;
  * End to end tests for {@link GetByteFunction} {@link SetByteFunction} {@link GetBitFunction}
  * {@link SetBitFunction}
  */
-public class GetSetByteBitFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class GetSetByteBitFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final String TABLE_NAME = generateRandomString();

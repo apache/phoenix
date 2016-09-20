@@ -31,7 +31,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -47,7 +47,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class RollbackIT extends BaseHBaseManagedTimeTableReuseIT {
+public class RollbackIT extends ParallelStatsDisabledIT {
 	
 	private final boolean localIndex;
 	private final boolean mutable;
@@ -58,7 +58,7 @@ public class RollbackIT extends BaseHBaseManagedTimeTableReuseIT {
 	}
 	
 	@BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
@@ -66,7 +66,7 @@ public class RollbackIT extends BaseHBaseManagedTimeTableReuseIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 	
-	@Parameters(name="localIndex = {0} , mutable = {1}")
+	@Parameters(name="RollbackIT_localIndex={0},mutable={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
                  { false, false }, { false, true },

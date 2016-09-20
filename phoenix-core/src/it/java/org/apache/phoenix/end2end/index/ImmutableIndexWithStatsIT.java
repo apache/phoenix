@@ -46,9 +46,6 @@ public class ImmutableIndexWithStatsIT extends BaseOwnClusterHBaseManagedTimeIT 
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(1));
-        props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
-        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(4));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(500));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
    
@@ -77,7 +74,7 @@ public class ImmutableIndexWithStatsIT extends BaseOwnClusterHBaseManagedTimeIT 
         conn.createStatement().execute("UPDATE STATISTICS " + tableName);
         query = "SELECT COUNT(*) FROM " + tableName;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-        assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT 7-CHUNK PARALLEL 1-WAY FULL SCAN"));
+        assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT PARALLEL 1-WAY FULL SCAN"));
 
         String indexName = TestUtil.DEFAULT_INDEX_TABLE_NAME;
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (v)");

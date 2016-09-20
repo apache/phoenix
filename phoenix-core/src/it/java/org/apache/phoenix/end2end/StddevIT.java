@@ -30,7 +30,7 @@ import java.sql.ResultSet;
 
 import org.junit.Test;
 
-public class StddevIT extends BaseHBaseManagedTimeTableReuseIT {
+public class StddevIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSTDDEV_POP() throws Exception {

@@ -89,8 +89,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     }
 
     public boolean isBytesComparableWith(PDataType otherType) {
-        return this == otherType || this.getClass() == PVarbinary.class || otherType == PVarbinary.INSTANCE
-                || this.getClass() == PBinary.class || otherType == PBinary.INSTANCE;
+        return equalsAny(this, otherType, PVarbinary.INSTANCE, PBinary.INSTANCE);
     }
 
     public int estimateByteSize(Object o) {
@@ -151,6 +150,18 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             // Special case as we may be comparing two arrays that have different separator characters due to PHOENIX-2067
             if (!this.isArrayType() || !rhsType.isArrayType() || 
                     PArrayDataType.isRowKeyOrderOptimized(this, lhsSortOrder, lhs, lhsOffset, lhsLength) == PArrayDataType.isRowKeyOrderOptimized(rhsType, rhsSortOrder, rhs, rhsOffset, rhsLength)) {
+                // Ignore trailing zero bytes if fixed byte length (for example TIMESTAMP compared to DATE)
+                if (lhsLength != rhsLength && this.isFixedWidth() && rhsType.isFixedWidth() && this.getByteSize() != null && rhsType.getByteSize() != null) {
+                    if (lhsLength > rhsLength) {
+                        int minOffset = lhsOffset + rhsLength;
+                        for (int i = lhsOffset + lhsLength - 1; i >= minOffset && lhsSortOrder.normalize(lhs[i]) == 0; i--,lhsLength--) {
+                        }
+                    } else {
+                        int minOffset = rhsOffset + lhsLength;
+                        for (int i = rhsOffset + rhsLength - 1; i >= minOffset && rhsSortOrder.normalize(rhs[i]) == 0; i--,rhsLength--) {
+                        }
+                    }
+                }
                 return compareTo(lhs, lhsOffset, lhsLength, lhsSortOrder, rhs, rhsOffset, rhsLength, rhsSortOrder);
             }
         }
@@ -196,8 +207,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             return Bytes.compareTo(lhsConverted, 0, lhsConverted.length, rhs, rhsOffset, rhsLength);
         }
         // convert to native and compare
-        if (this.isCoercibleTo(PLong.INSTANCE) && rhsType.isCoercibleTo(PLong.INSTANCE)) { // native long to long
-                                                                                           // comparison
+        if ( (this.isCoercibleTo(PLong.INSTANCE) || this.isCoercibleTo(PDate.INSTANCE)) && 
+             (rhsType.isCoercibleTo(PLong.INSTANCE) || rhsType.isCoercibleTo(PDate.INSTANCE)) ) {
             return Longs.compare(this.getCodec().decodeLong(lhs, lhsOffset, lhsSortOrder), rhsType.getCodec()
                     .decodeLong(rhs, rhsOffset, rhsSortOrder));
         } else if (isDoubleOrFloat(this) && isDoubleOrFloat(rhsType)) { // native double to double comparison

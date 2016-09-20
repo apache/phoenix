@@ -45,7 +45,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 
 
-public class InListIT extends BaseHBaseManagedTimeTableReuseIT {
+public class InListIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLeadingPKWithTrailingRVC() throws Exception {

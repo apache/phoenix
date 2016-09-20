@@ -33,8 +33,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
 
-    private static final int DEFAULT_THREAD_POOL_SIZE = 20;
-    private static final int DEFAULT_QUEUE_SIZE = 0;
+    private static final int DEFAULT_THREAD_POOL_SIZE = 10;
     // TODO: setting this down to 5mb causes insufficient memory exceptions. Need to investigate why
     private static final int DEFAULT_MAX_MEMORY_PERC = 30; // 30% of heap
     private static final int DEFAULT_THREAD_TIMEOUT_MS = 60000*5; //5min
@@ -85,7 +84,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     	        .setSequenceSaltBuckets(DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS)
                 .setMinStatsUpdateFrequencyMs(DEFAULT_MIN_STATS_UPDATE_FREQ_MS)
                 .setThreadPoolSize(DEFAULT_THREAD_POOL_SIZE)
-                .setQueueSize(DEFAULT_QUEUE_SIZE)
                 .setMaxMemoryPerc(DEFAULT_MAX_MEMORY_PERC)
                 .setThreadTimeoutMs(DEFAULT_THREAD_TIMEOUT_MS)
                 .setSpoolThresholdBytes(DEFAULT_SPOOL_THRESHOLD_BYTES)

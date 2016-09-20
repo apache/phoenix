@@ -17,17 +17,17 @@
  */
 package org.apache.phoenix.trace;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.sql.Connection;
+import java.util.Collection;
+
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
 import org.junit.Test;
-
-import java.sql.Connection;
-import java.util.Collection;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 /**
  * Test that the logging sink stores the expected metrics/stats
@@ -43,7 +43,8 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
     public void testCreatesTable() throws Exception {
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        sink.initForTesting(conn);
+        String tableName = generateRandomString();
+        sink.initForTesting(conn, tableName);
 
         // check for existence of the tracing table
         try {
@@ -57,7 +58,7 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
         // initialize sink again, which should attempt to create the table, but not fail
         try {
-            sink.initForTesting(conn);
+            sink.initForTesting(conn, tableName);
         } catch (Exception e) {
             fail("Initialization shouldn't fail if table already exists!");
         }
@@ -73,7 +74,8 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         // hook up a phoenix sink
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        sink.initForTesting(conn);
+        String tableName = generateRandomString();
+        sink.initForTesting(conn, tableName);
 
         // create a simple metrics record
         long traceid = 987654;
@@ -94,7 +96,7 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
         // make sure we only get expected stat entry (matcing the trace id), otherwise we could the
         // stats for the update as well
-        TraceReader reader = new TraceReader(conn);
+        TraceReader reader = new TraceReader(conn, tableName);
         Collection<TraceHolder> traces = reader.readAll(10);
         assertEquals("Wrong number of traces in the tracing table", 1, traces.size());
 

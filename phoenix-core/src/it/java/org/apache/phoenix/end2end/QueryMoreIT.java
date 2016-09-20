@@ -44,7 +44,7 @@ import org.junit.Test;
 import com.google.common.collect.Lists;
 
 
-public class QueryMoreIT extends BaseHBaseManagedTimeTableReuseIT {
+public class QueryMoreIT extends ParallelStatsDisabledIT {
     
     private String dataTableName;
     //queryAgainstTenantSpecificView = true, dataTableSalted = true 
@@ -72,21 +72,21 @@ public class QueryMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     }
     
     private void testQueryMore(boolean queryAgainstTenantSpecificView, boolean dataTableSalted) throws Exception {
-        String[] tenantIds = new String[] {"00Dxxxxxtenant1", "00Dxxxxxtenant2", "00Dxxxxxtenant3"};
+        String[] tenantIds = new String[] {"T1_" + generateRandomString(), "T2_" + generateRandomString(), "T3_" + generateRandomString()};
         int numRowsPerTenant = 10;
         String cursorTableName = generateRandomString();
         String base_history_table = generateRandomString();
         this.dataTableName = base_history_table + (dataTableSalted ? "_SALTED" : "");
         String cursorTableDDL = "CREATE TABLE IF NOT EXISTS " + 
                 cursorTableName +  " (\n" +  
-                "TENANT_ID VARCHAR(15) NOT NULL\n," +  
+                "TENANT_ID VARCHAR NOT NULL\n," +  
                 "QUERY_ID VARCHAR(15) NOT NULL,\n" +
                 "CURSOR_ORDER BIGINT NOT NULL \n" + 
                 "CONSTRAINT CURSOR_TABLE_PK PRIMARY KEY (TENANT_ID, QUERY_ID, CURSOR_ORDER)) "+
                 "SALT_BUCKETS = 4, TTL=86400";
         String baseDataTableDDL = "CREATE TABLE IF NOT EXISTS " +
                 dataTableName + " (\n" + 
-                "TENANT_ID CHAR(15) NOT NULL,\n" +
+                "TENANT_ID VARCHAR NOT NULL,\n" +
                 "PARENT_ID CHAR(15) NOT NULL,\n" + 
                 "CREATED_DATE DATE NOT NULL,\n" + 
                 "ENTITY_HISTORY_ID CHAR(15) NOT NULL,\n" + 

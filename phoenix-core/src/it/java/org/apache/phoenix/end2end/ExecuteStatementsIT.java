@@ -48,7 +48,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
 
-public class ExecuteStatementsIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testExecuteStatements() throws Exception {

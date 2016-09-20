@@ -176,7 +176,6 @@ public class PhoenixRuntime {
             AUTO_COMMIT_ATTRIB,
             CONSISTENCY_ATTRIB,
             REQUEST_METRIC_ATTRIB,
-            NO_UPGRADE_ATTRIB
             };
 
     /**
@@ -219,6 +218,7 @@ public class PhoenixRuntime {
                 props.setProperty(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, "false");
             }
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
+            conn.setRunningUpgrade(true);
             if (execCmd.isMapNamespace()) {
                 String srcTable = execCmd.getSrcTable();
                 System.out.println("Starting upgrading table:" + srcTable + "... please don't kill it in between!!");

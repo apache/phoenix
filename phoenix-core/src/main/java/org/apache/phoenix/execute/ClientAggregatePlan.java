@@ -91,13 +91,8 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     }
 
     @Override
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(scanGrouper, null);
-    }
-
-    @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-        ResultIterator iterator = delegate.iterator(scanGrouper);
+        ResultIterator iterator = delegate.iterator(scanGrouper, scan);
         if (where != null) {
             iterator = new FilterResultIterator(iterator, where);
         }

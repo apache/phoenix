@@ -38,7 +38,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class CoalesceFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCoalesce() throws Exception {

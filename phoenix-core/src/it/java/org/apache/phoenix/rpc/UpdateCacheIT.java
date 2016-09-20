@@ -18,7 +18,6 @@
 package org.apache.phoenix.rpc;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
-import static org.apache.phoenix.util.TestUtil.MUTABLE_INDEX_DATA_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertFalse;
@@ -37,7 +36,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -61,12 +60,12 @@ import com.google.common.collect.Maps;
  * Verifies the number of rpcs calls from {@link MetaDataClient} updateCache() 
  * for transactional and non-transactional tables.
  */
-public class UpdateCacheIT extends BaseHBaseManagedTimeTableReuseIT {
+public class UpdateCacheIT extends ParallelStatsDisabledIT {
 	
 	public static final int NUM_MILLIS_IN_DAY = 86400000;
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
@@ -84,7 +83,8 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testUpdateCacheForTxnTable() throws Exception {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + TRANSACTIONAL_DATA_TABLE;
-        ensureTableCreated(getUrl(), TRANSACTIONAL_DATA_TABLE, TRANSACTIONAL_DATA_TABLE);
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
         helpTestUpdateCache(fullTableName, null, new int[] {1, 1});
     }
     
@@ -92,7 +92,8 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testUpdateCacheForNonTxnTable() throws Exception {
         String tableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
-        ensureTableCreated(getUrl(), tableName, MUTABLE_INDEX_DATA_TABLE);
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA);
         helpTestUpdateCache(fullTableName, null, new int[] {1, 3});
     }
 	
@@ -107,9 +108,9 @@ public class UpdateCacheIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testUpdateCacheForNeverUpdatedTable() throws Exception {
         String tableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
-        ensureTableCreated(getUrl(), tableName, MUTABLE_INDEX_DATA_TABLE);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA);
             conn.createStatement().execute(
             "alter table " + fullTableName + " SET UPDATE_CACHE_FREQUENCY=NEVER");
         }

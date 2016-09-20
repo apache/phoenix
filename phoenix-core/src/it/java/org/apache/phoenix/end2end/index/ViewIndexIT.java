@@ -31,56 +31,29 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
-import org.apache.phoenix.end2end.Shadower;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
-
 @RunWith(Parameterized.class)
-public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
-
-
-    private String schemaName="TEST";
+public class ViewIndexIT extends ParallelStatsDisabledIT {
     private boolean isNamespaceMapped;
 
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Drop the HBase table metadata for this test to confirm that view index table dropped
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-
-    @Parameters(name = "isNamespaceMapped = {0}")
+    @Parameters(name = "ViewIndexIT_isNamespaceMapped={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
         return Arrays.asList(true, false);
     }
 
-    private void createBaseTable(String tableName, boolean multiTenant, Integer saltBuckets, String splits)
+    private void createBaseTable(String schemaName, String tableName, boolean multiTenant, Integer saltBuckets, String splits)
             throws SQLException {
         Connection conn = getConnection();
         if (isNamespaceMapped) {
@@ -107,9 +80,8 @@ public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
         conn.close();
     }
     
-    public Connection getConnection() throws SQLException{
+    private Connection getConnection() throws SQLException{
         Properties props = new Properties();
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
         props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         return DriverManager.getConnection(getUrl(),props);
     }
@@ -120,47 +92,39 @@ public class ViewIndexIT extends BaseHBaseManagedTimeTableReuseIT {
 
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
+        String schemaName = generateRandomString();
         String tableName = schemaName + "." + generateRandomString();
         String indexName = "IND_" + generateRandomString();
         String VIEW_NAME = "VIEW_" + generateRandomString();
-        TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
-        String viewIndexPhysicalTableName = physicalTableName.getNameAsString();
         String viewName = schemaName + "." + VIEW_NAME;
 
-        createBaseTable(tableName, false, null, null);
+        createBaseTable(schemaName, tableName, false, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
         conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + " (v1)");
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
-        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_schema like '%"
-                + schemaName + "%'";
-        ResultSet rs = conn1.prepareStatement(query).executeQuery();
-        assertTrue(rs.next());
-        assertEquals(MetaDataUtil.getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped),
-                rs.getString("sequence_schema"));
-        assertEquals(MetaDataUtil.getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped),
-                rs.getString("sequence_name"));
-        assertEquals(-32767, rs.getInt("current_value"));
-        assertEquals(1, rs.getInt("increment_by"));
-        assertFalse(rs.next());
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped);
+        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
+        String seqName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, !isNamespaceMapped);
+        String seqSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), !isNamespaceMapped);
+        verifySequence(null, sequenceName, sequenceSchemaName, true);
+        // Check other format of sequence is not there as Sequences format is different for views/indexes created on
+        // table which are namespace mapped and which are not.
+        verifySequence(null, seqName, seqSchemaName, false);
         conn1.createStatement().execute("DROP VIEW " + viewName);
         conn1.createStatement().execute("DROP TABLE "+ tableName);
-        admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        assertFalse("View index table should be deleted.", admin.tableExists(TableName.valueOf(viewIndexPhysicalTableName)));
-        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("a"), isNamespaceMapped);
-        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
+        
         verifySequence(null, sequenceName, sequenceSchemaName, false);
-
     }
     
     @Test
     public void testMultiTenantViewLocalIndex() throws Exception {
+        String schemaName = generateRandomString();
         String tableName =  generateRandomString();
         String indexName = "IND_" + generateRandomString();
         String VIEW_NAME = "VIEW_" + generateRandomString();
-        createBaseTable(tableName, true, null, null);
+        createBaseTable(schemaName, tableName, true, null, null);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
                 "UPSERT INTO " + tableName

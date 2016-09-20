@@ -26,7 +26,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -35,7 +35,7 @@ import org.junit.Test;
  * Tests to validate that user specified property phoenix.query.timeoutMs
  * works as expected.
  */
-public class PhoenixQueryTimeoutIT extends BaseHBaseManagedTimeTableReuseIT {
+public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
     private static final String QUERY_TIMEOUT_TEST = generateRandomString();
 

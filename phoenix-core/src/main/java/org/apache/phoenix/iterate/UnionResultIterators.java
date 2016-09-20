@@ -42,21 +42,19 @@ public class UnionResultIterators implements ResultIterators {
     private final List<KeyRange> splits;
     private final List<List<Scan>> scans;
     private final List<PeekingResultIterator> iterators;
-    private final List<QueryPlan> plans;
     private final List<ReadMetricQueue> readMetricsList;
     private final List<OverAllQueryMetrics> overAllQueryMetricsList;
     private boolean closed;
     private final StatementContext parentStmtCtx;
     public UnionResultIterators(List<QueryPlan> plans, StatementContext parentStmtCtx) throws SQLException {
         this.parentStmtCtx = parentStmtCtx;
-        this.plans = plans;
         int nPlans = plans.size();
         iterators = Lists.newArrayListWithExpectedSize(nPlans);
         splits = Lists.newArrayListWithExpectedSize(nPlans * 30); 
         scans = Lists.newArrayListWithExpectedSize(nPlans * 10); 
         readMetricsList = Lists.newArrayListWithCapacity(nPlans);
         overAllQueryMetricsList = Lists.newArrayListWithCapacity(nPlans);
-        for (QueryPlan plan : this.plans) {
+        for (QueryPlan plan : plans) {
             readMetricsList.add(plan.getContext().getReadMetricsQueue());
             overAllQueryMetricsList.add(plan.getContext().getOverallQueryMetrics());
             iterators.add(LookAheadResultIterator.wrap(plan.iterator()));

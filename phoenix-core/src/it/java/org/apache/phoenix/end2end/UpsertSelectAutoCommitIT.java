@@ -37,7 +37,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class UpsertSelectAutoCommitIT extends BaseHBaseManagedTimeTableReuseIT {
+public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
 
     public UpsertSelectAutoCommitIT() {
     }

@@ -20,7 +20,6 @@ package org.apache.phoenix.execute;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -32,6 +31,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.ConcatResultIterator;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -42,8 +42,6 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.SQLCloseable;
-
 import com.google.common.collect.Sets;
 
 
@@ -124,22 +122,19 @@ public class UnionPlan implements QueryPlan {
     public RowProjector getProjector() {
         return projector;
     }
+    
+    @Override
+    public ResultIterator iterator() throws SQLException {
+        return iterator(DefaultParallelScanGrouper.getInstance());
+    }
 
     @Override
-    public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList());
+    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
+        return iterator(scanGrouper, null);
     }
 
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList());
-    }
-    @Override
-    public final ResultIterator iterator() throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList());
-    }
-
-    public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies) throws SQLException {
         this.iterators = new UnionResultIterators(plans, parentContext);
         ResultIterator scanner;      
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();

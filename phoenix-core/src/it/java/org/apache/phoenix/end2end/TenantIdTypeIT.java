@@ -22,11 +22,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.sql.*;
-import java.util.Properties;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
-import com.google.common.collect.Lists;
+import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -37,8 +39,10 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Lists;
+
 @RunWith(Parameterized.class)
-public class TenantIdTypeIT extends BaseHBaseManagedTimeTableReuseIT {
+public class TenantIdTypeIT extends ParallelStatsDisabledIT {
 
     private Connection regularConnection(String url) throws SQLException {
         Properties props = new Properties();
@@ -86,7 +90,7 @@ public class TenantIdTypeIT extends BaseHBaseManagedTimeTableReuseIT {
                 + "MULTI_TENANT=true";
     }
 
-    @Parameters
+    @Parameters( name = "TenantIdTypeIT_datatype={0}" ) // name is used by failsafe as file name in reports
     public static Collection<Object[]> data() {
         List<Object[]> testCases = Lists.newArrayList();
         testCases.add(new Object[] { "INTEGER", "2147483647", "2147483646" });

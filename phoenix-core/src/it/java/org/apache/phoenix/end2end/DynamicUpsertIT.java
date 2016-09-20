@@ -36,7 +36,6 @@ import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -47,15 +46,15 @@ import org.junit.Test;
  */
 
 
-public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
-    private static String TABLE;
+public class DynamicUpsertIT extends ParallelStatsDisabledIT {
+    private String tableName;
 
-    @BeforeClass
-    public static void doBeforeTestSetup() throws Exception {
-    	TABLE = BaseTest.generateRandomString();
+    @Before
+    public void doBeforeTestSetup() throws Exception {
+    	tableName = BaseTest.generateRandomString();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table if not exists  " + TABLE + "   (entry varchar not null primary key,"
+        String ddl = "create table " + tableName + "   (entry varchar not null primary key,"
                 + "    a.dummy varchar," + "    b.dummy varchar)";
         conn.createStatement().execute(ddl);
         conn.close();
@@ -66,9 +65,9 @@ public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
      */
     @Test
     public void testUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + TABLE
+        String upsertquery = "UPSERT INTO " + tableName
                 + " (entry, a.DynCol VARCHAR,a.dummy) VALUES ('dynEntry','DynValue','DynColValue')";
-        String selectquery = "SELECT DynCol FROM " + TABLE + " (a.DynCol VARCHAR) where entry='dynEntry'";
+        String selectquery = "SELECT DynCol FROM " + tableName + " (a.DynCol VARCHAR) where entry='dynEntry'";
         // String selectquery = "SELECT * FROM "+TABLE;
 
         String url = getUrl() + ";";
@@ -96,9 +95,9 @@ public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
      */
     @Test
     public void testMultiUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + TABLE
+        String upsertquery = "UPSERT INTO " + tableName
                 + " (entry, a.DynColA VARCHAR,b.DynColB varchar) VALUES('dynEntry','DynColValuea','DynColValueb')";
-        String selectquery = "SELECT DynColA,entry,DynColB FROM " + TABLE
+        String selectquery = "SELECT DynColA,entry,DynColB FROM " + tableName
                 + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
 
         String url = getUrl() + ";";
@@ -129,9 +128,9 @@ public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testFullUpsert() throws Exception {
         String upsertquery = "UPSERT INTO "
-                + TABLE
+                + tableName
                 + " (a.DynColA VARCHAR,b.DynColB varchar) VALUES('dynEntry','aValue','bValue','DynColValuea','DynColValueb')";
-        String selectquery = "SELECT entry,DynColA,a.dummy,DynColB,b.dummy FROM " + TABLE
+        String selectquery = "SELECT entry,DynColA,a.dummy,DynColB,b.dummy FROM " + tableName
                 + " (a.DynColA VARCHAR,b.DynColB VARCHAR) where entry='dynEntry'";
 
         String url = getUrl() + ";";
@@ -163,7 +162,7 @@ public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
      */
     @Test
     public void testFullUnbalancedUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + TABLE
+        String upsertquery = "UPSERT INTO " + tableName
                 + " (a.DynCol VARCHAR,b.DynCol varchar) VALUES('dynEntry','aValue','bValue','dyncola')";
 
         String url = getUrl() + ";";
@@ -185,7 +184,7 @@ public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
      */
     @Test(expected = ColumnAlreadyExistsException.class)
     public void testAmbiguousStaticUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + TABLE + " (a.dummy INTEGER,b.dummy INTEGER) VALUES(1,2)";
+        String upsertquery = "UPSERT INTO " + tableName + " (a.dummy INTEGER,b.dummy INTEGER) VALUES(1,2)";
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -202,7 +201,7 @@ public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
      */
     @Test(expected = ColumnAlreadyExistsException.class)
     public void testAmbiguousDynamicUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + TABLE + " (a.DynCol VARCHAR,a.DynCol INTEGER) VALUES('dynCol',1)";
+        String upsertquery = "UPSERT INTO " + tableName + " (a.DynCol VARCHAR,a.DynCol INTEGER) VALUES('dynCol',1)";
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -219,7 +218,7 @@ public class DynamicUpsertIT extends BaseHBaseManagedTimeTableReuseIT {
      */
     @Test(expected = ColumnFamilyNotFoundException.class)
     public void testFakeCFDynamicUpsert() throws Exception {
-        String upsertquery = "UPSERT INTO " + TABLE + " (fakecf.DynCol VARCHAR) VALUES('dynCol')";
+        String upsertquery = "UPSERT INTO " + tableName + " (fakecf.DynCol VARCHAR) VALUES('dynCol')";
         String url = getUrl() + ";";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);

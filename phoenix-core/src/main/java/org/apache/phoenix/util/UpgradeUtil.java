@@ -19,7 +19,7 @@ package org.apache.phoenix.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.TIMESTAMP_VERSION_MAP;
+import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
@@ -31,7 +31,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DECIMAL_DIGITS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
@@ -133,7 +132,12 @@ public class UpgradeUtil {
     private static final Logger logger = LoggerFactory.getLogger(UpgradeUtil.class);
     private static final byte[] SEQ_PREFIX_BYTES = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("_SEQ_"));
     public static final byte[] UPGRADE_TO_4_7_COLUMN_NAME = Bytes.toBytes("UPGRADE_TO_4_7");
-    
+    /**
+     * Attribute for Phoenix's internal purposes only. When this attribute is set on a phoenix connection, then
+     * the upgrade code for upgrading the cluster to the new minor release is not triggered. Note that presence 
+     * of this attribute overrides a true value for {@value QueryServices#AUTO_UPGRADE_ENABLED}.     
+     */
+    private static final String DO_NOT_UPGRADE = "DoNotUpgrade";
     public static String UPSERT_BASE_COLUMN_COUNT_IN_HEADER_ROW = "UPSERT "
             + "INTO SYSTEM.CATALOG "
             + "(TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, BASE_COLUMN_COUNT) "
@@ -175,7 +179,7 @@ public class UpgradeUtil {
             + " FROM " + SYSTEM_CATALOG_SCHEMA + "." + SYSTEM_CATALOG_TABLE + " WHERE " + COLUMN_FAMILY + " = ? AND "
             + LINK_TYPE + " = " + LinkType.PHYSICAL_TABLE.getSerializedValue() + " AND ( " + TABLE_TYPE + "=" + "'"
             + PTableType.VIEW.getSerializedValue() + "' OR " + TABLE_TYPE + " IS NULL) ORDER BY "+TENANT_ID;
-
+    
     private UpgradeUtil() {
     }
 
@@ -1499,7 +1503,7 @@ public class UpgradeUtil {
             }
             throw new SQLException(buf.toString());
         }
-        PhoenixConnection upgradeConn = new PhoenixConnection(conn, true);
+        PhoenixConnection upgradeConn = new PhoenixConnection(conn, true, true);
         try {
             upgradeConn.setAutoCommit(true);
             for (PTable table : tablesNeedingUpgrading) {
@@ -1896,7 +1900,15 @@ public class UpgradeUtil {
     public static final String getUpgradeSnapshotName(String tableString, long currentSystemTableTimestamp) {
         Format formatter = new SimpleDateFormat("yyyyMMddHHmmssZ");
         String date = formatter.format(new Date(System.currentTimeMillis()));
-        String upgradingFrom = TIMESTAMP_VERSION_MAP.get(currentSystemTableTimestamp);
+        String upgradingFrom = getVersion(currentSystemTableTimestamp);
         return "SNAPSHOT_" + tableString + "_" + upgradingFrom + "_TO_" + CURRENT_CLIENT_VERSION + "_" + date;
+    }
+    
+    public static boolean isNoUpgradeSet(Properties props) {
+        return Boolean.compare(true, Boolean.valueOf(props.getProperty(DO_NOT_UPGRADE))) == 0;
+    }
+    
+    public static void doNotUpgradeOnFirstConnection(Properties props) {
+        props.setProperty(DO_NOT_UPGRADE, String.valueOf(true));
     }
 }

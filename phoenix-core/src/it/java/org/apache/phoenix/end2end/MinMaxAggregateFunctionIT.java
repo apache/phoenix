@@ -23,7 +23,7 @@ import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
-public class MinMaxAggregateFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class MinMaxAggregateFunctionIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateRandomString();
 

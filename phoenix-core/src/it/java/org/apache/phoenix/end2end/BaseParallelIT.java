@@ -18,18 +18,19 @@
 
 package org.apache.phoenix.end2end;
 
-import javax.annotation.concurrent.NotThreadSafe;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.experimental.categories.Category;
 
 /**
- * Base class for tests that let HBase set timestamps.
+ * Base class for tests that create unique tables for
+ * every test enabling them to be
+ * 1) run in parallel
+ * 2) not have to delete any tables
+ * 
  * We need to separate these from tests that rely on clients
  * to set timestamps, because we create/destroy the Phoenix tables
  * between tests and only allow a table time stamp to increase.
@@ -41,13 +42,8 @@ import org.junit.experimental.categories.Category;
  * Remember to use BaseTest.generateRandomString() to generate table
  * names for your tests otherwise there might be naming collisions between
  * other tests.
- * {@link BaseClientManagedTimeIT}.
- *
- * @since 0.1
  */
-@NotThreadSafe
-@Category(HBaseManagedTimeTableReuseTest.class)
-public class BaseHBaseManagedTimeTableReuseIT extends BaseTest {
+public abstract class BaseParallelIT extends BaseTest {
     protected static Configuration getTestClusterConfig() {
         // don't want callers to modify config.
         return new Configuration(config);

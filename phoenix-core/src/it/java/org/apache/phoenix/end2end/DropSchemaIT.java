@@ -65,7 +65,7 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
         this.schema = schema;
     }
 
-    @Parameters(name = "schema = {0}")
+    @Parameters(name = "DropSchemaIT_schema={0}") // name is used by failsafe as file name in reports
     public static Collection<String> data() {
         return Arrays.asList("TEST_SCHEMA", "\"test_schema\"");
     }

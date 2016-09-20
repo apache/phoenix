@@ -47,7 +47,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class AutoPartitionViewsIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 
     private String tableDDLOptions;
     private boolean isMultiTenant;
@@ -56,7 +56,7 @@ public class AutoPartitionViewsIT extends BaseHBaseManagedTimeTableReuseIT {
     private final String TENANT_SPECIFIC_URL2 = getUrl() + ';' + PhoenixRuntime.TENANT_ID_ATTRIB
             + "=tenant2";
 
-    @Parameters(name = "salted = {0}, multi-tenant = {1}")
+    @Parameters(name = "AutoPartitionViewsIT_salted={0},multi-tenant={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { { false, false }, { false, true }, { true, false },
                 { true, true } });

@@ -38,7 +38,7 @@ import com.google.common.io.Files;
 
 
 
-public class SpooledTmpFileDeleteIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
 	
     private Connection conn = null;
     private Properties props = null;

@@ -50,7 +50,6 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.InListExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
-import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -139,19 +138,13 @@ public class HashJoinPlan extends DelegateQueryPlan {
     public Set<TableRef> getSourceRefs() {
         return tableRefs;
     }
-    
-    @Override
-    public ResultIterator iterator() throws SQLException {
-    	return iterator(DefaultParallelScanGrouper.getInstance());
-    }
-
-    @Override
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(scanGrouper, this.delegate.getContext().getScan());
-    }
         
     @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+        if (scan == null) {
+            scan = delegate.getContext().getScan();
+        }
+        
         int count = subPlans.length;
         PhoenixConnection connection = getContext().getConnection();
         ConnectionQueryServices services = connection.getQueryServices();

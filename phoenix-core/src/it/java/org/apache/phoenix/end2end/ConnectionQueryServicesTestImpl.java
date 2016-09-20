@@ -20,6 +20,8 @@ package org.apache.phoenix.end2end;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Properties;
 import java.util.Set;
 
@@ -49,39 +51,24 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     }
     
     @Override
-    public void addConnection(PhoenixConnection connection) throws SQLException {
+    public synchronized void addConnection(PhoenixConnection connection) throws SQLException {
         connections.add(connection);
     }
     
     @Override
-    public void removeConnection(PhoenixConnection connection) throws SQLException {
+    public synchronized void removeConnection(PhoenixConnection connection) throws SQLException {
         connections.remove(connection);
-    }
-
-    @Override
-    public void init(String url, Properties props) throws SQLException {
-        try {
-            super.init(url, props);
-            /**
-             * Clear the server-side meta data cache on initialization. Otherwise, if we
-             * query for meta data tables, we'll get nothing (since the server just came
-             * up). However, our server-side cache (which is a singleton) will claim
-             * that we do have tables and our create table calls will return the cached
-             * meta data instead of creating new metadata.
-             */
-            clearCache();
-        } catch (SQLException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new SQLException(e);
-        }
     }
 
     @Override
     public void close() throws SQLException {
         try {
-            Set<PhoenixConnection> connections = this.connections;
-            this.connections = Sets.newHashSet();
+            Collection<PhoenixConnection> connections;
+            synchronized(this) {
+                // Make copy to prevent ConcurrentModificationException (TODO: figure out why this is necessary)
+                connections = new ArrayList<>(this.connections);
+                this.connections = Sets.newHashSet();
+            }
             SQLCloseables.closeAll(connections);
             long unfreedBytes = clearCache();
             assertEquals("Found unfreed bytes in server-side cache", 0, unfreedBytes);

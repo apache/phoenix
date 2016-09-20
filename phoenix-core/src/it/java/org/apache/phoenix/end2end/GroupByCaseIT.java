@@ -17,9 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.GROUPBYTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.getTableName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -41,30 +39,29 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 
-public class GroupByCaseIT extends BaseHBaseManagedTimeTableReuseIT {
-    private static int id;
-
+public class GroupByCaseIT extends ParallelStatsDisabledIT {
     private static void initData(Connection conn, String tableName) throws SQLException {
-        ensureTableCreated(getUrl(), tableName, GROUPBYTEST_NAME);
-        insertRow(conn, tableName, "Report1", 10);
-        insertRow(conn, tableName, "Report2", 10);
-        insertRow(conn, tableName, "Report3", 30);
-        insertRow(conn, tableName, "Report4", 30);
-        insertRow(conn, tableName, "SOQL1", 10);
-        insertRow(conn, tableName, "SOQL2", 10);
-        insertRow(conn, tableName, "SOQL3", 30);
-        insertRow(conn, tableName, "SOQL4", 30);
+        conn.createStatement().execute("create table " + tableName +
+                "   (id varchar not null primary key,\n" +
+                "    uri varchar, appcpu integer)");
+        insertRow(conn, tableName, "Report1", 10, 1);
+        insertRow(conn, tableName, "Report2", 10, 2);
+        insertRow(conn, tableName, "Report3", 30, 3);
+        insertRow(conn, tableName, "Report4", 30, 4);
+        insertRow(conn, tableName, "SOQL1", 10, 5);
+        insertRow(conn, tableName, "SOQL2", 10, 6);
+        insertRow(conn, tableName, "SOQL3", 30, 7);
+        insertRow(conn, tableName, "SOQL4", 30, 8);
         conn.commit();
         conn.close();
     }
 
-    private static void insertRow(Connection conn, String tableName, String uri, int appcpu) throws SQLException {
+    private static void insertRow(Connection conn, String tableName, String uri, int appcpu, int id) throws SQLException {
         PreparedStatement statement = conn.prepareStatement("UPSERT INTO " + tableName + "(id, uri, appcpu) values (?,?,?)");
         statement.setString(1, "id" + id);
         statement.setString(2, uri);
         statement.setInt(3, appcpu);
         statement.executeUpdate();
-        id++;
     }
 
     @Test

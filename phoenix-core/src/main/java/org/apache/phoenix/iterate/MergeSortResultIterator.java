@@ -70,7 +70,7 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
     private PriorityQueue<MaterializedComparableResultIterator> getMinHeap() throws SQLException {
         if (minHeap == null) {
             List<PeekingResultIterator> iterators = resultIterators.getIterators();
-            minHeap = new PriorityQueue<MaterializedComparableResultIterator>(iterators.size());
+            minHeap = new PriorityQueue<MaterializedComparableResultIterator>(Math.max(1, iterators.size()));
             for (PeekingResultIterator itr : iterators) {
                 if (itr.peek() == null) {
                     itr.close();

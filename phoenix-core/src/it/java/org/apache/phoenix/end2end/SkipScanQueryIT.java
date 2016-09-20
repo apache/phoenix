@@ -41,7 +41,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
 
-public class SkipScanQueryIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     private String initIntInTable(Connection conn, List<Integer> data) throws SQLException {
         String tableName = generateRandomString();
@@ -353,7 +353,7 @@ public class SkipScanQueryIT extends BaseHBaseManagedTimeTableReuseIT {
         String tableName = generateRandomString();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try {
-            createMultiCFTestTable(fullTableName , null);
+            TestUtil.createMultiCFTestTable(conn , fullTableName, null);
             populateMultiCFTestTable(fullTableName);
             String upsert = "UPSERT INTO " + fullTableName
                     + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";

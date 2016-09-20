@@ -33,7 +33,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -41,18 +41,17 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.tephra.Transaction.VisibilityLevel;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import org.apache.tephra.Transaction.VisibilityLevel;
-
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class TxCheckpointIT extends BaseHBaseManagedTimeTableReuseIT {
+public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	
 	private final boolean localIndex;
 	private final boolean mutable;
@@ -64,7 +63,7 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeTableReuseIT {
 	}
 	
 	@BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
@@ -72,7 +71,7 @@ public class TxCheckpointIT extends BaseHBaseManagedTimeTableReuseIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 	
-	@Parameters(name="localIndex = {0} , mutable = {1}")
+	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
                  { false, false }, { false, true }, { true, false }, { true, true }  

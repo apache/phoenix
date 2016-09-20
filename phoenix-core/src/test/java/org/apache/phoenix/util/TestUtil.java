@@ -474,6 +474,12 @@ public class TestUtil {
         conn.commit();
     }
 
+    public static void createGroupByTestTable(Connection conn, String tableName) throws SQLException {
+        conn.createStatement().execute("create table " + tableName +
+                "   (id varchar not null primary key,\n" +
+                "    uri varchar, appcpu integer)");
+    }
+    
     private static void createTable(Connection conn, String inputSqlType, String tableName, String sortOrder) throws SQLException {
         String dmlFormat =
             "CREATE TABLE " + tableName + "_%s (id INTEGER NOT NULL, pk %s NOT NULL, " + "kv %s "
@@ -698,6 +704,29 @@ public class TestUtil {
             ClientAggregators aggregators = aggregationManager.getAggregators();
             return aggregators;
         }
+    }
+
+    public static void createMultiCFTestTable(Connection conn, String tableName, String options) throws SQLException {
+        String ddl = "create table if not exists " + tableName + "(" +
+                "   varchar_pk VARCHAR NOT NULL, " +
+                "   char_pk CHAR(5) NOT NULL, " +
+                "   int_pk INTEGER NOT NULL, "+ 
+                "   long_pk BIGINT NOT NULL, " +
+                "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+                "   a.varchar_col1 VARCHAR, " +
+                "   a.char_col1 CHAR(5), " +
+                "   a.int_col1 INTEGER, " +
+                "   a.long_col1 BIGINT, " +
+                "   a.decimal_col1 DECIMAL(31, 10), " +
+                "   b.varchar_col2 VARCHAR, " +
+                "   b.char_col2 CHAR(5), " +
+                "   b.int_col2 INTEGER, " +
+                "   b.long_col2 BIGINT, " +
+                "   b.decimal_col2 DECIMAL, " +
+                "   b.date_col DATE " + 
+                "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
+                + (options!=null? options : "");
+            conn.createStatement().execute(ddl);
     }
 }
 

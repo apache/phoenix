@@ -45,6 +45,7 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
@@ -54,7 +55,13 @@ import com.google.common.collect.Lists;
  */
 
 
-public class SortOrderIT extends BaseHBaseManagedTimeTableReuseIT {
+public class SortOrderIT extends ParallelStatsDisabledIT {
+    private String baseTableName;
+    
+    @Before
+    public void generateTableName() {
+        baseTableName = generateRandomString();
+    }
     
     @Test
     public void noOrder() throws Exception {
@@ -530,7 +537,7 @@ public class SortOrderIT extends BaseHBaseManagedTimeTableReuseIT {
     }
 
     private void testCompareCompositeKey(Integer saltBuckets, PDataType dataType, SortOrder sortOrder, String whereClause, List<Integer> expectedResults, String orderBy) throws SQLException {
-        String tableName = "t_" + saltBuckets + "_" + dataType + "_" + sortOrder;
+        String tableName = "t_" + saltBuckets + "_" + dataType + "_" + sortOrder + "_" + baseTableName;
         String ddl = "create table if not exists " + tableName + " (k1 bigint not null, k2 " + dataType.getSqlTypeName() + (dataType.isFixedWidth() ? " not null" : "") + ", constraint pk primary key (k1,k2 " + sortOrder + "))" + (saltBuckets == null ? "" : (" SALT_BUCKETS= " + saltBuckets));
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);

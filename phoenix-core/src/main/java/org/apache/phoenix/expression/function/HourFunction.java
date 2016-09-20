@@ -37,7 +37,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
  */
 @BuiltInFunction(name=HourFunction.NAME, 
 args={@Argument(allowedTypes={PTimestamp.class})})
-public class HourFunction extends ScalarFunction {
+public class HourFunction extends DateScalarFunction {
     public static final String NAME = "HOUR";
 
     public HourFunction() {
@@ -56,7 +56,7 @@ public class HourFunction extends ScalarFunction {
         if ( ptr.getLength() == 0) {
             return true; //means null
         }
-        long dateTime = expression.getDataType().getCodec().decodeLong(ptr, expression.getSortOrder());
+        long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
         int hour = (int)(((dateTime/1000) % (24*3600))/3600);
         PDataType returnType = getDataType();
         byte[] byteValue = new byte[returnType.getByteSize()];

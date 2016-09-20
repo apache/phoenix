@@ -26,7 +26,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-public class ArrayConcatFunctionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     private String initTables(Connection conn) throws Exception {
         String tableName = generateRandomString();

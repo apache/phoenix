@@ -19,7 +19,6 @@ package org.apache.phoenix.tx;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.TRANSACTIONAL_DATA_TABLE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -47,7 +46,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeTableReuseIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -62,37 +61,39 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
-
 import org.apache.tephra.TransactionContext;
 import org.apache.tephra.TransactionSystemClient;
 import org.apache.tephra.TxConstants;
 import org.apache.tephra.hbase.TransactionAwareHTable;
+import org.junit.BeforeClass;
+import org.junit.Ignore;
+import org.junit.Test;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
-public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class TransactionIT extends ParallelStatsDisabledIT {
     
 
     @BeforeClass
-    @Shadower(classBeingShadowed = BaseHBaseManagedTimeTableReuseIT.class)
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-        
+
+    private static void createTable(Connection conn, String tableName) throws SQLException {
+        conn.createStatement().execute("create table " + tableName + TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
+    }
+    
     @Test
     public void testReadOwnWrites() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         String selectSql = "SELECT * FROM "+ fullTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn.setAutoCommit(false);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
@@ -125,9 +126,9 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testTxnClosedCorrecty() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         String selectSql = "SELECT * FROM "+fullTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn.setAutoCommit(false);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
@@ -144,12 +145,14 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
             rs = conn.createStatement().executeQuery(selectSql);
             TestUtil.validateRowKeyColumns(rs, 1);
             TestUtil.validateRowKeyColumns(rs, 2);
+            // Long currentTx = rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp();
             assertFalse(rs.next());
             
             conn.close();
-            // wait for any open txns to time out
-            Thread.sleep(DEFAULT_TXN_TIMEOUT_SECONDS*1000+10000);
-            assertTrue("There should be no invalid transactions", txManager.getInvalidSize()==0);
+            // start new connection
+            // conn.createStatement().executeQuery(selectSql);
+            // assertFalse("This transaction should not be on the invalid transactions",
+            // txManager.getCurrentState().getInvalid().contains(currentTx));
         }
     }
     
@@ -157,10 +160,11 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testDelete() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         String selectSQL = "SELECT * FROM " + fullTableName;
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn1.setAutoCommit(false);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
             assertFalse(rs.next());
@@ -196,8 +200,8 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testAutoCommitQuerySingleTable() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn.setAutoCommit(true);
             // verify no rows returned
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName);
@@ -209,8 +213,8 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testAutoCommitQueryMultiTables() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn.setAutoCommit(true);
             // verify no rows returned
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName + " a JOIN " + fullTableName + " b ON (a.long_pk = b.int_pk)");
@@ -222,9 +226,9 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testColConflicts() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         try (Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
+            createTable(conn1, fullTableName);
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(false);
             String selectSql = "SELECT * FROM "+fullTableName;
@@ -295,7 +299,8 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testRowConflictDetected() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
+        Connection conn = DriverManager.getConnection(getUrl());
+        createTable(conn, fullTableName);
         testRowConflicts(fullTableName);
     }
     
@@ -303,8 +308,8 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testNoConflictDetectionForImmutableRows() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         Connection conn = DriverManager.getConnection(getUrl());
+        createTable(conn, fullTableName);
         conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET IMMUTABLE_ROWS=true");
         testRowConflicts(fullTableName);
     }
@@ -496,22 +501,20 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     
     @Test
     public void testCreateTableToBeTransactional() throws Exception {
-
-        String transTableName = generateRandomString();
-        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "CREATE TABLE TEST_TRANSACTIONAL_TABLE (k varchar primary key) transactional=true";
+        String t1 = generateRandomString();
+        String t2 = generateRandomString();
+        String ddl = "CREATE TABLE " + t1 + " (k varchar primary key) transactional=true";
         conn.createStatement().execute(ddl);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PTable table = pconn.getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
-        HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE"));
+        PTable table = pconn.getTable(new PTableKey(null, t1));
+        HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
         
         try {
-            ddl = "ALTER TABLE TEST_TRANSACTIONAL_TABLE SET transactional=false";
+            ddl = "ALTER TABLE " + t1 + " SET transactional=false";
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
@@ -519,15 +522,15 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
         }
 
         HBaseAdmin admin = pconn.getQueryServices().getAdmin();
-        HTableDescriptor desc = new HTableDescriptor(TableName.valueOf("TXN_TEST_EXISTING"));
+        HTableDescriptor desc = new HTableDescriptor(TableName.valueOf(t2));
         desc.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
         admin.createTable(desc);
-        ddl = "CREATE TABLE TXN_TEST_EXISTING (k varchar primary key) transactional=true";
+        ddl = "CREATE TABLE " + t2 + " (k varchar primary key) transactional=true";
         conn.createStatement().execute(ddl);
-        assertEquals(Boolean.TRUE.toString(), admin.getTableDescriptor(TableName.valueOf("TXN_TEST_EXISTING")).getValue(TxConstants.READ_NON_TX_DATA));
+        assertEquals(Boolean.TRUE.toString(), admin.getTableDescriptor(TableName.valueOf(t2)).getValue(TxConstants.READ_NON_TX_DATA));
         
         // Should be ok, as HBase metadata should match existing metadata.
-        ddl = "CREATE TABLE IF NOT EXISTS TEST_TRANSACTIONAL_TABLE (k varchar primary key)"; 
+        ddl = "CREATE TABLE IF NOT EXISTS " + t1 + " (k varchar primary key)"; 
         try {
             conn.createStatement().execute(ddl);
             fail();
@@ -536,17 +539,19 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
         }
         ddl += " transactional=true";
         conn.createStatement().execute(ddl);
-        table = pconn.getTable(new PTableKey(null, "TEST_TRANSACTIONAL_TABLE"));
-        htable = pconn.getQueryServices().getTable(Bytes.toBytes("TEST_TRANSACTIONAL_TABLE"));
+        table = pconn.getTable(new PTableKey(null, t1));
+        htable = pconn.getQueryServices().getTable(Bytes.toBytes(t1));
         assertTrue(table.isTransactional());
         assertTrue(htable.getTableDescriptor().getCoprocessors().contains(PhoenixTransactionalProcessor.class.getName()));
     }
 
+    @Test
     public void testCurrentDate() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
         String selectSql = "SELECT current_date() FROM "+fullTableName;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn.setAutoCommit(false);
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertFalse(rs.next());
@@ -782,10 +787,11 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testInflightUpdateNotSeen() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         String selectSQL = "SELECT * FROM " + fullTableName;
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(true);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
@@ -836,10 +842,11 @@ public class TransactionIT extends BaseHBaseManagedTimeTableReuseIT {
     public void testInflightDeleteNotSeen() throws Exception {
         String transTableName = generateRandomString();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        ensureTableCreated(getUrl(), transTableName, TRANSACTIONAL_DATA_TABLE);
         String selectSQL = "SELECT * FROM " + fullTableName;
-        try (Connection conn1 = DriverManager.getConnection(getUrl()); 
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection conn1 = DriverManager.getConnection(getUrl()); 
                 Connection conn2 = DriverManager.getConnection(getUrl())) {
+            createTable(conn, fullTableName);
             conn1.setAutoCommit(false);
             conn2.setAutoCommit(true);
             ResultSet rs = conn1.createStatement().executeQuery(selectSQL);

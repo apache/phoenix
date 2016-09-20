@@ -32,7 +32,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 
-public class ServerExceptionIT extends BaseHBaseManagedTimeTableReuseIT {
+public class ServerExceptionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testServerExceptionBackToClient() throws Exception {

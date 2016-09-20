@@ -131,6 +131,7 @@ import org.apache.phoenix.util.ByteUtil;
 public interface QueryConstants {
     public static final String NAME_SEPARATOR = ".";
     public static final String NAMESPACE_SEPARATOR = ":";
+    public static final String CHILD_VIEW_INDEX_NAME_SEPARATOR = "#";
     public static final byte[] NAMESPACE_SEPARATOR_BYTES = Bytes.toBytes(NAMESPACE_SEPARATOR);
     public static final byte NAMESPACE_SEPARATOR_BYTE = NAMESPACE_SEPARATOR_BYTES[0];
     public static final String NAME_SEPARATOR_REGEX = "\\" + NAME_SEPARATOR;
@@ -167,6 +168,11 @@ public interface QueryConstants {
 
     public static final byte[] TRUE = new byte[] {1};
     
+    /**
+     * The priority property for an hbase table. This is already in HTD, but older versions of
+     * HBase do not have this, so we re-defined it here. Once Phoenix is HBase-1.3+, we can remote.
+     */
+    public static final String PRIORITY = "PRIORITY";
 
     /**
      * Separator used between variable length keys for a composite key.
@@ -356,5 +362,6 @@ public interface QueryConstants {
     public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
     public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
     public static final String LAST_SCAN = "LAST_SCAN";
+    public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
 
 }

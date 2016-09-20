@@ -34,7 +34,7 @@ import org.junit.Test;
 /**
  * End to end tests for {@link AbsFunction}
  */
-public class AbsFunctionEnd2EndIT extends BaseHBaseManagedTimeTableReuseIT {
+public class AbsFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateRandomString();
     private static final String KEY = "key";

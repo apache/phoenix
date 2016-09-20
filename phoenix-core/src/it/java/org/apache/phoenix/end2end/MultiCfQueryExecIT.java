@@ -52,7 +52,6 @@ public class MultiCfQueryExecIT extends BaseOwnClusterClientManagedTimeIT {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Long.toString(200));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
