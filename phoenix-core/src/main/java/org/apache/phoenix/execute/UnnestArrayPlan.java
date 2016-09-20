@@ -28,7 +28,6 @@ import org.apache.phoenix.expression.BaseSingleExpression;
 import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -45,16 +44,6 @@ public class UnnestArrayPlan extends DelegateQueryPlan {
         super(delegate);
         this.arrayExpression = arrayExpression;
         this.withOrdinality = withOrdinality;
-    }
-
-    @Override
-    public ResultIterator iterator() throws SQLException {
-        return iterator(DefaultParallelScanGrouper.getInstance());
-    }
-
-    @Override
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return new UnnestArrayResultIterator(delegate.iterator(scanGrouper, delegate.getContext().getScan()));
     }
 
     @Override

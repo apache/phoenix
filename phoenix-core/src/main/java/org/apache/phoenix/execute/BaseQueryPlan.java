@@ -200,10 +200,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
 //        byte[] producer = Bytes.toBytes(UUID.randomUUID().toString());
 //        scan.setAttribute(HBaseServer.CALL_QUEUE_PRODUCER_ATTRIB_NAME, producer);
 //    }
+
+    @Override
+    public final ResultIterator iterator() throws SQLException {
+        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance(), null);
+    }
     
     @Override
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, this.context.getScan());
+        return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, null);
     }
 
     @Override
@@ -211,12 +216,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
         return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, scan);
     }
 
-    @Override
-    public final ResultIterator iterator() throws SQLException {
-        return iterator(Collections.<SQLCloseable>emptyList(), DefaultParallelScanGrouper.getInstance(), this.context.getScan());
-    }
-
     public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+         if (scan == null) {
+             scan = context.getScan();
+         }
+         
 		/*
 		 * For aggregate queries, we still need to let the AggregationPlan to
 		 * proceed so that we can give proper aggregates even if there are no
