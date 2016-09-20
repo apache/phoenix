@@ -225,6 +225,17 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertEquals(ROW2,rs.getString(1));
 
             assertFalse(rs.next());
+            
+            // ((where limit) where limit) limit
+            query = "SELECT u.eid FROM (SELECT t.eid FROM (SELECT entity_id eid, b_string b FROM aTable WHERE a_string = '" + B_VALUE + "' LIMIT 5) AS t WHERE t.b = '" + C_VALUE + "' LIMIT 4) AS u WHERE u.eid >= '" + ROW1 + "' LIMIT 3";
+            statement = conn.prepareStatement(query);
+            rs = statement.executeQuery();
+            assertTrue (rs.next());
+            assertEquals(ROW5,rs.getString(1));
+            assertTrue (rs.next());
+            assertEquals(ROW8,rs.getString(1));
+
+            assertFalse(rs.next());
 
             // (count) where
             query = "SELECT t.c FROM (SELECT count(*) c FROM aTable) AS t WHERE t.c > 0";

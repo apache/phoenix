@@ -50,10 +50,6 @@ public class ClientScanPlan extends ClientProcessingPlan {
     }
 
     @Override
-    public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-        return iterator(scanGrouper, delegate.getContext().getScan());
-    }
-    @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         ResultIterator iterator = delegate.iterator(scanGrouper, scan);
         if (where != null) {
