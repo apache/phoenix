@@ -515,7 +515,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 public PhoenixStatement newStatement(PhoenixConnection connection) {
                     return new PhoenixStatement(connection) {
                         @Override
-                        protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector,
+                        public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector,
                                 StatementContext context) throws SQLException {
                             return new PhoenixResultSet(new TenantColumnFilteringIterator(iterator, projector),
                                     projector, context);

@@ -139,4 +139,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      * @param tableName The table to remove stats for
      */
     void invalidateStats(ImmutableBytesPtr tableName);
+    
+    boolean isUpgradeRequired();
+    void upgradeSystemTables(String url, Properties props) throws SQLException;
 }

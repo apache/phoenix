@@ -24,7 +24,9 @@ import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_
 import static org.apache.phoenix.util.UpgradeUtil.SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -33,6 +35,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -41,8 +46,14 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.exception.UpgradeInProgressException;
+import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
@@ -51,7 +62,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class UpgradeIT extends BaseHBaseManagedTimeIT {
@@ -575,6 +585,150 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
                 htable.mutateRow(mutations);
             }
         }
+    }
+    
+    @Test
+    public void testUpgradeRequiredPreventsSQL() throws SQLException {
+        String tableName = generateRandomString();
+        try (Connection conn = getConnection(false, null)) {
+            conn.createStatement().execute(
+                    "CREATE TABLE " + tableName
+                            + " (PK1 VARCHAR NOT NULL, PK2 VARCHAR, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2))");
+            final ConnectionQueryServices delegate = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices servicesWithUpgrade = new DelegateConnectionQueryServices(delegate) {
+                @Override
+                public boolean isUpgradeRequired() {
+                    return true;
+                }
+            };
+            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade,
+                    conn.unwrap(PhoenixConnection.class), HConstants.LATEST_TIMESTAMP)) {
+                try {
+                    phxConn.createStatement().execute(
+                            "CREATE TABLE " + generateRandomString()
+                                    + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2))");
+                    fail("CREATE TABLE should have failed with UpgradeRequiredException");
+                } catch (UpgradeRequiredException expected) {
+
+                }
+                try {
+                    phxConn.createStatement().execute("SELECT * FROM " + tableName);
+                    fail("SELECT should have failed with UpgradeRequiredException");
+                } catch (UpgradeRequiredException expected) {
+
+                }
+                try {
+                    phxConn.createStatement().execute("DELETE FROM " + tableName);
+                    fail("DELETE should have failed with UpgradeRequiredException");
+                } catch (UpgradeRequiredException expected) {
+
+                }
+                try {
+                    phxConn.createStatement().execute(
+                            "CREATE INDEX " + tableName + "_IDX ON " + tableName + " (KV1) INCLUDE (KV2)" );
+                    fail("CREATE INDEX should have failed with UpgradeRequiredException");
+                } catch (UpgradeRequiredException expected) {
+
+                }
+                try {
+                    phxConn.createStatement().execute(
+                            "UPSERT INTO " + tableName + " VALUES ('PK1', 'PK2', 'KV1', 'KV2')" );
+                    fail("UPSERT VALUES should have failed with UpgradeRequiredException");
+                } catch (UpgradeRequiredException expected) {
+
+                }
+            }
+        }
+    }
+    
+    @Test
+    public void testUpgradingConnectionBypassesUpgradeRequiredCheck() throws Exception {
+        String tableName = generateRandomString();
+        try (Connection conn = getConnection(false, null)) {
+            conn.createStatement()
+                    .execute(
+                            "CREATE TABLE "
+                                    + tableName
+                                    + " (PK1 VARCHAR NOT NULL, PK2 VARCHAR, KV1 VARCHAR, KV2 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2))");
+            final ConnectionQueryServices delegate = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices servicesWithUpgrade = new DelegateConnectionQueryServices(delegate) {
+                @Override
+                public boolean isUpgradeRequired() {
+                    return true;
+                }
+            };
+            try (PhoenixConnection phxConn = new PhoenixConnection(servicesWithUpgrade,
+                    conn.unwrap(PhoenixConnection.class), HConstants.LATEST_TIMESTAMP)) {
+                // Because upgrade is required, this SQL should fail.
+                try {
+                    phxConn.createStatement().executeQuery("SELECT * FROM " + tableName);
+                    fail("SELECT should have failed with UpgradeRequiredException");
+                } catch (UpgradeRequiredException expected) {
+
+                }
+                // Marking connection as the one running upgrade should let SQL execute fine.
+                phxConn.setRunningUpgrade(true);
+                phxConn.createStatement().execute(
+                        "UPSERT INTO " + tableName + " VALUES ('PK1', 'PK2', 'KV1', 'KV2')" );
+                phxConn.commit();
+                try (ResultSet rs = phxConn.createStatement().executeQuery("SELECT * FROM " + tableName)) {
+                    assertTrue(rs.next());
+                    assertFalse(rs.next());
+                }
+            }
+        }
+    }
+    
+    @Test
+    public void testConcurrentUpgradeThrowsUprgadeInProgressException() throws Exception {
+        final AtomicBoolean mutexStatus1 = new AtomicBoolean(false);
+        final AtomicBoolean mutexStatus2 = new AtomicBoolean(false);
+        final CountDownLatch latch = new CountDownLatch(2);
+        final AtomicInteger numExceptions = new AtomicInteger(0);
+        try (Connection conn = getConnection(false, null)) {
+            final ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            Thread t1 = new Thread(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions));
+            t1.setDaemon(true);
+            Thread t2 = new Thread(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions));
+            t2.setDaemon(true);;
+            t1.start();
+            t2.start();
+            latch.await();
+            assertTrue("One of the threads should have acquired the mutex", mutexStatus1.get() || mutexStatus2.get());
+            assertNotEquals("One and only one thread should have acquired the mutex ", mutexStatus1.get(), mutexStatus2.get());
+            assertEquals("One and only one thread should have caught UpgradeRequiredException ", 1, numExceptions.get());
+        }
+    }
+    
+    private static class AcquireMutexRunnable implements Runnable {
+        
+        private final AtomicBoolean acquireStatus;
+        private final ConnectionQueryServices services;
+        private final CountDownLatch latch;
+        private final AtomicInteger numExceptions;
+        public AcquireMutexRunnable(AtomicBoolean acquireStatus, ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions) {
+            this.acquireStatus = acquireStatus;
+            this.services = services;
+            this.latch = latch;
+            this.numExceptions = numExceptions;
+        }
+        @Override
+        public void run() {
+            try {
+                ((ConnectionQueryServicesImpl)services).acquireUpgradeMutex(
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0,
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+                acquireStatus.set(true);
+            } catch (UpgradeInProgressException e) {
+                numExceptions.incrementAndGet();
+            }
+            catch (IOException | SQLException ignore) {
+
+            } finally {
+                latch.countDown();
+            }
+        }
+        
     }
 
     private Connection createTenantConnection(String tenantId) throws SQLException {

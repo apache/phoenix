@@ -38,16 +38,23 @@ import org.apache.commons.configuration.SubsetConfiguration;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.TableNotDisabledException;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsSink;
 import org.apache.hadoop.metrics2.MetricsTag;
+import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -93,7 +100,7 @@ public class PhoenixMetricsSink implements MetricsSink {
     private Connection conn;
 
     private String table;
-
+    
     public PhoenixMetricsSink() {
         LOG.info("Writing tracing metrics to phoenix table");
 
@@ -133,14 +140,25 @@ public class PhoenixMetricsSink implements MetricsSink {
             }
         }
     }
-
+    
     private void initializeInternal(Connection conn, String tableName) throws SQLException {
         this.conn = conn;
-
         // ensure that the target table already exists
-        createTable(conn, tableName);
+        if (!traceTableExists(conn, tableName)) {
+            createTable(conn, tableName);
+        }
+        this.table = tableName;
     }
-
+    
+    private boolean traceTableExists(Connection conn, String traceTableName) throws SQLException {
+        try {
+            PhoenixRuntime.getTable(conn, traceTableName);
+            return true;
+        } catch (TableNotFoundException e) {
+            return false;
+        }
+    }
+    
     /**
      * Used for <b>TESTING ONLY</b>
      * Initialize the connection and setup the table to use the
@@ -183,10 +201,8 @@ public class PhoenixMetricsSink implements MetricsSink {
                         // tables created as transactional tables, make these table non
                         // transactional
                         PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
-;
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
-        this.table = table;
     }
 
     @Override
@@ -281,7 +297,12 @@ public class PhoenixMetricsSink implements MetricsSink {
             for (String tag : variableValues) {
                 ps.setString(index++, tag);
             }
-            ps.execute();
+            // Not going through the standard route of using statement.execute() as that code path
+            // is blocked if the metadata hasn't been been upgraded to the new minor release. 
+            MutationPlan plan = ps.unwrap(PhoenixPreparedStatement.class).compileMutation(stmt);
+            MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
+            MutationState newState = plan.execute();
+            state.join(newState);
         } catch (SQLException e) {
             LOG.error("Could not write metric: \n" + record + " to prepared statement:\n" + stmt,
                     e);
