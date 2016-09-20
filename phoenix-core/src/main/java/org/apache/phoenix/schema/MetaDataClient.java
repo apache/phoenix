@@ -3406,7 +3406,7 @@ public class MetaDataClient {
                                 String indexTenantId = entry.getKey();
                                 Properties props = new Properties(connection.getClientInfo());
                                 props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, indexTenantId);
-                                try (PhoenixConnection tenantConn = DriverManager.getConnection(connection.getURL(), props).unwrap(PhoenixConnection.class)) {
+                                try (PhoenixConnection tenantConn = new PhoenixConnection(connection, connection.getQueryServices(), props)) {
                                     PostDDLCompiler dropCompiler = new PostDDLCompiler(tenantConn);
                                     tenantConn.getQueryServices().updateData(dropCompiler.compile(entry.getValue(), null, null, Collections.<PColumn>emptyList(), ts));
                                 }

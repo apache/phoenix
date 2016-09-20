@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -52,6 +53,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.PhoenixMRJobUtil;
+import org.apache.phoenix.util.UpgradeUtil;
 import org.apache.phoenix.util.PhoenixMRJobUtil.MR_SCHEDULER_TYPE;
 import org.apache.phoenix.util.ZKBasedMasterElectionUtil;
 import org.codehaus.jettison.json.JSONArray;
@@ -158,6 +160,8 @@ public class PhoenixMRJobSubmitter {
     }
 
     public Map<String, PhoenixAsyncIndex> getCandidateJobs() throws SQLException {
+        Properties props = new Properties();
+        UpgradeUtil.doNotUpgradeOnFirstConnection(props);
         Connection con = DriverManager.getConnection("jdbc:phoenix:" + zkQuorum);
         Statement s = con.createStatement();
         ResultSet rs = s.executeQuery(CANDIDATE_INDEX_INFO_QUERY);

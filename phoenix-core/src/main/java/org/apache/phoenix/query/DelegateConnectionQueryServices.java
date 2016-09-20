@@ -345,4 +345,14 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     public void invalidateStats(ImmutableBytesPtr tableName) {
         getDelegate().invalidateStats(tableName);
     }
+
+    @Override
+    public boolean isUpgradeRequired() {
+        return getDelegate().isUpgradeRequired();
+    }
+
+    @Override
+    public void upgradeSystemTables(String url, Properties props) throws SQLException {
+        getDelegate().upgradeSystemTables(url, props);
+    }
 }

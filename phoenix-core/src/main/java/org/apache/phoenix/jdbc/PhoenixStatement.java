@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
@@ -77,6 +78,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
@@ -102,6 +104,7 @@ import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
+import org.apache.phoenix.parse.ExecuteUpgradeStatement;
 import org.apache.phoenix.parse.ExplainStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -189,7 +192,8 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     public enum Operation {
         QUERY("queried", false),
         DELETE("deleted", true),
-        UPSERT("upserted", true);
+        UPSERT("upserted", true),
+        UPGRADE("upgrade", true);
         
         private final String toString;
         private final boolean isMutation;
@@ -238,7 +242,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         return resultSets;
     }
     
-    protected PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
+    public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
         return new PhoenixResultSet(iterator, projector, context);
     }
     
@@ -265,7 +269,12 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     public PhoenixResultSet call() throws SQLException {
                     final long startTime = System.currentTimeMillis();
                     try {
-						QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
+                        PhoenixConnection conn = getConnection();
+                        if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
+                                && stmt.getOperation() != Operation.UPGRADE) {
+                            throw new UpgradeRequiredException();
+                        }
+                        QueryPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
                         // Send mutations to hbase, so they are visible to subsequent reads.
                         // Use original plan for data table so that data and immutable indexes will be sent
                         // TODO: for joins, we need to iterate through all tables, but we need the original table,
@@ -330,6 +339,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         @Override
                             public Integer call() throws SQLException {
                             try {
+                                PhoenixConnection conn = getConnection();
+                                if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
+                                        && stmt.getOperation() != Operation.UPGRADE) {
+                                    throw new UpgradeRequiredException();
+                                }
                                 MutationState state = connection.getMutationState();
                                 MutationPlan plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null && plan.getTargetRef().getTable().isTransactional()) {
@@ -1032,6 +1046,53 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
 
     }
+    
+    private static class ExecutableExecuteUpgradeStatement extends ExecuteUpgradeStatement implements CompilableStatement {
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            return new MutationPlan() {
+                
+                @Override
+                public Set<TableRef> getSourceRefs() {
+                    return Collections.emptySet();
+                }
+                
+                @Override
+                public ParameterMetaData getParameterMetaData() {
+                    return PhoenixParameterMetaData.EMPTY_PARAMETER_META_DATA;
+                }
+                
+                @Override
+                public Operation getOperation() {
+                    return Operation.UPGRADE;
+                }
+                
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("EXECUTE UPGRADE"));
+                }
+                
+                @Override
+                public StatementContext getContext() {
+                    return new StatementContext(stmt);
+                }
+                
+                @Override
+                public TableRef getTargetRef() {
+                    return TableRef.EMPTY_TABLE_REF;
+                }
+                
+                @Override
+                public MutationState execute() throws SQLException {
+                    PhoenixConnection phxConn = stmt.getConnection();
+                    Properties props = new Properties();
+                    phxConn.getQueryServices().upgradeSystemTables(phxConn.getURL(), props);
+                    return MutationState.emptyMutationState(-1, phxConn);
+                }
+            };
+        }
+    }
 
     private static class ExecutableAddColumnStatement extends AddColumnStatement implements CompilableStatement {
 
@@ -1208,6 +1269,11 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
             return new ExecutableUpdateStatisticsStatement(table, scope, props);
+        }
+        
+        @Override
+        public ExecuteUpgradeStatement executeUpgrade() {
+            return new ExecutableExecuteUpgradeStatement();
         }
     }
     

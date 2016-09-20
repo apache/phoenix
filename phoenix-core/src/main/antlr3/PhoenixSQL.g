@@ -132,6 +132,8 @@ tokens
     ROW = 'row';
     ROWS = 'rows';
     ONLY = 'only';
+    EXECUTE = 'execute';
+    UPGRADE = 'upgrade';
 }
 
 
@@ -417,6 +419,7 @@ oneStatement returns [BindableStatement ret]
     |	s=drop_schema_node
     |	s=use_schema_node
     |   s=update_statistics_node
+    |   s=execute_upgrade_node
     |   s=explain_node) { $ret = s; }
     ;
 finally{ contextStack.pop(); }
@@ -568,7 +571,7 @@ trace_node returns [TraceStatement ret]
        {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
     ;
 
-// Parse a trace statement.
+// Parse a create function statement.
 create_function_node returns [CreateFunctionStatement ret]
     :   CREATE (OR replace=REPLACE)? (temp=TEMPORARY)? FUNCTION function=identifier 
        (LPAREN args=zero_or_more_data_types RPAREN)
@@ -609,6 +612,11 @@ alter_table_node returns [AlterTableStatement ret]
 update_statistics_node returns [UpdateStatisticsStatement ret]
 	:   UPDATE STATISTICS t=from_table_name (s=INDEX | s=ALL | s=COLUMNS)? (SET (p=properties))?
 		{ret = factory.updateStatistics(factory.namedTable(null, t), s == null ? StatisticsCollectionScope.getDefault() : StatisticsCollectionScope.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), p);}
+	;
+
+execute_upgrade_node returns [ExecuteUpgradeStatement ret]
+	:   EXECUTE UPGRADE
+		{ret = factory.executeUpgrade();}
 	;
 
 prop_name returns [String ret]

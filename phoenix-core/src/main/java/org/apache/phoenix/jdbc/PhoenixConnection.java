@@ -161,6 +161,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private ParallelIteratorFactory parallelIteratorFactory;
     private final LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue;
     private TableResultIteratorFactory tableResultIteratorFactory;
+    private boolean isRunningUpgrade;
     
     static {
         Tracing.addTraceMetricsSource();
@@ -172,8 +173,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return props;
     }
 
-    public PhoenixConnection(PhoenixConnection connection, boolean isDescRowKeyOrderUpgrade) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState(), isDescRowKeyOrderUpgrade);
+    public PhoenixConnection(PhoenixConnection connection, boolean isDescRowKeyOrderUpgrade, boolean isRunningUpgrade) throws SQLException {
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState(), isDescRowKeyOrderUpgrade, isRunningUpgrade);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -181,11 +182,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     public PhoenixConnection(PhoenixConnection connection) throws SQLException {
-        this(connection, connection.isDescVarLengthRowKeyUpgrade());
+        this(connection, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade());
     }
     
     public PhoenixConnection(PhoenixConnection connection, MutationState mutationState) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), mutationState, connection.isDescVarLengthRowKeyUpgrade());
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), mutationState, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade());
     }
     
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
@@ -193,7 +194,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState(), connection.isDescVarLengthRowKeyUpgrade());
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState(), connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade());
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -201,14 +202,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
-        this(services, url, info, metaData, null, false);
+        this(services, url, info, metaData, null, false, false);
     }
     
     public PhoenixConnection(PhoenixConnection connection, ConnectionQueryServices services, Properties info) throws SQLException {
-        this(services, connection.url, info, connection.metaData, null, connection.isDescVarLengthRowKeyUpgrade());
+        this(services, connection.url, info, connection.metaData, null, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade());
     }
     
-    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, MutationState mutationState, boolean isDescVarLengthRowKeyUpgrade) throws SQLException {
+    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, MutationState mutationState, boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade) throws SQLException {
         this.url = url;
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
         // Copy so client cannot change
@@ -294,6 +295,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
         this.scannerQueue = new LinkedBlockingQueue<>();
         this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
+        this.isRunningUpgrade = isRunningUpgrade;
         GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
     }
     
@@ -1055,4 +1057,13 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         getQueryServices().removeSchema(schema, schemaTimeStamp);
 
     }
+    
+    public boolean isRunningUpgrade() {
+        return isRunningUpgrade;
+    }
+    
+    public void setRunningUpgrade(boolean isRunningUpgrade) {
+        this.isRunningUpgrade = isRunningUpgrade;
+    }
+    
 }

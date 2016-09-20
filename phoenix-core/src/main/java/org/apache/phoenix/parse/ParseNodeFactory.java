@@ -389,6 +389,10 @@ public class ParseNodeFactory {
     public UpdateStatisticsStatement updateStatistics(NamedTableNode table, StatisticsCollectionScope scope, Map<String,Object> props) {
       return new UpdateStatisticsStatement(table, scope, props);
     }
+    
+    public ExecuteUpgradeStatement executeUpgrade() {
+        return new ExecuteUpgradeStatement();
+    }
 
 
     public FunctionParseNode functionDistinct(String name, List<ParseNode> args) {
