@@ -1,7 +1,9 @@
 package org.apache.phoenix.calcite;
 
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -127,6 +129,9 @@ public class CalciteUtils {
         final boolean isArrayType = sqlTypeName == SqlTypeName.ARRAY;
         if (isArrayType) {
             sqlTypeName = ((ArraySqlType) relDataType).getComponentType().getSqlTypeName();
+        }
+        if (SqlTypeName.INTERVAL_TYPES.contains(sqlTypeName)) {
+            sqlTypeName = SqlTypeName.DECIMAL;
         }
         final int ordinal = sqlTypeName.getJdbcOrdinal();
         if (ordinal >= PDataType.ARRAY_TYPE_BASE) {
@@ -605,6 +610,8 @@ public class CalciteUtils {
 				    o = ((NlsString) o).getValue();
 				} else if (o instanceof ByteString) {
 				    o = ((ByteString) o).getBytes();
+				} else if (o instanceof GregorianCalendar) {
+				    o = new Timestamp(((GregorianCalendar) o).getTimeInMillis());
 				}
 				try {
                     return LiteralExpression.newConstant(o, targetType);
