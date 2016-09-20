@@ -650,4 +650,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public void invalidateStats(ImmutableBytesPtr tableName) {
         this.tableStatsCache.invalidate(Objects.requireNonNull(tableName));
     }
+
+    @Override
+    public void upgradeSystemTables(String url, Properties props) throws SQLException {}
+
+    @Override
+    public boolean isUpgradeRequired() {
+        return false;
+    }
 }

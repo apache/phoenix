@@ -310,7 +310,7 @@ public final class QueryUtil {
     }
 
     /**
-     * @return {@link PhoenixConnection} with NO_UPGRADE_ATTRIB set so that we don't initiate server upgrade
+     * @return {@link PhoenixConnection} with {@value UpgradeUtil#RUN_UPGRADE} set so that we don't initiate server upgrade
      */
     public static Connection getConnectionOnServer(Configuration conf) throws ClassNotFoundException,
             SQLException {
@@ -318,12 +318,12 @@ public final class QueryUtil {
     }
 
     /**
-     * @return {@link PhoenixConnection} with NO_UPGRADE_ATTRIB set so that we don't initiate server upgrade
+     * @return {@link PhoenixConnection} with {@value UpgradeUtil#DO_NOT_UPGRADE} set so that we don't initiate metadata upgrade.
      */
     public static Connection getConnectionOnServer(Properties props, Configuration conf)
             throws ClassNotFoundException,
             SQLException {
-        props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
+        UpgradeUtil.doNotUpgradeOnFirstConnection(props);
         return getConnection(props, conf);
     }
 

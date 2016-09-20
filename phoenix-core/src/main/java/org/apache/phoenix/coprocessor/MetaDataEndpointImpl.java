@@ -79,7 +79,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -127,6 +126,7 @@ import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.GlobalCache.FunctionBytesPtr;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
@@ -162,8 +162,10 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -212,7 +214,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -1433,12 +1434,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (parentTable!=null && parentTable.getAutoPartitionSeqName()!=null) {
                     long autoPartitionNum = 1;
                     final Properties props = new Properties();
-                    props.setProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB, Boolean.TRUE.toString());
+                    UpgradeUtil.doNotUpgradeOnFirstConnection(props);
                     try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
-                            Statement stmt = connection.createStatement()) {
+                        Statement stmt = connection.createStatement()) {
                         String seqName = parentTable.getAutoPartitionSeqName();
+                        // Not going through the standard route of using statement.execute() as that code path
+                        // is blocked if the metadata hasn't been been upgraded to the new minor release.
                         String seqNextValueSql = String.format("SELECT NEXT VALUE FOR %s", seqName);
-                        ResultSet rs = stmt.executeQuery(seqNextValueSql);
+                        PhoenixStatement ps = stmt.unwrap(PhoenixStatement.class);
+                        QueryPlan plan = ps.compileQuery(seqNextValueSql);
+                        ResultIterator resultIterator = plan.iterator();
+                        PhoenixResultSet rs = ps.newResultSet(resultIterator, plan.getProjector(), plan.getContext());
                         rs.next();
                         autoPartitionNum = rs.getLong(1);
                     }
