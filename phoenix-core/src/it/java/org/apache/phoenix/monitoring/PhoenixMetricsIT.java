@@ -46,7 +46,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.QueryServices;
@@ -61,7 +61,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-public class PhoenixMetricsIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     private static final List<String> mutationMetricsToSkip = Lists
             .newArrayList(MetricType.MUTATION_COMMIT_TIME.name());

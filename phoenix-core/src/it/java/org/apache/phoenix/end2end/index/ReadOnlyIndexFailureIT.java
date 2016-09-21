@@ -43,7 +43,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -77,7 +77,7 @@ import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class ReadOnlyIndexFailureIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class ReadOnlyIndexFailureIT extends BaseOwnClusterIT {
     public static volatile boolean FAIL_WRITE = false;
     public static final String INDEX_NAME = "IDX";
 

@@ -250,9 +250,6 @@
             <execution>
               <id>ParallelStatsDisabledTest</id>
               <configuration>
-		<!--includes>
-		  <include>TenantIdTypeIT</include>
-		</includes-->
                 <encoding>UTF-8</encoding>
                 <forkCount>${numForkedIT}</forkCount>
                 <runOrder>alphabetical</runOrder>

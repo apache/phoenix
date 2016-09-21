@@ -43,7 +43,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class RenewLeaseIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class RenewLeaseIT extends BaseOwnClusterIT {
     private static final long RPC_TIMEOUT = 2000;
     private static volatile boolean SLEEP_NOW = false;
     private static final String TABLE_NAME = "FOO_BAR";

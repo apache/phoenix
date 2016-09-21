@@ -17,13 +17,12 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.STABLE_NAME;
+import static org.apache.phoenix.util.TestUtil.STABLE_PK_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.analyzeTableColumns;
 import static org.apache.phoenix.util.TestUtil.analyzeTableIndex;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
-import static org.apache.phoenix.util.TestUtil.getSplits;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
@@ -31,8 +30,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Scan;
@@ -40,18 +40,16 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
+import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
+import com.google.common.base.Joiner;
 
 
-public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
 
-    private static final String STABLE_INDEX = "STABLE_INDEX";
     protected static final byte[] KMIN  = new byte[] {'!'};
     protected static final byte[] KMIN2  = new byte[] {'.'};
     protected static final byte[] K1  = new byte[] {'a'};
@@ -66,27 +64,39 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
     protected static final byte[] KMAX2  = new byte[] {'z'};
     protected static final byte[] KR = new byte[] { 'r' };
     protected static final byte[] KP = new byte[] { 'p' };
+
+    private String tableName;
+    private String indexName;
     
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Must update config before starting server
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    @Before
+    public void generateTableNames() {
+        tableName = "T_" + generateRandomString();
+        indexName = "I_" + generateRandomString();
+    }
+    
+    private List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {
+        return TestUtil.getSplits(conn, tableName, STABLE_PK_NAME, lowerRange, upperRange, null, "COUNT(*)");
     }
 
     @Test
     public void testGetSplits() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
-        initTableValues(conn);
-        
-        PreparedStatement stmt = conn.prepareStatement("UPDATE STATISTICS STABLE");
+        byte[][] splits = new byte[][] {K3,K4,K9,K11};
+        createTable(conn, splits);
+        PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " VALUES (?, ?)");
+        stmt.setString(1, new String(KMIN));
+        stmt.setInt(2, 1);
         stmt.execute();
+        stmt.setString(1, new String(KMAX));
+        stmt.setInt(2, 2);
+        stmt.execute();
+        conn.commit();
+        
+        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
         
         List<KeyRange> keyRanges;
         
-        keyRanges = getAllSplits(conn);
+        keyRanges = getAllSplits(conn, tableName);
         assertEquals("Unexpected number of splits: " + keyRanges, 7, keyRanges.size());
         assertEquals(newKeyRange(KeyRange.UNBOUND, KMIN), keyRanges.get(0));
         assertEquals(newKeyRange(KMIN, K3), keyRanges.get(1));
@@ -116,10 +126,10 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testServerNameOnScan() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
         byte[][] splits = new byte[][] { K3, K9, KR };
-        ensureTableCreated(getUrl(), STABLE_NAME, STABLE_NAME, splits);
+        createTable(conn, splits);
         
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        ResultSet rs = stmt.executeQuery("SELECT * FROM " + STABLE_NAME + " LIMIT 1");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " LIMIT 1");
         rs.next();
         QueryPlan plan = stmt.getQueryPlan();
         List<List<Scan>> nestedScans = plan.getScans();
@@ -138,56 +148,57 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
     public void testGuidePostsLifeCycle() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), TEST_PROPERTIES);
         byte[][] splits = new byte[][] { K3, K9, KR };
-        ensureTableCreated(getUrl(), STABLE_NAME, STABLE_NAME, splits);
+        createTable(conn, splits);
+        
         // create index
-        conn.createStatement().execute("CREATE INDEX " + STABLE_INDEX + " ON " + STABLE_NAME + "( \"value\")");
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "( \"value\")");
         // before upserting
-        List<KeyRange> keyRanges = getAllSplits(conn);
+        List<KeyRange> keyRanges = getAllSplits(conn, tableName);
         assertEquals(4, keyRanges.size());
         upsert(conn, new byte[][] { KMIN, K4, K11 });
         // Analyze table alone
-        analyzeTableColumns(conn);
-        keyRanges = getAllSplits(conn);
+        analyzeTableColumns(conn, tableName);
+        keyRanges = getAllSplits(conn, tableName);
         assertEquals(7, keyRanges.size());
         // Get all splits on the index table before calling analyze on the index table
-        List<KeyRange> indexSplits = getAllSplits(conn, STABLE_INDEX);
+        List<KeyRange> indexSplits = getAllSplits(conn, indexName);
         assertEquals(1, indexSplits.size());
         // Analyze the index table alone
-        analyzeTableIndex(conn, STABLE_NAME);
+        analyzeTableIndex(conn, tableName);
         // check the splits of the main table 
-        keyRanges = getAllSplits(conn);
+        keyRanges = getAllSplits(conn, tableName);
         assertEquals(7, keyRanges.size());
         // check the splits on the index table
-        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        indexSplits = getAllSplits(conn, indexName);
         assertEquals(4, indexSplits.size());
         upsert(conn, new byte[][] { KMIN2, K5, K12 });
         // Update the stats for both the table and the index table
-        analyzeTable(conn);
-        keyRanges = getAllSplits(conn);
+        analyzeTable(conn, tableName);
+        keyRanges = getAllSplits(conn, tableName);
         assertEquals(10, keyRanges.size());
         // the above analyze should have udpated the index splits also
-        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        indexSplits = getAllSplits(conn, indexName);
         assertEquals(7, indexSplits.size());
         upsert(conn, new byte[][] { K1, K6, KP });
         // Update only the table
-        analyzeTableColumns(conn);
-        keyRanges = getAllSplits(conn);
+        analyzeTableColumns(conn, tableName);
+        keyRanges = getAllSplits(conn, tableName);
         assertEquals(13, keyRanges.size());
         // No change to the index splits
-        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        indexSplits = getAllSplits(conn, indexName);
         assertEquals(7, indexSplits.size());
-        analyzeTableIndex(conn, STABLE_NAME);
-        indexSplits = getAllSplits(conn, STABLE_INDEX);
+        analyzeTableIndex(conn, tableName);
+        indexSplits = getAllSplits(conn, indexName);
         // the above analyze should have udpated the index splits only
         assertEquals(10, indexSplits.size());
         // No change in main table splits
-        keyRanges = getAllSplits(conn);
+        keyRanges = getAllSplits(conn, tableName);
         assertEquals(13, keyRanges.size());
         conn.close();
     }
 
-    private static void upsert(Connection conn, byte[][] val) throws Exception {
-        PreparedStatement stmt = conn.prepareStatement("upsert into " + STABLE_NAME + " VALUES (?, ?)");
+    private void upsert(Connection conn, byte[][] val) throws Exception {
+        PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " VALUES (?, ?)");
         stmt.setString(1, new String(val[0]));
         stmt.setInt(2, 1);
         stmt.execute();
@@ -204,16 +215,13 @@ public class ParallelIteratorsIT extends BaseOwnClusterHBaseManagedTimeIT {
         return PChar.INSTANCE.getKeyRange(lowerRange, true, upperRange, false);
     }
     
-    private static void initTableValues(Connection conn) throws Exception {
-        byte[][] splits = new byte[][] {K3,K4,K9,K11};
-        ensureTableCreated(getUrl(),STABLE_NAME, STABLE_NAME, splits);
-        PreparedStatement stmt = conn.prepareStatement("upsert into " + STABLE_NAME + " VALUES (?, ?)");
-        stmt.setString(1, new String(KMIN));
-        stmt.setInt(2, 1);
+    private void createTable (Connection conn, byte[][] splits) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement("create table " + tableName +
+                "   (id char(1) not null primary key,\n" +
+                "    \"value\" integer) SPLIT ON (" + Joiner.on(',').join(Collections.nCopies(splits.length, "?")) + ")");
+        for (int i = 0; i < splits.length; i++) {
+            stmt.setBytes(i+1, splits[i]);
+        }
         stmt.execute();
-        stmt.setString(1, new String(KMAX));
-        stmt.setInt(2, 2);
-        stmt.execute();
-        conn.commit();
     }
 }

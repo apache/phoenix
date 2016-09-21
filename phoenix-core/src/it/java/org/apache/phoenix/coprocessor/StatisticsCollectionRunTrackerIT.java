@@ -32,18 +32,26 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class StatisticsCollectionRunTrackerIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
+    private static final StatisticsCollectionRunTracker tracker = StatisticsCollectionRunTracker
+            .getInstance(new Configuration());
+
+    private String fullTableName;
+
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
@@ -53,9 +61,16 @@ public class StatisticsCollectionRunTrackerIT extends BaseOwnClusterHBaseManaged
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
+    @Before
+    public void generateTableNames() {
+        String schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
+        String tableName = "T_" + generateRandomString();
+        fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+    }
+
     @Test
     public void testStateBeforeAndAfterUpdateStatsCommand() throws Exception {
-        String tableName = "testStateBeforeAndAfterUpdateStatsCommand".toUpperCase();
+        String tableName = fullTableName;
         HRegionInfo regionInfo = createTableAndGetRegion(tableName);
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
@@ -70,7 +85,7 @@ public class StatisticsCollectionRunTrackerIT extends BaseOwnClusterHBaseManaged
     
     @Test
     public void testStateBeforeAndAfterMajorCompaction() throws Exception {
-        String tableName = "testStateBeforeAndAfterMajorCompaction".toUpperCase();
+        String tableName = fullTableName;
         HRegionInfo regionInfo = createTableAndGetRegion(tableName);
         StatisticsCollectionRunTracker tracker =
                 StatisticsCollectionRunTracker.getInstance(new Configuration());
@@ -98,7 +113,7 @@ public class StatisticsCollectionRunTrackerIT extends BaseOwnClusterHBaseManaged
     
     @Test
     public void testMajorCompactionPreventsUpdateStatsFromRunning() throws Exception {
-        String tableName = "testMajorCompactionPreventsUpdateStatsFromRunning".toUpperCase();
+        String tableName = fullTableName;
         HRegionInfo regionInfo = createTableAndGetRegion(tableName);
         // simulate stats collection via major compaction by marking the region as compacting in the tracker
         markRegionAsCompacting(regionInfo);
@@ -111,7 +126,7 @@ public class StatisticsCollectionRunTrackerIT extends BaseOwnClusterHBaseManaged
     
     @Test
     public void testUpdateStatsPreventsAnotherUpdateStatsFromRunning() throws Exception {
-        String tableName = "testUpdateStatsPreventsAnotherUpdateStatsFromRunning".toUpperCase();
+        String tableName = fullTableName;
         HRegionInfo regionInfo = createTableAndGetRegion(tableName);
         markRunningUpdateStats(regionInfo);
         Assert.assertEquals("Row count didn't match", CONCURRENT_UPDATE_STATS_ROW_COUNT,

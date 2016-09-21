@@ -65,12 +65,13 @@ import org.apache.phoenix.schema.ValueRangeExcpetion;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
+public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     
     protected static final String TENANT_ID = "ZZTop";
     private static String url;
@@ -189,6 +190,10 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT{
     private static String GETY_CLASSNAME_PROGRAM = getProgram(GETY_CLASSNAME, GETY_EVALUATE_METHOD, "return PInteger.INSTANCE;");
     private static Properties EMPTY_PROPS = new Properties();
     
+
+    @Override
+    @After
+    public void cleanUpAfterTest() throws Exception {}
 
     private static String getProgram(String className, String evaluateMethod, String returnType) {
         return new StringBuffer()

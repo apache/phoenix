@@ -49,7 +49,6 @@ import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
@@ -339,9 +338,6 @@ public abstract class BaseTest {
                 "    \"1\".\"value\" integer,\n" +
                 "    \"1\".\"_blah^\" varchar)"
                 );
-        builder.put(KEYONLY_NAME,"create table " + KEYONLY_NAME +
-                "   (i1 integer not null, i2 integer not null\n" +
-                "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
         builder.put(MDTEST_NAME,"create table " + MDTEST_NAME +
                 "   (id char(1) primary key,\n" +
                 "    a.col1 integer,\n" +
