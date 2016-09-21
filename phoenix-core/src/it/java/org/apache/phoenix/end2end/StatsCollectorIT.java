@@ -40,8 +40,8 @@ import java.util.Random;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -77,8 +77,8 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
         props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
         props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
+        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
@@ -347,16 +347,8 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         return stmt;
     }
 
-    private void compactTable(Connection conn, String tableName) throws IOException, InterruptedException, SQLException {
-        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        HBaseAdmin admin = services.getAdmin();
-        try {
-            admin.flush(tableName);
-            admin.majorCompact(tableName);
-            Thread.sleep(10000); // FIXME: how do we know when compaction is done?
-        } finally {
-            admin.close();
-        }
+    private void compactTable(Connection conn, String tableName) throws Exception {
+        TestUtil.doMajorCompaction(conn, tableName);
     }
     
     @Test
@@ -374,9 +366,6 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         Connection conn;
         PreparedStatement stmt;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        if (minStatsUpdateFreq != null) {
-            props.setProperty(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB, minStatsUpdateFreq.toString());
-        }
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER, w INTEGER) "
                 + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
@@ -391,11 +380,11 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         
         compactTable(conn, tableName);
         if (minStatsUpdateFreq == null) {
-            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
-        }
-        // Confirm that when we have a non zero MIN_STATS_UPDATE_FREQ_MS_ATTRIB, after we run
-        // UPDATATE STATISTICS, the new statistics are faulted in as expected.
-        if (minStatsUpdateFreq != null) {
+            ImmutableBytesPtr ptr = new ImmutableBytesPtr(Bytes.toBytes(tableName));
+            conn.unwrap(PhoenixConnection.class).getQueryServices().invalidateStats(ptr);
+        } else {
+            // Confirm that when we have a non zero MIN_STATS_UPDATE_FREQ_MS_ATTRIB, after we run
+            // UPDATATE STATISTICS, the new statistics are faulted in as expected.
             List<KeyRange>keyRanges = getAllSplits(conn, tableName);
             assertNotEquals(nRows+1, keyRanges.size());
             // If we've set MIN_STATS_UPDATE_FREQ_MS_ATTRIB, an UPDATE STATISTICS will invalidate the cache
@@ -412,7 +401,8 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         
         compactTable(conn, tableName);
         if (minStatsUpdateFreq == null) {
-            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            ImmutableBytesPtr ptr = new ImmutableBytesPtr(Bytes.toBytes(tableName));
+            conn.unwrap(PhoenixConnection.class).getQueryServices().invalidateStats(ptr);
         }
         
         keyRanges = getAllSplits(conn, tableName);
@@ -429,7 +419,6 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
                 + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE PHYSICAL_NAME='" + tableName + "'");
         rs.next();
         assertEquals(nRows - nDeletedRows, rs.getLong(1));
-        
     }
 
     @Test
