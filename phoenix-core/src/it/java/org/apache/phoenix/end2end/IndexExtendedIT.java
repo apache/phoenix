@@ -64,7 +64,7 @@ import com.google.common.collect.Maps;
  * Tests for the {@link IndexTool}
  */
 @RunWith(Parameterized.class)
-public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class IndexExtendedIT extends BaseOwnClusterIT {
     private final boolean localIndex;
     private final boolean transactional;
     private final boolean directApi;

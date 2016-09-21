@@ -43,7 +43,7 @@ import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -53,7 +53,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-public class PhoenixServerRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class PhoenixServerRpcIT extends BaseOwnClusterIT {
 
     private static final String SCHEMA_NAME = "S";
     private static final String INDEX_TABLE_NAME = "I";

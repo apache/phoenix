@@ -34,6 +34,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -62,24 +64,30 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
+import org.junit.Before;
 import org.junit.Test;
 
-public class UpgradeIT extends BaseHBaseManagedTimeIT {
+public class UpgradeIT extends ParallelStatsDisabledIT {
 
-    private static String TENANT_ID = "tenantId";
+    private String tenantId;
+    
+    @Before
+    public void generateTenantId() {
+        tenantId = "T_" + generateRandomString();
+    }
 
     @Test
     public void testUpgradeForTenantViewWithSameColumnsAsBaseTable() throws Exception {
         String tableWithViewName = generateRandomString();
         String viewTableName = generateRandomString();
-        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
+        testViewUpgrade(true, tenantId, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.EQUAL);
+        testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "3", viewTableName + "SCHEMA", viewTableName + "3",
+        testViewUpgrade(true, tenantId, null, tableWithViewName + "3", viewTableName + "SCHEMA", viewTableName + "3",
             ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "4", viewTableName + "SCHEMA", viewTableName + "4",
+        testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "4", viewTableName + "SCHEMA", viewTableName + "4",
             ColumnDiff.EQUAL);
-        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
+        testViewUpgrade(true, tenantId, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.EQUAL);
     }
 
@@ -87,14 +95,14 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
     public void testUpgradeForTenantViewWithMoreColumnsThanBaseTable() throws Exception {
         String tableWithViewName = generateRandomString();
         String viewTableName = generateRandomString();
-        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
+        testViewUpgrade(true, tenantId, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
+        testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3",
+        testViewUpgrade(true, tenantId, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3",
             ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
+        testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
             ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
+        testViewUpgrade(true, tenantId, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.MORE);
     }
 
@@ -130,14 +138,14 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
     public void testSettingBaseColumnCountWhenBaseTableColumnDropped() throws Exception {
         String tableWithViewName = generateRandomString();
         String viewTableName = generateRandomString();
-        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
+        testViewUpgrade(true, tenantId, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
+        testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.LESS);
-        testViewUpgrade(true, TENANT_ID, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3",
+        testViewUpgrade(true, tenantId, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3",
             ColumnDiff.LESS);
-        testViewUpgrade(true, TENANT_ID, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
+        testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "4", "VIEWSCHEMA", viewTableName + "4",
             ColumnDiff.LESS);
-        testViewUpgrade(true, TENANT_ID, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
+        testViewUpgrade(true, tenantId, "SAMESCHEMA", tableWithViewName + "5", "SAMESCHEMA", viewTableName + "5",
             ColumnDiff.LESS);
     }
 
@@ -385,19 +393,24 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
 
     @Test
     public void testSettingBaseColumnCountForMultipleViewsOnTable() throws Exception {
-        String baseSchema = "XYZ";
-        String baseTable = "BASE_TABLE";
+        String baseSchema = "S_" + generateRandomString();
+        String baseTable = "T_" + generateRandomString();
         String fullBaseTableName = SchemaUtil.getTableName(baseSchema, baseTable);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + fullBaseTableName + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 INTEGER, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true";
             conn.createStatement().execute(baseTableDDL);
 
-            for (int i = 1; i <=2; i++) {
+            String[] tenants = new String[] {"T_" + generateRandomString(), "T_" + generateRandomString()};
+            Collections.sort(Arrays.asList(tenants));
+            String[] tenantViews = new String[] {"V_" + generateRandomString(), "V_" + generateRandomString(), "V_" + generateRandomString()};
+            Collections.sort(Arrays.asList(tenantViews));
+            String[] globalViews = new String[] {"G_" + generateRandomString(), "G_" + generateRandomString(), "G_" + generateRandomString()};
+            Collections.sort(Arrays.asList(globalViews));
+            for (int i = 0; i < 2; i++) {
                 // Create views for tenants;
-                String tenant = "tenant" + i;
+                String tenant = tenants[i];
                 try (Connection tenantConn = createTenantConnection(tenant)) {
-                    String view = "TENANT_VIEW1";
-
+                    String view = tenantViews[0];
                     // view with its own column
                     String viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
                     tenantConn.createStatement().execute(viewDDL);
@@ -406,7 +419,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
                     removeBaseColumnCountKV(tenant, null, view);
 
                     // view that has the last base table column removed
-                    view = "TENANT_VIEW2";
+                    view = tenantViews[1];
                     viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
                     tenantConn.createStatement().execute(viewDDL);
                     String droplastBaseCol = "ALTER VIEW " + view + " DROP COLUMN V2";
@@ -414,7 +427,7 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
                     removeBaseColumnCountKV(tenant, null, view);
 
                     // view that has the middle base table column removed
-                    view = "TENANT_VIEW3";
+                    view = tenantViews[2];
                     viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
                     tenantConn.createStatement().execute(viewDDL);
                     String dropMiddileBaseCol = "ALTER VIEW " + view + " DROP COLUMN V1";
@@ -425,47 +438,46 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
 
             // create global views
             try (Connection globalConn = DriverManager.getConnection(getUrl())) {
-                String view = "GLOBAL_VIEW1";
-
+                String globalView = globalViews[0];
                 // view with its own column
-                String viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
+                String viewDDL = "CREATE VIEW " + globalView + " AS SELECT * FROM " + fullBaseTableName;
                 globalConn.createStatement().execute(viewDDL);
-                String addCols = "ALTER VIEW " + view + " ADD COL1 VARCHAR ";
+                String addCols = "ALTER VIEW " + globalView + " ADD COL1 VARCHAR ";
                 globalConn.createStatement().execute(addCols);
-                removeBaseColumnCountKV(null, null, view);
+                removeBaseColumnCountKV(null, null, globalView);
 
                 // view that has the last base table column removed
-                view = "GLOBAL_VIEW2";
-                viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
+                globalView = globalViews[1];
+                viewDDL = "CREATE VIEW " + globalView + " AS SELECT * FROM " + fullBaseTableName;
                 globalConn.createStatement().execute(viewDDL);
-                String droplastBaseCol = "ALTER VIEW " + view + " DROP COLUMN V2";
+                String droplastBaseCol = "ALTER VIEW " + globalView + " DROP COLUMN V2";
                 globalConn.createStatement().execute(droplastBaseCol);
-                removeBaseColumnCountKV(null, null, view);
+                removeBaseColumnCountKV(null, null, globalView);
 
                 // view that has the middle base table column removed
-                view = "GLOBAL_VIEW3";
-                viewDDL = "CREATE VIEW " + view + " AS SELECT * FROM " + fullBaseTableName;
+                globalView = globalViews[2];
+                viewDDL = "CREATE VIEW " + globalView + " AS SELECT * FROM " + fullBaseTableName;
                 globalConn.createStatement().execute(viewDDL);
-                String dropMiddileBaseCol = "ALTER VIEW " + view + " DROP COLUMN V1";
+                String dropMiddileBaseCol = "ALTER VIEW " + globalView + " DROP COLUMN V1";
                 globalConn.createStatement().execute(dropMiddileBaseCol);
-                removeBaseColumnCountKV(null, null, view);
+                removeBaseColumnCountKV(null, null, globalView);
             }
             
             // run upgrade
             UpgradeUtil.upgradeTo4_5_0(conn.unwrap(PhoenixConnection.class));
             
             // Verify base column counts for tenant specific views
-            for (int i = 1; i <=2 ; i++) {
-                String tenantId = "tenant" + i;
-                checkBaseColumnCount(tenantId, null, "TENANT_VIEW1", 4);
-                checkBaseColumnCount(tenantId, null, "TENANT_VIEW2", DIVERGED_VIEW_BASE_COLUMN_COUNT);
-                checkBaseColumnCount(tenantId, null, "TENANT_VIEW3", DIVERGED_VIEW_BASE_COLUMN_COUNT);
+            for (int i = 0; i < 2 ; i++) {
+                String tenantId = tenants[i];
+                checkBaseColumnCount(tenantId, null, tenantViews[0], 4);
+                checkBaseColumnCount(tenantId, null, tenantViews[1], DIVERGED_VIEW_BASE_COLUMN_COUNT);
+                checkBaseColumnCount(tenantId, null, tenantViews[2], DIVERGED_VIEW_BASE_COLUMN_COUNT);
             }
             
             // Verify base column count for global views
-            checkBaseColumnCount(null, null, "GLOBAL_VIEW1", 4);
-            checkBaseColumnCount(null, null, "GLOBAL_VIEW2", DIVERGED_VIEW_BASE_COLUMN_COUNT);
-            checkBaseColumnCount(null, null, "GLOBAL_VIEW3", DIVERGED_VIEW_BASE_COLUMN_COUNT);
+            checkBaseColumnCount(null, null, globalViews[0], 4);
+            checkBaseColumnCount(null, null, globalViews[1], DIVERGED_VIEW_BASE_COLUMN_COUNT);
+            checkBaseColumnCount(null, null, globalViews[2], DIVERGED_VIEW_BASE_COLUMN_COUNT);
         }
         
         

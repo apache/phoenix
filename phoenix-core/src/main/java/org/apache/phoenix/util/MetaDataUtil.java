@@ -334,6 +334,10 @@ public class MetaDataUtil {
     public static String getViewIndexSchemaName(String schemaName) {
         return schemaName;
     }
+    
+    public static String getViewIndexName(String schemaName, String tableName) {
+        return SchemaUtil.getTableName(getViewIndexSchemaName(schemaName), getViewIndexTableName(tableName));
+    }
 
     public static byte[] getIndexPhysicalName(byte[] physicalTableName, String indexPrefix) {
         return getIndexPhysicalName(Bytes.toString(physicalTableName), indexPrefix).getBytes();

@@ -569,14 +569,6 @@ public class TestUtil {
         return tableStats.getGuidePosts().values();
     }
 
-    public static List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {
-        return getSplits(conn, STABLE_NAME, STABLE_PK_NAME, lowerRange, upperRange, null, "COUNT(*)");
-    }
-
-    public static List<KeyRange> getAllSplits(Connection conn) throws SQLException {
-        return getAllSplits(conn, STABLE_NAME);
-    }
-
     public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
     	analyzeTable(conn, tableName, false);
     }
@@ -593,13 +585,8 @@ public class TestUtil {
         conn.createStatement().execute(query);
     }
     
-    public static void analyzeTableColumns(Connection conn) throws IOException, SQLException {
-        String query = "UPDATE STATISTICS " + STABLE_NAME+ " COLUMNS";
-        conn.createStatement().execute(query);
-    }
-    
-    public static void analyzeTable(Connection conn) throws IOException, SQLException {
-        String query = "UPDATE STATISTICS " + STABLE_NAME;
+    public static void analyzeTableColumns(Connection conn, String tableName) throws IOException, SQLException {
+        String query = "UPDATE STATISTICS " + tableName + " COLUMNS";
         conn.createStatement().execute(query);
     }
     

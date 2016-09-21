@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -41,7 +41,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class RoundRobinResultIteratorWithStatsIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class RoundRobinResultIteratorWithStatsIT extends BaseOwnClusterIT {
     
     @BeforeClass
     public static void doSetup() throws Exception {

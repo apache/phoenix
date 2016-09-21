@@ -48,7 +48,7 @@ import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class CsvBulkLoadToolIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
     private static Connection conn;
     private static String zkQuorum;
