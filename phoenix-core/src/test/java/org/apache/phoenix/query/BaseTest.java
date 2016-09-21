@@ -497,7 +497,7 @@ public abstract class BaseTest {
         return url;
     }
     
-    private static void teardownTxManager() throws SQLException {
+    private static void tearDownTxManager() throws SQLException {
         try {
             if (txService != null) txService.stopAndWait();
         } finally {
@@ -506,6 +506,7 @@ public abstract class BaseTest {
             } finally {
                 txService = null;
                 zkClient = null;
+                txManager = null;
             }
         }
         
@@ -539,14 +540,29 @@ public abstract class BaseTest {
         txService.startAndWait();
     }
 
-    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) throws Exception {
+    private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
         if (!clusterInitialized) {
-            url = setUpTestCluster(config, overrideProps);
+            url = setUpTestCluster(config, serverProps);
             clusterInitialized = true;
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                @Override
+                public void run() {
+                    logger.info("SHUTDOWN: halting JVM now");
+                    Runtime.getRuntime().halt(0);
+                }
+            });
         }
         return url;
     }
     
+    private static void checkTxManagerInitialized(ReadOnlyProps clientProps) throws SQLException, IOException {
+        if (txService == null
+                && clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED,
+                        QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+            setupTxManager();
+        }
+    }
+
     /**
      * Set up the test hbase cluster.
      * @return url to be used by clients to connect to the cluster.
@@ -568,7 +584,6 @@ public abstract class BaseTest {
                 driver = null;
             }
         }
-        teardownTxManager();
     }
     
     protected static void dropNonSystemTables() throws Exception {
@@ -579,21 +594,25 @@ public abstract class BaseTest {
         }
     }
 
-    protected static void tearDownMiniCluster() throws Exception {
+    public static void tearDownMiniCluster() throws Exception {
         try {
             destroyDriver();
         } finally {
             try {
-                if (utility != null) {
-                    try {
-                        utility.shutdownMiniMapReduceCluster();
-                    } finally {
-                        utility.shutdownMiniCluster();
-                    }
-                }
+                tearDownTxManager();
             } finally {
-                utility = null;
-                clusterInitialized = false;
+                try {
+                    if (utility != null) {
+                        try {
+                            utility.shutdownMiniMapReduceCluster();
+                        } finally {
+                            utility.shutdownMiniCluster();
+                        }
+                    }
+                } finally {
+                    utility = null;
+                    clusterInitialized = false;
+                }
             }
         }
     }
@@ -604,11 +623,9 @@ public abstract class BaseTest {
     
     protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
         String url = checkClusterInitialized(serverProps);
+        checkTxManagerInitialized(clientProps);
         if (driver == null) {
             driver = initAndRegisterTestDriver(url, clientProps);
-            if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
-                setupTxManager();
-            }
         }
     }
     
