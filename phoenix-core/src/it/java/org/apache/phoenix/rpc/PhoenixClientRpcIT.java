@@ -23,7 +23,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
-import org.apache.phoenix.end2end.BaseOwnClusterHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -33,7 +33,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-public class PhoenixClientRpcIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class PhoenixClientRpcIT extends BaseOwnClusterIT {
 
     private static final String SCHEMA_NAME = "S";
     private static final String INDEX_TABLE_NAME = "I";

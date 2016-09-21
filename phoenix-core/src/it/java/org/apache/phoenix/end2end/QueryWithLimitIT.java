@@ -43,7 +43,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class QueryWithLimitIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class QueryWithLimitIT extends BaseOwnClusterIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -61,7 +61,9 @@ public class QueryWithLimitIT extends BaseOwnClusterHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            ensureTableCreated(getUrl(), KEYONLY_NAME, KEYONLY_NAME);
+            conn.createStatement().execute("create table " + KEYONLY_NAME + "\n" +
+                "   (i1 integer not null, i2 integer not null\n" +
+                "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
             initTableValues(conn, 100);
             
             String query = "SELECT i1 FROM KEYONLY LIMIT 1";
@@ -85,7 +87,9 @@ public class QueryWithLimitIT extends BaseOwnClusterHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
-        ensureTableCreated(getUrl(), KEYONLY_NAME, KEYONLY_NAME);
+        conn.createStatement().execute("create table " + KEYONLY_NAME + "\n" +
+                "   (i1 integer not null, i2 integer not null\n" +
+                "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
         initTableValues(conn, 100);
         conn.createStatement().execute("UPDATE STATISTICS " + KEYONLY_NAME);
         

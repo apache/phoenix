@@ -18,7 +18,14 @@
 
 package org.apache.phoenix.end2end;
 
+import java.util.Map;
+
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
+
+import com.google.common.collect.Maps;
 
 /**
  * 
@@ -27,5 +34,12 @@ import org.junit.experimental.categories.Category;
  */
 @Category(ParallelStatsEnabledTest.class)
 public abstract class ParallelStatsEnabledIT extends BaseParallelIT {
-
+    
+    @BeforeClass
+    @Shadower(classBeingShadowed = BaseParallelIT.class)
+    public static void doSetup() throws Exception {
+        Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
+        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 }

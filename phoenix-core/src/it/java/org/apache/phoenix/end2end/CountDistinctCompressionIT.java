@@ -40,7 +40,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class CountDistinctCompressionIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class CountDistinctCompressionIT extends BaseOwnClusterIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);

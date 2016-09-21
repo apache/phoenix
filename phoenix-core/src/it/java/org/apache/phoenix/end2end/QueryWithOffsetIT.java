@@ -38,6 +38,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,28 +48,35 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
     
-    private String tableName = "T";
-    private final String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
-            "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
-    private final String ddl;
+    private static final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n",
+            "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
     private final boolean isSalted;
-
-    public QueryWithOffsetIT(String preSplit) {
-        this.tableName=tableName + "_" + preSplit.charAt(2);
-        this.ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
-                + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
-                + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) " + preSplit;
-        this.isSalted = preSplit.startsWith(" SALT_BUCKETS");
-    }
+    private final String preSplit;
+    private String ddl;
+    private String tableName;
 
     @BeforeClass
+    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
         // Must update config before starting server
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
+    public QueryWithOffsetIT(String preSplit) {
+        this.isSalted = preSplit.startsWith(" SALT_BUCKETS");
+        this.preSplit = preSplit;
+    }
+
+    @Before
+    public void initTest() {
+        tableName = "T_" + generateRandomString();
+        ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
+                + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
+                + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) " + preSplit;
     }
 
     @Parameters(name="preSplit = {0}")
@@ -92,7 +100,7 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         int i = 0;
         while (i < limit) {
             assertTrue(rs.next());
-            assertEquals("Expected string didn't match for i = " + i, strings[offset + i], rs.getString(1));
+            assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i], rs.getString(1));
             i++;
         }
 
@@ -100,14 +108,14 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("SELECT t_id from " + tableName + " union all SELECT t_id from "
                 + tableName + " offset " + offset + " FETCH FIRST " + limit + " rows only");
         i = 0;
-        while (i++ < strings.length - offset) {
+        while (i++ < STRINGS.length - offset) {
             assertTrue(rs.next());
-            assertEquals(strings[offset + i - 1], rs.getString(1));
+            assertEquals(STRINGS[offset + i - 1], rs.getString(1));
         }
         i = 0;
-        while (i++ < limit - strings.length - offset) {
+        while (i++ < limit - STRINGS.length - offset) {
             assertTrue(rs.next());
-            assertEquals(strings[i - 1], rs.getString(1));
+            assertEquals(STRINGS[i - 1], rs.getString(1));
         }
         conn.close();
     }
@@ -124,25 +132,27 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         String query = "SELECT t_id from " + tableName + " offset " + offset;
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if(!isSalted){
-            assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER T_P\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+            assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName + "\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "    SERVER OFFSET " + offset, QueryUtil.getExplainPlan(rs));
         }else{
-            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER T_A\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
+            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER " + tableName + "\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
         }
         rs = conn.createStatement().executeQuery(query);
         int i = 0;
-        while (i++ < strings.length - offset) {
+        while (i++ < STRINGS.length - offset) {
             assertTrue(rs.next());
-            assertEquals(strings[offset + i - 1], rs.getString(1));
+            assertEquals(STRINGS[offset + i - 1], rs.getString(1));
         }
         query = "SELECT t_id from " + tableName + " ORDER BY v1 offset " + offset;
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         if (!isSalted) {
-            assertEquals("CLIENT PARALLEL 5-WAY FULL SCAN OVER T_P\n" + "    SERVER SORTED BY [C2.V1]\n"
+            assertEquals("CLIENT PARALLEL 5-WAY FULL SCAN OVER " + tableName + "\n" + "    SERVER SORTED BY [C2.V1]\n"
                     + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
         } else {
-            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER T_A\n" + "    SERVER SORTED BY [C2.V1]\n"
+            assertEquals("CLIENT PARALLEL 10-WAY FULL SCAN OVER " + tableName + "\n" + "    SERVER SORTED BY [C2.V1]\n"
                     + "CLIENT MERGE SORT\n" + "CLIENT OFFSET " + offset, QueryUtil.getExplainPlan(rs));
         }
         conn.close();
@@ -161,31 +171,31 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
         rs = conn.createStatement()
                 .executeQuery("SELECT t_id from " + tableName + " order by t_id offset " + offset + " row");
         int i = 0;
-        while (i++ < strings.length - offset) {
+        while (i++ < STRINGS.length - offset) {
             assertTrue(rs.next());
-            assertEquals(strings[offset + i - 1], rs.getString(1));
+            assertEquals(STRINGS[offset + i - 1], rs.getString(1));
         }
 
         rs = conn.createStatement().executeQuery(
                 "SELECT k3, count(*) from " + tableName + " group by k3 order by k3 desc offset " + offset + " row");
 
         i = 0;
-        while (i++ < strings.length - offset) {
+        while (i++ < STRINGS.length - offset) {
             assertTrue(rs.next());
-            assertEquals(strings.length - offset - i + 2, rs.getInt(1));
+            assertEquals(STRINGS.length - offset - i + 2, rs.getInt(1));
         }
 
         rs = conn.createStatement().executeQuery("SELECT t_id from " + tableName + " union all SELECT t_id from "
                 + tableName + " offset " + offset + " rows");
         i = 0;
-        while (i++ < strings.length - offset) {
+        while (i++ < STRINGS.length - offset) {
             assertTrue(rs.next());
-            assertEquals(strings[offset + i - 1], rs.getString(1));
+            assertEquals(STRINGS[offset + i - 1], rs.getString(1));
         }
         i = 0;
-        while (i++ < strings.length) {
+        while (i++ < STRINGS.length) {
             assertTrue(rs.next());
-            assertEquals(strings[i - 1], rs.getString(1));
+            assertEquals(STRINGS[i - 1], rs.getString(1));
         }
         conn.close();
     }
@@ -210,8 +220,8 @@ public class QueryWithOffsetIT extends BaseOwnClusterHBaseManagedTimeIT {
     
     private void initTableValues(Connection conn) throws SQLException {
         for (int i = 0; i < 26; i++) {
-            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + strings[i] + "'," + i + ","
-                    + (i + 1) + "," + (i + 2) + ",'" + strings[25 - i] + "')");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + STRINGS[i] + "'," + i + ","
+                    + (i + 1) + "," + (i + 2) + ",'" + STRINGS[25 - i] + "')");
         }
         conn.commit();
     }
