@@ -3071,6 +3071,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableInterface htable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
             try {
+                tableStatsCache.invalidateAll();
                 final Map<byte[], Long> results =
                         htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
                                 HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, Long>() {

@@ -64,25 +64,26 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     private String enableForLoggingIndex;
 
     private DisableableMetricsWriter sink;
-    private String tableName;
+    private String tracingTableName;
 
     @Before
     public void setupMetrics() throws Exception {
         PhoenixMetricsSink pWriter = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        tableName = generateRandomString();
-        pWriter.initForTesting(conn, tableName);
+        tracingTableName = "TRACING_" + generateRandomString();
+        pWriter.initForTesting(conn, tracingTableName);
         sink = new DisableableMetricsWriter(pWriter);
         enabledForLoggingTable = "ENABLED_FOR_LOGGING_" + generateRandomString();
-        enableForLoggingIndex = "ENABALED_FOR_LOGGING_INDEX" + generateRandomString();
+        enableForLoggingIndex = "ENABALED_FOR_LOGGING_INDEX_" + generateRandomString();
 
-        TracingTestUtil.registerSink(sink);
+        TracingTestUtil.registerSink(sink, tracingTableName);
     }
 
     @After
     public void cleanup() {
         sink.disable();
         sink.clear();
+        TracingTestUtil.unregisterSink(tracingTableName);
     }
 
     private void waitForCommit(CountDownLatch latch) throws SQLException {
@@ -95,7 +96,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         sink.disable();
 
         // swap the connection for one that listens
-        sink.getDelegate().initForTesting(conn, tableName);
+        sink.getDelegate().initForTesting(conn, tracingTableName);
 
         // enable the writer
         sink.enable();
@@ -223,7 +224,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
             public boolean foundTrace(TraceHolder trace, SpanInfo span) {
                 String traceInfo = trace.toString();
                 // skip logging traces that are just traces about tracing
-                if (traceInfo.contains(tableName)) {
+                if (traceInfo.contains(tracingTableName)) {
                     return false;
                 }
                 return traceInfo.contains("Completing index");
@@ -247,7 +248,6 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         // create an index on the table - we know indexing has some basic tracing
         ddl = "CREATE INDEX IF NOT EXISTS " + enableForLoggingIndex + " on " + enabledForLoggingTable + " (c1)";
         conn.createStatement().execute(ddl);
-        conn.commit();
     }
 
     @Test
@@ -321,14 +321,12 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         stmt.setLong(2, 1);
         stmt.execute();
         conn.commit();
-        conn.rollback();
 
         // setup for next set of updates
         stmt.setString(1, "key2");
         stmt.setLong(2, 2);
         stmt.execute();
         conn.commit();
-        conn.rollback();
 
         // do a scan of the table
         String read = "SELECT COUNT(*) FROM " + enabledForLoggingTable;
@@ -338,7 +336,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         assertEquals("Didn't get the expected number of row", 2, results.getInt(1));
         results.close();
 
-        assertTrue("Get expected updates to trace table", updated.await(200, TimeUnit.SECONDS));
+        assertTrue("Didn't get expected updates to trace table", updated.await(60, TimeUnit.SECONDS));
         // don't trace reads either
         boolean found = checkStoredTraces(conn, new TraceChecker() {
             @Override
@@ -461,7 +459,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     }
     
     private boolean checkStoredTraces(Connection conn, TraceChecker checker) throws Exception {
-        TraceReader reader = new TraceReader(conn, tableName);
+        TraceReader reader = new TraceReader(conn, tracingTableName);
         int retries = 0;
         boolean found = false;
         outer: while (retries < MAX_RETRIES) {

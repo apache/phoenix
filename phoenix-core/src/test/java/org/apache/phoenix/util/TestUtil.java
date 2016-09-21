@@ -49,9 +49,16 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -90,6 +97,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -110,6 +118,8 @@ import com.google.common.collect.Lists;
 
 
 public class TestUtil {
+    private static final Log LOG = LogFactory.getLog(TestUtil.class);
+    
     public static final String DEFAULT_SCHEMA_NAME = "";
     public static final String DEFAULT_DATA_TABLE_NAME = "T";
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
@@ -712,6 +722,51 @@ public class TestUtil {
                 "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk)) "
                 + (options!=null? options : "");
             conn.createStatement().execute(ddl);
+    }
+
+    /**
+     * Runs a major compaction, and then waits until the compaction is complete before returning.
+     *
+     * @param tableName name of the table to be compacted
+     */
+    public static void doMajorCompaction(Connection conn, String tableName) throws Exception {
+    
+        tableName = SchemaUtil.normalizeIdentifier(tableName);
+    
+        // We simply write a marker row, request a major compaction, and then wait until the marker
+        // row is gone
+        ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        try (HTableInterface htable = services.getTable(Bytes.toBytes(tableName))) {
+            byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
+        
+            Put put = new Put(markerRowKey);
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, HConstants.EMPTY_BYTE_ARRAY,
+                    HConstants.EMPTY_BYTE_ARRAY);
+            htable.put(put);
+            htable.delete(new Delete(markerRowKey));
+        
+            HBaseAdmin hbaseAdmin = services.getAdmin();
+            hbaseAdmin.flush(tableName);
+            hbaseAdmin.majorCompact(tableName);
+            hbaseAdmin.close();
+        
+            boolean compactionDone = false;
+            while (!compactionDone) {
+                Thread.sleep(2000L);
+                Scan scan = new Scan();
+                scan.setStartRow(markerRowKey);
+                scan.setStopRow(Bytes.add(markerRowKey, new byte[] { 0 }));
+                scan.setRaw(true);
+        
+                ResultScanner scanner = htable.getScanner(scan);
+                List<Result> results = Lists.newArrayList(scanner);
+                LOG.info("Results: " + results);
+                compactionDone = results.isEmpty();
+                scanner.close();
+        
+                LOG.info("Compaction done: " + compactionDone);
+            }
+        }
     }
 }
 
