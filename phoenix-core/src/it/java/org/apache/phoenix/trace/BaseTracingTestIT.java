@@ -38,13 +38,10 @@ import org.apache.hadoop.metrics2.impl.ExposedMetricsRecordImpl;
 import org.apache.hadoop.metrics2.lib.ExposedMetricsInfoImpl;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.metrics.MetricInfo;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.trace.util.Tracing.Frequency;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.junit.Before;
 
 /**
  * Base test for tracing tests - helps manage getting tracing/non-tracing
@@ -52,16 +49,6 @@ import org.junit.Before;
  */
 
 public class BaseTracingTestIT extends ParallelStatsDisabledIT {
-    @Before
-    public void resetTracingTableIfExists() throws Exception {
-        Connection conn = getConnectionWithoutTracing();
-        conn.setAutoCommit(true);
-        try {
-            conn.createStatement().executeUpdate(
-                    "DELETE FROM " + QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
-        } catch (TableNotFoundException ignore) {
-        }
-    }
 
     public static Connection getConnectionWithoutTracing() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -70,7 +57,6 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
 
     public static Connection getConnectionWithoutTracing(Properties props) throws SQLException {
         Connection conn = getConnectionWithTracingFrequency(props, Frequency.NEVER);
-        conn.setAutoCommit(false);
         return conn;
     }
 
