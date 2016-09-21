@@ -561,14 +561,17 @@ public abstract class BaseTest {
     }
     
     protected static void destroyDriver() throws Exception {
-        if (driver != null) {
-            try {
-                assertTrue(destroyDriver(driver));
-            } finally {
-                driver = null;
+        try {
+            if (driver != null) {
+                try {
+                    assertTrue(destroyDriver(driver));
+                } finally {
+                    driver = null;
+                }
             }
+        } finally {
+            teardownTxManager();
         }
-        teardownTxManager();
     }
     
     protected static void dropNonSystemTables() throws Exception {
@@ -579,7 +582,7 @@ public abstract class BaseTest {
         }
     }
 
-    protected static void tearDownMiniCluster() throws Exception {
+    public static void tearDownMiniCluster() throws Exception {
         try {
             destroyDriver();
         } finally {
