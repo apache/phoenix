@@ -144,6 +144,9 @@ SqlNode SqlCreateTable() :
     <LPAREN>
     columnDefs = ColumnDefList()
     (
+    	(
+    		<COMMA>
+    	)?
         <CONSTRAINT> pkConstraint = SimpleIdentifier() <PRIMARY> <KEY>
         <LPAREN> pkConstraintColumnDefs = PkConstraintColumnDefList() <RPAREN>
         |
