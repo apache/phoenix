@@ -3140,38 +3140,27 @@ public final class PTableProtos {
      */
     boolean getIsImmutableRows();
 
-    // repeated .PTableStats guidePosts = 12;
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> 
-        getGuidePostsList();
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getGuidePosts(int index);
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    int getGuidePostsCount();
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
-        getGuidePostsOrBuilderList();
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getGuidePostsOrBuilder(
-        int index);
-
     // optional bytes dataTableNameBytes = 13;
     /**
      * <code>optional bytes dataTableNameBytes = 13;</code>
+     *
+     * <pre>
+     * Do NOT reuse the tag '12'. Stats are no longer passed
+     * along with the PTable.
+     *repeated PTableStats guidePosts = 12;
+     * TODO remove this field in 5.0 release
+     * </pre>
      */
     boolean hasDataTableNameBytes();
     /**
      * <code>optional bytes dataTableNameBytes = 13;</code>
+     *
+     * <pre>
+     * Do NOT reuse the tag '12'. Stats are no longer passed
+     * along with the PTable.
+     *repeated PTableStats guidePosts = 12;
+     * TODO remove this field in 5.0 release
+     * </pre>
      */
     com.google.protobuf.ByteString getDataTableNameBytes();
 
@@ -3373,6 +3362,16 @@ public final class PTableProtos {
      * <code>optional bool isAppendOnlySchema = 32;</code>
      */
     boolean getIsAppendOnlySchema();
+
+    // optional bytes parentNameBytes = 33;
+    /**
+     * <code>optional bytes parentNameBytes = 33;</code>
+     */
+    boolean hasParentNameBytes();
+    /**
+     * <code>optional bytes parentNameBytes = 33;</code>
+     */
+    com.google.protobuf.ByteString getParentNameBytes();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3492,14 +3491,6 @@ public final class PTableProtos {
               isImmutableRows_ = input.readBool();
               break;
             }
-            case 98: {
-              if (!((mutable_bitField0_ & 0x00000800) == 0x00000800)) {
-                guidePosts_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats>();
-                mutable_bitField0_ |= 0x00000800;
-              }
-              guidePosts_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.PARSER, extensionRegistry));
-              break;
-            }
             case 106: {
               bitField0_ |= 0x00000200;
               dataTableNameBytes_ = input.readBytes();
@@ -3531,9 +3522,9 @@ public final class PTableProtos {
               break;
             }
             case 154: {
-              if (!((mutable_bitField0_ & 0x00040000) == 0x00040000)) {
+              if (!((mutable_bitField0_ & 0x00020000) == 0x00020000)) {
                 physicalNames_ = new java.util.ArrayList<com.google.protobuf.ByteString>();
-                mutable_bitField0_ |= 0x00040000;
+                mutable_bitField0_ |= 0x00020000;
               }
               physicalNames_.add(input.readBytes());
               break;
@@ -3603,6 +3594,11 @@ public final class PTableProtos {
               isAppendOnlySchema_ = input.readBool();
               break;
             }
+            case 266: {
+              bitField0_ |= 0x10000000;
+              parentNameBytes_ = input.readBytes();
+              break;
+            }
           }
         }
       } catch (com.google.protobuf.InvalidProtocolBufferException e) {
@@ -3617,10 +3613,7 @@ public final class PTableProtos {
         if (((mutable_bitField0_ & 0x00000200) == 0x00000200)) {
           indexes_ = java.util.Collections.unmodifiableList(indexes_);
         }
-        if (((mutable_bitField0_ & 0x00000800) == 0x00000800)) {
-          guidePosts_ = java.util.Collections.unmodifiableList(guidePosts_);
-        }
-        if (((mutable_bitField0_ & 0x00040000) == 0x00040000)) {
+        if (((mutable_bitField0_ & 0x00020000) == 0x00020000)) {
           physicalNames_ = java.util.Collections.unmodifiableList(physicalNames_);
         }
         this.unknownFields = unknownFields.build();
@@ -3898,53 +3891,31 @@ public final class PTableProtos {
       return isImmutableRows_;
     }
 
-    // repeated .PTableStats guidePosts = 12;
-    public static final int GUIDEPOSTS_FIELD_NUMBER = 12;
-    private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> guidePosts_;
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> getGuidePostsList() {
-      return guidePosts_;
-    }
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
-        getGuidePostsOrBuilderList() {
-      return guidePosts_;
-    }
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    public int getGuidePostsCount() {
-      return guidePosts_.size();
-    }
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getGuidePosts(int index) {
-      return guidePosts_.get(index);
-    }
-    /**
-     * <code>repeated .PTableStats guidePosts = 12;</code>
-     */
-    public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getGuidePostsOrBuilder(
-        int index) {
-      return guidePosts_.get(index);
-    }
-
     // optional bytes dataTableNameBytes = 13;
     public static final int DATATABLENAMEBYTES_FIELD_NUMBER = 13;
     private com.google.protobuf.ByteString dataTableNameBytes_;
     /**
      * <code>optional bytes dataTableNameBytes = 13;</code>
+     *
+     * <pre>
+     * Do NOT reuse the tag '12'. Stats are no longer passed
+     * along with the PTable.
+     *repeated PTableStats guidePosts = 12;
+     * TODO remove this field in 5.0 release
+     * </pre>
      */
     public boolean hasDataTableNameBytes() {
       return ((bitField0_ & 0x00000200) == 0x00000200);
     }
     /**
      * <code>optional bytes dataTableNameBytes = 13;</code>
+     *
+     * <pre>
+     * Do NOT reuse the tag '12'. Stats are no longer passed
+     * along with the PTable.
+     *repeated PTableStats guidePosts = 12;
+     * TODO remove this field in 5.0 release
+     * </pre>
      */
     public com.google.protobuf.ByteString getDataTableNameBytes() {
       return dataTableNameBytes_;
@@ -4288,6 +4259,22 @@ public final class PTableProtos {
       return isAppendOnlySchema_;
     }
 
+    // optional bytes parentNameBytes = 33;
+    public static final int PARENTNAMEBYTES_FIELD_NUMBER = 33;
+    private com.google.protobuf.ByteString parentNameBytes_;
+    /**
+     * <code>optional bytes parentNameBytes = 33;</code>
+     */
+    public boolean hasParentNameBytes() {
+      return ((bitField0_ & 0x10000000) == 0x10000000);
+    }
+    /**
+     * <code>optional bytes parentNameBytes = 33;</code>
+     */
+    public com.google.protobuf.ByteString getParentNameBytes() {
+      return parentNameBytes_;
+    }
+
     private void initFields() {
       schemaNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       tableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
@@ -4300,7 +4287,6 @@ public final class PTableProtos {
       columns_ = java.util.Collections.emptyList();
       indexes_ = java.util.Collections.emptyList();
       isImmutableRows_ = false;
-      guidePosts_ = java.util.Collections.emptyList();
       dataTableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       defaultFamilyName_ = com.google.protobuf.ByteString.EMPTY;
       disableWAL_ = false;
@@ -4321,6 +4307,7 @@ public final class PTableProtos {
       isNamespaceMapped_ = false;
       autoParititonSeqName_ = "";
       isAppendOnlySchema_ = false;
+      parentNameBytes_ = com.google.protobuf.ByteString.EMPTY;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4375,12 +4362,6 @@ public final class PTableProtos {
           return false;
         }
       }
-      for (int i = 0; i < getGuidePostsCount(); i++) {
-        if (!getGuidePosts(i).isInitialized()) {
-          memoizedIsInitialized = 0;
-          return false;
-        }
-      }
       memoizedIsInitialized = 1;
       return true;
     }
@@ -4420,9 +4401,6 @@ public final class PTableProtos {
       }
       if (((bitField0_ & 0x00000100) == 0x00000100)) {
         output.writeBool(11, isImmutableRows_);
-      }
-      for (int i = 0; i < guidePosts_.size(); i++) {
-        output.writeMessage(12, guidePosts_.get(i));
       }
       if (((bitField0_ & 0x00000200) == 0x00000200)) {
         output.writeBytes(13, dataTableNameBytes_);
@@ -4484,6 +4462,9 @@ public final class PTableProtos {
       if (((bitField0_ & 0x08000000) == 0x08000000)) {
         output.writeBool(32, isAppendOnlySchema_);
       }
+      if (((bitField0_ & 0x10000000) == 0x10000000)) {
+        output.writeBytes(33, parentNameBytes_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -4536,10 +4517,6 @@ public final class PTableProtos {
       if (((bitField0_ & 0x00000100) == 0x00000100)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(11, isImmutableRows_);
-      }
-      for (int i = 0; i < guidePosts_.size(); i++) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(12, guidePosts_.get(i));
       }
       if (((bitField0_ & 0x00000200) == 0x00000200)) {
         size += com.google.protobuf.CodedOutputStream
@@ -4626,6 +4603,10 @@ public final class PTableProtos {
         size += com.google.protobuf.CodedOutputStream
           .computeBoolSize(32, isAppendOnlySchema_);
       }
+      if (((bitField0_ & 0x10000000) == 0x10000000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(33, parentNameBytes_);
+      }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
       return size;
@@ -4698,8 +4679,6 @@ public final class PTableProtos {
         result = result && (getIsImmutableRows()
             == other.getIsImmutableRows());
       }
-      result = result && getGuidePostsList()
-          .equals(other.getGuidePostsList());
       result = result && (hasDataTableNameBytes() == other.hasDataTableNameBytes());
       if (hasDataTableNameBytes()) {
         result = result && getDataTableNameBytes()
@@ -4797,6 +4776,11 @@ public final class PTableProtos {
         result = result && (getIsAppendOnlySchema()
             == other.getIsAppendOnlySchema());
       }
+      result = result && (hasParentNameBytes() == other.hasParentNameBytes());
+      if (hasParentNameBytes()) {
+        result = result && getParentNameBytes()
+            .equals(other.getParentNameBytes());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -4853,10 +4837,6 @@ public final class PTableProtos {
       if (hasIsImmutableRows()) {
         hash = (37 * hash) + ISIMMUTABLEROWS_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getIsImmutableRows());
-      }
-      if (getGuidePostsCount() > 0) {
-        hash = (37 * hash) + GUIDEPOSTS_FIELD_NUMBER;
-        hash = (53 * hash) + getGuidePostsList().hashCode();
       }
       if (hasDataTableNameBytes()) {
         hash = (37 * hash) + DATATABLENAMEBYTES_FIELD_NUMBER;
@@ -4937,6 +4917,10 @@ public final class PTableProtos {
       if (hasIsAppendOnlySchema()) {
         hash = (37 * hash) + ISAPPENDONLYSCHEMA_FIELD_NUMBER;
         hash = (53 * hash) + hashBoolean(getIsAppendOnlySchema());
+      }
+      if (hasParentNameBytes()) {
+        hash = (37 * hash) + PARENTNAMEBYTES_FIELD_NUMBER;
+        hash = (53 * hash) + getParentNameBytes().hashCode();
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -5041,7 +5025,6 @@ public final class PTableProtos {
         if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
           getColumnsFieldBuilder();
           getIndexesFieldBuilder();
-          getGuidePostsFieldBuilder();
         }
       }
       private static Builder create() {
@@ -5080,51 +5063,47 @@ public final class PTableProtos {
         }
         isImmutableRows_ = false;
         bitField0_ = (bitField0_ & ~0x00000400);
-        if (guidePostsBuilder_ == null) {
-          guidePosts_ = java.util.Collections.emptyList();
-          bitField0_ = (bitField0_ & ~0x00000800);
-        } else {
-          guidePostsBuilder_.clear();
-        }
         dataTableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00001000);
+        bitField0_ = (bitField0_ & ~0x00000800);
         defaultFamilyName_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00002000);
+        bitField0_ = (bitField0_ & ~0x00001000);
         disableWAL_ = false;
-        bitField0_ = (bitField0_ & ~0x00004000);
+        bitField0_ = (bitField0_ & ~0x00002000);
         multiTenant_ = false;
-        bitField0_ = (bitField0_ & ~0x00008000);
+        bitField0_ = (bitField0_ & ~0x00004000);
         viewType_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00010000);
+        bitField0_ = (bitField0_ & ~0x00008000);
         viewStatement_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00020000);
+        bitField0_ = (bitField0_ & ~0x00010000);
         physicalNames_ = java.util.Collections.emptyList();
-        bitField0_ = (bitField0_ & ~0x00040000);
+        bitField0_ = (bitField0_ & ~0x00020000);
         tenantId_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00080000);
+        bitField0_ = (bitField0_ & ~0x00040000);
         viewIndexId_ = 0;
-        bitField0_ = (bitField0_ & ~0x00100000);
+        bitField0_ = (bitField0_ & ~0x00080000);
         indexType_ = com.google.protobuf.ByteString.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00200000);
+        bitField0_ = (bitField0_ & ~0x00100000);
         statsTimeStamp_ = 0L;
-        bitField0_ = (bitField0_ & ~0x00400000);
+        bitField0_ = (bitField0_ & ~0x00200000);
         storeNulls_ = false;
-        bitField0_ = (bitField0_ & ~0x00800000);
+        bitField0_ = (bitField0_ & ~0x00400000);
         baseColumnCount_ = 0;
-        bitField0_ = (bitField0_ & ~0x01000000);
+        bitField0_ = (bitField0_ & ~0x00800000);
         rowKeyOrderOptimizable_ = false;
-        bitField0_ = (bitField0_ & ~0x02000000);
+        bitField0_ = (bitField0_ & ~0x01000000);
         transactional_ = false;
-        bitField0_ = (bitField0_ & ~0x04000000);
+        bitField0_ = (bitField0_ & ~0x02000000);
         updateCacheFrequency_ = 0L;
-        bitField0_ = (bitField0_ & ~0x08000000);
+        bitField0_ = (bitField0_ & ~0x04000000);
         indexDisableTimestamp_ = 0L;
-        bitField0_ = (bitField0_ & ~0x10000000);
+        bitField0_ = (bitField0_ & ~0x08000000);
         isNamespaceMapped_ = false;
-        bitField0_ = (bitField0_ & ~0x20000000);
+        bitField0_ = (bitField0_ & ~0x10000000);
         autoParititonSeqName_ = "";
-        bitField0_ = (bitField0_ & ~0x40000000);
+        bitField0_ = (bitField0_ & ~0x20000000);
         isAppendOnlySchema_ = false;
+        bitField0_ = (bitField0_ & ~0x40000000);
+        parentNameBytes_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x80000000);
         return this;
       }
@@ -5208,96 +5187,91 @@ public final class PTableProtos {
           to_bitField0_ |= 0x00000100;
         }
         result.isImmutableRows_ = isImmutableRows_;
-        if (guidePostsBuilder_ == null) {
-          if (((bitField0_ & 0x00000800) == 0x00000800)) {
-            guidePosts_ = java.util.Collections.unmodifiableList(guidePosts_);
-            bitField0_ = (bitField0_ & ~0x00000800);
-          }
-          result.guidePosts_ = guidePosts_;
-        } else {
-          result.guidePosts_ = guidePostsBuilder_.build();
-        }
-        if (((from_bitField0_ & 0x00001000) == 0x00001000)) {
+        if (((from_bitField0_ & 0x00000800) == 0x00000800)) {
           to_bitField0_ |= 0x00000200;
         }
         result.dataTableNameBytes_ = dataTableNameBytes_;
-        if (((from_bitField0_ & 0x00002000) == 0x00002000)) {
+        if (((from_bitField0_ & 0x00001000) == 0x00001000)) {
           to_bitField0_ |= 0x00000400;
         }
         result.defaultFamilyName_ = defaultFamilyName_;
-        if (((from_bitField0_ & 0x00004000) == 0x00004000)) {
+        if (((from_bitField0_ & 0x00002000) == 0x00002000)) {
           to_bitField0_ |= 0x00000800;
         }
         result.disableWAL_ = disableWAL_;
-        if (((from_bitField0_ & 0x00008000) == 0x00008000)) {
+        if (((from_bitField0_ & 0x00004000) == 0x00004000)) {
           to_bitField0_ |= 0x00001000;
         }
         result.multiTenant_ = multiTenant_;
-        if (((from_bitField0_ & 0x00010000) == 0x00010000)) {
+        if (((from_bitField0_ & 0x00008000) == 0x00008000)) {
           to_bitField0_ |= 0x00002000;
         }
         result.viewType_ = viewType_;
-        if (((from_bitField0_ & 0x00020000) == 0x00020000)) {
+        if (((from_bitField0_ & 0x00010000) == 0x00010000)) {
           to_bitField0_ |= 0x00004000;
         }
         result.viewStatement_ = viewStatement_;
-        if (((bitField0_ & 0x00040000) == 0x00040000)) {
+        if (((bitField0_ & 0x00020000) == 0x00020000)) {
           physicalNames_ = java.util.Collections.unmodifiableList(physicalNames_);
-          bitField0_ = (bitField0_ & ~0x00040000);
+          bitField0_ = (bitField0_ & ~0x00020000);
         }
         result.physicalNames_ = physicalNames_;
-        if (((from_bitField0_ & 0x00080000) == 0x00080000)) {
+        if (((from_bitField0_ & 0x00040000) == 0x00040000)) {
           to_bitField0_ |= 0x00008000;
         }
         result.tenantId_ = tenantId_;
-        if (((from_bitField0_ & 0x00100000) == 0x00100000)) {
+        if (((from_bitField0_ & 0x00080000) == 0x00080000)) {
           to_bitField0_ |= 0x00010000;
         }
         result.viewIndexId_ = viewIndexId_;
-        if (((from_bitField0_ & 0x00200000) == 0x00200000)) {
+        if (((from_bitField0_ & 0x00100000) == 0x00100000)) {
           to_bitField0_ |= 0x00020000;
         }
         result.indexType_ = indexType_;
-        if (((from_bitField0_ & 0x00400000) == 0x00400000)) {
+        if (((from_bitField0_ & 0x00200000) == 0x00200000)) {
           to_bitField0_ |= 0x00040000;
         }
         result.statsTimeStamp_ = statsTimeStamp_;
-        if (((from_bitField0_ & 0x00800000) == 0x00800000)) {
+        if (((from_bitField0_ & 0x00400000) == 0x00400000)) {
           to_bitField0_ |= 0x00080000;
         }
         result.storeNulls_ = storeNulls_;
-        if (((from_bitField0_ & 0x01000000) == 0x01000000)) {
+        if (((from_bitField0_ & 0x00800000) == 0x00800000)) {
           to_bitField0_ |= 0x00100000;
         }
         result.baseColumnCount_ = baseColumnCount_;
-        if (((from_bitField0_ & 0x02000000) == 0x02000000)) {
+        if (((from_bitField0_ & 0x01000000) == 0x01000000)) {
           to_bitField0_ |= 0x00200000;
         }
         result.rowKeyOrderOptimizable_ = rowKeyOrderOptimizable_;
-        if (((from_bitField0_ & 0x04000000) == 0x04000000)) {
+        if (((from_bitField0_ & 0x02000000) == 0x02000000)) {
           to_bitField0_ |= 0x00400000;
         }
         result.transactional_ = transactional_;
-        if (((from_bitField0_ & 0x08000000) == 0x08000000)) {
+        if (((from_bitField0_ & 0x04000000) == 0x04000000)) {
           to_bitField0_ |= 0x00800000;
         }
         result.updateCacheFrequency_ = updateCacheFrequency_;
-        if (((from_bitField0_ & 0x10000000) == 0x10000000)) {
+        if (((from_bitField0_ & 0x08000000) == 0x08000000)) {
           to_bitField0_ |= 0x01000000;
         }
         result.indexDisableTimestamp_ = indexDisableTimestamp_;
-        if (((from_bitField0_ & 0x20000000) == 0x20000000)) {
+        if (((from_bitField0_ & 0x10000000) == 0x10000000)) {
           to_bitField0_ |= 0x02000000;
         }
         result.isNamespaceMapped_ = isNamespaceMapped_;
-        if (((from_bitField0_ & 0x40000000) == 0x40000000)) {
+        if (((from_bitField0_ & 0x20000000) == 0x20000000)) {
           to_bitField0_ |= 0x04000000;
         }
         result.autoParititonSeqName_ = autoParititonSeqName_;
-        if (((from_bitField0_ & 0x80000000) == 0x80000000)) {
+        if (((from_bitField0_ & 0x40000000) == 0x40000000)) {
           to_bitField0_ |= 0x08000000;
         }
         result.isAppendOnlySchema_ = isAppendOnlySchema_;
+        if (((from_bitField0_ & 0x80000000) == 0x80000000)) {
+          to_bitField0_ |= 0x10000000;
+        }
+        result.parentNameBytes_ = parentNameBytes_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -5395,32 +5369,6 @@ public final class PTableProtos {
         if (other.hasIsImmutableRows()) {
           setIsImmutableRows(other.getIsImmutableRows());
         }
-        if (guidePostsBuilder_ == null) {
-          if (!other.guidePosts_.isEmpty()) {
-            if (guidePosts_.isEmpty()) {
-              guidePosts_ = other.guidePosts_;
-              bitField0_ = (bitField0_ & ~0x00000800);
-            } else {
-              ensureGuidePostsIsMutable();
-              guidePosts_.addAll(other.guidePosts_);
-            }
-            onChanged();
-          }
-        } else {
-          if (!other.guidePosts_.isEmpty()) {
-            if (guidePostsBuilder_.isEmpty()) {
-              guidePostsBuilder_.dispose();
-              guidePostsBuilder_ = null;
-              guidePosts_ = other.guidePosts_;
-              bitField0_ = (bitField0_ & ~0x00000800);
-              guidePostsBuilder_ = 
-                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
-                   getGuidePostsFieldBuilder() : null;
-            } else {
-              guidePostsBuilder_.addAllMessages(other.guidePosts_);
-            }
-          }
-        }
         if (other.hasDataTableNameBytes()) {
           setDataTableNameBytes(other.getDataTableNameBytes());
         }
@@ -5442,7 +5390,7 @@ public final class PTableProtos {
         if (!other.physicalNames_.isEmpty()) {
           if (physicalNames_.isEmpty()) {
             physicalNames_ = other.physicalNames_;
-            bitField0_ = (bitField0_ & ~0x00040000);
+            bitField0_ = (bitField0_ & ~0x00020000);
           } else {
             ensurePhysicalNamesIsMutable();
             physicalNames_.addAll(other.physicalNames_);
@@ -5483,12 +5431,15 @@ public final class PTableProtos {
           setIsNamespaceMapped(other.getIsNamespaceMapped());
         }
         if (other.hasAutoParititonSeqName()) {
-          bitField0_ |= 0x40000000;
+          bitField0_ |= 0x20000000;
           autoParititonSeqName_ = other.autoParititonSeqName_;
           onChanged();
         }
         if (other.hasIsAppendOnlySchema()) {
           setIsAppendOnlySchema(other.getIsAppendOnlySchema());
+        }
+        if (other.hasParentNameBytes()) {
+          setParentNameBytes(other.getParentNameBytes());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -5539,12 +5490,6 @@ public final class PTableProtos {
         }
         for (int i = 0; i < getIndexesCount(); i++) {
           if (!getIndexes(i).isInitialized()) {
-            
-            return false;
-          }
-        }
-        for (int i = 0; i < getGuidePostsCount(); i++) {
-          if (!getGuidePosts(i).isInitialized()) {
             
             return false;
           }
@@ -6401,277 +6346,65 @@ public final class PTableProtos {
         return this;
       }
 
-      // repeated .PTableStats guidePosts = 12;
-      private java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> guidePosts_ =
-        java.util.Collections.emptyList();
-      private void ensureGuidePostsIsMutable() {
-        if (!((bitField0_ & 0x00000800) == 0x00000800)) {
-          guidePosts_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats>(guidePosts_);
-          bitField0_ |= 0x00000800;
-         }
-      }
-
-      private com.google.protobuf.RepeatedFieldBuilder<
-          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> guidePostsBuilder_;
-
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> getGuidePostsList() {
-        if (guidePostsBuilder_ == null) {
-          return java.util.Collections.unmodifiableList(guidePosts_);
-        } else {
-          return guidePostsBuilder_.getMessageList();
-        }
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public int getGuidePostsCount() {
-        if (guidePostsBuilder_ == null) {
-          return guidePosts_.size();
-        } else {
-          return guidePostsBuilder_.getCount();
-        }
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats getGuidePosts(int index) {
-        if (guidePostsBuilder_ == null) {
-          return guidePosts_.get(index);
-        } else {
-          return guidePostsBuilder_.getMessage(index);
-        }
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder setGuidePosts(
-          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
-        if (guidePostsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          ensureGuidePostsIsMutable();
-          guidePosts_.set(index, value);
-          onChanged();
-        } else {
-          guidePostsBuilder_.setMessage(index, value);
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder setGuidePosts(
-          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
-        if (guidePostsBuilder_ == null) {
-          ensureGuidePostsIsMutable();
-          guidePosts_.set(index, builderForValue.build());
-          onChanged();
-        } else {
-          guidePostsBuilder_.setMessage(index, builderForValue.build());
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder addGuidePosts(org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
-        if (guidePostsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          ensureGuidePostsIsMutable();
-          guidePosts_.add(value);
-          onChanged();
-        } else {
-          guidePostsBuilder_.addMessage(value);
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder addGuidePosts(
-          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats value) {
-        if (guidePostsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          ensureGuidePostsIsMutable();
-          guidePosts_.add(index, value);
-          onChanged();
-        } else {
-          guidePostsBuilder_.addMessage(index, value);
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder addGuidePosts(
-          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
-        if (guidePostsBuilder_ == null) {
-          ensureGuidePostsIsMutable();
-          guidePosts_.add(builderForValue.build());
-          onChanged();
-        } else {
-          guidePostsBuilder_.addMessage(builderForValue.build());
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder addGuidePosts(
-          int index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder builderForValue) {
-        if (guidePostsBuilder_ == null) {
-          ensureGuidePostsIsMutable();
-          guidePosts_.add(index, builderForValue.build());
-          onChanged();
-        } else {
-          guidePostsBuilder_.addMessage(index, builderForValue.build());
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder addAllGuidePosts(
-          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats> values) {
-        if (guidePostsBuilder_ == null) {
-          ensureGuidePostsIsMutable();
-          super.addAll(values, guidePosts_);
-          onChanged();
-        } else {
-          guidePostsBuilder_.addAllMessages(values);
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder clearGuidePosts() {
-        if (guidePostsBuilder_ == null) {
-          guidePosts_ = java.util.Collections.emptyList();
-          bitField0_ = (bitField0_ & ~0x00000800);
-          onChanged();
-        } else {
-          guidePostsBuilder_.clear();
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public Builder removeGuidePosts(int index) {
-        if (guidePostsBuilder_ == null) {
-          ensureGuidePostsIsMutable();
-          guidePosts_.remove(index);
-          onChanged();
-        } else {
-          guidePostsBuilder_.remove(index);
-        }
-        return this;
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder getGuidePostsBuilder(
-          int index) {
-        return getGuidePostsFieldBuilder().getBuilder(index);
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder getGuidePostsOrBuilder(
-          int index) {
-        if (guidePostsBuilder_ == null) {
-          return guidePosts_.get(index);  } else {
-          return guidePostsBuilder_.getMessageOrBuilder(index);
-        }
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
-           getGuidePostsOrBuilderList() {
-        if (guidePostsBuilder_ != null) {
-          return guidePostsBuilder_.getMessageOrBuilderList();
-        } else {
-          return java.util.Collections.unmodifiableList(guidePosts_);
-        }
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder addGuidePostsBuilder() {
-        return getGuidePostsFieldBuilder().addBuilder(
-            org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.getDefaultInstance());
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder addGuidePostsBuilder(
-          int index) {
-        return getGuidePostsFieldBuilder().addBuilder(
-            index, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.getDefaultInstance());
-      }
-      /**
-       * <code>repeated .PTableStats guidePosts = 12;</code>
-       */
-      public java.util.List<org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder> 
-           getGuidePostsBuilderList() {
-        return getGuidePostsFieldBuilder().getBuilderList();
-      }
-      private com.google.protobuf.RepeatedFieldBuilder<
-          org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder> 
-          getGuidePostsFieldBuilder() {
-        if (guidePostsBuilder_ == null) {
-          guidePostsBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
-              org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStats.Builder, org.apache.phoenix.coprocessor.generated.PTableProtos.PTableStatsOrBuilder>(
-                  guidePosts_,
-                  ((bitField0_ & 0x00000800) == 0x00000800),
-                  getParentForChildren(),
-                  isClean());
-          guidePosts_ = null;
-        }
-        return guidePostsBuilder_;
-      }
-
       // optional bytes dataTableNameBytes = 13;
       private com.google.protobuf.ByteString dataTableNameBytes_ = com.google.protobuf.ByteString.EMPTY;
       /**
        * <code>optional bytes dataTableNameBytes = 13;</code>
+       *
+       * <pre>
+       * Do NOT reuse the tag '12'. Stats are no longer passed
+       * along with the PTable.
+       *repeated PTableStats guidePosts = 12;
+       * TODO remove this field in 5.0 release
+       * </pre>
        */
       public boolean hasDataTableNameBytes() {
-        return ((bitField0_ & 0x00001000) == 0x00001000);
+        return ((bitField0_ & 0x00000800) == 0x00000800);
       }
       /**
        * <code>optional bytes dataTableNameBytes = 13;</code>
+       *
+       * <pre>
+       * Do NOT reuse the tag '12'. Stats are no longer passed
+       * along with the PTable.
+       *repeated PTableStats guidePosts = 12;
+       * TODO remove this field in 5.0 release
+       * </pre>
        */
       public com.google.protobuf.ByteString getDataTableNameBytes() {
         return dataTableNameBytes_;
       }
       /**
        * <code>optional bytes dataTableNameBytes = 13;</code>
+       *
+       * <pre>
+       * Do NOT reuse the tag '12'. Stats are no longer passed
+       * along with the PTable.
+       *repeated PTableStats guidePosts = 12;
+       * TODO remove this field in 5.0 release
+       * </pre>
        */
       public Builder setDataTableNameBytes(com.google.protobuf.ByteString value) {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00001000;
+  bitField0_ |= 0x00000800;
         dataTableNameBytes_ = value;
         onChanged();
         return this;
       }
       /**
        * <code>optional bytes dataTableNameBytes = 13;</code>
+       *
+       * <pre>
+       * Do NOT reuse the tag '12'. Stats are no longer passed
+       * along with the PTable.
+       *repeated PTableStats guidePosts = 12;
+       * TODO remove this field in 5.0 release
+       * </pre>
        */
       public Builder clearDataTableNameBytes() {
-        bitField0_ = (bitField0_ & ~0x00001000);
+        bitField0_ = (bitField0_ & ~0x00000800);
         dataTableNameBytes_ = getDefaultInstance().getDataTableNameBytes();
         onChanged();
         return this;
@@ -6683,7 +6416,7 @@ public final class PTableProtos {
        * <code>optional bytes defaultFamilyName = 14;</code>
        */
       public boolean hasDefaultFamilyName() {
-        return ((bitField0_ & 0x00002000) == 0x00002000);
+        return ((bitField0_ & 0x00001000) == 0x00001000);
       }
       /**
        * <code>optional bytes defaultFamilyName = 14;</code>
@@ -6698,7 +6431,7 @@ public final class PTableProtos {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00002000;
+  bitField0_ |= 0x00001000;
         defaultFamilyName_ = value;
         onChanged();
         return this;
@@ -6707,7 +6440,7 @@ public final class PTableProtos {
        * <code>optional bytes defaultFamilyName = 14;</code>
        */
       public Builder clearDefaultFamilyName() {
-        bitField0_ = (bitField0_ & ~0x00002000);
+        bitField0_ = (bitField0_ & ~0x00001000);
         defaultFamilyName_ = getDefaultInstance().getDefaultFamilyName();
         onChanged();
         return this;
@@ -6719,7 +6452,7 @@ public final class PTableProtos {
        * <code>required bool disableWAL = 15;</code>
        */
       public boolean hasDisableWAL() {
-        return ((bitField0_ & 0x00004000) == 0x00004000);
+        return ((bitField0_ & 0x00002000) == 0x00002000);
       }
       /**
        * <code>required bool disableWAL = 15;</code>
@@ -6731,7 +6464,7 @@ public final class PTableProtos {
        * <code>required bool disableWAL = 15;</code>
        */
       public Builder setDisableWAL(boolean value) {
-        bitField0_ |= 0x00004000;
+        bitField0_ |= 0x00002000;
         disableWAL_ = value;
         onChanged();
         return this;
@@ -6740,7 +6473,7 @@ public final class PTableProtos {
        * <code>required bool disableWAL = 15;</code>
        */
       public Builder clearDisableWAL() {
-        bitField0_ = (bitField0_ & ~0x00004000);
+        bitField0_ = (bitField0_ & ~0x00002000);
         disableWAL_ = false;
         onChanged();
         return this;
@@ -6752,7 +6485,7 @@ public final class PTableProtos {
        * <code>required bool multiTenant = 16;</code>
        */
       public boolean hasMultiTenant() {
-        return ((bitField0_ & 0x00008000) == 0x00008000);
+        return ((bitField0_ & 0x00004000) == 0x00004000);
       }
       /**
        * <code>required bool multiTenant = 16;</code>
@@ -6764,7 +6497,7 @@ public final class PTableProtos {
        * <code>required bool multiTenant = 16;</code>
        */
       public Builder setMultiTenant(boolean value) {
-        bitField0_ |= 0x00008000;
+        bitField0_ |= 0x00004000;
         multiTenant_ = value;
         onChanged();
         return this;
@@ -6773,7 +6506,7 @@ public final class PTableProtos {
        * <code>required bool multiTenant = 16;</code>
        */
       public Builder clearMultiTenant() {
-        bitField0_ = (bitField0_ & ~0x00008000);
+        bitField0_ = (bitField0_ & ~0x00004000);
         multiTenant_ = false;
         onChanged();
         return this;
@@ -6785,7 +6518,7 @@ public final class PTableProtos {
        * <code>optional bytes viewType = 17;</code>
        */
       public boolean hasViewType() {
-        return ((bitField0_ & 0x00010000) == 0x00010000);
+        return ((bitField0_ & 0x00008000) == 0x00008000);
       }
       /**
        * <code>optional bytes viewType = 17;</code>
@@ -6800,7 +6533,7 @@ public final class PTableProtos {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00010000;
+  bitField0_ |= 0x00008000;
         viewType_ = value;
         onChanged();
         return this;
@@ -6809,7 +6542,7 @@ public final class PTableProtos {
        * <code>optional bytes viewType = 17;</code>
        */
       public Builder clearViewType() {
-        bitField0_ = (bitField0_ & ~0x00010000);
+        bitField0_ = (bitField0_ & ~0x00008000);
         viewType_ = getDefaultInstance().getViewType();
         onChanged();
         return this;
@@ -6821,7 +6554,7 @@ public final class PTableProtos {
        * <code>optional bytes viewStatement = 18;</code>
        */
       public boolean hasViewStatement() {
-        return ((bitField0_ & 0x00020000) == 0x00020000);
+        return ((bitField0_ & 0x00010000) == 0x00010000);
       }
       /**
        * <code>optional bytes viewStatement = 18;</code>
@@ -6836,7 +6569,7 @@ public final class PTableProtos {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00020000;
+  bitField0_ |= 0x00010000;
         viewStatement_ = value;
         onChanged();
         return this;
@@ -6845,7 +6578,7 @@ public final class PTableProtos {
        * <code>optional bytes viewStatement = 18;</code>
        */
       public Builder clearViewStatement() {
-        bitField0_ = (bitField0_ & ~0x00020000);
+        bitField0_ = (bitField0_ & ~0x00010000);
         viewStatement_ = getDefaultInstance().getViewStatement();
         onChanged();
         return this;
@@ -6854,9 +6587,9 @@ public final class PTableProtos {
       // repeated bytes physicalNames = 19;
       private java.util.List<com.google.protobuf.ByteString> physicalNames_ = java.util.Collections.emptyList();
       private void ensurePhysicalNamesIsMutable() {
-        if (!((bitField0_ & 0x00040000) == 0x00040000)) {
+        if (!((bitField0_ & 0x00020000) == 0x00020000)) {
           physicalNames_ = new java.util.ArrayList<com.google.protobuf.ByteString>(physicalNames_);
-          bitField0_ |= 0x00040000;
+          bitField0_ |= 0x00020000;
          }
       }
       /**
@@ -6918,7 +6651,7 @@ public final class PTableProtos {
        */
       public Builder clearPhysicalNames() {
         physicalNames_ = java.util.Collections.emptyList();
-        bitField0_ = (bitField0_ & ~0x00040000);
+        bitField0_ = (bitField0_ & ~0x00020000);
         onChanged();
         return this;
       }
@@ -6929,7 +6662,7 @@ public final class PTableProtos {
        * <code>optional bytes tenantId = 20;</code>
        */
       public boolean hasTenantId() {
-        return ((bitField0_ & 0x00080000) == 0x00080000);
+        return ((bitField0_ & 0x00040000) == 0x00040000);
       }
       /**
        * <code>optional bytes tenantId = 20;</code>
@@ -6944,7 +6677,7 @@ public final class PTableProtos {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00080000;
+  bitField0_ |= 0x00040000;
         tenantId_ = value;
         onChanged();
         return this;
@@ -6953,7 +6686,7 @@ public final class PTableProtos {
        * <code>optional bytes tenantId = 20;</code>
        */
       public Builder clearTenantId() {
-        bitField0_ = (bitField0_ & ~0x00080000);
+        bitField0_ = (bitField0_ & ~0x00040000);
         tenantId_ = getDefaultInstance().getTenantId();
         onChanged();
         return this;
@@ -6965,7 +6698,7 @@ public final class PTableProtos {
        * <code>optional int32 viewIndexId = 21;</code>
        */
       public boolean hasViewIndexId() {
-        return ((bitField0_ & 0x00100000) == 0x00100000);
+        return ((bitField0_ & 0x00080000) == 0x00080000);
       }
       /**
        * <code>optional int32 viewIndexId = 21;</code>
@@ -6977,7 +6710,7 @@ public final class PTableProtos {
        * <code>optional int32 viewIndexId = 21;</code>
        */
       public Builder setViewIndexId(int value) {
-        bitField0_ |= 0x00100000;
+        bitField0_ |= 0x00080000;
         viewIndexId_ = value;
         onChanged();
         return this;
@@ -6986,7 +6719,7 @@ public final class PTableProtos {
        * <code>optional int32 viewIndexId = 21;</code>
        */
       public Builder clearViewIndexId() {
-        bitField0_ = (bitField0_ & ~0x00100000);
+        bitField0_ = (bitField0_ & ~0x00080000);
         viewIndexId_ = 0;
         onChanged();
         return this;
@@ -6998,7 +6731,7 @@ public final class PTableProtos {
        * <code>optional bytes indexType = 22;</code>
        */
       public boolean hasIndexType() {
-        return ((bitField0_ & 0x00200000) == 0x00200000);
+        return ((bitField0_ & 0x00100000) == 0x00100000);
       }
       /**
        * <code>optional bytes indexType = 22;</code>
@@ -7013,7 +6746,7 @@ public final class PTableProtos {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x00200000;
+  bitField0_ |= 0x00100000;
         indexType_ = value;
         onChanged();
         return this;
@@ -7022,7 +6755,7 @@ public final class PTableProtos {
        * <code>optional bytes indexType = 22;</code>
        */
       public Builder clearIndexType() {
-        bitField0_ = (bitField0_ & ~0x00200000);
+        bitField0_ = (bitField0_ & ~0x00100000);
         indexType_ = getDefaultInstance().getIndexType();
         onChanged();
         return this;
@@ -7034,7 +6767,7 @@ public final class PTableProtos {
        * <code>optional int64 statsTimeStamp = 23;</code>
        */
       public boolean hasStatsTimeStamp() {
-        return ((bitField0_ & 0x00400000) == 0x00400000);
+        return ((bitField0_ & 0x00200000) == 0x00200000);
       }
       /**
        * <code>optional int64 statsTimeStamp = 23;</code>
@@ -7046,7 +6779,7 @@ public final class PTableProtos {
        * <code>optional int64 statsTimeStamp = 23;</code>
        */
       public Builder setStatsTimeStamp(long value) {
-        bitField0_ |= 0x00400000;
+        bitField0_ |= 0x00200000;
         statsTimeStamp_ = value;
         onChanged();
         return this;
@@ -7055,7 +6788,7 @@ public final class PTableProtos {
        * <code>optional int64 statsTimeStamp = 23;</code>
        */
       public Builder clearStatsTimeStamp() {
-        bitField0_ = (bitField0_ & ~0x00400000);
+        bitField0_ = (bitField0_ & ~0x00200000);
         statsTimeStamp_ = 0L;
         onChanged();
         return this;
@@ -7067,7 +6800,7 @@ public final class PTableProtos {
        * <code>optional bool storeNulls = 24;</code>
        */
       public boolean hasStoreNulls() {
-        return ((bitField0_ & 0x00800000) == 0x00800000);
+        return ((bitField0_ & 0x00400000) == 0x00400000);
       }
       /**
        * <code>optional bool storeNulls = 24;</code>
@@ -7079,7 +6812,7 @@ public final class PTableProtos {
        * <code>optional bool storeNulls = 24;</code>
        */
       public Builder setStoreNulls(boolean value) {
-        bitField0_ |= 0x00800000;
+        bitField0_ |= 0x00400000;
         storeNulls_ = value;
         onChanged();
         return this;
@@ -7088,7 +6821,7 @@ public final class PTableProtos {
        * <code>optional bool storeNulls = 24;</code>
        */
       public Builder clearStoreNulls() {
-        bitField0_ = (bitField0_ & ~0x00800000);
+        bitField0_ = (bitField0_ & ~0x00400000);
         storeNulls_ = false;
         onChanged();
         return this;
@@ -7100,7 +6833,7 @@ public final class PTableProtos {
        * <code>optional int32 baseColumnCount = 25;</code>
        */
       public boolean hasBaseColumnCount() {
-        return ((bitField0_ & 0x01000000) == 0x01000000);
+        return ((bitField0_ & 0x00800000) == 0x00800000);
       }
       /**
        * <code>optional int32 baseColumnCount = 25;</code>
@@ -7112,7 +6845,7 @@ public final class PTableProtos {
        * <code>optional int32 baseColumnCount = 25;</code>
        */
       public Builder setBaseColumnCount(int value) {
-        bitField0_ |= 0x01000000;
+        bitField0_ |= 0x00800000;
         baseColumnCount_ = value;
         onChanged();
         return this;
@@ -7121,7 +6854,7 @@ public final class PTableProtos {
        * <code>optional int32 baseColumnCount = 25;</code>
        */
       public Builder clearBaseColumnCount() {
-        bitField0_ = (bitField0_ & ~0x01000000);
+        bitField0_ = (bitField0_ & ~0x00800000);
         baseColumnCount_ = 0;
         onChanged();
         return this;
@@ -7133,7 +6866,7 @@ public final class PTableProtos {
        * <code>optional bool rowKeyOrderOptimizable = 26;</code>
        */
       public boolean hasRowKeyOrderOptimizable() {
-        return ((bitField0_ & 0x02000000) == 0x02000000);
+        return ((bitField0_ & 0x01000000) == 0x01000000);
       }
       /**
        * <code>optional bool rowKeyOrderOptimizable = 26;</code>
@@ -7145,7 +6878,7 @@ public final class PTableProtos {
        * <code>optional bool rowKeyOrderOptimizable = 26;</code>
        */
       public Builder setRowKeyOrderOptimizable(boolean value) {
-        bitField0_ |= 0x02000000;
+        bitField0_ |= 0x01000000;
         rowKeyOrderOptimizable_ = value;
         onChanged();
         return this;
@@ -7154,7 +6887,7 @@ public final class PTableProtos {
        * <code>optional bool rowKeyOrderOptimizable = 26;</code>
        */
       public Builder clearRowKeyOrderOptimizable() {
-        bitField0_ = (bitField0_ & ~0x02000000);
+        bitField0_ = (bitField0_ & ~0x01000000);
         rowKeyOrderOptimizable_ = false;
         onChanged();
         return this;
@@ -7166,7 +6899,7 @@ public final class PTableProtos {
        * <code>optional bool transactional = 27;</code>
        */
       public boolean hasTransactional() {
-        return ((bitField0_ & 0x04000000) == 0x04000000);
+        return ((bitField0_ & 0x02000000) == 0x02000000);
       }
       /**
        * <code>optional bool transactional = 27;</code>
@@ -7178,7 +6911,7 @@ public final class PTableProtos {
        * <code>optional bool transactional = 27;</code>
        */
       public Builder setTransactional(boolean value) {
-        bitField0_ |= 0x04000000;
+        bitField0_ |= 0x02000000;
         transactional_ = value;
         onChanged();
         return this;
@@ -7187,7 +6920,7 @@ public final class PTableProtos {
        * <code>optional bool transactional = 27;</code>
        */
       public Builder clearTransactional() {
-        bitField0_ = (bitField0_ & ~0x04000000);
+        bitField0_ = (bitField0_ & ~0x02000000);
         transactional_ = false;
         onChanged();
         return this;
@@ -7199,7 +6932,7 @@ public final class PTableProtos {
        * <code>optional int64 updateCacheFrequency = 28;</code>
        */
       public boolean hasUpdateCacheFrequency() {
-        return ((bitField0_ & 0x08000000) == 0x08000000);
+        return ((bitField0_ & 0x04000000) == 0x04000000);
       }
       /**
        * <code>optional int64 updateCacheFrequency = 28;</code>
@@ -7211,7 +6944,7 @@ public final class PTableProtos {
        * <code>optional int64 updateCacheFrequency = 28;</code>
        */
       public Builder setUpdateCacheFrequency(long value) {
-        bitField0_ |= 0x08000000;
+        bitField0_ |= 0x04000000;
         updateCacheFrequency_ = value;
         onChanged();
         return this;
@@ -7220,7 +6953,7 @@ public final class PTableProtos {
        * <code>optional int64 updateCacheFrequency = 28;</code>
        */
       public Builder clearUpdateCacheFrequency() {
-        bitField0_ = (bitField0_ & ~0x08000000);
+        bitField0_ = (bitField0_ & ~0x04000000);
         updateCacheFrequency_ = 0L;
         onChanged();
         return this;
@@ -7232,7 +6965,7 @@ public final class PTableProtos {
        * <code>optional int64 indexDisableTimestamp = 29;</code>
        */
       public boolean hasIndexDisableTimestamp() {
-        return ((bitField0_ & 0x10000000) == 0x10000000);
+        return ((bitField0_ & 0x08000000) == 0x08000000);
       }
       /**
        * <code>optional int64 indexDisableTimestamp = 29;</code>
@@ -7244,7 +6977,7 @@ public final class PTableProtos {
        * <code>optional int64 indexDisableTimestamp = 29;</code>
        */
       public Builder setIndexDisableTimestamp(long value) {
-        bitField0_ |= 0x10000000;
+        bitField0_ |= 0x08000000;
         indexDisableTimestamp_ = value;
         onChanged();
         return this;
@@ -7253,7 +6986,7 @@ public final class PTableProtos {
        * <code>optional int64 indexDisableTimestamp = 29;</code>
        */
       public Builder clearIndexDisableTimestamp() {
-        bitField0_ = (bitField0_ & ~0x10000000);
+        bitField0_ = (bitField0_ & ~0x08000000);
         indexDisableTimestamp_ = 0L;
         onChanged();
         return this;
@@ -7265,7 +6998,7 @@ public final class PTableProtos {
        * <code>optional bool isNamespaceMapped = 30;</code>
        */
       public boolean hasIsNamespaceMapped() {
-        return ((bitField0_ & 0x20000000) == 0x20000000);
+        return ((bitField0_ & 0x10000000) == 0x10000000);
       }
       /**
        * <code>optional bool isNamespaceMapped = 30;</code>
@@ -7277,7 +7010,7 @@ public final class PTableProtos {
        * <code>optional bool isNamespaceMapped = 30;</code>
        */
       public Builder setIsNamespaceMapped(boolean value) {
-        bitField0_ |= 0x20000000;
+        bitField0_ |= 0x10000000;
         isNamespaceMapped_ = value;
         onChanged();
         return this;
@@ -7286,7 +7019,7 @@ public final class PTableProtos {
        * <code>optional bool isNamespaceMapped = 30;</code>
        */
       public Builder clearIsNamespaceMapped() {
-        bitField0_ = (bitField0_ & ~0x20000000);
+        bitField0_ = (bitField0_ & ~0x10000000);
         isNamespaceMapped_ = false;
         onChanged();
         return this;
@@ -7298,7 +7031,7 @@ public final class PTableProtos {
        * <code>optional string autoParititonSeqName = 31;</code>
        */
       public boolean hasAutoParititonSeqName() {
-        return ((bitField0_ & 0x40000000) == 0x40000000);
+        return ((bitField0_ & 0x20000000) == 0x20000000);
       }
       /**
        * <code>optional string autoParititonSeqName = 31;</code>
@@ -7338,7 +7071,7 @@ public final class PTableProtos {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x40000000;
+  bitField0_ |= 0x20000000;
         autoParititonSeqName_ = value;
         onChanged();
         return this;
@@ -7347,7 +7080,7 @@ public final class PTableProtos {
        * <code>optional string autoParititonSeqName = 31;</code>
        */
       public Builder clearAutoParititonSeqName() {
-        bitField0_ = (bitField0_ & ~0x40000000);
+        bitField0_ = (bitField0_ & ~0x20000000);
         autoParititonSeqName_ = getDefaultInstance().getAutoParititonSeqName();
         onChanged();
         return this;
@@ -7360,7 +7093,7 @@ public final class PTableProtos {
         if (value == null) {
     throw new NullPointerException();
   }
-  bitField0_ |= 0x40000000;
+  bitField0_ |= 0x20000000;
         autoParititonSeqName_ = value;
         onChanged();
         return this;
@@ -7372,7 +7105,7 @@ public final class PTableProtos {
        * <code>optional bool isAppendOnlySchema = 32;</code>
        */
       public boolean hasIsAppendOnlySchema() {
-        return ((bitField0_ & 0x80000000) == 0x80000000);
+        return ((bitField0_ & 0x40000000) == 0x40000000);
       }
       /**
        * <code>optional bool isAppendOnlySchema = 32;</code>
@@ -7384,7 +7117,7 @@ public final class PTableProtos {
        * <code>optional bool isAppendOnlySchema = 32;</code>
        */
       public Builder setIsAppendOnlySchema(boolean value) {
-        bitField0_ |= 0x80000000;
+        bitField0_ |= 0x40000000;
         isAppendOnlySchema_ = value;
         onChanged();
         return this;
@@ -7393,8 +7126,44 @@ public final class PTableProtos {
        * <code>optional bool isAppendOnlySchema = 32;</code>
        */
       public Builder clearIsAppendOnlySchema() {
-        bitField0_ = (bitField0_ & ~0x80000000);
+        bitField0_ = (bitField0_ & ~0x40000000);
         isAppendOnlySchema_ = false;
+        onChanged();
+        return this;
+      }
+
+      // optional bytes parentNameBytes = 33;
+      private com.google.protobuf.ByteString parentNameBytes_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes parentNameBytes = 33;</code>
+       */
+      public boolean hasParentNameBytes() {
+        return ((bitField0_ & 0x80000000) == 0x80000000);
+      }
+      /**
+       * <code>optional bytes parentNameBytes = 33;</code>
+       */
+      public com.google.protobuf.ByteString getParentNameBytes() {
+        return parentNameBytes_;
+      }
+      /**
+       * <code>optional bytes parentNameBytes = 33;</code>
+       */
+      public Builder setParentNameBytes(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x80000000;
+        parentNameBytes_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bytes parentNameBytes = 33;</code>
+       */
+      public Builder clearParentNameBytes() {
+        bitField0_ = (bitField0_ & ~0x80000000);
+        parentNameBytes_ = getDefaultInstance().getParentNameBytes();
         onChanged();
         return this;
       }
@@ -7446,30 +7215,30 @@ public final class PTableProtos {
       "\016\n\006values\030\002 \003(\014\022\033\n\023guidePostsByteCount\030\003",
       " \001(\003\022\025\n\rkeyBytesCount\030\004 \001(\003\022\027\n\017guidePost" +
       "sCount\030\005 \001(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGui" +
-      "dePosts\"\230\006\n\006PTable\022\027\n\017schemaNameBytes\030\001 " +
+      "dePosts\"\217\006\n\006PTable\022\027\n\017schemaNameBytes\030\001 " +
       "\002(\014\022\026\n\016tableNameBytes\030\002 \002(\014\022\036\n\ttableType" +
       "\030\003 \002(\0162\013.PTableType\022\022\n\nindexState\030\004 \001(\t\022" +
       "\026\n\016sequenceNumber\030\005 \002(\003\022\021\n\ttimeStamp\030\006 \002" +
       "(\003\022\023\n\013pkNameBytes\030\007 \001(\014\022\021\n\tbucketNum\030\010 \002" +
       "(\005\022\031\n\007columns\030\t \003(\0132\010.PColumn\022\030\n\007indexes" +
       "\030\n \003(\0132\007.PTable\022\027\n\017isImmutableRows\030\013 \002(\010" +
-      "\022 \n\nguidePosts\030\014 \003(\0132\014.PTableStats\022\032\n\022da",
-      "taTableNameBytes\030\r \001(\014\022\031\n\021defaultFamilyN" +
-      "ame\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013multiTe" +
-      "nant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rviewStat" +
-      "ement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014\022\020\n\010te" +
-      "nantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022\021\n\tind" +
-      "exType\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001(\003\022\022\n\n" +
-      "storeNulls\030\030 \001(\010\022\027\n\017baseColumnCount\030\031 \001(" +
-      "\005\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022\025\n\rtra" +
-      "nsactional\030\033 \001(\010\022\034\n\024updateCacheFrequency" +
-      "\030\034 \001(\003\022\035\n\025indexDisableTimestamp\030\035 \001(\003\022\031\n",
-      "\021isNamespaceMapped\030\036 \001(\010\022\034\n\024autoParitito" +
-      "nSeqName\030\037 \001(\t\022\032\n\022isAppendOnlySchema\030  \001" +
-      "(\010*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010" +
-      "\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apa" +
-      "che.phoenix.coprocessor.generatedB\014PTabl" +
-      "eProtosH\001\210\001\001\240\001\001"
+      "\022\032\n\022dataTableNameBytes\030\r \001(\014\022\031\n\021defaultF",
+      "amilyName\030\016 \001(\014\022\022\n\ndisableWAL\030\017 \002(\010\022\023\n\013m" +
+      "ultiTenant\030\020 \002(\010\022\020\n\010viewType\030\021 \001(\014\022\025\n\rvi" +
+      "ewStatement\030\022 \001(\014\022\025\n\rphysicalNames\030\023 \003(\014" +
+      "\022\020\n\010tenantId\030\024 \001(\014\022\023\n\013viewIndexId\030\025 \001(\005\022" +
+      "\021\n\tindexType\030\026 \001(\014\022\026\n\016statsTimeStamp\030\027 \001" +
+      "(\003\022\022\n\nstoreNulls\030\030 \001(\010\022\027\n\017baseColumnCoun" +
+      "t\030\031 \001(\005\022\036\n\026rowKeyOrderOptimizable\030\032 \001(\010\022" +
+      "\025\n\rtransactional\030\033 \001(\010\022\034\n\024updateCacheFre" +
+      "quency\030\034 \001(\003\022\035\n\025indexDisableTimestamp\030\035 " +
+      "\001(\003\022\031\n\021isNamespaceMapped\030\036 \001(\010\022\034\n\024autoPa",
+      "rititonSeqName\030\037 \001(\t\022\032\n\022isAppendOnlySche" +
+      "ma\030  \001(\010\022\027\n\017parentNameBytes\030! \001(\014*A\n\nPTa" +
+      "bleType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010\n\004VIEW\020\002\022" +
+      "\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apache.phoen" +
+      "ix.coprocessor.generatedB\014PTableProtosH\001" +
+      "\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -7493,7 +7262,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "GuidePosts", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", });
           return null;
         }
       };
