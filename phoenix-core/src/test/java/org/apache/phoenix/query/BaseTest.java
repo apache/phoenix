@@ -84,7 +84,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -218,7 +217,6 @@ public abstract class BaseTest {
     protected static TransactionManager txManager;
     @ClassRule
     public static TemporaryFolder tmpFolder = new TemporaryFolder();
-    public static String tmpFolderpath =  System.getProperty("java.io.tmpdir");
     private static final int dropTableTimeout = 300; // 5 mins should be long enough.
     private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
@@ -267,26 +265,26 @@ public abstract class BaseTest {
                 "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n" +
                 ") ");
         builder.put(TABLE_WITH_ARRAY, "create table "
-				+ TABLE_WITH_ARRAY
-				+ "   (organization_id char(15) not null, \n"
-				+ "    entity_id char(15) not null,\n"
-				+ "    a_string_array varchar(100) array[],\n"
-				+ "    b_string varchar(100),\n"
-				+ "    a_integer integer,\n"
-				+ "    a_date date,\n"
-				+ "    a_time time,\n"
-				+ "    a_timestamp timestamp,\n"
-				+ "    x_decimal decimal(31,10),\n"
-				+ "    x_long_array bigint array[],\n"
-				+ "    x_integer integer,\n"
-				+ "    a_byte_array tinyint array[],\n"
-				+ "    a_short smallint,\n"
-				+ "    a_float float,\n"
-				+ "    a_double_array double array[],\n"
-				+ "    a_unsigned_float unsigned_float,\n"
-				+ "    a_unsigned_double unsigned_double \n"
-				+ "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
-				+ ")");
+                + TABLE_WITH_ARRAY
+                + "   (organization_id char(15) not null, \n"
+                + "    entity_id char(15) not null,\n"
+                + "    a_string_array varchar(100) array[],\n"
+                + "    b_string varchar(100),\n"
+                + "    a_integer integer,\n"
+                + "    a_date date,\n"
+                + "    a_time time,\n"
+                + "    a_timestamp timestamp,\n"
+                + "    x_decimal decimal(31,10),\n"
+                + "    x_long_array bigint array[],\n"
+                + "    x_integer integer,\n"
+                + "    a_byte_array tinyint array[],\n"
+                + "    a_short smallint,\n"
+                + "    a_float float,\n"
+                + "    a_double_array double array[],\n"
+                + "    a_unsigned_float unsigned_float,\n"
+                + "    a_unsigned_double unsigned_double \n"
+                + "    CONSTRAINT pk PRIMARY KEY (organization_id, entity_id)\n"
+                + ")");
         builder.put(BTABLE_NAME,"create table " + BTABLE_NAME +
                 "   (a_string varchar not null, \n" +
                 "    a_id char(3) not null,\n" +
@@ -499,37 +497,19 @@ public abstract class BaseTest {
         return url;
     }
     
-    private static void tearDownTxManager() throws SQLException, IOException {
+    private static void tearDownTxManager() throws SQLException {
         try {
             if (txService != null) txService.stopAndWait();
         } finally {
             try {
                 if (zkClient != null) zkClient.stopAndWait();
             } finally {
-                try {
-                    deleteSnapshotFiles();
-                } finally {
-                    txService = null;
-                    zkClient = null;
-                    txManager = null;
-                }
+                txService = null;
+                zkClient = null;
+                txManager = null;
             }
         }
-    }
-
-    private static void deleteSnapshotFiles() throws IOException {
-    	String path = config.get(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR);
-    	if (path != null) {
-    		File dir = new File(path);
-    		if (dir.exists()) {
-    			for (File file : dir.listFiles()) {
-    				if (!file.isDirectory()) {
-    					file.delete();
-    				}
-    			}
-    		}
-    		dir.delete();
-    	}
+        
     }
     
     protected static void setupTxManager() throws SQLException, IOException {
@@ -537,6 +517,7 @@ public abstract class BaseTest {
         config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
         config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
         config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, Networks.getRandomPort());
+        config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
         config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS);
 
         ConnectionInfo connInfo = ConnectionInfo.create(getUrl());
@@ -726,10 +707,6 @@ public abstract class BaseTest {
     public static Configuration setUpConfigForMiniCluster(Configuration conf, ReadOnlyProps overrideProps) {
         assertNotNull(conf);
         setDefaultTestConfig(conf, overrideProps);
-        String directoryPath = tmpFolderpath + BaseTest.generateRandomString();
-        File f = new File(directoryPath);
-        f.mkdir();
-        conf.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, directoryPath);
         /*
          * The default configuration of mini cluster ends up spawning a lot of threads
          * that are not really needed by phoenix for test purposes. Limiting these threads
@@ -958,12 +935,12 @@ public abstract class BaseTest {
             // Make sure all tables and views have been dropped
             props.remove(CURRENT_SCN_ATTRIB);
             try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
-            	DatabaseMetaData dbmd = seeLatestConn.getMetaData();
-    	        ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
-    	        boolean hasTables = rs.next();
-    	        if (hasTables) {
-    	        	fail("The following tables are not deleted that should be:" + getTableNames(rs));
-    	        }
+                DatabaseMetaData dbmd = seeLatestConn.getMetaData();
+                ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
+                boolean hasTables = rs.next();
+                if (hasTables) {
+                    fail("The following tables are not deleted that should be:" + getTableNames(rs));
+                }
             }
         }
         finally {
@@ -1012,12 +989,12 @@ public abstract class BaseTest {
     }
     
     private static String getTableNames(ResultSet rs) throws SQLException {
-    	StringBuilder buf = new StringBuilder();
-    	do {
-    		buf.append(" ");
-    		buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
-    	} while (rs.next());
-    	return buf.toString();
+        StringBuilder buf = new StringBuilder();
+        do {
+            buf.append(" ");
+            buf.append(SchemaUtil.getTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME)));
+        } while (rs.next());
+        return buf.toString();
     }
 
     private static String getSchemaNames(ResultSet rs) throws SQLException {
@@ -1942,42 +1919,42 @@ public abstract class BaseTest {
     }
     
     public static void upsertRows(Connection conn, String fullTableName, int numRows) throws SQLException {
-    	for (int i=1; i<=numRows; ++i) {
-	        upsertRow(conn, fullTableName, i, false);
-    	}
+        for (int i=1; i<=numRows; ++i) {
+            upsertRow(conn, fullTableName, i, false);
+        }
     }
 
     public static void upsertRow(Connection conn, String fullTableName, int index, boolean firstRowInBatch) throws SQLException {
-    	String upsert = "UPSERT INTO " + fullTableName
+        String upsert = "UPSERT INTO " + fullTableName
                 + " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-		PreparedStatement stmt = conn.prepareStatement(upsert);
-		stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
-		stmt.setString(2, "char"+index);
-		stmt.setInt(3, index);
-		stmt.setLong(4, index);
-		stmt.setBigDecimal(5, new BigDecimal(index));
-		Date date = DateUtil.parseDate("2015-01-01 00:00:00");
-		stmt.setDate(6, date);
-		stmt.setString(7, "varchar_a");
-		stmt.setString(8, "chara");
-		stmt.setInt(9, index+1);
-		stmt.setLong(10, index+1);
-		stmt.setBigDecimal(11, new BigDecimal(index+1));
-		stmt.setDate(12, date);
-		stmt.setString(13, "varchar_b");
-		stmt.setString(14, "charb");
-		stmt.setInt(15, index+2);
-		stmt.setLong(16, index+2);
-		stmt.setBigDecimal(17, new BigDecimal(index+2));
-		stmt.setDate(18, date);
-		stmt.executeUpdate();
-	}
+        PreparedStatement stmt = conn.prepareStatement(upsert);
+        stmt.setString(1, firstRowInBatch ? "firstRowInBatch_" : "" + "varchar"+index);
+        stmt.setString(2, "char"+index);
+        stmt.setInt(3, index);
+        stmt.setLong(4, index);
+        stmt.setBigDecimal(5, new BigDecimal(index));
+        Date date = DateUtil.parseDate("2015-01-01 00:00:00");
+        stmt.setDate(6, date);
+        stmt.setString(7, "varchar_a");
+        stmt.setString(8, "chara");
+        stmt.setInt(9, index+1);
+        stmt.setLong(10, index+1);
+        stmt.setBigDecimal(11, new BigDecimal(index+1));
+        stmt.setDate(12, date);
+        stmt.setString(13, "varchar_b");
+        stmt.setString(14, "charb");
+        stmt.setInt(15, index+2);
+        stmt.setLong(16, index+2);
+        stmt.setBigDecimal(17, new BigDecimal(index+2));
+        stmt.setDate(18, date);
+        stmt.executeUpdate();
+    }
 
     // Populate the test table with data.
     public static void populateTestTable(String fullTableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-        	upsertRows(conn, fullTableName, 3);
+            upsertRows(conn, fullTableName, 3);
             conn.commit();
         }
     }
