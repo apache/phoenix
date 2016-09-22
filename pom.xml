@@ -118,7 +118,7 @@
 
     <!-- Plugin options -->
     <numForkedUT>3</numForkedUT>
-    <numForkedIT>5</numForkedIT>
+    <numForkedIT>6</numForkedIT>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -316,12 +316,6 @@
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
                 <shutdown>kill</shutdown>
-                <properties>
-                  <property>
-                    <name>listener</name>
-                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
-                  </property>
-                </properties>
               </configuration>
               <goals>
                 <goal>integration-test</goal>
@@ -329,8 +323,8 @@
               </goals>
             </execution>
 	    <execution>
-               <id>NeedTheirOwnClusterTests</id>
-                 <configuration>
+              <id>NeedTheirOwnClusterTests</id>
+              <configuration>
                  <encoding>UTF-8</encoding>
                  <forkCount>${numForkedIT}</forkCount>
                  <runOrder>alphabetical</runOrder>
@@ -340,11 +334,17 @@
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
                  <shutdown>kill</shutdown>
-               </configuration>
-               <goals>
+                <properties>
+                  <property>
+                    <name>listener</name>
+                    <value>org.apache.phoenix.end2end.ParallelRunListener</value>
+                  </property>
+                </properties>
+              </configuration>
+              <goals>
                  <goal>integration-test</goal>
                  <goal>verify</goal>
-               </goals>
+              </goals>
             </execution>
           </executions>
         </plugin>

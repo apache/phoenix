@@ -20,8 +20,19 @@ package org.apache.phoenix.flume;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
-import org.apache.flume.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.util.Properties;
+
+import org.apache.flume.Channel;
+import org.apache.flume.Context;
+import org.apache.flume.Sink;
+import org.apache.flume.SinkFactory;
+import org.apache.flume.Transaction;
 import org.apache.flume.channel.MemoryChannel;
 import org.apache.flume.conf.Configurables;
 import org.apache.flume.event.EventBuilder;
@@ -29,9 +40,9 @@ import org.apache.flume.lifecycle.LifecycleState;
 import org.apache.flume.sink.DefaultSinkFactory;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.flume.serializer.EventSerializers;
+import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.flume.serializer.CustomSerializer;
+import org.apache.phoenix.flume.serializer.EventSerializers;
 import org.apache.phoenix.flume.sink.NullPhoenixSink;
 import org.apache.phoenix.flume.sink.PhoenixSink;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -39,16 +50,8 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.util.Properties;
 
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-
-
-public class PhoenixSinkIT extends ParallelStatsDisabledIT {
+public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
 
     private Context sinkContext;
     private PhoenixSink sink;

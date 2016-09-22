@@ -22,9 +22,21 @@ import org.junit.runner.Result;
 import org.junit.runner.notification.RunListener;
 
 public class ParallelRunListener extends RunListener {
+    // This causes output to go to the console when run through maven
+    // private static final Log LOG = LogFactory.getLog(ParallelRunListener.class);
+    private static final int TEAR_DOWN_THRESHOLD = 200;
+    
+    private int testRuns = 0;
+
     @Override
     public void testRunFinished(Result result) throws Exception {
-        BaseTest.tearDownMiniCluster();
+        testRuns += result.getRunCount();
+        if (testRuns > TEAR_DOWN_THRESHOLD) {
+            // LOG.info("Tearing down mini cluster after " + testRuns + " test runs");
+            testRuns = 0;
+            BaseTest.tearDownMiniCluster();
+        }
+
         super.testRunFinished(result);
     }
 }
