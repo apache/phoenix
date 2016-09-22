@@ -73,6 +73,7 @@ message PTable {
   // Do NOT reuse the tag '12'. Stats are no longer passed
   // along with the PTable.
   //repeated PTableStats guidePosts = 12;
+  // TODO remove this field in 5.0 release
   optional bytes dataTableNameBytes = 13;
   optional bytes defaultFamilyName = 14;
   required bool disableWAL = 15;
@@ -93,4 +94,5 @@ message PTable {
   optional bool isNamespaceMapped = 30;
   optional string autoParititonSeqName = 31;
   optional bool isAppendOnlySchema = 32;
+  optional bytes parentNameBytes = 33;
 }
