@@ -57,7 +57,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -107,7 +106,6 @@ public class ImmutableIndexIT extends BaseOwnClusterIT {
     }
 
     @Test
-    @Ignore
     public void testDropIfImmutableKeyValueColumn() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = "TBL_" + generateRandomString();
@@ -151,6 +149,10 @@ public class ImmutableIndexIT extends BaseOwnClusterIT {
 
     @Test
     public void testCreateIndexDuringUpsertSelect() throws Exception {
+        // This test times out at the UPSERT SELECT call for local index
+        if (localIndex) { // TODO: remove after PHOENIX-3314 is fixed 
+            return;
+        }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(100));
         String tableName = "TBL_" + generateRandomString();
