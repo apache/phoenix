@@ -272,7 +272,7 @@ public enum SQLExceptionCode {
     DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE(1069, "43A69", "Default column family not allowed on VIEW or shared INDEX."),
     ONLY_TABLE_MAY_BE_DECLARED_TRANSACTIONAL(1070, "44A01", "Only tables may be declared as transactional."),
     TX_MAY_NOT_SWITCH_TO_NON_TX(1071, "44A02", "A transactional table may not be switched to non transactional."),
-	STORE_NULLS_MUST_BE_TRUE_FOR_TRANSACTIONAL(1072, "44A03", "Store nulls must be true when a table is transactional."),
+    STORE_NULLS_MUST_BE_TRUE_FOR_TRANSACTIONAL(1072, "44A03", "Store nulls must be true when a table is transactional."),
     CANNOT_START_TRANSACTION_WITH_SCN_SET(1073, "44A04", "Cannot start a transaction on a connection with SCN set."),
     TX_MAX_VERSIONS_MUST_BE_GREATER_THAN_ONE(1074, "44A05", "A transactional table must define VERSION of greater than one."),
     CANNOT_SPECIFY_SCN_FOR_TXN_TABLE(1075, "44A06", "Cannot use a connection with SCN set for a transactional table."),
@@ -370,6 +370,7 @@ public enum SQLExceptionCode {
     OUTDATED_JARS(2007, "INT09", "Outdated jars."),
     INDEX_METADATA_NOT_FOUND(2008, "INT10", "Unable to find cached index metadata. "),
     UNKNOWN_ERROR_CODE(2009, "INT11", "Unknown error code."),
+    CONCURRENT_UPGRADE_IN_PROGRESS(2010, "INT12", ""),
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
