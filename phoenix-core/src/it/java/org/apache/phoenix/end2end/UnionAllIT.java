@@ -536,9 +536,9 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
             String[] queries = new String[2];
             queries[0] = "select a_string, col1 from " + tableName1 + " where a_string in " +
-                    "(select a_string aa from " + tableName2 + " where a_string != 'a' union all select a_string bb from " + tableName2 + ")";
+                    "(select a_string aa from " + tableName2 + " where a_string <> 'a' union all select a_string bb from " + tableName2 + ")";
             queries[1] = "select a_string, col1 from " + tableName1 + " where a_string in (select a_string from  " +
-                    "(select a_string from " + tableName2 + " where a_string != 'a' union all select a_string from " + tableName2 + "))";
+                    "(select a_string from " + tableName2 + " where a_string <> 'a' union all select a_string from " + tableName2 + "))";
             for (String query : queries) {
                 ResultSet rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());

@@ -289,7 +289,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testLeadingPKWithTrailingRVCNoResults() throws Exception {
-        String whereClause = "WHERE pk1 != 2 AND (pk3, pk4, pk5) IN ((6, 4, 5), (5, 6, 4))";
+        String whereClause = "WHERE pk1 <> 2 AND (pk3, pk4, pk5) IN ((6, 4, 5), (5, 6, 4))";
         List<String> expecteds = Collections.<String>emptyList();
         
         testWithIntegerTypesWithVariedSaltingAndTenancy(DEFAULT_UPSERT_BODIES, whereClause, expecteds);

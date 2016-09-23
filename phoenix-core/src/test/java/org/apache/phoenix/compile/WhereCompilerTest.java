@@ -594,7 +594,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testOrFalseFilter() throws SQLException {
         String tenantId = "000000000000001";
-        String query = "select * from atable where organization_id='" + tenantId + "' and (a_integer=0 or 3!=3)";
+        String query = "select * from atable where organization_id='" + tenantId + "' and (a_integer=0 or 3<>3)";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();

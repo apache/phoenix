@@ -519,7 +519,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             conn.commit();
 
             conn.createStatement().executeQuery(
-                "select v1,v2,v3,v4 FROM " + testTable  + " where v2 = 'abc' and v3 != 'a'");
+                "select v1,v2,v3,v4 FROM " + testTable  + " where v2 = 'abc' and v3 <> 'a'");
 
 
         } finally {

@@ -1862,7 +1862,7 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                             + "SELECT t1.TID, t1.A, t2.A, COUNT(*) "
                             + "FROM " + sourceTable + " t1 "
                             + "INNER JOIN " + sourceTable + " t2 ON t1.B = t2.B "
-                            + "WHERE t1.A != t2.A AND t1.TID = '1' AND t2.TID = '1' "
+                            + "WHERE t1.A <> t2.A AND t1.TID = '1' AND t2.TID = '1' "
                             + "GROUP BY t1.TID, t1.A, t2.A");
             upsertStmt.execute();
             conn.commit();            
@@ -1895,7 +1895,7 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 + "(" + JOIN_ORDER_TABLE_FULL_NAME + " o INNER JOIN " 
                 + "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + " s RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\") ON c.\"customer_id\" = o.\"customer_id\"" 
-                + " WHERE c.\"customer_id\" <= '0000000005' AND \"order_id\" != '000000000000003' AND i.name != 'T3' ORDER BY c.\"customer_id\", i.name";
+                + " WHERE c.\"customer_id\" <= '0000000005' AND \"order_id\" <> '000000000000003' AND i.name <> 'T3' ORDER BY c.\"customer_id\", i.name";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -2075,7 +2075,7 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + " LIMIT 5) AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name != 'S1') ORDER BY \"item_id\"";
+            String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + " LIMIT 5) AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name <> 'S1') ORDER BY \"item_id\"";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -2204,7 +2204,7 @@ public class SortMergeJoinIT extends BaseHBaseManagedTimeIT {
                 + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, date FROM " + JOIN_ORDER_TABLE_FULL_NAME + ") AS o INNER JOIN " 
                 + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + JOIN_SUPPLIER_TABLE_FULL_NAME + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + JOIN_ITEM_TABLE_FULL_NAME + ") AS i ON i.sid = s.sid) as qi" 
                 + " ON o.iid = qi.iiid) as qo ON c.cid = qo.ocid" 
-                + " WHERE c.cid <= '0000000005' AND qo.ooid != '000000000000003' AND qo.iname != 'T3' ORDER BY c.cid, qo.iname";
+                + " WHERE c.cid <= '0000000005' AND qo.ooid <> '000000000000003' AND qo.iname <> 'T3' ORDER BY c.cid, qo.iname";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
