@@ -92,10 +92,10 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
-        String schemaName = generateRandomString();
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
-        String VIEW_NAME = "VIEW_" + generateRandomString();
+        String schemaName = generateUniqueName();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String VIEW_NAME = "VIEW_" + generateUniqueName();
         String viewName = schemaName + "." + VIEW_NAME;
 
         createBaseTable(schemaName, tableName, false, null, null);
@@ -120,10 +120,10 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMultiTenantViewLocalIndex() throws Exception {
-        String schemaName = generateRandomString();
-        String tableName =  generateRandomString();
-        String indexName = "IND_" + generateRandomString();
-        String VIEW_NAME = "VIEW_" + generateRandomString();
+        String schemaName = generateUniqueName();
+        String tableName =  generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String VIEW_NAME = "VIEW_" + generateUniqueName();
         createBaseTable(schemaName, tableName, true, null, null);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
@@ -167,9 +167,9 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCreatingIndexOnGlobalView() throws Exception {
-        String baseTable =  generateRandomString();
-        String globalView = generateRandomString();
-        String globalViewIdx =  generateRandomString();
+        String baseTable =  generateUniqueName();
+        String globalView = generateUniqueName();
+        String globalViewIdx =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
             conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);

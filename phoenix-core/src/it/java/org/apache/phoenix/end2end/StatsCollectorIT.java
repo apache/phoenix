@@ -89,7 +89,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     @Before
     public void generateTableNames() {
         schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
-        tableName = "T_" + generateRandomString();
+        tableName = "T_" + generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, tableName);
     }
 
@@ -224,7 +224,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testUpdateStatsWithMultipleTables() throws Throwable {
-        String fullTableName2 = SchemaUtil.getTableName(schemaName, "T_" + generateRandomString());
+        String fullTableName2 = SchemaUtil.getTableName(schemaName, "T_" + generateUniqueName());
         Connection conn;
         PreparedStatement stmt;
         ResultSet rs;

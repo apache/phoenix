@@ -73,8 +73,8 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMutableTableIndexMaintanenceSaltedSalted() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, TABLE_SPLITS, INDEX_SPLITS);
@@ -84,8 +84,8 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMutableTableIndexMaintanenceSalted() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, INDEX_SPLITS);
@@ -95,8 +95,8 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMutableTableIndexMaintanenceUnsalted() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, null);

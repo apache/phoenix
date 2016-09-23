@@ -25,7 +25,7 @@ import org.junit.Test;
 
 public class MinMaxAggregateFunctionIT extends ParallelStatsDisabledIT {
 
-    private static final String TABLE_NAME = generateRandomString();
+    private static final String TABLE_NAME = generateUniqueName();
 
     @Test
     public void testMinMaxAggregateFunctions() throws SQLException {

@@ -39,7 +39,7 @@ public class ReadOnlyIT extends ParallelStatsDisabledIT {
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-      String testTable = generateRandomString();
+      String testTable = generateUniqueName();
       String ddl = "CREATE TABLE " + testTable + " " +
                         "  (r varchar not null, col1 integer" +
                         "  CONSTRAINT pk PRIMARY KEY (r))\n"; 

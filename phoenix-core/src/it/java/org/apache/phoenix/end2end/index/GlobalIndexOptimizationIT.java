@@ -73,16 +73,16 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testGlobalIndexOptimization() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
         testOptimization(dataTableName, dataTableFullName, indexTableName, 4);
     }
     
     @Test
     public void testGlobalIndexOptimizationWithSalting() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
         testOptimization(dataTableName, dataTableFullName, indexTableName, 4);
 
@@ -90,15 +90,15 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testGlobalIndexOptimizationTenantSpecific() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         testOptimizationTenantSpecific(dataTableName, indexTableName, null);
     }
     
     @Test
     public void testGlobalIndexOptimizationWithSaltingTenantSpecific() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         testOptimizationTenantSpecific(dataTableName, indexTableName, 4);
     }
 
@@ -330,11 +330,11 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGlobalIndexOptimizationOnSharedIndex() throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         createBaseTable(dataTableName, null, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());
-        String viewName = generateRandomString();
-        String indexOnDataTable = generateRandomString();
+        String viewName = generateUniqueName();
+        String indexOnDataTable = generateUniqueName();
         try{
             conn1.createStatement().execute("CREATE INDEX " + indexOnDataTable + " ON " + dataTableName + "(k2,k1) INCLUDE (v1)");
             conn1.createStatement().execute("CREATE VIEW " + viewName  + " AS SELECT * FROM " + dataTableName + " WHERE v1 = 'a'");
@@ -347,7 +347,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
-            String viewIndex = generateRandomString();
+            String viewIndex = generateUniqueName();
             conn1.createStatement().execute("CREATE INDEX " + viewIndex + " ON " + viewName + " (k1)");
             
             String query = "SELECT /*+ INDEX(" + viewName + " " + viewIndex + ")*/ t_id,k1,k2,k3,v1 FROM " + viewName + " where k1 IN (1,2) and k2 IN (3,4)";
@@ -378,8 +378,8 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNoGlobalIndexOptimization() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
         createBaseTable(dataTableName, null, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());

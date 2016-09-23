@@ -29,7 +29,7 @@ import static org.junit.Assert.assertTrue;
 public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     private String initTables(Connection conn) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[])";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + "(region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2) VALUES('SF Bay Area'," +
@@ -265,7 +265,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayConcatFunctionWithUpsert1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
@@ -289,7 +289,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayConcatFunctionWithUpsert2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
         conn.createStatement().execute(ddl);
@@ -313,7 +313,7 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayConcatFunctionWithUpsert3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
@@ -338,8 +338,8 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayConcatFunctionWithUpsertSelect1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String sourceTableName = generateRandomString();
-        String targetTableName = generateRandomString();
+        String sourceTableName = generateUniqueName();
+        String targetTableName = generateUniqueName();
         String ddl = "CREATE TABLE " + sourceTableName + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
 
@@ -377,8 +377,8 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayConcatFunctionWithUpsertSelect2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String sourceTableName = generateRandomString();
-        String targetTableName = generateRandomString();
+        String sourceTableName = generateUniqueName();
+        String targetTableName = generateUniqueName();
         String ddl = "CREATE TABLE " + sourceTableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 

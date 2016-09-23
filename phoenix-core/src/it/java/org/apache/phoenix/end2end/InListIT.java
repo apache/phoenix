@@ -51,7 +51,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     public void testLeadingPKWithTrailingRVC() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "( col1 VARCHAR NOT NULL,"
                 + "  col2 VARCHAR NOT NULL, "
@@ -74,7 +74,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     public void testLeadingPKWithTrailingRVC2() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " ( user VARCHAR, tenant_id VARCHAR(5) NOT NULL,tenant_type_id VARCHAR(3) NOT NULL,  id INTEGER NOT NULL CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id))");
 
         conn.createStatement().execute("upsert into " + tableName + " (tenant_id, tenant_type_id, id, user) values ('a', 'a', 1, 'BonA')");
@@ -144,7 +144,7 @@ public class InListIT extends ParallelStatsDisabledIT {
      * @return  the table or view name that should be used to access the created table
      */
     private static String initializeAndGetTable(Connection baseConn, Connection conn, boolean isMultiTenant, PDataType pkType, int saltBuckets) throws SQLException {
-            String tableName = generateRandomString() + "in_test" + pkType.getSqlTypeName() + saltBuckets + (isMultiTenant ? "_multi" : "_single");
+            String tableName = generateUniqueName() + "in_test" + pkType.getSqlTypeName() + saltBuckets + (isMultiTenant ? "_multi" : "_single");
             String tableDDL = createTableDDL(tableName, pkType, saltBuckets, isMultiTenant);
             baseConn.createStatement().execute(tableDDL);
             
@@ -445,7 +445,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     public void testWithFixedLengthKV() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " ( id INTEGER PRIMARY KEY, k CHAR(3))");
 
         conn.createStatement().execute("upsert into " + tableName + " values (1, 'aa')");
@@ -465,7 +465,7 @@ public class InListIT extends ParallelStatsDisabledIT {
     private void testWithFixedLengthPK(SortOrder sortOrder) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " ( k CHAR(3) PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
 
         conn.createStatement().execute("upsert into " + tableName + " (k) values ('aa')");

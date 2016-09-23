@@ -39,8 +39,8 @@ import org.junit.Test;
 public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
-    private static final String TEST_SIGNED = generateRandomString();
-    private static final String TEST_UNSIGNED = generateRandomString();
+    private static final String TEST_SIGNED = generateUniqueName();
+    private static final String TEST_UNSIGNED = generateUniqueName();
 
     @BeforeClass
     public static void initTable() throws Exception {

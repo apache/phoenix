@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.query.BaseTest.generateRandomString;
+import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_NAME;
@@ -125,6 +125,27 @@ public class TestUtil {
     public static final String DEFAULT_INDEX_TABLE_NAME = "I";
     public static final String DEFAULT_DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "T");
     public static final String DEFAULT_INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(DEFAULT_SCHEMA_NAME, "I");
+
+    public static final String TEST_TABLE_SCHEMA = "(" +
+    "   varchar_pk VARCHAR NOT NULL, " +
+    "   char_pk CHAR(10) NOT NULL, " +
+    "   int_pk INTEGER NOT NULL, "+ 
+    "   long_pk BIGINT NOT NULL, " +
+    "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
+    "   date_pk DATE NOT NULL, " +
+    "   a.varchar_col1 VARCHAR, " +
+    "   a.char_col1 CHAR(10), " +
+    "   a.int_col1 INTEGER, " +
+    "   a.long_col1 BIGINT, " +
+    "   a.decimal_col1 DECIMAL(31, 10), " +
+    "   a.date1 DATE, " +
+    "   b.varchar_col2 VARCHAR, " +
+    "   b.char_col2 CHAR(10), " +
+    "   b.int_col2 INTEGER, " +
+    "   b.long_col2 BIGINT, " +
+    "   b.decimal_col2 DECIMAL(31, 10), " +
+    "   b.date2 DATE " +
+    "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
     
     private TestUtil() {
     }
@@ -509,7 +530,7 @@ public class TestUtil {
      *            list of values to be inserted into the pk column
      */
     public static String initTables(Connection conn, String inputSqlType, List<Object> inputList) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         createTable(conn, inputSqlType, tableName, "ASC");
         createTable(conn, inputSqlType, tableName, "DESC");
         for (int i = 0; i < inputList.size(); ++i) {
@@ -767,6 +788,10 @@ public class TestUtil {
                 LOG.info("Compaction done: " + compactionDone);
             }
         }
+    }
+
+    public static void createTransactionalTable(Connection conn, String tableName) throws SQLException {
+        conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
     }
 }
 

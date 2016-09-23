@@ -45,7 +45,7 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
     
     @Before
     public void createTable() throws SQLException {
-        tableName = generateRandomString();
+        tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("create table " + tableName +

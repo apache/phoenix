@@ -117,8 +117,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     private void testMultiCFViewIndex(boolean localIndex, boolean isNamespaceEnabled) throws Exception {
-        String tableName = "XYZ." + generateRandomString();
-        String baseViewName = generateRandomString() ;
+        String tableName = "XYZ." + generateUniqueName();
+        String baseViewName = generateUniqueName() ;
         createTableAndValidate(tableName, isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "b", isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "a", isNamespaceEnabled);
@@ -249,8 +249,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     public void testNonPaddedTenantId() throws Exception {
         String tenantId1 = "org1";
         String tenantId2 = "org2";
-        String tableName = generateRandomString();
-        String viewName = generateRandomString();
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);

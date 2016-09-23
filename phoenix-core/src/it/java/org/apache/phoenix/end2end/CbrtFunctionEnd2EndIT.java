@@ -38,8 +38,8 @@ public class CbrtFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-8;
-    private static final String TEST_SIGNED = generateRandomString();
-    private static final String TEST_UNSIGNED = generateRandomString();
+    private static final String TEST_SIGNED = generateUniqueName();
+    private static final String TEST_UNSIGNED = generateUniqueName();
 
     @BeforeClass
     public static void initTable() throws Exception {

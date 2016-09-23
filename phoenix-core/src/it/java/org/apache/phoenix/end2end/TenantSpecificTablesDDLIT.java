@@ -84,10 +84,10 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testCreateTenantViewFromNonMultiTenant() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         createTestTable(getUrl(), "CREATE TABLE " + tableName + " (K VARCHAR PRIMARY KEY)");
         try {
-            String viewName = generateRandomString();
+            String viewName = generateUniqueName();
             // Only way to get this exception is to attempt to derive from a global, multi-type table, as we won't find
             // a tenant-specific table when we attempt to resolve the base table.
             createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + viewName + " (COL VARCHAR) AS SELECT * FROM " + tableName);
@@ -99,8 +99,8 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testAlteringMultiTenancyForTableWithViewsNotAllowed() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String multiTenantTable = "MT_" + generateRandomString();
-        String globalTable = "G_" + generateRandomString();
+        String multiTenantTable = "MT_" + generateUniqueName();
+        String globalTable = "G_" + generateUniqueName();
         // create the two base tables
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String ddl = "CREATE TABLE " + multiTenantTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true "; 
@@ -108,18 +108,18 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             ddl = "CREATE TABLE " + globalTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) ";
             conn.createStatement().execute(ddl);
         }
-        String t1 = generateRandomString();
+        String t1 = generateUniqueName();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, t1);
         // create view on multi-tenant table
         try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
-            String viewName = "V_" + generateRandomString();
+            String viewName = "V_" + generateUniqueName();
             String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + multiTenantTable;
             tenantConn.createStatement().execute(viewDDL);
         }
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // create view on global table
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String viewName = "V_" + generateRandomString();
+            String viewName = "V_" + generateUniqueName();
             conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + globalTable);
         }
         props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -151,7 +151,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     public void testCreationOfParentTableFailsOnTenantSpecificConnection() throws Exception {
         try {
-            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE TABLE " + generateRandomString() + "( \n" + 
+            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE TABLE " + generateUniqueName() + "( \n" + 
                     "                user VARCHAR ,\n" + 
                     "                id INTEGER not null primary key desc\n" + 
                     "                ) ");
@@ -163,7 +163,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testTenantSpecificAndParentTablesMayBeInDifferentSchemas() throws SQLException {
-        String fullTableName = "DIFFSCHEMA." + generateRandomString();
+        String fullTableName = "DIFFSCHEMA." + generateUniqueName();
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + fullTableName + " ( \n" + 
                 "                tenant_col VARCHAR) AS SELECT * \n" + 
                 "                FROM " + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'aaa'");
@@ -191,14 +191,14 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testTenantSpecificTableCanDeclarePK() throws SQLException {
-            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateRandomString() + "( \n" + 
+            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateUniqueName() + "( \n" + 
                     "                tenant_col VARCHAR PRIMARY KEY) AS SELECT *\n" + 
                     "                FROM " + PARENT_TABLE_NAME);
     }
     
     @Test(expected=ColumnAlreadyExistsException.class)
     public void testTenantSpecificTableCannotOverrideParentCol() throws SQLException {
-        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateRandomString() + " ( \n" + 
+        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateUniqueName() + " ( \n" + 
                 "                user INTEGER) AS SELECT *\n" + 
                 "                FROM " + PARENT_TABLE_NAME);
     }
@@ -208,7 +208,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         // only two PK columns for multi_tenant, multi_type
         try {
             createTestTable(getUrl(), 
-                    "CREATE TABLE " + generateRandomString() + 
+                    "CREATE TABLE " + generateUniqueName() + 
                     "(TENANT_ID VARCHAR NOT NULL PRIMARY KEY, ID VARCHAR, A INTEGER) MULTI_TENANT=true");
             fail();
         }
@@ -338,7 +338,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testAllDropParentTableWithCascadeWithMultipleTenantTablesAndIndexes() throws Exception {
         // Create a second tenant table
-        String tenantTable2 = "V_" + generateRandomString();
+        String tenantTable2 = "V_" + generateUniqueName();
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2));
     	//TODO Create some tenant specific table indexes
         
@@ -418,9 +418,9 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testTableMetadataScan() throws Exception {
         // create a tenant table with same name for a different tenant to make sure we are not picking it up in metadata scans for TENANT_ID
-        String tenantId2 = "T_" + generateRandomString();
+        String tenantId2 = "T_" + generateUniqueName();
         String secondTenatConnectionURL = PHOENIX_JDBC_TENANT_SPECIFIC_URL.replace(TENANT_ID,  tenantId2);
-        String tenantTable2 = "V_" + generateRandomString();
+        String tenantTable2 = "V_" + generateUniqueName();
         createTestTable(secondTenatConnectionURL, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2));
         
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

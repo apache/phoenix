@@ -69,7 +69,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testExpressionInGroupBy() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = " create table " + tableName + "(tgb_id integer NOT NULL,utc_date_epoch integer NOT NULL,tgb_name varchar(40),ack_success_count integer" +
                 ",ack_success_one_ack_count integer, CONSTRAINT pk_tgb_counter PRIMARY KEY(tgb_id, utc_date_epoch))";
         String query = "SELECT tgb_id, tgb_name, (utc_date_epoch/10)*10 AS utc_epoch_hour,SUM(ack_success_count + ack_success_one_ack_count) AS ack_tx_sum" +
@@ -112,7 +112,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testBooleanInGroupBy() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = " create table " + tableName + "(id varchar primary key,v1 boolean, v2 integer, v3 integer)";
 
         createTestTable(getUrl(), ddl);
@@ -162,7 +162,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testScanUri() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initData(conn, tableName);
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("select uri from " + tableName);
@@ -190,7 +190,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testCount() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initData(conn, tableName);
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("select count(1) from " + tableName);
@@ -204,7 +204,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testGroupByCase() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String groupBy1 = "select " +
                 "case when uri LIKE 'Report%' then 'Reports' else 'Other' END category" +
                 ", avg(appcpu) from " + tableName +
@@ -238,7 +238,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + "(\n" + 
                 "  a VARCHAR NOT NULL,\n" + 
                 "  b VARCHAR,\n" + 
@@ -274,7 +274,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testGroupByOrderPreserving() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         conn.createStatement().execute("CREATE TABLE " + tableName + "(ORGANIZATION_ID char(15) not null, \n" + 
                 "JOURNEY_ID char(15) not null, \n" + 
@@ -319,7 +319,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testGroupByOrderPreservingDescSort() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString(); 
+        String tableName = generateUniqueName(); 
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 char(1) not null, k2 char(1) not null, constraint pk primary key (k1,k2)) split on ('ac','jc','nc')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a', 'a')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a', 'b')");
@@ -357,7 +357,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testSumGroupByOrderPreservingDesc() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         PreparedStatement stmt = conn.prepareStatement("CREATE TABLE " + tableName + " (k1 char(1) not null, k2 integer not null, constraint pk primary key (k1,k2)) split on (?,?,?)");
         stmt.setBytes(1, ByteUtil.concat(PChar.INSTANCE.toBytes("a"), PInteger.INSTANCE.toBytes(3)));
@@ -404,7 +404,7 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testAvgGroupByOrderPreserving() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         PreparedStatement stmt = conn.prepareStatement("CREATE TABLE " + tableName + " (k1 char(1) not null, k2 integer not null, constraint pk primary key (k1,k2)) split on (?,?,?)");
         stmt.setBytes(1, ByteUtil.concat(PChar.INSTANCE.toBytes("a"), PInteger.INSTANCE.toBytes(3)));

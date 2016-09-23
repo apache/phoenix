@@ -30,7 +30,7 @@ import org.junit.Test;
 
 public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
-    private static final String REGIONS = generateRandomString();
+    private static final String REGIONS = generateUniqueName();
 
     @BeforeClass
     public static void initTables() throws Exception {
@@ -314,7 +314,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayFillFunctionWithUpsert1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String regions = generateRandomString();
+        String regions = generateUniqueName();
         String ddl =
             "CREATE TABLE " + regions + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
@@ -341,7 +341,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayFillFunctionWithUpsert2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String regions = generateRandomString();
+        String regions = generateUniqueName();
         String ddl =
             "CREATE TABLE " + regions + " (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
         conn.createStatement().execute(ddl);
@@ -368,7 +368,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayFillFunctionWithUpsert3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String regions = generateRandomString();
+        String regions = generateUniqueName();
         String ddl =
             "CREATE TABLE " + regions + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
@@ -437,12 +437,12 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayFillFunctionWithUpsertSelect2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String source = generateRandomString();
+        String source = generateUniqueName();
         String ddl =
             "CREATE TABLE " + source + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        String target = generateRandomString();
+        String target = generateUniqueName();
         ddl = "CREATE TABLE " + target
             + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],varchars2 VARCHAR[])";
         conn.createStatement().execute(ddl);

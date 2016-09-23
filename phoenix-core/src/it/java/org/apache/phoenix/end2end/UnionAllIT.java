@@ -41,8 +41,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnionAllSelects() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -96,8 +96,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testAggregate() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -151,8 +151,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGroupBy() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -200,8 +200,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testOrderByLimit() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -276,8 +276,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSelectDiff() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -305,8 +305,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testJoinInUnionAll() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -380,8 +380,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDerivedTable() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -428,8 +428,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnionAllInDerivedTable() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -497,8 +497,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnionAllInSubquery() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -553,8 +553,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnionAllWithBindParam() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -601,8 +601,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testExplainUnionAll() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -660,10 +660,10 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testBug2295() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
-        String itableName1 = generateRandomString();
-        String itableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        String itableName1 = generateUniqueName();
+        String itableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -694,8 +694,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testParameterMetaDataNotNull() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
     
@@ -741,10 +741,10 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDiffDataTypes() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
-        String tableName3 = generateRandomString();
-        String tableName4 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        String tableName3 = generateUniqueName();
+        String tableName4 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -827,10 +827,10 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDiffScaleSortOrder() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
-        String tableName3 = generateRandomString();
-        String tableName4 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        String tableName3 = generateUniqueName();
+        String tableName4 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -915,8 +915,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testVarcharChar() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
@@ -979,8 +979,8 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCoerceExpr() throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 

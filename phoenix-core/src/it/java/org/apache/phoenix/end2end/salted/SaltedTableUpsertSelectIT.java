@@ -44,11 +44,11 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String source = generateRandomString();
+            String source = generateUniqueName();
             String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER)";
             createTestTable(getUrl(), ddl);
-            String target = generateRandomString();
+            String target = generateUniqueName();
             ddl = "CREATE TABLE IF NOT EXISTS " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
@@ -83,11 +83,11 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String source = generateRandomString();
+            String source = generateUniqueName();
             String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
-            String target = generateRandomString();
+            String target = generateUniqueName();
             ddl = "CREATE TABLE IF NOT EXISTS " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER)";
             createTestTable(getUrl(), ddl);
@@ -127,11 +127,11 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String source = generateRandomString();
+            String source = generateUniqueName();
             String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
-            String target = generateRandomString();
+            String target = generateUniqueName();
             ddl = "CREATE TABLE IF NOT EXISTS " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
@@ -166,7 +166,7 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String source = generateRandomString();
+            String source = generateUniqueName();
             String ddl = "CREATE TABLE IF NOT EXISTS " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col1 INTEGER, col2 INTEGER) SALT_BUCKETS=4";
             createTestTable(getUrl(), ddl);
@@ -200,7 +200,7 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String source1 = generateRandomString();
+            String source1 = generateUniqueName();
             String ddl = "CREATE TABLE IF NOT EXISTS " + source1 +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" + 
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
@@ -241,7 +241,7 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String source1 = generateRandomString();
+            String source1 = generateUniqueName();
             String ddl = "CREATE TABLE IF NOT EXISTS " + source1 +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
@@ -258,7 +258,7 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
             }
             conn.commit();
 
-            String source2 = generateRandomString();
+            String source2 = generateUniqueName();
             String ddl2 = "CREATE TABLE IF NOT EXISTS " + source2 +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";
@@ -275,7 +275,7 @@ public class SaltedTableUpsertSelectIT extends ParallelStatsDisabledIT {
             }
             conn.commit();
 
-            String dest = generateRandomString();
+            String dest = generateUniqueName();
             String ddl3 = "CREATE TABLE IF NOT EXISTS " + dest +
                     " (pk1 varchar NULL, pk2 varchar NULL, pk3 integer NOT NULL, col1 INTEGER" +
                     " CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SALT_BUCKETS=4";

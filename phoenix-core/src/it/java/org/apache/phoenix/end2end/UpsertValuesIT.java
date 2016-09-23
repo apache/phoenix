@@ -471,7 +471,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = null;
         PreparedStatement pstmt = null;
-        String tableName = BaseTest.generateRandomString();
+        String tableName = BaseTest.generateUniqueName();
         try {
             conn = DriverManager.getConnection(getUrl(), props);
             pstmt = conn.prepareStatement("create table " + tableName + " (k varchar primary key, v integer)");

@@ -255,7 +255,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testToDateWithCloneMethod() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
     	String ddl = "create table " + tableName + " (k varchar primary key, v varchar[])";
         conn.createStatement().execute(ddl);
         String dateStr = "2100-01-01";

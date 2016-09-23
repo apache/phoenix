@@ -40,7 +40,7 @@ public class RegexpReplaceFunctionIT extends ParallelStatsDisabledIT {
 
     @Before
     public void doBeforeTestSetup() throws Exception {
-        this.tableName = generateRandomString();
+        this.tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         createGroupByTestTable(conn, tableName);
         insertRow(conn, "Report11", 10);

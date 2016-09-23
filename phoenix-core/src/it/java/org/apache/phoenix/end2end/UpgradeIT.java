@@ -73,13 +73,13 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     
     @Before
     public void generateTenantId() {
-        tenantId = "T_" + generateRandomString();
+        tenantId = "T_" + generateUniqueName();
     }
 
     @Test
     public void testUpgradeForTenantViewWithSameColumnsAsBaseTable() throws Exception {
-        String tableWithViewName = generateRandomString();
-        String viewTableName = generateRandomString();
+        String tableWithViewName = generateUniqueName();
+        String viewTableName = generateUniqueName();
         testViewUpgrade(true, tenantId, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.EQUAL);
         testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.EQUAL);
@@ -93,8 +93,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpgradeForTenantViewWithMoreColumnsThanBaseTable() throws Exception {
-        String tableWithViewName = generateRandomString();
-        String viewTableName = generateRandomString();
+        String tableWithViewName = generateUniqueName();
+        String viewTableName = generateUniqueName();
         testViewUpgrade(true, tenantId, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
         testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.MORE);
@@ -108,8 +108,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpgradeForViewWithSameColumnsAsBaseTable() throws Exception {
-        String tableWithViewName = generateRandomString();
-        String viewTableName = generateRandomString();
+        String tableWithViewName = generateUniqueName();
+        String viewTableName = generateUniqueName();
         testViewUpgrade(false, null, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.EQUAL);
         testViewUpgrade(false, null, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.EQUAL);
@@ -123,8 +123,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpgradeForViewWithMoreColumnsThanBaseTable() throws Exception {
-        String tableWithViewName = generateRandomString();
-        String viewTableName = generateRandomString();
+        String tableWithViewName = generateUniqueName();
+        String viewTableName = generateUniqueName();
         testViewUpgrade(false, null, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
         testViewUpgrade(false, null, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2", ColumnDiff.MORE);
         testViewUpgrade(false, null, null, tableWithViewName + "3", "VIEWSCHEMA", viewTableName + "3", ColumnDiff.MORE);
@@ -136,8 +136,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSettingBaseColumnCountWhenBaseTableColumnDropped() throws Exception {
-        String tableWithViewName = generateRandomString();
-        String viewTableName = generateRandomString();
+        String tableWithViewName = generateUniqueName();
+        String viewTableName = generateUniqueName();
         testViewUpgrade(true, tenantId, null, tableWithViewName + "1", null, viewTableName + "1", ColumnDiff.MORE);
         testViewUpgrade(true, tenantId, "TABLESCHEMA", tableWithViewName + "", null, viewTableName + "2",
             ColumnDiff.LESS);
@@ -156,12 +156,12 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String schemaName = "TEST";
-            String phoenixFullTableName = schemaName + "." + generateRandomString();
-            String indexName = "IDX_" + generateRandomString();
-            String localIndexName = "LIDX_" + generateRandomString();
+            String phoenixFullTableName = schemaName + "." + generateUniqueName();
+            String indexName = "IDX_" + generateUniqueName();
+            String localIndexName = "LIDX_" + generateUniqueName();
 
-            String viewName = "VIEW_" + generateRandomString();
-            String viewIndexName = "VIDX_" + generateRandomString();
+            String viewName = "VIEW_" + generateUniqueName();
+            String viewIndexName = "VIDX_" + generateUniqueName();
 
             String[] tableNames = new String[] { phoenixFullTableName, schemaName + "." + indexName,
                     schemaName + "." + localIndexName, "diff." + viewName, "test." + viewName, viewName};
@@ -275,19 +275,20 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     public void testMapMultiTenantTableToNamespaceDuringUpgrade() throws SQLException, SnapshotCreationException,
             IllegalArgumentException, IOException, InterruptedException {
         String[] strings = new String[] { "a", "b", "c", "d" };
-        String schemaName = "TEST";
-        String phoenixFullTableName = schemaName + "." + generateRandomString();
+        String schemaName1 = "S_" +generateUniqueName(); // TEST
+        String schemaName2 = "S_" +generateUniqueName(); // DIFF
+        String phoenixFullTableName = schemaName1 + "." + generateUniqueName();
         String hbaseTableName = SchemaUtil.getPhysicalTableName(Bytes.toBytes(phoenixFullTableName), true)
                 .getNameAsString();
-        String indexName = "IDX_" + generateRandomString();
-        String viewName = "V_" + generateRandomString();
-        String viewName1 = "V1_" + generateRandomString();
-        String viewIndexName = "V_IDX_" + generateRandomString();
-        String tenantViewIndexName = "V1_IDX_" + generateRandomString();
+        String indexName = "IDX_" + generateUniqueName();
+        String viewName = "V_" + generateUniqueName();
+        String viewName1 = "V1_" + generateUniqueName();
+        String viewIndexName = "V_IDX_" + generateUniqueName();
+        String tenantViewIndexName = "V1_IDX_" + generateUniqueName();
 
-        String[] tableNames = new String[] { phoenixFullTableName, "diff." + viewName1, "test." + viewName1, viewName1 };
-        String[] viewIndexes = new String[] { "test." + viewIndexName, "diff." + viewIndexName };
-        String[] tenantViewIndexes = new String[] { "test." + tenantViewIndexName, "diff." + tenantViewIndexName };
+        String[] tableNames = new String[] { phoenixFullTableName, schemaName2 + "." + viewName1, schemaName1 + "." + viewName1, viewName1 };
+        String[] viewIndexes = new String[] { schemaName1 + "." + viewIndexName, schemaName2 + "." + viewIndexName };
+        String[] tenantViewIndexes = new String[] { schemaName1 + "." + tenantViewIndexName, schemaName2 + "." + tenantViewIndexName };
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + phoenixFullTableName
                     + "(k VARCHAR not null, v INTEGER not null, f INTEGER, g INTEGER NULL, h INTEGER NULL CONSTRAINT pk PRIMARY KEY(k,v)) MULTI_TENANT=true");
@@ -304,16 +305,16 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             // creating global index
             conn.createStatement().execute("create index " + indexName + " on " + phoenixFullTableName + "(f)");
             // creating view in schema 'diff'
-            conn.createStatement().execute("CREATE VIEW diff." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW " + schemaName2 + "." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // creating view in schema 'test'
-            conn.createStatement().execute("CREATE VIEW test." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+            conn.createStatement().execute("CREATE VIEW " + schemaName1 + "." + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             conn.createStatement().execute("CREATE VIEW " + viewName + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // Creating index on views
-            conn.createStatement().execute("create local index " + viewIndexName + " on diff." + viewName + "(col)");
-            conn.createStatement().execute("create local index " + viewIndexName + " on test." + viewName + "(col)");
+            conn.createStatement().execute("create local index " + viewIndexName + " on " + schemaName2 + "." + viewName + "(col)");
+            conn.createStatement().execute("create local index " + viewIndexName + " on " + schemaName1 + "." + viewName + "(col)");
         }
         Properties props = new Properties();
-        String tenantId = "a";
+        String tenantId = strings[0];
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             PreparedStatement upsertStmt = conn
@@ -327,14 +328,14 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             conn.commit();
             // creating view in schema 'diff'
             conn.createStatement()
-                    .execute("CREATE VIEW diff." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+                    .execute("CREATE VIEW " + schemaName2 + "." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // creating view in schema 'test'
             conn.createStatement()
-                    .execute("CREATE VIEW test." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
+                    .execute("CREATE VIEW " + schemaName1 + "." + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             conn.createStatement().execute("CREATE VIEW " + viewName1 + " (col VARCHAR) AS SELECT * FROM " + phoenixFullTableName);
             // Creating index on views
-            conn.createStatement().execute("create index " + tenantViewIndexName + " on diff." + viewName1 + "(col)");
-            conn.createStatement().execute("create index " + tenantViewIndexName + " on test." + viewName1 + "(col)");
+            conn.createStatement().execute("create index " + tenantViewIndexName + " on " + schemaName2 + "." + viewName1 + "(col)");
+            conn.createStatement().execute("create index " + tenantViewIndexName + " on " + schemaName1 + "." + viewName1 + "(col)");
         }
 
         props = new Properties();
@@ -393,18 +394,18 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSettingBaseColumnCountForMultipleViewsOnTable() throws Exception {
-        String baseSchema = "S_" + generateRandomString();
-        String baseTable = "T_" + generateRandomString();
+        String baseSchema = "S_" + generateUniqueName();
+        String baseTable = "T_" + generateUniqueName();
         String fullBaseTableName = SchemaUtil.getTableName(baseSchema, baseTable);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + fullBaseTableName + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 INTEGER, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true";
             conn.createStatement().execute(baseTableDDL);
 
-            String[] tenants = new String[] {"T_" + generateRandomString(), "T_" + generateRandomString()};
+            String[] tenants = new String[] {"T_" + generateUniqueName(), "T_" + generateUniqueName()};
             Collections.sort(Arrays.asList(tenants));
-            String[] tenantViews = new String[] {"V_" + generateRandomString(), "V_" + generateRandomString(), "V_" + generateRandomString()};
+            String[] tenantViews = new String[] {"V_" + generateUniqueName(), "V_" + generateUniqueName(), "V_" + generateUniqueName()};
             Collections.sort(Arrays.asList(tenantViews));
-            String[] globalViews = new String[] {"G_" + generateRandomString(), "G_" + generateRandomString(), "G_" + generateRandomString()};
+            String[] globalViews = new String[] {"G_" + generateUniqueName(), "G_" + generateUniqueName(), "G_" + generateUniqueName()};
             Collections.sort(Arrays.asList(globalViews));
             for (int i = 0; i < 2; i++) {
                 // Create views for tenants;
@@ -601,7 +602,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpgradeRequiredPreventsSQL() throws SQLException {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         try (Connection conn = getConnection(false, null)) {
             conn.createStatement().execute(
                     "CREATE TABLE " + tableName
@@ -617,7 +618,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     conn.unwrap(PhoenixConnection.class), HConstants.LATEST_TIMESTAMP)) {
                 try {
                     phxConn.createStatement().execute(
-                            "CREATE TABLE " + generateRandomString()
+                            "CREATE TABLE " + generateUniqueName()
                                     + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2))");
                     fail("CREATE TABLE should have failed with UpgradeRequiredException");
                 } catch (UpgradeRequiredException expected) {
@@ -655,7 +656,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpgradingConnectionBypassesUpgradeRequiredCheck() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         try (Connection conn = getConnection(false, null)) {
             conn.createStatement()
                     .execute(

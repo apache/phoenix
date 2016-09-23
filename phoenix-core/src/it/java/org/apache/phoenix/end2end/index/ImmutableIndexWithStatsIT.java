@@ -40,7 +40,7 @@ public class ImmutableIndexWithStatsIT extends ParallelStatsEnabledIT {
         String query;
         ResultSet rs;
         
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -62,7 +62,7 @@ public class ImmutableIndexWithStatsIT extends ParallelStatsEnabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN " + query);
         assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT PARALLEL 1-WAY FULL SCAN"));
 
-        String indexName = "I_" + generateRandomString();
+        String indexName = "I_" + generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (v)");
         
         query = "SELECT * FROM " + indexName;

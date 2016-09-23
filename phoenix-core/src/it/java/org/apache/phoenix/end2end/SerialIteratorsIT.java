@@ -38,7 +38,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 public class SerialIteratorsIT extends ParallelStatsDisabledIT {
-    private String tableName = generateRandomString();
+    private String tableName = generateUniqueName();
     private final String[] strings = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p",
             "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
     private final String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"

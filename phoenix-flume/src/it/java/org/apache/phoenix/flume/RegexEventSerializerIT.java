@@ -59,7 +59,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testKeyGenerator() throws EventDeliveryException, SQLException {
         
-        final String fullTableName = generateRandomString();
+        final String fullTableName = generateUniqueName();
         initSinkContextWithDefaults(fullTableName);
         
         sink = new PhoenixSink();
@@ -94,7 +94,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMismatchKeyGenerator() throws EventDeliveryException, SQLException {
         
-        final String fullTableName = generateRandomString();
+        final String fullTableName = generateUniqueName();
         initSinkContextWithDefaults(fullTableName);
         setConfig(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR,DefaultKeyGenerator.UUID.name());
      
@@ -127,7 +127,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testMissingColumnsInEvent() throws EventDeliveryException, SQLException {
         
-        final String fullTableName = generateRandomString();
+        final String fullTableName = generateUniqueName();
         initSinkContextWithDefaults(fullTableName);
       
         sink = new PhoenixSink();
@@ -160,7 +160,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
     @Test
     public void testBatchEvents() throws EventDeliveryException, SQLException {
         
-        final String fullTableName = generateRandomString();
+        final String fullTableName = generateUniqueName();
         initSinkContextWithDefaults(fullTableName);
       
         sink = new PhoenixSink();
@@ -205,7 +205,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
     public void testApacheLogRegex() throws Exception {
         
         sinkContext = new Context ();
-        final String fullTableName = generateRandomString();
+        final String fullTableName = generateUniqueName();
         final String logRegex = "([^ ]*) ([^ ]*) ([^ ]*) (-|\\[[^\\]]*\\]) \"([^ ]+) ([^ ]+)" +
                                 " ([^\"]+)\" (-|[0-9]*) (-|[0-9]*)(?: ([^ \"]*|\"[^\"]*\")" +
                                 " ([^ \"]*|\"[^\"]*\"))?";
@@ -280,7 +280,7 @@ public class RegexEventSerializerIT extends BaseHBaseManagedTimeIT {
     public void testEventsWithHeaders() throws Exception {
         
         sinkContext = new Context ();
-        final String fullTableName = generateRandomString();
+        final String fullTableName = generateUniqueName();
         final String ddl = "CREATE TABLE " + fullTableName +
                 "  (rowkey VARCHAR not null, col1 varchar , cf1.col2 varchar , host varchar , source varchar \n" +
                 "  CONSTRAINT pk PRIMARY KEY (rowkey))\n";

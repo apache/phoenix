@@ -83,7 +83,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 		}
 		this.schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
 		this.tableDDLOptions = optionBuilder.toString();
-		this.tableName = "T_" + generateRandomString();
+		this.tableName = "T_" + generateUniqueName();
         this.fullTableName = SchemaUtil.getTableName(schemaName, tableName);
 	}
     
@@ -126,7 +126,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 				tableDDLOptions+=",";
 			tableDDLOptions+=(" SALT_BUCKETS="+saltBuckets);
 		}
-		String viewName = "V_" + generateRandomString();
+		String viewName = "V_" + generateUniqueName();
         String ddl = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))" + tableDDLOptions;
         conn.createStatement().execute(ddl);
         ddl = "CREATE VIEW " + viewName + " AS SELECT * FROM " + fullTableName + " WHERE k1 = 1";
@@ -180,7 +180,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     protected Pair<String,Scan> testUpdatableViewIndex(Integer saltBuckets, boolean localIndex, String viewName) throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        String viewIndexName1 = "I_" + generateRandomString();
+        String viewIndexName1 = "I_" + generateUniqueName();
         String viewIndexPhysicalName = MetaDataUtil.getViewIndexName(schemaName, tableName);
         if (localIndex) {
             conn.createStatement().execute("CREATE LOCAL INDEX " + viewIndexName1 + " on " + viewName + "(k3)");
@@ -217,7 +217,7 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
                             queryPlan);
         }
 
-        String viewIndexName2 = "I_" + generateRandomString();
+        String viewIndexName2 = "I_" + generateUniqueName();
         if (localIndex) {
             conn.createStatement().execute("CREATE LOCAL INDEX " + viewIndexName2 + " on " + viewName + "(s)");
         } else {

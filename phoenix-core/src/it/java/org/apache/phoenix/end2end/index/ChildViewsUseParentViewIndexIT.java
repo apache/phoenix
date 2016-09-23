@@ -20,11 +20,11 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIndexOnParentViewWithTenantSpecificConnection() throws Exception {
-        final String baseTableName = generateRandomString();
-        final String globalViewName = generateRandomString();
-        final String globalViewIdxName = generateRandomString();
-        final String tenantViewName1 = generateRandomString();
-        final String tenantViewName2 = generateRandomString();
+        final String baseTableName = generateUniqueName();
+        final String globalViewName = generateUniqueName();
+        final String globalViewIdxName = generateUniqueName();
+        final String tenantViewName1 = generateUniqueName();
+        final String tenantViewName2 = generateUniqueName();
 
         // Set up props with TenantId
         Properties props  = new Properties();
@@ -68,11 +68,11 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testParentViewIndexWithSpecializedChildViews() throws Exception {
-        final String baseTableName = generateRandomString();
-        final String parentViewName = generateRandomString();
-        final String parentViewIdxName = generateRandomString();
-        final String childViewName1 = generateRandomString();
-        final String childViewName2 = generateRandomString();
+        final String baseTableName = generateUniqueName();
+        final String parentViewName = generateUniqueName();
+        final String parentViewIdxName = generateUniqueName();
+        final String childViewName1 = generateUniqueName();
+        final String childViewName2 = generateUniqueName();
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // create base table

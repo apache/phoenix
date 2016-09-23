@@ -108,14 +108,14 @@ public class ImmutableIndexIT extends BaseOwnClusterIT {
     @Test
     public void testDropIfImmutableKeyValueColumn() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             String ddl =
-                    "CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
+                    "CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
             Statement stmt = conn.createStatement();
             stmt.execute(ddl);
             populateTestTable(fullTableName);
@@ -155,11 +155,11 @@ public class ImmutableIndexIT extends BaseOwnClusterIT {
         }
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(100));
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         TABLE_NAME = fullTableName;
-        String ddl ="CREATE TABLE " + TABLE_NAME + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
+        String ddl ="CREATE TABLE " + TABLE_NAME + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
         INDEX_DDL = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX IF NOT EXISTS " + indexName + " ON " + TABLE_NAME
                 + " (long_pk, varchar_pk)"
                 + " INCLUDE (long_col1, long_col2)";
@@ -242,11 +242,11 @@ public class ImmutableIndexIT extends BaseOwnClusterIT {
     @Test
     public void testCreateIndexWhileUpsertingData() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-        String ddl ="CREATE TABLE " + fullTableName + BaseTest.TEST_TABLE_SCHEMA + tableDDLOptions;
+        String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
         String indexDDL = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName
                 + " (long_pk, varchar_pk)"
                 + " INCLUDE (long_col1, long_col2)";

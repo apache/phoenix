@@ -95,10 +95,10 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     private void testGetTenantIdExpression(boolean isSalted) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        String tableName = generateRandomString() ;
-        String sequenceName = generateRandomString();
-        String t1 = generateRandomString();
-        String t2 = t1 + generateRandomString(); // ensure bigger
+        String tableName = generateUniqueName() ;
+        String sequenceName = generateUniqueName();
+        String t1 = generateUniqueName();
+        String t2 = t1 + generateUniqueName(); // ensure bigger
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) MULTI_TENANT=true" + (isSalted ? ",SALT_BUCKETS=3" : ""));
         conn.createStatement().execute("CREATE SEQUENCE "  + sequenceName);
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('" + t1 + "','x')");
@@ -112,7 +112,7 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
         HTableInterface htable1 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES);
         assertTenantIds(e1, htable1, new FirstKeyOnlyFilter(), new String[] {"", t1} );
 
-        String viewName = generateRandomString();
+        String viewName = generateUniqueName();
         tsconn.createStatement().execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
         Expression e2 = PhoenixRuntime.getTenantIdExpression(tsconn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
         HTableInterface htable2 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
@@ -122,24 +122,24 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
         HTableInterface htable3 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(tableName));
         assertTenantIds(e3, htable3, new FirstKeyOnlyFilter(), new String[] {t1, t2} );
 
-        String basTableName = generateRandomString();
+        String basTableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + basTableName + " (k1 VARCHAR PRIMARY KEY)");
         Expression e4 = PhoenixRuntime.getTenantIdExpression(conn, basTableName);
         assertNull(e4);
 
-        String indexName1 = generateRandomString();
+        String indexName1 = generateUniqueName();
         tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");
         Expression e5 = PhoenixRuntime.getTenantIdExpression(tsconn, indexName1);
         HTableInterface htable5 = tsconn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX + tableName));
         assertTenantIds(e5, htable5, new FirstKeyOnlyFilter(), new String[] {t1} );
 
-        String indexName2 = generateRandomString();
+        String indexName2 = generateUniqueName();
         conn.createStatement().execute("CREATE INDEX " + indexName2 + " ON " + tableName + "(k2)");
         Expression e6 = PhoenixRuntime.getTenantIdExpression(conn, indexName2);
         HTableInterface htable6 = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(indexName2));
         assertTenantIds(e6, htable6, new FirstKeyOnlyFilter(), new String[] {t1, t2} );
         
-        tableName = generateRandomString() + "BAR_" + (isSalted ? "SALTED" : "UNSALTED");
+        tableName = generateUniqueName() + "BAR_" + (isSalted ? "SALTED" : "UNSALTED");
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) " + (isSalted ? "SALT_BUCKETS=3" : ""));
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('" + t1 + "','x')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('" + t2 + "','y')");

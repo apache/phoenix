@@ -65,7 +65,7 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     @Before
     public void generateTableNames() {
         String schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
-        String tableName = "T_" + generateRandomString();
+        String tableName = "T_" + generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, tableName);
     }
 

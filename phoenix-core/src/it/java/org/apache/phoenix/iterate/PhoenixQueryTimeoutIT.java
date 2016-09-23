@@ -37,7 +37,7 @@ import org.junit.Test;
  */
 public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
-    private static final String QUERY_TIMEOUT_TEST = generateRandomString();
+    private static final String QUERY_TIMEOUT_TEST = generateUniqueName();
 
     @Test
     /**

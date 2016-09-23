@@ -77,7 +77,7 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
     @Test
     public void testDropViewKeepsHTable() throws Exception {
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
-        String hbaseNativeViewName = generateRandomString();
+        String hbaseNativeViewName = generateUniqueName();
 
         byte[] hbaseNativeBytes = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, hbaseNativeViewName);
         try {
@@ -108,8 +108,8 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
     @Test
     public void testDroppingIndexedColDropsIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String indexTableName = generateRandomString();
-        String dataTableFullName = SchemaUtil.getTableName(SCHEMA_NAME, generateRandomString());
+        String indexTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueName());
         String localIndexTableName1 = "LOCAL_" + indexTableName + "_1";
         String localIndexTableName2 = "LOCAL_" + indexTableName + "_2";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -202,10 +202,10 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
     public void helpTestDroppingIndexedColDropsViewIndex(boolean isMultiTenant) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : conn ) {
-            String tableWithView = generateRandomString();
-            String viewOfTable = generateRandomString();
-            String viewIndex1 = generateRandomString();
-            String viewIndex2 = generateRandomString();
+            String tableWithView = generateUniqueName();
+            String viewOfTable = generateUniqueName();
+            String viewIndex1 = generateUniqueName();
+            String viewIndex2 = generateUniqueName();
             
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);

@@ -54,7 +54,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
     public void testExecuteStatements() throws Exception {
         String tenantId = getOrganizationId();
         String tableName = initATableValues(tenantId, getDefaultSplits(tenantId), getUrl());
-        String ptsdbTableName = generateRandomString();
+        String ptsdbTableName = generateUniqueName();
         String statements = 
             "create table if not exists " + tableName + // Shouldn't error out b/c of if not exists clause
             "   (organization_id char(15) not null, \n" + 
@@ -120,7 +120,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
     @Test
     public void testCharPadding() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String rowKey = "hello"; 
         String testString = "world";
         String query = "create table " + tableName +
@@ -144,7 +144,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
         statement.execute();       
         conn.commit();
 
-        String btableName = generateRandomString();
+        String btableName = generateUniqueName();
         ensureTableCreated(getUrl(),btableName, BTABLE_NAME, nextTimestamp()-2);
         statement = conn.prepareStatement(
                 "upsert into " + btableName + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");

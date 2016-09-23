@@ -63,7 +63,7 @@ import org.junit.Test;
         justification="Designed to ignore.")
 
 public class DynamicFamilyIT extends ParallelStatsDisabledIT {
-    private static final String WEB_STATS = generateRandomString();
+    private static final String WEB_STATS = generateUniqueName();
     private static final String WEB_STATS_SCHEMA_NAME = "";
     private static final byte[] A_CF = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));
     private static final byte[] B_CF = Bytes.toBytes(SchemaUtil.normalizeIdentifier("B"));
@@ -339,7 +339,7 @@ public class DynamicFamilyIT extends ParallelStatsDisabledIT {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName
             + " (Id VARCHAR NOT NULL PRIMARY KEY, COLFAM1.A VARCHAR, COLFAM1.B VARCHAR, COLFAM2.A VARCHAR )");
         conn.createStatement().execute("UPSERT INTO " + tableName
