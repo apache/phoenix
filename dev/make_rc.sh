@@ -73,7 +73,7 @@ mvn clean apache-rat:check package -DskipTests -Dcheckstyle.skip=true -q;
 rm -rf $(find . -type d -name archive-tmp);
 
 # Copy all phoenix-*.jars to release dir
-phx_jars=$(find -iname phoenix-*.jar)
+phx_jars=$(find -iwholename "./*/target/phoenix-*.jar")
 cp $phx_jars $DIR_REL_BIN_PATH;
 
 # Copy bin
