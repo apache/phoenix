@@ -28,7 +28,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
+import java.util.Properties;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -36,11 +36,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 
 public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
@@ -59,22 +57,15 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
     private static final int MIN_CHAR = 'a';
     private static final int MAX_CHAR = 'z';
 
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
-        // needed for 64 region parallelization due to splitting
-        // props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(64));
-        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(32));
-        // enables manual splitting on salted tables
-        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1000));
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    private static Connection getConnection() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
     }
     
     private static void initTable(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         conn.createStatement().execute("CREATE TABLE " + tableName + "("
                 + "a VARCHAR PRIMARY KEY, b VARCHAR) " 
                 + HTableDescriptor.MAX_FILESIZE + "=" + MAX_FILESIZE + ","
@@ -109,7 +100,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         initTable(tableName);
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         int nRegions = services.getAllTableRegions(tableNameBytes).size();
         int nInitialRegions = nRegions;
@@ -280,7 +271,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testSkipScanInListOfRVCAfterManualSplit() throws SQLException {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( "
             + "organization_id CHAR(15) NOT NULL, "
@@ -350,7 +341,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMinMaxRangeIntersection() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         String tableName = generateUniqueName();
         PreparedStatement stmt = conn.prepareStatement("create table " + tableName
             + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "

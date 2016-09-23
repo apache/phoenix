@@ -30,21 +30,21 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
-    private static final String TEST_TABLE = generateUniqueName();
+    private String tableName;
 
-    @BeforeClass
-    public static void doBeforeTestSetup() throws Exception {
+    @Before
+    public void initTable() throws Exception {
+        tableName = generateUniqueName();
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE " + TEST_TABLE + " (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)";
+            ddl = "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, i INTEGER)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -58,9 +58,9 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
         insertRow(conn, "321n7-App-2-", 32);
     }
 
-    private static void insertRow(Connection conn, String k, int i) throws SQLException {
+    private void insertRow(Connection conn, String k, int i) throws SQLException {
         PreparedStatement stmt = conn.prepareStatement(
-            "UPSERT INTO " + TEST_TABLE + " VALUES (?, ?)");
+            "UPSERT INTO " + tableName + " VALUES (?, ?)");
         stmt.setString(1, k);
         stmt.setInt(2, i);
         stmt.executeUpdate();
@@ -69,7 +69,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
     private void testLikeExpression(Connection conn, String likeStr, int numResult, int expectedSum)
             throws Exception {
-        String cmd = "select k, i from " + TEST_TABLE + " where k like '" + likeStr + "'";
+        String cmd = "select k, i from " + tableName + " where k like '" + likeStr + "'";
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(cmd);
         int sum = 0;

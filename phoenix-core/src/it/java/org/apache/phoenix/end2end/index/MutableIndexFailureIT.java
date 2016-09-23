@@ -96,7 +96,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterIT {
         this.tableName = (localIndex ? "L_" : "") + TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "")
                 + (isNamespaceMapped ? "_NM" : "");
         this.indexName = INDEX_NAME;
-        this.fullTableName = SchemaUtil.getTableName(schema, tableName);
+        fullTableName = SchemaUtil.getTableName(schema, tableName);
         this.fullIndexName = SchemaUtil.getTableName(schema, indexName);
         this.isNamespaceMapped = isNamespaceMapped;
     }

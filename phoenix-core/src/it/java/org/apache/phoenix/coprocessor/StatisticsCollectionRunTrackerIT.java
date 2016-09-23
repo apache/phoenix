@@ -26,7 +26,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -34,17 +33,12 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
     private static final StatisticsCollectionRunTracker tracker = StatisticsCollectionRunTracker
@@ -52,15 +46,6 @@ public class StatisticsCollectionRunTrackerIT extends ParallelStatsEnabledIT {
 
     private String fullTableName;
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Must update config before starting server
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1024));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
     @Before
     public void generateTableNames() {
         String schemaName = TestUtil.DEFAULT_SCHEMA_NAME;

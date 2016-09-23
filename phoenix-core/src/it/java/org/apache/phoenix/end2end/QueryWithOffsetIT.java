@@ -31,21 +31,16 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
@@ -57,15 +52,6 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
     private final String preSplit;
     private String ddl;
     private String tableName;
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(true));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
 
     public QueryWithOffsetIT(String preSplit) {
         this.isSalted = preSplit.startsWith(" SALT_BUCKETS");

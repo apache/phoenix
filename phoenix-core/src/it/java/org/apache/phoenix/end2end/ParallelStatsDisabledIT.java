@@ -18,13 +18,21 @@
 
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 
 /**
- * Base class for tests that do not have statistics enabled.
- *
+ * Base class for tests whose methods run in parallel with statistics disabled.
+ * You must create unique names using {@link #generateUniqueName()} for each
+ * table and sequence used to prevent collisions.
  */
 @Category(ParallelStatsDisabledTest.class)
-public abstract class ParallelStatsDisabledIT extends BaseParallelIT {
+public abstract class ParallelStatsDisabledIT extends BaseTest {
 
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+    }
 }

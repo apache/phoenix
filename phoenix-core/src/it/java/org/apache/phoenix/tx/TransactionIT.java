@@ -33,7 +33,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -47,7 +46,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -59,31 +57,19 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.tephra.TransactionContext;
 import org.apache.tephra.TransactionSystemClient;
 import org.apache.tephra.TxConstants;
 import org.apache.tephra.hbase.TransactionAwareHTable;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 
 public class TransactionIT extends ParallelStatsDisabledIT {
     
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-
     @Test
     public void testReadOwnWrites() throws Exception {
         String transTableName = generateUniqueName();
@@ -150,46 +136,6 @@ public class TransactionIT extends ParallelStatsDisabledIT {
             // conn.createStatement().executeQuery(selectSql);
             // assertFalse("This transaction should not be on the invalid transactions",
             // txManager.getCurrentState().getInvalid().contains(currentTx));
-        }
-    }
-    
-    @Test
-    public void testDelete() throws Exception {
-        String transTableName = generateUniqueName();
-        String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + transTableName;
-        String selectSQL = "SELECT * FROM " + fullTableName;
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection conn1 = DriverManager.getConnection(getUrl()); 
-                Connection conn2 = DriverManager.getConnection(getUrl())) {
-            TestUtil.createTransactionalTable(conn, fullTableName);
-            conn1.setAutoCommit(false);
-            ResultSet rs = conn1.createStatement().executeQuery(selectSQL);
-            assertFalse(rs.next());
-            
-            String upsert = "UPSERT INTO " + fullTableName + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk) VALUES(?, ?, ?, ?, ?, ?)";
-            PreparedStatement stmt = conn1.prepareStatement(upsert);
-            // upsert two rows
-            TestUtil.setRowKeyColumns(stmt, 1);
-            stmt.execute();
-            conn1.commit();
-            
-            TestUtil.setRowKeyColumns(stmt, 2);
-            stmt.execute();
-            
-            // verify rows can be read even though commit has not been called
-            int rowsDeleted = conn1.createStatement().executeUpdate("DELETE FROM " + fullTableName);
-            assertEquals(2, rowsDeleted);
-            
-            // Delete and second upsert not committed yet, so there should be one row.
-            rs = conn2.createStatement().executeQuery("SELECT count(*) FROM " + fullTableName);
-            assertTrue(rs.next());
-            assertEquals(1, rs.getInt(1));
-            
-            conn1.commit();
-            
-            // verify rows are deleted after commit
-            rs = conn1.createStatement().executeQuery(selectSQL);
-            assertFalse(rs.next());
         }
     }
     

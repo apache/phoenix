@@ -33,7 +33,6 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import jline.internal.Log;
@@ -46,7 +45,6 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
@@ -54,16 +52,13 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Maps;
 import com.google.common.primitives.Doubles;
 
 @RunWith(Parameterized.class)
@@ -81,16 +76,17 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 		this.tableDDLOptions = optionBuilder.toString();
 	}
     
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        // Forces server cache to be used
-        props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(1));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    private static Connection getConnection(Properties props) throws SQLException {
+        props.setProperty(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(1));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
     }
-	
+    
+    private static Connection getConnection() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        return getConnection(props);
+    }
+    
 	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
@@ -100,8 +96,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCoveredColumnUpdates() throws Exception {
-    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = getConnection()) {
 	        conn.setAutoCommit(false);
 			String tableName = "TBL_" + generateUniqueName();
 			String indexName = "IDX_" + generateUniqueName();
@@ -200,12 +195,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCoveredColumns() throws Exception {
-    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = getConnection()) {
 
 	        conn.setAutoCommit(false);
 	        String query;
@@ -310,12 +304,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCompoundIndexKey() throws Exception {
-    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = getConnection()) {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
@@ -429,12 +422,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testMultipleUpdatesToSingleRow() throws Exception {
-    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = getConnection()) {
 	        conn.setAutoCommit(false);
 	        String query;
 	        ResultSet rs;
@@ -513,12 +505,11 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpsertingNullForIndexedColumns() throws Exception {
-    	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         String testTableName = tableName + "_" + System.currentTimeMillis();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = getConnection()) {
 	        conn.setAutoCommit(false);
 	        ResultSet rs;
     		Statement stmt = conn.createStatement();
@@ -603,9 +594,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 		String tableName = "TBL_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 
-
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = getConnection()) {
 	        conn.setAutoCommit(false);
 	        conn.createStatement().execute(
 	            "CREATE TABLE " + fullTableName +" (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) " + tableDDLOptions);
@@ -635,10 +624,10 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     }
 
     private void testSplitDuringIndexScan(boolean isReverse) throws Exception {
-        Properties props = new Properties();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(2));
-        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
-        Connection conn1 = DriverManager.getConnection(getUrl());
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn1 = getConnection(props);
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
@@ -688,7 +677,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIndexHalfStoreFileReader() throws Exception {
-        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn1 = getConnection();
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
@@ -859,7 +848,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 	  String indexName = "IDX_" + generateUniqueName();
 	  String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 	  Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-      try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      try (Connection conn = getConnection()) {
           conn.setAutoCommit(false);
           // create data table
           conn.createStatement().execute(
@@ -876,7 +865,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           String dml = "UPSERT INTO " + fullTableName + " (ENTITY_ID, TYPE) VALUES ( ?, ?)";
           props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
           // connection is tenant-specific
-          try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
+          try (Connection tenantConn = getConnection(props)) {
               // upsert one row
               upsertRow(dml, tenantConn, 0);
               tenantConn.commit();

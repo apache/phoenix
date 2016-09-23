@@ -21,36 +21,41 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
-    private static final String TABLE_NAME = generateUniqueName();
+    private String tableName;
 
-    @BeforeClass
-    public static void initTables() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        String ddl = "CREATE TABLE " + TABLE_NAME
-            + " (region_name VARCHAR PRIMARY KEY, string1 VARCHAR, string2 CHAR(50), delimiter1 VARCHAR, delimiter2 CHAR(20), nullstring1 VARCHAR, nullstring2 CHAR(20))";
-        conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO " + TABLE_NAME
-            + "(region_name, string1, string2, delimiter1, delimiter2, nullstring1, nullstring2) VALUES('SF Bay Area',"
-            +
-                "'a,b,c,d'," +
-                "'1.2.3.4'," +
-                "','," +
-                "'.'," +
-                "'c'," +
-                "'3'" +
-                ")";
-        PreparedStatement stmt = conn.prepareStatement(dml);
-        stmt.execute();
-        conn.commit();
+    @Before
+    public void initTables() throws Exception {
+        tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE " + tableName
+                + " (region_name VARCHAR PRIMARY KEY, string1 VARCHAR, string2 CHAR(50), delimiter1 VARCHAR, delimiter2 CHAR(20), nullstring1 VARCHAR, nullstring2 CHAR(20))";
+            conn.createStatement().execute(ddl);
+            String dml = "UPSERT INTO " + tableName
+                + "(region_name, string1, string2, delimiter1, delimiter2, nullstring1, nullstring2) VALUES('SF Bay Area',"
+                +
+                    "'a,b,c,d'," +
+                    "'1.2.3.4'," +
+                    "','," +
+                    "'.'," +
+                    "'c'," +
+                    "'3'" +
+                    ")";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.execute();
+            conn.commit();
+        }
     }
 
     @Test
@@ -59,7 +64,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string1, delimiter1) FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string1, delimiter1) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -75,7 +80,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string1, delimiter1, nullstring1) FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string1, delimiter1, nullstring1) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -91,7 +96,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string1, delimiter1, 'a') FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string1, delimiter1, 'a') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -107,7 +112,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string1, delimiter1, 'd') FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string1, delimiter1, 'd') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -123,7 +128,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string2, delimiter2) FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string2, delimiter2) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -139,7 +144,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string2, delimiter2, nullstring2) FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string2, delimiter2, nullstring2) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -155,7 +160,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string2, delimiter2, '1') FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string2, delimiter2, '1') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -171,7 +176,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(string2, delimiter2, '4') FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(string2, delimiter2, '4') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -187,7 +192,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY(region_name, ' ', '4') FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY(region_name, ' ', '4') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -203,7 +208,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY('hello,hello,hello', delimiter1) FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY('hello,hello,hello', delimiter1) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -219,7 +224,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY('a,hello,hello,hello,b', ',', 'hello') FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY('a,hello,hello,hello,b', ',', 'hello') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -235,7 +240,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT STRING_TO_ARRAY('b.a.b', delimiter2, 'b') FROM " + TABLE_NAME
+            "SELECT STRING_TO_ARRAY('b.a.b', delimiter2, 'b') FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -251,7 +256,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_LENGTH(STRING_TO_ARRAY('a, b, c', ', ')) FROM " + TABLE_NAME
+            "SELECT ARRAY_LENGTH(STRING_TO_ARRAY('a, b, c', ', ')) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -266,7 +271,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
             "SELECT STRING_TO_ARRAY(ARRAY_TO_STRING(ARRAY['a', 'b', 'c'], delimiter2), delimiter2, 'b') FROM "
-                + TABLE_NAME + " WHERE region_name = 'SF Bay Area'");
+                + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         PhoenixArray expected = new PhoenixArray(PVarchar.INSTANCE, new Object[]{"a", null, "c"});
@@ -282,7 +287,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
             "SELECT STRING_TO_ARRAY(ARRAY_TO_STRING(ARRAY['a', 'b', 'c'], delimiter2), ARRAY_ELEM(ARRAY[',', '.'], 2), 'b') FROM "
-                + TABLE_NAME + " WHERE region_name = 'SF Bay Area'");
+                + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         PhoenixArray expected = new PhoenixArray(PVarchar.INSTANCE, new Object[]{"a", null, "c"});
@@ -435,7 +440,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + TABLE_NAME
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE ARRAY['a', 'b', 'c', 'd']=STRING_TO_ARRAY(string1, delimiter1)");
         assertTrue(rs.next());
 
@@ -448,7 +453,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + TABLE_NAME
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE 'a'=ANY(STRING_TO_ARRAY(string1, delimiter1))");
         assertTrue(rs.next());
 
@@ -461,7 +466,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + TABLE_NAME
+        rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
             + " WHERE 'a'=ALL(STRING_TO_ARRAY('a,a,a,', delimiter1))");
         assertTrue(rs.next());
 

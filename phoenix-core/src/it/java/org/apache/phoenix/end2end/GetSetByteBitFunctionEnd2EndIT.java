@@ -32,7 +32,6 @@ import org.apache.phoenix.expression.function.GetByteFunction;
 import org.apache.phoenix.expression.function.SetBitFunction;
 import org.apache.phoenix.expression.function.SetByteFunction;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -42,10 +41,11 @@ import org.junit.Test;
 public class GetSetByteBitFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
-    private static final String TABLE_NAME = generateUniqueName();
+    private String TABLE_NAME;
 
-    @BeforeClass
-    public static void initTable() throws Exception {
+    @Before
+    public void initTable() throws Exception {
+        TABLE_NAME = generateUniqueName();
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
