@@ -31,13 +31,14 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosName;
-import org.apache.hadoop.security.authentication.util.KerberosUtil;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.util.InstanceResolver;
@@ -54,6 +55,9 @@ import org.junit.Test;
  * collide and when they do not.
  */
 public class SecureUserConnectionsTest {
+    private static final Log LOG = LogFactory.getLog(SecureUserConnectionsTest.class); 
+    private static final int KDC_START_ATTEMPTS = 10;
+
     private static final File TEMP_DIR = new File(getClassTempDir());
     private static final File KEYTAB_DIR = new File(TEMP_DIR, "keytabs");
     private static final File KDC_DIR = new File(TEMP_DIR, "kdc");
@@ -68,11 +72,22 @@ public class SecureUserConnectionsTest {
     public static void setupKdc() throws Exception {
         ensureIsEmptyDirectory(KDC_DIR);
         ensureIsEmptyDirectory(KEYTAB_DIR);
-        // Create and start the KDC
-        Properties kdcConf = MiniKdc.createConf();
-        kdcConf.put(MiniKdc.DEBUG, true);
-        KDC = new MiniKdc(kdcConf, KDC_DIR);
-        KDC.start();
+        // Create and start the KDC. MiniKDC appears to have a race condition in how it does
+        // port allocation (with apache-ds). See PHOENIX-3287.
+        boolean started = false;
+        for (int i = 0; !started && i < KDC_START_ATTEMPTS; i++) {
+            Properties kdcConf = MiniKdc.createConf();
+            kdcConf.put(MiniKdc.DEBUG, true);
+            KDC = new MiniKdc(kdcConf, KDC_DIR);
+            try {
+                KDC.start();
+                started = true;
+            } catch (Exception e) {
+                LOG.warn("PHOENIX-3287: Failed to start KDC, retrying..", e);
+            }
+        }
+        assertTrue("The embedded KDC failed to start successfully after " + KDC_START_ATTEMPTS
+                + " attempts.", started);
 
         createUsers(NUM_USERS);
 
