@@ -374,9 +374,9 @@ public class IndexExtendedIT extends BaseOwnClusterIT {
         }
     }
 
-    private Connection getConnectionForLocalIndexTest() throws SQLException{
+    private static Connection getConnectionForLocalIndexTest() throws SQLException{
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         return DriverManager.getConnection(getUrl(),props);
     }
 

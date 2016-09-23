@@ -25,29 +25,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.*;
-import org.junit.BeforeClass;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
-
 public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
-
-    @BeforeClass 
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Drop the HBase table metadata for this test
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
 
     private void createBaseTable(String tableName, Integer saltBuckets, String splits, boolean multiTenant) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());

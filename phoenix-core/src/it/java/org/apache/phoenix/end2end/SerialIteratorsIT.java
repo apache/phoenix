@@ -25,17 +25,12 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 public class SerialIteratorsIT extends ParallelStatsDisabledIT {
     private String tableName = generateUniqueName();
@@ -45,19 +40,17 @@ public class SerialIteratorsIT extends ParallelStatsDisabledIT {
             + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
             + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) SPLIT ON ('e','i','o')";
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Don't force row key order
-        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    private static Connection getConnection() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
     }
     
     @Test
     public void testConcatenatingSerialIterators() throws Exception {
         Connection conn;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
+        conn = getConnection();
         createTestTable(getUrl(), ddl);
         initTableValues(conn);
         String query = "SELECT t_id from " + tableName + " order by t_id desc limit " + 10;

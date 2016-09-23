@@ -34,7 +34,6 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
@@ -50,17 +49,13 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class StatsCollectorIT extends ParallelStatsEnabledIT {
@@ -69,21 +64,16 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     private String schemaName;
     private String fullTableName;
         
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsEnabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(10);
-        // Must update config before starting server
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        props.put(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
-        props.put(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
     public StatsCollectorIT( boolean transactional) {
         this.tableDDLOptions= transactional ? " TRANSACTIONAL=true" : "";
+    }
+    
+    private static Connection getConnection() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
+        props.setProperty(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        return DriverManager.getConnection(getUrl(), props);
     }
     
     @Before
@@ -100,9 +90,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testUpdateEmptyStats() throws Exception {
-        Connection conn;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         conn.setAutoCommit(true);
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k CHAR(1) PRIMARY KEY )"  + tableDDLOptions);
@@ -118,9 +106,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     
     @Test
     public void testSomeUpdateEmptyStats() throws Exception {
-        Connection conn;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         conn.setAutoCommit(true);
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k VARCHAR PRIMARY KEY, a.v1 VARCHAR, b.v2 VARCHAR ) " + tableDDLOptions + (tableDDLOptions.isEmpty() ? "" : ",") + "SALT_BUCKETS = 3");
@@ -158,7 +144,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         PreparedStatement stmt;
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
+        conn = getConnection();
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
                         + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))"
@@ -178,9 +164,6 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         array = conn.createArrayOf("VARCHAR", s);
         stmt.setArray(3, array);
         stmt.execute();
-        conn.close();
-        conn = DriverManager.getConnection(getUrl(), props);
-        // This analyze would not work
         stmt = conn.prepareStatement("UPDATE STATISTICS " + tableName);
         stmt.execute();
         rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
@@ -189,11 +172,9 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     }
 
     private void testNoDuplicatesAfterUpdateStats(String splitKey) throws Throwable {
-        Connection conn;
+        Connection conn = getConnection();
         PreparedStatement stmt;
         ResultSet rs;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement()
                 .execute("CREATE TABLE " + fullTableName
                         + " ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k))"+ tableDDLOptions
@@ -229,7 +210,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         PreparedStatement stmt;
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
+        conn = getConnection();
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k VARCHAR, a_string_array VARCHAR(100) ARRAY[4], b_string_array VARCHAR(100) ARRAY[4] \n"
                         + " CONSTRAINT pk PRIMARY KEY (k, b_string_array DESC))" + tableDDLOptions );
@@ -264,7 +245,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         stmt.setArray(3, array);
         stmt.execute();
         conn.close();
-        conn = DriverManager.getConnection(getUrl(), props);
+        conn = getConnection();
         // This analyze would not work
         stmt = conn.prepareStatement("UPDATE STATISTICS "+fullTableName2);
         stmt.execute();
@@ -277,7 +258,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
             InterruptedException {
         Connection conn;
         PreparedStatement stmt;
-        conn = DriverManager.getConnection(getUrl(), props);
+        conn = getConnection();
         stmt = upsertStmt(conn, tableName);
         stmt.setString(1, "a");
         String[] s = new String[] { "abc", "def", "ghi", "jkll", null, null, "xxx" };
@@ -363,10 +344,8 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     
     private void testCompactUpdatesStats(Integer minStatsUpdateFreq, String tableName) throws Exception {
         int nRows = 10;
-        Connection conn;
+        Connection conn = getConnection();
         PreparedStatement stmt;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER, w INTEGER) "
                 + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
         stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
@@ -424,10 +403,8 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     @Test
     public void testWithMultiCF() throws Exception {
         int nRows = 20;
-        Connection conn;
+        Connection conn = getConnection();
         PreparedStatement stmt;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName
                         + "(k VARCHAR PRIMARY KEY, a.v INTEGER, b.v INTEGER, c.v INTEGER NULL, d.v INTEGER NULL) ");
@@ -505,9 +482,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
 
     @Test
     public void testRowCountAndByteCounts() throws SQLException {
-        Connection conn;
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         String ddl = "CREATE TABLE " + fullTableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
                 + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
                 + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) split on ('e','j','o')";

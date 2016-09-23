@@ -27,7 +27,6 @@ import java.sql.ResultSet;
 
 import org.apache.phoenix.expression.function.PowerFunction;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -37,8 +36,8 @@ public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-9;
-    private static final String TEST_SIGNED = generateUniqueName();
-    private static final String TEST_UNSIGNED = generateUniqueName();
+    private String signedTableName;
+    private String unsignedTableName;
 
     private static boolean twoDoubleEquals(double a, double b) {
         if (Double.isNaN(a) ^ Double.isNaN(b)) return false;
@@ -55,17 +54,19 @@ public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @BeforeClass
-    public static void initTable() throws Exception {
+    @Before
+    public void initTable() throws Exception {
+        signedTableName = generateUniqueName();
+        unsignedTableName = generateUniqueName();
         Connection conn = null;
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
-            ddl = "CREATE TABLE " + TEST_SIGNED
+            ddl = "CREATE TABLE " + signedTableName
                 + " (k VARCHAR NOT NULL PRIMARY KEY, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
             conn.createStatement().execute(ddl);
-            ddl = "CREATE TABLE " + TEST_UNSIGNED
+            ddl = "CREATE TABLE " + unsignedTableName
                 + " (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
             conn.createStatement().execute(ddl);
             conn.commit();
@@ -140,8 +141,8 @@ public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
     public void test() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         for (double d : new double[] { 0.0, 1.0, -1.0, 123.1234, -123.1234 }) {
-            testNumberSpec(conn, d, TEST_SIGNED);
-            if (d >= 0) testNumberSpec(conn, d, TEST_UNSIGNED);
+            testNumberSpec(conn, d, signedTableName);
+            if (d >= 0) testNumberSpec(conn, d, unsignedTableName);
         }
     }
 }

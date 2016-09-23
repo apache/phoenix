@@ -51,6 +51,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -2146,8 +2147,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertTrue(t.isMultiTenant());
             
             // check table metadata updated server side
-            ResultSet rs = conn.createStatement().executeQuery("SELECT DISABLE_WAL, MULTI_TENANT FROM SYSTEM.CATALOG " +
- "WHERE table_name = '"
+            ResultSet rs = conn.createStatement().executeQuery("SELECT DISABLE_WAL, MULTI_TENANT FROM SYSTEM.CATALOG "
+                            + "WHERE table_name = '"
                             + dataTableFullName + "' AND DISABLE_WAL IS NOT NULL AND MULTI_TENANT IS NOT NULL");
             assertTrue(rs.next());
             assertFalse(rs.getBoolean(1));
@@ -2234,7 +2235,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCreatingTxnTableFailsIfTxnsDisabled() throws Exception {
-		try (Connection conn = DriverManager.getConnection(getUrl())) {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(false));
+		try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 			// creating a transactional table should fail if transactions are disabled
 			try {
 				conn.createStatement().execute("CREATE TABLE " + dataTableFullName + "(k INTEGER PRIMARY KEY, v VARCHAR) TRANSACTIONAL=true");

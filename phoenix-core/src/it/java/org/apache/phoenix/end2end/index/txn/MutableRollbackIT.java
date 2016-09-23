@@ -30,26 +30,20 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class MutableRollbackIT extends ParallelStatsDisabledIT {
@@ -60,23 +54,20 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
 		this.localIndex = localIndex;
 	}
 	
-	@BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
-        props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-	
 	@Parameters(name="MutableRollbackIT_localIndex={0}") // name is used by failsafe as file name in reports
     public static Collection<Boolean> data() {
         return Arrays.asList(new Boolean[] { false, true});
     }
 	
-    public void testRollbackOfUncommittedExistingKeyValueIndexUpdate() throws Exception {
+	private static Connection getConnection() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
+	}
+	
+    public void testRollbackOfUncommittedExistingKeyValueIndexUpdate() throws Exception {
+        Connection conn = getConnection();
         String tableName1 = "TBL1_" + generateUniqueName();
         String indexName1 = "IDX1_" + generateUniqueName();
         String fullTableName1 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName1);
@@ -215,8 +206,7 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
         String tableName2 = "TBL2_" + generateUniqueName();
         String indexName2 = "IDX2_" + generateUniqueName();
         String fullTableName2 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName2);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
@@ -350,12 +340,10 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMultiRollbackOfUncommittedExistingRowKeyIndexUpdate() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         String tableName1 = "TBL1_" + generateUniqueName();
         String indexName1 = "IDX1_" + generateUniqueName();
         String fullTableName1 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName1);
-        String tableName2 = "TBL2_" + generateUniqueName();
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
@@ -456,12 +444,10 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCheckpointAndRollback() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         String tableName1 = "TBL1_" + generateUniqueName();
         String indexName1 = "IDX1_" + generateUniqueName();
         String fullTableName1 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName1);
-        String tableName2 = "TBL2_" + generateUniqueName();
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();

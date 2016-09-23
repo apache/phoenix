@@ -25,28 +25,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Map;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 public class AsyncIndexDisabledIT extends ParallelStatsDisabledIT {
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
-        clientProps.put(QueryServices.INDEX_ASYNC_BUILD_ENABLED, Boolean.toString(false));
-        setUpTestDriver(ReadOnlyProps.EMPTY_PROPS, new ReadOnlyProps(clientProps.entrySet().iterator()));
-    }
-    
     @Test
     public void testAsyncIndexRegularBuild() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {

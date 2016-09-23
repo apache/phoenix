@@ -25,33 +25,18 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 public class TransactionalViewIT extends ParallelStatsEnabledIT {
 
     private String fullTableName;
     private String fullViewName;
 
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsEnabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Integer.toString(20));
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
     @Before
     public void generateTableNames() {
         String schemaName = TestUtil.DEFAULT_SCHEMA_NAME;

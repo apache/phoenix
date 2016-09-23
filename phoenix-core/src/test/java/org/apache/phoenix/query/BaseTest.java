@@ -536,9 +536,7 @@ public abstract class BaseTest {
     }
     
     private static void checkTxManagerInitialized(ReadOnlyProps clientProps) throws SQLException, IOException {
-        if (txService == null
-                && clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED,
-                        QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
+        if (txService == null) {
             setupTxManager();
         }
     }

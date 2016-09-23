@@ -32,19 +32,21 @@ import java.util.Properties;
 
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
-    private static final String testTableF = generateUniqueName();
-    private static final String testTableV = generateUniqueName();
-    private static final String testSeq = testTableF + "_seq";
     private static final String PREFIX = "SERVER DISTINCT PREFIX";
-    private static Connection conn;
+    private String testTableF;
+    private String testTableV;
+    private String testSeq;
+    private Connection conn;
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        ParallelStatsDisabledIT.doSetup();
+    @Before
+    public void initTables() throws Exception {
+        testTableF = generateUniqueName();
+        testTableV = generateUniqueName();
+        testSeq = "SEQ_" + generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
@@ -367,7 +369,7 @@ public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
         assertFalse(res.next());
     }
 
-    private static void insertPrefixF(int prefix1, int prefix2) throws SQLException {
+    private void insertPrefixF(int prefix1, int prefix2) throws SQLException {
         String query = "UPSERT INTO " + testTableF
                 + "(prefix1, prefix2, prefix3, col1, col2) VALUES(?,?,NEXT VALUE FOR "+testSeq+",rand(), trunc(rand()*1000))";
             PreparedStatement stmt = conn.prepareStatement(query);
@@ -376,7 +378,7 @@ public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
             stmt.execute();
     }
 
-    private static void insertPrefixV(String prefix1, String prefix2) throws SQLException {
+    private void insertPrefixV(String prefix1, String prefix2) throws SQLException {
         String query = "UPSERT INTO " + testTableV
                 + "(prefix1, prefix2, prefix3, col1, col2) VALUES(?,?,NEXT VALUE FOR "+testSeq+",rand(), trunc(rand()*1000))";
             PreparedStatement stmt = conn.prepareStatement(query);
@@ -385,7 +387,7 @@ public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
             stmt.execute();
     }
 
-    private static void multiply() throws SQLException {
+    private void multiply() throws SQLException {
         conn.prepareStatement("UPSERT INTO " + testTableF
                 + " SELECT prefix1,prefix2,NEXT VALUE FOR "+testSeq+",rand(), trunc(rand()*1000) FROM "+testTableF).execute();
         conn.prepareStatement("UPSERT INTO " + testTableV

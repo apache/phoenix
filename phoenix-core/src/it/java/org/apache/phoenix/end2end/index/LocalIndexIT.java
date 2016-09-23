@@ -194,7 +194,7 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
     
     private Connection getConnection() throws SQLException{
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         return DriverManager.getConnection(getUrl(),props);
     }
 

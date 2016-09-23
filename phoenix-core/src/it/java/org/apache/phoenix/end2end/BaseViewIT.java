@@ -31,7 +31,6 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -43,19 +42,14 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public abstract class BaseViewIT extends ParallelStatsEnabledIT {
@@ -66,15 +60,6 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 	protected String tableDDLOptions;
 	protected boolean transactional;
 
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        // TODO: don't repeat this
-        props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
     public BaseViewIT( boolean transactional) {
 		StringBuilder optionBuilder = new StringBuilder();
 		this.transactional = transactional;
