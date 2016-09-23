@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -43,7 +42,6 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -51,37 +49,31 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
 
     private static final int NUM_SALT_BUCKETS = 4; 
 
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(32));
+    private static Connection getConnection() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         /*  
          * Don't force row key order. This causes RoundRobinResultIterator to be used if there was no order by specified
          * on the query.
          */
-        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
-        props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1000));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
     }
-
+    
     @Test
     public void testRoundRobinAfterTableSplit() throws Exception {
         String tableName = generateUniqueName();
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         int numRows = setupTableForSplit(tableName);
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
         int nRegions = services.getAllTableRegions(tableNameBytes).size();
         int nRegionsBeforeSplit = nRegions;
@@ -131,7 +123,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         int numRows = 9;
         Set<String> expectedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, numRows, salted, false));
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         PreparedStatement stmt = conn.prepareStatement("SELECT K, V FROM " + tableName);
         tryWithFetchSize(new HashSet<>(expectedKeys), 1, stmt, 0);
         tryWithFetchSize(new HashSet<>(expectedKeys), 2, stmt, salted ? 2 : 5);
@@ -155,7 +147,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         int numRows = 6;
         Set<String> insertedKeys = createTableAndInsertRows(tableName, numRows, salted, false);
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         PreparedStatement stmt = conn.prepareStatement("SELECT K, V FROM " + tableName + " WHERE K = ?");
         stmt.setString(1, "key1"); // will return only 1 row
         int numRowsFiltered = 1;
@@ -187,7 +179,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
 
     private Set<String> createTableAndInsertRows(String tableName, int numRows, boolean salted, boolean addTableNameToKey) throws Exception {
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + (salted ? "SALT_BUCKETS=" + NUM_SALT_BUCKETS : "");
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + " VALUES (?, ?)";
         PreparedStatement stmt = conn.prepareStatement(dml);
@@ -207,7 +199,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
     public void testFetchSizesAndRVCExpression() throws Exception {
         String tableName = generateUniqueName();
         Set<String> insertedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, 4, false, false));
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         PreparedStatement stmt = conn.prepareStatement("SELECT K FROM " + tableName + " WHERE (K, V)  > (?, ?)");
         stmt.setString(1, "key0");
         stmt.setString(2, "value0");
@@ -244,7 +236,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
 
         int MIN_CHAR = 'a';
         int MAX_CHAR = 'z';
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         conn.createStatement().execute("CREATE TABLE " + tableName + "("
                 + "a VARCHAR PRIMARY KEY, b VARCHAR) " 
                 + HTableDescriptor.MAX_FILESIZE + "=" + maxFileSize + ","
@@ -288,7 +280,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         Set<String> keySetB = createTableAndInsertRows(tableB, insertedRowsB, true, true);
         Set<String> keySetC = createTableAndInsertRows(tableC, insertedRowsC, false, true);
         String query = "SELECT K FROM " + tableA + " UNION ALL SELECT K FROM " + tableB + " UNION ALL SELECT K FROM " + tableC;
-        Connection conn = DriverManager.getConnection(getUrl());
+        Connection conn = getConnection();
         PreparedStatement stmt = conn.prepareStatement(query);
         stmt.setFetchSize(2); // force parallel fetch of scanner cache
         ResultSet rs = stmt.executeQuery();
@@ -317,7 +309,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
     @Test
     public void testBug2074() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         try {
             conn.createStatement().execute("CREATE TABLE EVENTS" 
                     + "   (id VARCHAR(10) PRIMARY KEY, " 
@@ -407,7 +399,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testIteratorsPickedInRoundRobinFashionForSaltedTable() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = getConnection()) {
             String testTable = "testIteratorsPickedInRoundRobinFashionForSaltedTable".toUpperCase();
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + testTable + "(K VARCHAR PRIMARY KEY) SALT_BUCKETS = 8");

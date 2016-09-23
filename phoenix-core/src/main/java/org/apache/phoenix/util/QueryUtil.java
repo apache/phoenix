@@ -382,7 +382,7 @@ public final class QueryUtil {
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         String url = getUrl(server, port, znodeParent, principal);
         // Mainly for testing to tack on the test=true part to ensure driver is found on server
-        String extraArgs = conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        String extraArgs = props.getProperty(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, conf.get(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS));
         if (extraArgs.length() > 0) {
             url += extraArgs + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
         }

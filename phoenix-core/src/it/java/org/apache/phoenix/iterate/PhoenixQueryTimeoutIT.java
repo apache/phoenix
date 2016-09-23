@@ -17,7 +17,8 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,7 +29,8 @@ import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.junit.BeforeClass;
+import org.apache.phoenix.query.QueryServices;
+import org.junit.Before;
 import org.junit.Test;
 
 /**
@@ -37,13 +39,33 @@ import org.junit.Test;
  */
 public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
-    private static final String QUERY_TIMEOUT_TEST = generateUniqueName();
+    private String tableName;
 
-    @Test
+    @Before
+    public void createTableAndInsertRows() throws Exception {
+        tableName = generateUniqueName();
+        int numRows = 1000;
+        String ddl =
+            "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            String dml = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            for (int i = 1; i <= numRows; i++) {
+                String key = "key" + i;
+                stmt.setString(1, key);
+                stmt.setString(2, "value" + i);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+        }
+    }
+
     /**
      * This test validates that we timeout as expected. It does do by
      * setting the timeout value to 1 ms.
      */
+    @Test
     public void testCustomQueryTimeoutWithVeryLowTimeout() throws Exception {
         // Arrange
         PreparedStatement ps = loadDataAndPrepareQuery(1, 1);
@@ -85,30 +107,12 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
     
     private PreparedStatement loadDataAndPrepareQuery(int timeoutMs, int timeoutSecs) throws Exception, SQLException {
         Properties props = new Properties();
-        props.setProperty("phoenix.query.timeoutMs", String.valueOf(timeoutMs));
+        props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, String.valueOf(timeoutMs));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + QUERY_TIMEOUT_TEST);
+        PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + tableName);
         PhoenixStatement phoenixStmt = ps.unwrap(PhoenixStatement.class);
         assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
         assertEquals(timeoutSecs, phoenixStmt.getQueryTimeout());
         return ps;
-    }
-
-    @BeforeClass
-    public static void createTableAndInsertRows() throws Exception {
-        int numRows = 1000;
-        String ddl =
-            "CREATE TABLE " + QUERY_TIMEOUT_TEST + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute(ddl);
-        String dml = "UPSERT INTO " + QUERY_TIMEOUT_TEST + " VALUES (?, ?)";
-        PreparedStatement stmt = conn.prepareStatement(dml);
-        for (int i = 1; i <= numRows; i++) {
-            String key = "key" + i;
-            stmt.setString(1, key);
-            stmt.setString(2, "value" + i);
-            stmt.executeUpdate();
-        }
-        conn.commit();
     }
 }
