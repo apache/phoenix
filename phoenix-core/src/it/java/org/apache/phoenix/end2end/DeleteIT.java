@@ -42,7 +42,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     private static final int NTH_ROW_NULL = 5;
     
     private static String initTableValues(Connection conn) throws SQLException {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntIntKeyTest");
         String upsertStmt = "UPSERT INTO " + tableName + " VALUES(?,?)";
         PreparedStatement stmt = conn.prepareStatement(upsertStmt);
@@ -157,8 +157,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     private void testDeleteRange(boolean autoCommit, boolean createIndex, boolean local) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String tableName = initTableValues(conn);
-        String indexName = generateRandomString();
-        String localIndexName = generateRandomString();
+        String indexName = generateUniqueName();
+        String localIndexName = generateUniqueName();
 
         String indexInUse = indexName;
         if (createIndex) {
@@ -294,7 +294,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             con.setAutoCommit(autoCommit);
 
             Statement stm = con.createStatement();
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String s = "CREATE TABLE IF NOT EXISTS " + tableName + "(" +
                     "HOST CHAR(2) NOT NULL," +
                     "DOMAIN VARCHAR NOT NULL, " +
@@ -305,8 +305,8 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                     "STATS.ACTIVE_VISITOR INTEGER " +
                     "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE))" + (isSalted ? " SALT_BUCKETS=3" : "");
             stm.execute(s);
-            String localIndexName = generateRandomString();
-            String indexName = generateRandomString();
+            String localIndexName = generateUniqueName();
+            String indexName = generateUniqueName();
             if (localIndex) {
                 stm.execute("CREATE LOCAL INDEX " + localIndexName + " ON " + tableName + " (CORE,DB,ACTIVE_VISITOR)");
             } else {
@@ -372,9 +372,9 @@ public class DeleteIT extends ParallelStatsDisabledIT {
 
             Statement stm = con.createStatement();
 
-            String tableName = generateRandomString();
-            String indexName1 = generateRandomString();
-            String indexName2 = generateRandomString();
+            String tableName = generateUniqueName();
+            String indexName1 = generateUniqueName();
+            String indexName2 = generateUniqueName();
 
             stm.execute("CREATE TABLE IF NOT EXISTS " + tableName + " (" +
                     "HOST CHAR(2) NOT NULL," +
@@ -458,7 +458,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             con = DriverManager.getConnection(getUrl());
             con.setAutoCommit(autoCommit);
 
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
 
             Statement stm = con.createStatement();
             stm.execute("CREATE TABLE IF NOT EXISTS " + tableName + "(" +
@@ -505,13 +505,13 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testDeleteForTableWithRowTimestampColServer() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         testDeleteForTableWithRowTimestampCol(true, tableName);
     }
     
     @Test
     public void testDeleteForTableWithRowTimestampColClient() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         testDeleteForTableWithRowTimestampCol(false, tableName);
     }
     
@@ -583,7 +583,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
     
     private void testDeleteCount(boolean autoCommit, Integer limit) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (pk1 DECIMAL NOT NULL, v1 VARCHAR CONSTRAINT PK PRIMARY KEY (pk1))";
         int numRecords = 1010;

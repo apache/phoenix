@@ -42,7 +42,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class AlterSessionIT extends ParallelStatsDisabledIT {
 
-    private static final String TABLE_NAME = generateRandomString();
+    private static final String TABLE_NAME = generateUniqueName();
     private static Connection testConn;
 
     @BeforeClass

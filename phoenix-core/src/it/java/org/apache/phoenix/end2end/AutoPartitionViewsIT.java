@@ -79,8 +79,8 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
                 Connection viewConn2 =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1)
                                 : DriverManager.getConnection(getUrl())) {
-            String tableName = generateRandomString();
-            String autoSeqName = generateRandomString();
+            String tableName = generateUniqueName();
+            String autoSeqName = generateUniqueName();
 
             try {
 
@@ -107,7 +107,7 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
 
 
-            String baseViewName = generateRandomString();
+            String baseViewName = generateUniqueName();
             String metricView1 = baseViewName + "_VIEW1";
             String metricView2 = baseViewName + "_VIEW2";
             String metricView3 = baseViewName + "_VIEW3";
@@ -234,8 +234,8 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
                 Connection viewConn2 =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2)
                                 : DriverManager.getConnection(getUrl())) {
-            String tableName = generateRandomString();
-            String autoSeqName = generateRandomString();
+            String tableName = generateUniqueName();
+            String autoSeqName = generateUniqueName();
 
             String ddl =
                     String.format(
@@ -246,7 +246,7 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("CREATE SEQUENCE " + autoSeqName + " CACHE 1");
 
-            String baseViewName = generateRandomString();
+            String baseViewName = generateUniqueName();
             String metricView1 = baseViewName + "_VIEW1";
             String metricView2 = baseViewName + "_VIEW2";
             // create a view
@@ -315,8 +315,8 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
                 Connection viewConn1 =
                         isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1)
                                 : DriverManager.getConnection(getUrl())) {
-            String tableName = generateRandomString();
-            String autoSeqName = generateRandomString();
+            String tableName = generateUniqueName();
+            String autoSeqName = generateUniqueName();
 
             String ddl =
                     String.format(
@@ -327,7 +327,7 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("CREATE SEQUENCE " + autoSeqName + " CACHE 1");
 
-            String metricView = generateRandomString() + "_VIEW";
+            String metricView = generateUniqueName() + "_VIEW";
             // create a view
             viewConn1.createStatement().execute(
                 "CREATE VIEW " + metricView + " AS SELECT * FROM " + tableName);

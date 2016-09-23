@@ -51,7 +51,7 @@ public class DynamicUpsertIT extends ParallelStatsDisabledIT {
 
     @Before
     public void doBeforeTestSetup() throws Exception {
-    	tableName = BaseTest.generateRandomString();
+    	tableName = BaseTest.generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "create table " + tableName + "   (entry varchar not null primary key,"

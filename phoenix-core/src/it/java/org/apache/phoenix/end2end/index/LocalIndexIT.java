@@ -80,7 +80,7 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
     
     @Before
     public void setup() {
-        schemaName = BaseTest.generateRandomString();
+        schemaName = BaseTest.generateUniqueName();
     }
     
     private void createBaseTable(String tableName, Integer saltBuckets, String splits) throws SQLException {
@@ -107,8 +107,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexRoundTrip() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
 
         createBaseTable(tableName, null, null);
@@ -131,8 +131,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexCreationWithSplitsShouldFail() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, null, null);
         Connection conn1 = getConnection();
@@ -150,8 +150,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexCreationWithSaltingShouldFail() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, null, null);
         Connection conn1 = getConnection();
@@ -169,8 +169,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexTableRegionSplitPolicyAndSplitKeys() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -200,8 +200,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDropLocalIndexTable() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         createBaseTable(tableName, null, null);
 
         String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped);
@@ -219,8 +219,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testPutsToLocalIndexTable() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
@@ -259,8 +259,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testBuildIndexWhenUserTableAlreadyHasData() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
@@ -299,8 +299,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexScan() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
@@ -437,8 +437,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexScanJoinColumnsFromDataTable() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
@@ -577,8 +577,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIndexPlanSelectionIfBothGlobalAndLocalIndexesHasSameColumnsAndOrder() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
 
         createBaseTable(tableName, null, "('e','i','o')");
@@ -601,8 +601,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDropLocalIndexShouldDeleteDataFromLocalIndexTable() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
@@ -646,8 +646,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexRowsShouldBeDeletedWhenUserTableRowsDeleted() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
 
         createBaseTable(tableName, null, "('e','i','o')");
@@ -672,8 +672,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testScanWhenATableHasMultipleLocalIndexes() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = DriverManager.getConnection(getUrl());
@@ -697,8 +697,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexesOnTableWithImmutableRows() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, null, "('e','i','o')");
         Connection conn1 = getConnection();
@@ -743,8 +743,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexScanWithInList() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String indexTableName = schemaName + "." + indexName;
 
         createBaseTable(tableName, null, "('e','i','o')");
@@ -777,8 +777,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
         Connection conn1 = DriverManager.getConnection(getUrl());
         try{
             Statement statement = conn1.createStatement();
-            String tableName = generateRandomString();
-            String indexName = generateRandomString();
+            String tableName = generateUniqueName();
+            String indexName = generateUniqueName();
             statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
                     + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
             statement.execute("upsert into " + tableName + "  values(1,'fn','ln')");
@@ -794,8 +794,8 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testLocalIndexScanWithSmallChunks() throws Exception {
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
 
         createBaseTable(tableName, 3, null);
         Properties props = new Properties();

@@ -80,9 +80,9 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
-        String seqName = "SEQ_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        String seqName = "SEQ_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
@@ -105,8 +105,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testRollbackOfUncommittedDeleteSingleCol() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)";
         testRollbackOfUncommittedDelete(indexDDL, fullTableName);
@@ -114,8 +114,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testRollbackOfUncommittedDeleteMultiCol() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1, v2)";
         testRollbackOfUncommittedDelete(indexDDL, fullTableName);
@@ -208,8 +208,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCheckpointForUpsertSelect() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
@@ -298,8 +298,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	
 	@Test
     public void testCheckpointForDeleteAndUpsert() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		ResultSet rs;

@@ -70,8 +70,8 @@ public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
     
     @Before
     public void generateTableNames() {
-        tableName = "T_" + generateRandomString();
-        indexName = "I_" + generateRandomString();
+        tableName = "T_" + generateUniqueName();
+        indexName = "I_" + generateUniqueName();
     }
     
     private List<KeyRange> getSplits(Connection conn, byte[] lowerRange, byte[] upperRange) throws SQLException {

@@ -83,9 +83,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     @Before
     public void setupTableNames() throws Exception {
         schemaName = "";
-        dataTableName = generateRandomString();
-        indexTableName = "I_" + generateRandomString();
-        localIndexTableName = "LI_" + generateRandomString();
+        dataTableName = generateUniqueName();
+        indexTableName = "I_" + generateUniqueName();
+        localIndexTableName = "LI_" + generateUniqueName();
         dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
         indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         localIndexTableFullName = SchemaUtil.getTableName(schemaName, localIndexTableName);
@@ -1364,7 +1364,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 +"CONSTRAINT PK PRIMARY KEY (ID1, ID2)) SALT_BUCKETS = 8";
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.createStatement().execute(ddl);
-        String viewFullName = SchemaUtil.getTableName(schemaName, generateRandomString());
+        String viewFullName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         ddl = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE CREATION_TIME = 1";
         conn1.createStatement().execute(ddl);
         ddl = "ALTER VIEW " + viewFullName + " SET IMMUTABLE_ROWS = TRUE";
@@ -2170,7 +2170,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertFalse(table.getColumn("PK2").isRowTimestamp());
             assertIsRowTimestampSet(schemaName, dataTableName, "PK1");
             
-            String dataTableName2 = BaseTest.generateRandomString();
+            String dataTableName2 = BaseTest.generateUniqueName();
             String dataTableFullName2 = SchemaUtil.getTableName(schemaName, dataTableName2);
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName2 + " (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
             table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName2));

@@ -70,11 +70,11 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     public void setupMetrics() throws Exception {
         PhoenixMetricsSink pWriter = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        tracingTableName = "TRACING_" + generateRandomString();
+        tracingTableName = "TRACING_" + generateUniqueName();
         pWriter.initForTesting(conn, tracingTableName);
         sink = new DisableableMetricsWriter(pWriter);
-        enabledForLoggingTable = "ENABLED_FOR_LOGGING_" + generateRandomString();
-        enableForLoggingIndex = "ENABALED_FOR_LOGGING_INDEX_" + generateRandomString();
+        enabledForLoggingTable = "ENABLED_FOR_LOGGING_" + generateUniqueName();
+        enableForLoggingIndex = "ENABALED_FOR_LOGGING_INDEX_" + generateUniqueName();
 
         TracingTestUtil.registerSink(sink, tracingTableName);
     }

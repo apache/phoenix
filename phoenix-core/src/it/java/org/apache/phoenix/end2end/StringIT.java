@@ -116,7 +116,7 @@ public class StringIT extends ParallelStatsDisabledIT {
     public void testCharPadding() throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k CHAR(3) PRIMARY KEY)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('ab')");
@@ -127,7 +127,7 @@ public class StringIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals("ab", rs.getString(1));
         assertFalse(rs.next());
-        String tableNameDesc = generateRandomString();
+        String tableNameDesc = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableNameDesc + " (k CHAR(3) PRIMARY KEY DESC)");
         conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('a')");
         conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('ab')");
@@ -144,7 +144,7 @@ public class StringIT extends ParallelStatsDisabledIT {
     public void testBinaryPadding() throws Exception {
         ResultSet rs;
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k BINARY(3) PRIMARY KEY)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('ab')");
@@ -156,7 +156,7 @@ public class StringIT extends ParallelStatsDisabledIT {
         assertArrayEquals(ByteUtil.concat(Bytes.toBytes("ab"), QueryConstants.SEPARATOR_BYTE_ARRAY), rs.getBytes(1));
         assertFalse(rs.next());
 
-        String tableNameDesc = generateRandomString();
+        String tableNameDesc = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " +  tableNameDesc + " (k BINARY(3) PRIMARY KEY DESC)");
         conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('a')");
         conn.createStatement().execute("UPSERT INTO " + tableNameDesc + " VALUES('ab')");
@@ -245,7 +245,7 @@ public class StringIT extends ParallelStatsDisabledIT {
     @Test
     public void testStrConcat() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("create table " + tableName + " (PK1 integer, F1 varchar, F2 varchar, F3 varchar, F4 varchar, constraint PK primary key (PK1))");
         conn.createStatement().execute("upsert into " + tableName + "(PK1, F1,F3) values(0, 'tortilla', 'chip')");
         conn.commit();

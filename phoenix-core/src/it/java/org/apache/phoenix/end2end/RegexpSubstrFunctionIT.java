@@ -40,7 +40,7 @@ public class RegexpSubstrFunctionIT extends ParallelStatsDisabledIT {
 
     @Before
     public void doBeforeTestSetup() throws Exception {
-        tableName = generateRandomString();
+        tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         createGroupByTestTable(conn, tableName);
         insertRow(conn, "Report1?1", 10);

@@ -57,7 +57,7 @@ public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
 	
 	@Before 
 	public void setup() throws SQLException {
-		tableName = generateRandomString();
+		tableName = generateUniqueName();
 		props = new Properties();
 		spoolDir =  Files.createTempDir();
 		props.put(QueryServices.SPOOL_DIRECTORY, spoolDir.getPath());

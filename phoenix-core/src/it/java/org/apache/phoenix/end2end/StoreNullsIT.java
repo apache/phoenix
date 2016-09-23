@@ -64,10 +64,10 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
 
     @Before
     public void setUp() throws SQLException {
-        WITH_NULLS = generateRandomString();
-        WITHOUT_NULLS = generateRandomString();
-        IMMUTABLE_WITH_NULLS = generateRandomString();
-        IMMUTABLE_WITHOUT_NULLS = generateRandomString();
+        WITH_NULLS = generateUniqueName();
+        WITHOUT_NULLS = generateUniqueName();
+        IMMUTABLE_WITH_NULLS = generateUniqueName();
+        IMMUTABLE_WITHOUT_NULLS = generateUniqueName();
         conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
 

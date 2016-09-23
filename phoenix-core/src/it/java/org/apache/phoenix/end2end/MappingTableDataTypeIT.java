@@ -52,7 +52,7 @@ import org.junit.Test;
 public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
     @Test
     public void testMappingHbaseTableToPhoenixTable() throws Exception {
-        String mtest = generateRandomString();
+        String mtest = generateUniqueName();
         final TableName tableName = TableName.valueOf(mtest);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);

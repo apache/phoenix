@@ -49,7 +49,7 @@ public class EvaluationOfORIT extends ParallelStatsDisabledIT{
 	public void testPKOrNotPKInOREvaluation() throws SQLException {
 	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 	    Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 	    conn.setAutoCommit(false);
 	    
             String create = "CREATE TABLE " + tableName + " ( ID INTEGER NOT NULL PRIMARY KEY,NAME VARCHAR(50))";

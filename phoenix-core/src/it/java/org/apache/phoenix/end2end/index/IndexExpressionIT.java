@@ -36,6 +36,7 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class IndexExpressionIT extends ParallelStatsDisabledIT {
@@ -110,14 +111,14 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     private void createDataTable(Connection conn, String dataTableName, String tableProps) throws SQLException {
-        String tableDDL = "create table " + dataTableName + TEST_TABLE_SCHEMA + tableProps;
+        String tableDDL = "create table " + dataTableName + TestUtil.TEST_TABLE_SCHEMA + tableProps;
         conn.createStatement().execute(tableDDL);
     }
     
     protected void helpTestCreateAndUpdate(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -208,17 +209,17 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMutableIndexUpdate() throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
     	helpTestUpdate(fullDataTableName, indexName, false);
     }
 
     @Test
     public void testMutableLocalIndexUpdate() throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         helpTestUpdate(fullDataTableName, indexName, true);
     }
     
@@ -316,9 +317,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     protected void helpTestDeleteIndexedExpression(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         String fullIndexTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexName;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -390,9 +391,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     protected void helpTestDeleteCoveredCol(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         String fullIndexTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexName;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -472,9 +473,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     protected void helpTestGroupByCount(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -528,9 +529,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     protected void helpTestSelectDistinct(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -582,9 +583,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     protected void helpTestInClauseWithIndex(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -633,9 +634,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     protected void helpTestSelectAliasAndOrderByWithIndex(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -688,8 +689,8 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
     
     protected void helpTestIndexWithCaseSensitiveCols(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
-        String indexName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexName = generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -798,9 +799,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
 
     protected void helpTestSelectColOnlyInDataTable(boolean mutable, boolean localIndex) throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -861,9 +862,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
 
         try {
 	        conn.setAutoCommit(false);
@@ -946,9 +947,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     public void helpTestDropCoveredColumn(boolean mutable, boolean local) throws Exception {
         ResultSet rs;
         PreparedStatement stmt;
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1058,9 +1059,9 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
         ResultSet rs;
         PreparedStatement stmt;
 
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -1181,11 +1182,11 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
        
     private void helpTestUpdatableViewIndex(boolean local) throws Exception {
     	Connection conn = DriverManager.getConnection(getUrl());
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         String fullDataTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + dataTableName;
-        String indexName1 = generateRandomString();
-        String viewName = generateRandomString();
-        String indexName2 = generateRandomString();
+        String indexName1 = generateUniqueName();
+        String viewName = generateUniqueName();
+        String indexName2 = generateUniqueName();
     	try {
 	        String ddl = "CREATE TABLE " + dataTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, k3 DECIMAL, s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
 	        conn.createStatement().execute(ddl);
@@ -1247,10 +1248,10 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl());
         try 
         {
-            String dataTableName = generateRandomString();
-            String indexName1 = generateRandomString();
-            String viewName = generateRandomString();
-            String indexName2 = generateRandomString();
+            String dataTableName = generateUniqueName();
+            String indexName1 = generateUniqueName();
+            String viewName = generateUniqueName();
+            String indexName2 = generateUniqueName();
         	ResultSet rs;
 	        String ddl = "CREATE TABLE " + dataTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, s1 VARCHAR, s2 VARCHAR, s3 VARCHAR, s4 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2))";
 	        conn.createStatement().execute(ddl);
@@ -1300,8 +1301,8 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
 	@Test
 	public void testExpressionThrowsException() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String dataTableName = generateRandomString();
-        String indexName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexName = generateUniqueName();
 		try {
 			String ddl = "CREATE TABLE " + dataTableName + " (k1 INTEGER PRIMARY KEY, k2 INTEGER)";
 			conn.createStatement().execute(ddl);
@@ -1344,8 +1345,8 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
 			boolean localIndex) throws Exception {
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		Connection conn = DriverManager.getConnection(getUrl(), props);
-        String dataTableName = generateRandomString();
-        String indexName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexName = generateUniqueName();
 		try {
 			conn.createStatement().execute(
 					"CREATE TABLE " + dataTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) "
@@ -1417,8 +1418,8 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
 			boolean localIndex) throws Exception {
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		Connection conn = DriverManager.getConnection(getUrl(), props);
-        String dataTableName = generateRandomString();
-        String indexName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexName = generateUniqueName();
         try {
 			conn.createStatement().execute(
 				"CREATE TABLE " + dataTableName + " ("

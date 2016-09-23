@@ -55,9 +55,9 @@ public class TransactionalViewIT extends ParallelStatsEnabledIT {
     @Before
     public void generateTableNames() {
         String schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
-        String tableName = "T_" + generateRandomString();
+        String tableName = "T_" + generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        String viewName = "V_" + generateRandomString();
+        String viewName = "V_" + generateUniqueName();
         fullViewName = SchemaUtil.getTableName(schemaName, viewName);
     }
 

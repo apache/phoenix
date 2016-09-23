@@ -29,6 +29,7 @@ import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class UpdateCacheWithScnIT extends BaseClientManagedTimeIT {
@@ -40,7 +41,7 @@ public class UpdateCacheWithScnIT extends BaseClientManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA);
+        conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA);
         // FIXME: given that the scn is advancing in the test, why aren't there more RPCs?
 		UpdateCacheIT.helpTestUpdateCache(fullTableName, ts+2, new int[] {1, 1});
 	}

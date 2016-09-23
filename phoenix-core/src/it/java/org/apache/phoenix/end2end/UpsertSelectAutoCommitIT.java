@@ -47,7 +47,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        String atable = generateRandomString();
+        String atable = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + atable
             + " (ORGANIZATION_ID CHAR(15) NOT NULL, ENTITY_ID CHAR(15) NOT NULL, A_STRING VARCHAR\n"
             +
@@ -77,7 +77,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         assertEquals(A_VALUE, rs.getString(2));
         assertFalse(rs.next());
 
-        String atable2 = generateRandomString();
+        String atable2 = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + atable2
             + " (ORGANIZATION_ID CHAR(15) NOT NULL, ENTITY_ID CHAR(15) NOT NULL, A_STRING VARCHAR\n"
             +
@@ -98,7 +98,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
     @Test
     public void testDynamicUpsertSelect() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String cursorDDL = " CREATE TABLE IF NOT EXISTS " + tableName
             + " (ORGANIZATION_ID VARCHAR(15) NOT NULL, \n"
                 + "QUERY_ID VARCHAR(15) NOT NULL, \n"
@@ -107,7 +107,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
                 + "SALT_BUCKETS = 4";
         conn.createStatement().execute(cursorDDL);
 
-        String tableName2 = generateRandomString();
+        String tableName2 = generateUniqueName();
         String dataTableDDL = "CREATE TABLE IF NOT EXISTS " + tableName2 +
                 "(" +
                 "ORGANIZATION_ID CHAR(15) NOT NULL, " +
@@ -158,7 +158,7 @@ public class UpsertSelectAutoCommitIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("CREATE SEQUENCE keys");
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + tableName + " (pk INTEGER PRIMARY KEY, val INTEGER)");
 

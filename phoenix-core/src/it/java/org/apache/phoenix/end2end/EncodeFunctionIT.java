@@ -97,7 +97,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpperCaseEncodingType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
 
         conn.createStatement().execute(ddl);
@@ -114,7 +114,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testNullEncodingType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
         conn.createStatement().execute(ddl);
 
@@ -125,7 +125,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testUnsupportedEncodingType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL CONSTRAINT PK PRIMARY KEY (pk))";
         conn.createStatement().execute(ddl);
 
@@ -140,7 +140,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testInvalidEncodingType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
             "CREATE TABLE " + tableName + " ( some_column BINARY(12) NOT NULL CONSTRAINT PK PRIMARY KEY (some_column))";
         conn.createStatement().execute(ddl);

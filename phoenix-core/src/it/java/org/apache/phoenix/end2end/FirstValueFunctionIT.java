@@ -33,7 +33,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
     public void signedLongAsBigInt() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date BIGINT, \"value\" BIGINT)";
@@ -64,7 +64,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
     public void testSortOrderInSortCol() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT CONSTRAINT pk PRIMARY KEY (id, dates DESC))";
@@ -95,7 +95,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
     public void testSortOrderInDataCol() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT NOT NULL CONSTRAINT pk PRIMARY KEY (id, dates, \"value\" DESC))";
@@ -126,7 +126,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
     public void doubleDataType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
                 + "date DOUBLE, \"value\" DOUBLE)";
@@ -157,7 +157,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
     public void varcharFixedLenghtDatatype() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String table_name = generateRandomString();
+        String table_name = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + table_name + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
                 + "date VARCHAR(3), \"value\" VARCHAR(3))";
@@ -188,7 +188,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
     public void floatDataType() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date FLOAT, \"value\" FLOAT)";
@@ -220,7 +220,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
     public void allColumnsNull() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date FLOAT, \"value\" FLOAT)";

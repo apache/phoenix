@@ -78,7 +78,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testRoundRobinAfterTableSplit() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         int numRows = setupTableForSplit(tableName);
         Connection conn = DriverManager.getConnection(getUrl());
@@ -128,7 +128,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
     }
 
     private void testSelectAllRowsWithDifferentFetchSizes(boolean salted) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         int numRows = 9;
         Set<String> expectedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, numRows, salted, false));
         Connection conn = DriverManager.getConnection(getUrl());
@@ -152,7 +152,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
     }
 
     private void testSelectRowsWithFilterAndDifferentFetchSizes(boolean salted) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         int numRows = 6;
         Set<String> insertedKeys = createTableAndInsertRows(tableName, numRows, salted, false);
         Connection conn = DriverManager.getConnection(getUrl());
@@ -205,7 +205,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testFetchSizesAndRVCExpression() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Set<String> insertedKeys = Collections.unmodifiableSet(createTableAndInsertRows(tableName, 4, false, false));
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement("SELECT K FROM " + tableName + " WHERE (K, V)  > (?, ?)");
@@ -280,7 +280,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         int insertedRowsA = 10;
         int insertedRowsB = 5;
         int insertedRowsC = 7;
-        String baseTableName = generateRandomString();
+        String baseTableName = generateUniqueName();
         String tableA = "TABLEA" + baseTableName;
         String tableB = "TABLEB" + baseTableName;
         String tableC = "TABLEC" + baseTableName;

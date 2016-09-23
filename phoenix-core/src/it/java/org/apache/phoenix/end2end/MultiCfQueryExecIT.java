@@ -47,7 +47,7 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
     @Before
     public void generateTableNames() throws SQLException {
         String schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
-        String tableName = "T_" + generateRandomString();
+        String tableName = "T_" + generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, tableName);
     }
 

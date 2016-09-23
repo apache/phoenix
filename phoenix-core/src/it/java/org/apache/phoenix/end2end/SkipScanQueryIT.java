@@ -44,7 +44,7 @@ import org.junit.Test;
 public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     private String initIntInTable(Connection conn, List<Integer> data) throws SQLException {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + 
                      "  i INTEGER NOT NULL PRIMARY KEY)";
         conn.createStatement().executeUpdate(ddl);
@@ -61,7 +61,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     }
     
     private String initVarCharCrossProductInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (" +
                      "  s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (s1,s2))";
         conn.createStatement().executeUpdate(ddl);
@@ -81,7 +81,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     }
     
     private String initVarCharParallelListInTable(Connection conn, List<String> c1, List<String> c2) throws SQLException {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + 
                      "  s1 VARCHAR, s2 VARCHAR CONSTRAINT pk PRIMARY KEY (s1,s2))";
         conn.createStatement().executeUpdate(ddl);
@@ -102,7 +102,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     		"upsert into %s(c1, c2, c3, c4, v1, v2) values('1001', '91', 's1', '2013-09-26', 28397, 23541);\n" +
     		"upsert into %s(c1, c2, c3, c4, v1, v2) values('1001', '91', 's2', '2013-09-23', 3369, null);\n";
     private String initSelectAfterUpsertTable(Connection conn) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "create table if not exists  " + tableName + " ("
                 + "c1 VARCHAR NOT NULL," + "c2 VARCHAR NOT NULL,"
                 + "c3 VARCHAR NOT NULL," + "c4 VARCHAR NOT NULL,"
@@ -120,7 +120,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSkipScanFilterQuery() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String createTableDDL = "CREATE TABLE " + tableName + "(col1 VARCHAR," + "col2 VARCHAR," + "col3 VARCHAR,"
              + "col4 VARCHAR," + "CONSTRAINT pk  " + "PRIMARY KEY (col1,col2,col3,col4))";
         String upsertQuery = "upsert into  " + tableName + "  values(?,?,?,?)";
@@ -254,7 +254,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testPreSplitCompositeFixedKey() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute("create table " + tableName + "(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2)) split on('000','100','200')");
@@ -284,7 +284,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testInWithDescKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         try {
             conn.createStatement().execute("create table " + tableName + "(key_1 char(3) not null, key_2 char(4) not null, v varchar(8)  CONSTRAINT pk PRIMARY KEY (key_1,key_2 desc))");
             conn.setAutoCommit(true);
@@ -324,7 +324,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testSkipScanIntersectionAtEnd() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         PreparedStatement stmt = conn.prepareStatement("create table " + tableName 
             + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, pk3 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
             + "CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SPLIT ON (?, ?, ?)");
@@ -350,7 +350,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try {
             TestUtil.createMultiCFTestTable(conn , fullTableName, null);
@@ -432,7 +432,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testOrPKWithAndNonPK() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         try {
             conn.createStatement().execute("create table " + tableName + "(ID varchar primary key,company varchar)");
             conn.setAutoCommit(true);
@@ -453,7 +453,7 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testNullInfiniteLoop() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             conn.setAutoCommit(true);
             conn.createStatement().execute(
               "create table " + tableName +

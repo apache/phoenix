@@ -43,7 +43,7 @@ public class RegexpSplitFunctionIT extends ParallelStatsDisabledIT {
     }
 
     private void initTable(Connection conn, String val, String separator) throws SQLException {
-        tableName = generateRandomString();
+        tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (" +
                 "ID INTEGER NOT NULL PRIMARY KEY," +
                 "VAL VARCHAR," +

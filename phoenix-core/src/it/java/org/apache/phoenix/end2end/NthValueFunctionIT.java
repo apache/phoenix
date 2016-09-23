@@ -35,7 +35,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void simpleTest() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nthValue = generateRandomString();
+        String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " dates INTEGER, val INTEGER)";
@@ -64,7 +64,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void offsetValueAscOrder() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nth_test_table = generateRandomString();
+        String nth_test_table = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -98,7 +98,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void offsetValueDescOrder() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nth_test_table = generateRandomString();
+        String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date INTEGER, \"value\" UNSIGNED_LONG)";
@@ -131,7 +131,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void offsetValueLastMismatchByColumn() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nth_test_table = generateRandomString();
+        String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date INTEGER, \"value\" UNSIGNED_LONG)";
@@ -164,7 +164,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void testSortOrderInDataColWithOffset() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nth_test_table = generateRandomString();
+        String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT NOT NULL CONSTRAINT pk PRIMARY KEY (id, dates, \"value\" DESC))";
@@ -195,7 +195,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void nonUniqueValuesInOrderByAsc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nthValue = generateRandomString();
+        String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " dates INTEGER, val INTEGER)";
@@ -226,7 +226,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void nonUniqueValuesInOrderByAscSkipDuplicit() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nthValue = generateRandomString();
+        String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " dates INTEGER, val INTEGER)";
@@ -257,7 +257,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void nonUniqueValuesInOrderByDesc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nthValue = generateRandomString();
+        String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " dates INTEGER, val INTEGER)";
@@ -288,7 +288,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void nonUniqueValuesInOrderNextValueDesc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nthValue = generateRandomString();
+        String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " dates INTEGER, val INTEGER)";
@@ -321,7 +321,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void nonUniqueValuesInOrderNextValueAsc() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nthValue = generateRandomString();
+        String nthValue = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " dates INTEGER, val INTEGER)";
@@ -354,7 +354,7 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     public void ignoreNullValues() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String nth_test_table = generateRandomString();
+        String nth_test_table = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL, page_id UNSIGNED_LONG,"
                 + " dates BIGINT NOT NULL, \"value\" BIGINT NULL CONSTRAINT pk PRIMARY KEY (id, dates))";

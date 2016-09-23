@@ -77,7 +77,7 @@ public class BinaryRowKeyIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             initTableValues(tableName);
             conn.setAutoCommit(true);
             conn.createStatement().execute("DELETE FROM " + tableName );
@@ -105,7 +105,7 @@ public class BinaryRowKeyIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
         try {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             initTableValues(tableName);
             String query = "SELECT * FROM " + tableName;
             PreparedStatement stmt = conn.prepareStatement(query);
@@ -131,7 +131,7 @@ public class BinaryRowKeyIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         
         try {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             initTableValues(tableName);
             
             String query = "UPSERT INTO " + tableName + " (a_binary, a_string, b_binary) "
