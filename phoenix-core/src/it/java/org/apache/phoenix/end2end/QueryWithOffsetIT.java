@@ -74,7 +74,7 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
 
     @Before
     public void initTest() {
-        tableName = "T_" + generateRandomString();
+        tableName = "T_" + generateUniqueName();
         ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" + "k1 INTEGER NOT NULL,\n"
                 + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n" + "C2.v1 VARCHAR,\n"
                 + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) " + preSplit;

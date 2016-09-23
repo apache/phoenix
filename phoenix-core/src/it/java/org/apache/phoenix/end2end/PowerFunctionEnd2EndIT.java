@@ -37,8 +37,8 @@ public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
     private static final double ZERO = 1e-9;
-    private static final String TEST_SIGNED = generateRandomString();
-    private static final String TEST_UNSIGNED = generateRandomString();
+    private static final String TEST_SIGNED = generateUniqueName();
+    private static final String TEST_UNSIGNED = generateUniqueName();
 
     private static boolean twoDoubleEquals(double a, double b) {
         if (Double.isNaN(a) ^ Double.isNaN(b)) return false;

@@ -48,7 +48,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCompareLongGTDecimal() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l > 1.5";
@@ -65,7 +65,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCompareLongGTEDecimal() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l >= 1.5";
@@ -89,7 +89,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCompareLongLTDecimal() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l < 1.5";
@@ -111,7 +111,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCompareLongLTEDecimal() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l <= 1.5";
@@ -132,7 +132,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
     }
     @Test
     public void testCompareLongGTDecimal2() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l > 2.5";
@@ -154,7 +154,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCompareLongGTEDecimal2() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l >= 2.5";
@@ -176,7 +176,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCompareLongLTDecimal2() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l < 2.5";
@@ -200,7 +200,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCompareLongLTEDecimal2() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "SELECT l FROM " + tableName + " where l <= 2.5";
@@ -224,7 +224,7 @@ public class PrimitiveTypeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testBooleanAsObject() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl(), PROPS);
         initTableValues(conn, tableName);
         String query = "upsert into " + tableName + " values (2, ?)";

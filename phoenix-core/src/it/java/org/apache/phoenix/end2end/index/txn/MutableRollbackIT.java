@@ -77,11 +77,11 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
     public void testRollbackOfUncommittedExistingKeyValueIndexUpdate() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName1 = "TBL1_" + generateRandomString();
-        String indexName1 = "IDX1_" + generateRandomString();
+        String tableName1 = "TBL1_" + generateUniqueName();
+        String indexName1 = "IDX1_" + generateUniqueName();
         String fullTableName1 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName1);
-        String tableName2 = "TBL2_" + generateRandomString();
-        String indexName2 = "IDX2_" + generateRandomString();
+        String tableName2 = "TBL2_" + generateUniqueName();
+        String indexName2 = "IDX2_" + generateUniqueName();
         String fullTableName2 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName2);
         conn.setAutoCommit(false);
         try {
@@ -209,11 +209,11 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
 
 	@Test
     public void testRollbackOfUncommittedExistingRowKeyIndexUpdate() throws Exception {
-        String tableName1 = "TBL1_" + generateRandomString();
-        String indexName1 = "IDX1_" + generateRandomString();
+        String tableName1 = "TBL1_" + generateUniqueName();
+        String indexName1 = "IDX1_" + generateUniqueName();
         String fullTableName1 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName1);
-        String tableName2 = "TBL2_" + generateRandomString();
-        String indexName2 = "IDX2_" + generateRandomString();
+        String tableName2 = "TBL2_" + generateUniqueName();
+        String indexName2 = "IDX2_" + generateUniqueName();
         String fullTableName2 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName2);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -352,10 +352,10 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
     public void testMultiRollbackOfUncommittedExistingRowKeyIndexUpdate() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName1 = "TBL1_" + generateRandomString();
-        String indexName1 = "IDX1_" + generateRandomString();
+        String tableName1 = "TBL1_" + generateUniqueName();
+        String indexName1 = "IDX1_" + generateUniqueName();
         String fullTableName1 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName1);
-        String tableName2 = "TBL2_" + generateRandomString();
+        String tableName2 = "TBL2_" + generateUniqueName();
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
@@ -458,10 +458,10 @@ public class MutableRollbackIT extends ParallelStatsDisabledIT {
     public void testCheckpointAndRollback() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName1 = "TBL1_" + generateRandomString();
-        String indexName1 = "IDX1_" + generateRandomString();
+        String tableName1 = "TBL1_" + generateUniqueName();
+        String indexName1 = "IDX1_" + generateUniqueName();
         String fullTableName1 = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName1);
-        String tableName2 = "TBL2_" + generateRandomString();
+        String tableName2 = "TBL2_" + generateUniqueName();
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();

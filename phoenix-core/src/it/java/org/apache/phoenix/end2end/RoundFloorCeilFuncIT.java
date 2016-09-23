@@ -64,7 +64,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     
     @Before
     public void initTable() throws Exception {
-        tableName = generateRandomString();
+        tableName = generateUniqueName();
         String testString = "abc";
         Connection conn = null;
         PreparedStatement stmt = null;

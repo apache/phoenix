@@ -36,7 +36,7 @@ import org.junit.Test;
 public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
-    private static final String TABLE_NAME = generateRandomString();
+    private static final String TABLE_NAME = generateUniqueName();
 
     @Before
     public void initTable() throws Exception {

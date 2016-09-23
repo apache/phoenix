@@ -76,8 +76,8 @@ public class RollbackIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testRollbackOfUncommittedKeyValueIndexInsert() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -124,8 +124,8 @@ public class RollbackIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         try {
             Statement stmt = conn.createStatement();

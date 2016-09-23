@@ -43,7 +43,7 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
     public void testCreatesTable() throws Exception {
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         sink.initForTesting(conn, tableName);
 
         // check for existence of the tracing table
@@ -74,7 +74,7 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         // hook up a phoenix sink
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         sink.initForTesting(conn, tableName);
 
         // create a simple metrics record

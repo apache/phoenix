@@ -57,7 +57,7 @@ public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
 
         String namespace = "TEST_SCHEMA";
         String schemaName = namespace;
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String phoenixFullTableName = schemaName + "." + tableName;
         String hbaseFullTableName = schemaName + ":" + tableName;

@@ -45,13 +45,13 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUseSchemaCaseInsensitive() throws Exception {
-        String schemaName = generateRandomString();
+        String schemaName = generateUniqueName();
         testUseSchema(schemaName);
     }
 
     @Test
     public void testUseSchemaCaseSensitive() throws Exception {
-        String schemaName = generateRandomString();
+        String schemaName = generateUniqueName();
         testUseSchema("\"" + schemaName + "\"");
     }
 
@@ -61,7 +61,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String ddl = "CREATE SCHEMA IF NOT EXISTS "+schema;
         conn.createStatement().execute(ddl);
-        String testTable = generateRandomString();
+        String testTable = generateUniqueName();
         ddl = "create table "+schema+"." + testTable + "(id varchar primary key)";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("use "+schema);
@@ -89,14 +89,14 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
     @Test
     public void testSchemaInJdbcUrl() throws Exception {
         Properties props = new Properties();
-        String schema = generateRandomString();
+        String schema = generateUniqueName();
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
         String ddl = "CREATE SCHEMA IF NOT EXISTS " + schema;
         conn.createStatement().execute(ddl);
-        String testTable = generateRandomString();
+        String testTable = generateUniqueName();
         ddl = "create table IF NOT EXISTS " + schema + "." + testTable + " (schema_name varchar primary key)";
         conn.createStatement().execute(ddl);
         conn.createStatement().executeUpdate("upsert into " + schema + "." + testTable + " values('" + schema + "')");
@@ -105,7 +105,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(schema, rs.getString(1));
 
-        schema = generateRandomString();
+        schema = generateUniqueName();
         ddl = "CREATE SCHEMA " + schema;
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("use " + schema);
@@ -121,8 +121,8 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
     @Test
     public void testMappedView() throws Exception {
         Properties props = new Properties();
-        String schema = generateRandomString();
-        String tableName = generateRandomString();
+        String schema = generateUniqueName();
+        String tableName = generateUniqueName();
         String fullTablename = schema + QueryConstants.NAME_SEPARATOR + tableName;
         props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
         Connection conn = DriverManager.getConnection(getUrl(), props);

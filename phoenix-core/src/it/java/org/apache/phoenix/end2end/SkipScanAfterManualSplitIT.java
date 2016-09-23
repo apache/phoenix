@@ -106,7 +106,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testManualSplit() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         initTable(tableName);
         Connection conn = DriverManager.getConnection(getUrl());
@@ -281,7 +281,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
     @Test
     public void testSkipScanInListOfRVCAfterManualSplit() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " ( "
             + "organization_id CHAR(15) NOT NULL, "
             + "parent_id CHAR(15) NOT NULL, "
@@ -351,7 +351,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
     @Test
     public void testMinMaxRangeIntersection() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         PreparedStatement stmt = conn.prepareStatement("create table " + tableName
             + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
             + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)) SALT_BUCKETS=4 SPLIT ON (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");

@@ -131,7 +131,7 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testSinkLifecycle () {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName +
                 "  (flume_time timestamp not null, col1 varchar , col2 varchar" +
@@ -162,7 +162,7 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
     
     @Test
     public void testCreateTable () throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " " +
                 "  (flume_time timestamp not null, col1 varchar , col2 varchar" +
                 "  CONSTRAINT pk PRIMARY KEY (flume_time))\n";

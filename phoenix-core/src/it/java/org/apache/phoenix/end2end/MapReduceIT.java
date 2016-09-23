@@ -64,8 +64,8 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
     @Test
     public void testNoConditionsOnSelect() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String stockTableName = generateRandomString();
-        String stockStatsTableName = generateRandomString();
+        String stockTableName = generateUniqueName();
+        String stockStatsTableName = generateUniqueName();
         conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
         conn.createStatement().execute(String.format(CREATE_STOCK_STATS_TABLE, stockStatsTableName));
         conn.commit();
@@ -79,8 +79,8 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
     @Test
     public void testConditionsOnSelect() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String stockTableName = generateRandomString();
-        String stockStatsTableName = generateRandomString();
+        String stockTableName = generateUniqueName();
+        String stockStatsTableName = generateUniqueName();
         conn.createStatement().execute(String.format(CREATE_STOCK_TABLE, stockTableName));
         conn.createStatement().execute(String.format(CREATE_STOCK_STATS_TABLE, stockStatsTableName));
         conn.commit();

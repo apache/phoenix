@@ -103,7 +103,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
                     + "(SYMBOL VARCHAR NOT NULL PRIMARY KEY, COMPANY VARCHAR);";
@@ -147,7 +147,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         PhoenixConnection globalConn = null;
         PhoenixConnection tenantConn = null;
         try {
-            String stockTableMultiName = generateRandomString();
+            String stockTableMultiName = generateUniqueName();
 
             // Create table using the global connection
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableMultiName
@@ -196,7 +196,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
@@ -240,7 +240,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
@@ -285,7 +285,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
@@ -331,7 +331,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
@@ -376,7 +376,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
@@ -420,7 +420,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
@@ -454,7 +454,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName
@@ -491,7 +491,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         CSVParser parser = null;
         PhoenixConnection conn = null;
         try {
-            String stockTableName = generateRandomString();
+            String stockTableName = generateUniqueName();
 
             // Create table
             String statements = "CREATE TABLE IF NOT EXISTS " + stockTableName

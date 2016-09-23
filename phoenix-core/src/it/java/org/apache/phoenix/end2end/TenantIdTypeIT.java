@@ -78,7 +78,7 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
         this.dataType = dataType;
         this.tenantId = tenantId;
         this.otherTenantId = otherTenantId;
-        String tbl = generateRandomString();
+        String tbl = generateUniqueName();
         if(tbl.contains("(")){
             tbl = tbl.substring(0, tbl.indexOf("("));
         }

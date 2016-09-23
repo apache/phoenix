@@ -39,7 +39,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
     public void testIntegerPK() throws Exception {
         int[] testNumbers = {Integer.MIN_VALUE, Integer.MIN_VALUE + 1,
                 -2, -1, 0, 1, 2, Integer.MAX_VALUE - 1, Integer.MAX_VALUE};
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName,"PKIntValueTest");
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -124,7 +124,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
       // NOTE: Due to how we parse negative long, -9223372036854775808L, the minimum value of 
       // bigint is not recognizable in the current version. As a result, we start with 
       // Long.MIN_VALUE+1 as the smallest value.
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         long[] testNumbers = {Long.MIN_VALUE+1 , Long.MIN_VALUE+2 , 
                 -2L, -1L, 0L, 1L, 2L, Long.MAX_VALUE-1, Long.MAX_VALUE};
         ensureTableCreated(getUrl(), tableName, "PKBigIntValueTest" );
@@ -208,7 +208,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIntegerKV() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         int[] testNumbers = {Integer.MIN_VALUE, Integer.MIN_VALUE + 1, 
                 -2, -1, 0, 1, 2, Integer.MAX_VALUE - 1, Integer.MAX_VALUE};
         ensureTableCreated(getUrl(), tableName, "KVIntValueTest" );
@@ -292,7 +292,7 @@ public class UpsertBigValuesIT extends ParallelStatsDisabledIT {
         // NOTE: Due to how we parse negative long, -9223372036854775808L, the minimum value of 
         // bigint is not recognizable in the current version. As a result, we start with 
         // Long.MIN_VALUE+1 as the smallest value.
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         long[] testNumbers = {Long.MIN_VALUE+1, Long.MIN_VALUE+2, 
                 -2L, -1L, 0L, 1L, 2L, Long.MAX_VALUE-1, Long.MAX_VALUE};
         ensureTableCreated(getUrl(), tableName, "KVBigIntValueTest" );

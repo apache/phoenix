@@ -33,7 +33,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void unsignedLong() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
                 + " date DATE, \"value\" UNSIGNED_LONG)";
@@ -65,7 +65,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void signedInteger() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, date INTEGER, \"value\" INTEGER)";
@@ -90,7 +90,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void unsignedInteger() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -115,7 +115,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void simpleTestDescOrder() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -141,7 +141,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void simpleTestAscOrder() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -167,7 +167,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void charDatatype() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
@@ -192,7 +192,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void varcharVariableLenghtDatatype() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -217,7 +217,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void groupMultipleValues() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -254,7 +254,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void nullValuesInAggregatingColumns() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -279,7 +279,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void nullValuesInAggregatingColumnsSecond() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
@@ -305,7 +305,7 @@ public class LastValueFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void inOrderByClausule() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName 
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_INT,"

@@ -361,7 +361,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testUpsertSelectOnlyUpsertsTenantDataWithDifferentTenantTable() throws Exception {
-        String anotherTableName = "V_" + generateRandomString();
+        String anotherTableName = "V_" + generateUniqueName();
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + anotherTableName + " ( " + 
             "tenant_col VARCHAR) AS SELECT * FROM " + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'def'");
         

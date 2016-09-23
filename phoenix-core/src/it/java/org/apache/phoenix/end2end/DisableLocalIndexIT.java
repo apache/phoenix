@@ -57,7 +57,7 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
     public void testDisabledLocalIndexes() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        String baseName = generateRandomString();
+        String baseName = generateUniqueName();
         String tableName = baseName+ "_TABLE";
         String viewName = baseName + "_VIEW";
         String indexName1 = baseName + "_INDEX1";

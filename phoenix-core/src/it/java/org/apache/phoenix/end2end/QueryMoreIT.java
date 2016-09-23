@@ -72,10 +72,10 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     }
     
     private void testQueryMore(boolean queryAgainstTenantSpecificView, boolean dataTableSalted) throws Exception {
-        String[] tenantIds = new String[] {"T1_" + generateRandomString(), "T2_" + generateRandomString(), "T3_" + generateRandomString()};
+        String[] tenantIds = new String[] {"T1_" + generateUniqueName(), "T2_" + generateUniqueName(), "T3_" + generateUniqueName()};
         int numRowsPerTenant = 10;
-        String cursorTableName = generateRandomString();
-        String base_history_table = generateRandomString();
+        String cursorTableName = generateUniqueName();
+        String base_history_table = generateUniqueName();
         this.dataTableName = base_history_table + (dataTableSalted ? "_SALTED" : "");
         String cursorTableDDL = "CREATE TABLE IF NOT EXISTS " + 
                 cursorTableName +  " (\n" +  
@@ -342,7 +342,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     @SuppressWarnings("deprecation")
     @Test
     public void testNullBigDecimalWithScale() throws Exception {
-        final String table = generateRandomString();
+        final String table = generateUniqueName();
         final Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
         try (Statement stmt = conn.createStatement()) {

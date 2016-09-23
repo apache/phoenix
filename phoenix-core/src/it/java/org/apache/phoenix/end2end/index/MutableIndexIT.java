@@ -103,8 +103,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 	        conn.setAutoCommit(false);
-			String tableName = "TBL_" + generateRandomString();
-			String indexName = "IDX_" + generateRandomString();
+			String tableName = "TBL_" + generateUniqueName();
+			String indexName = "IDX_" + generateUniqueName();
 			String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 			String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
 
@@ -201,8 +201,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testCoveredColumns() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		String tableName = "TBL_" + generateRandomString();
-		String indexName = "IDX_" + generateRandomString();
+		String tableName = "TBL_" + generateUniqueName();
+		String indexName = "IDX_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -311,8 +311,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testCompoundIndexKey() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		String tableName = "TBL_" + generateRandomString();
-		String indexName = "IDX_" + generateRandomString();
+		String tableName = "TBL_" + generateUniqueName();
+		String indexName = "IDX_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -430,8 +430,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testMultipleUpdatesToSingleRow() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		String tableName = "TBL_" + generateRandomString();
-		String indexName = "IDX_" + generateRandomString();
+		String tableName = "TBL_" + generateUniqueName();
+		String indexName = "IDX_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -514,8 +514,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testUpsertingNullForIndexedColumns() throws Exception {
     	Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		String tableName = "TBL_" + generateRandomString();
-		String indexName = "IDX_" + generateRandomString();
+		String tableName = "TBL_" + generateUniqueName();
+		String indexName = "IDX_" + generateUniqueName();
 		String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         String testTableName = tableName + "_" + System.currentTimeMillis();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -600,7 +600,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     public void testAlterTableWithImmutability() throws Exception {
         String query;
         ResultSet rs;
-		String tableName = "TBL_" + generateRandomString();
+		String tableName = "TBL_" + generateUniqueName();
 		String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 
 
@@ -639,10 +639,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(2));
         props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
         Connection conn1 = DriverManager.getConnection(getUrl());
-
-		String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
-		HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         dropTable(admin, conn1);
         try{
             String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
@@ -661,8 +660,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     }
 
     private void dropTable(HBaseAdmin admin, Connection conn) throws SQLException, IOException {
-		String tableName = "TBL_" + generateRandomString();
-		String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
         if(admin.tableExists(tableName)) {
             admin.disableTable(TableName.valueOf(tableName));
@@ -691,8 +690,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     public void testIndexHalfStoreFileReader() throws Exception {
         Connection conn1 = DriverManager.getConnection(getUrl());
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-		String tableName = "TBL_" + generateRandomString();
-		String indexName = "IDX_" + generateRandomString();
+		String tableName = "TBL_" + generateUniqueName();
+		String indexName = "IDX_" + generateUniqueName();
         try {
             dropTable(admin, conn1);
             createBaseTable(conn1, tableName, "('e')");
@@ -856,8 +855,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     
   @Test
   public void testTenantSpecificConnection() throws Exception {
-	  String tableName = "TBL_" + generateRandomString();
-	  String indexName = "IDX_" + generateRandomString();
+	  String tableName = "TBL_" + generateUniqueName();
+	  String indexName = "IDX_" + generateUniqueName();
 	  String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
 	  Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
       try (Connection conn = DriverManager.getConnection(getUrl(), props)) {

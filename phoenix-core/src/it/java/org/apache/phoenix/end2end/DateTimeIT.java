@@ -75,7 +75,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     }
     
     private String initAtable() throws SQLException {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, ATABLE_NAME, (byte[][])null);
         PreparedStatement stmt = conn.prepareStatement(
             "upsert into " + tableName +
@@ -295,7 +295,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         java.util.Date dateToday = cal.getTime();
         cal.add(Calendar.DAY_OF_YEAR, 1);
         java.util.Date dateTomorrow = cal.getTime();
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String today = formatter.format(dateToday);
         String tomorrow = formatter.format(dateTomorrow);
         String query = "SELECT entity_id FROM " + this.tableName + " WHERE a_integer < 4 AND a_date BETWEEN date '" + today + "' AND date '" + tomorrow + "' ";
@@ -454,7 +454,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testYearFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
@@ -484,7 +484,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMonthFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
@@ -514,7 +514,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUnsignedTimeDateWithLiteral() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + "  (k1 INTEGER NOT NULL," +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
@@ -535,7 +535,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testSecondFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
@@ -565,7 +565,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testWeekFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + "  (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -587,7 +587,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testHourFuncAgainstColumns() throws Exception {
-        String tableName  = generateRandomString();
+        String tableName  = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -612,7 +612,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNowFunction() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Date date = new Date(System.currentTimeMillis());
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, timestamps TIMESTAMP CONSTRAINT pk PRIMARY KEY (k1))";
@@ -636,7 +636,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMinuteFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME, " +
                         "unsignedDates UNSIGNED_DATE, unsignedTimestamps UNSIGNED_TIMESTAMP, unsignedTimes UNSIGNED_TIME CONSTRAINT pk PRIMARY KEY (k1))";
@@ -663,7 +663,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testDayOfMonthFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -689,7 +689,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testDayOfWeekFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2012-03-08 11:01:10'), TO_TIMESTAMP('2013-06-16 12:02:20'), TO_TIME('2014-09-23 13:03:30'))";
@@ -708,7 +708,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDayOfYearFuncAgainstColumns() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL, dates DATE, timestamps TIMESTAMP, times TIME CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + " VALUES (1, TO_DATE('2012-03-01 11:01:10'), TO_TIMESTAMP('2013-02-01 12:02:20'), TO_TIME('2014-01-15 13:03:30'))";
@@ -748,7 +748,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     }
     @Test
     public void testSelectBetweenNanos() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER NOT NULL PRIMARY KEY, ts " +
                         "TIMESTAMP(3))";
@@ -772,8 +772,8 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCurrentTimeWithProjectedTable () throws Exception {
-        String tableName1 = generateRandomString();
-        String tableName2 = generateRandomString();
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName1 + " ( ID integer primary key)";
         conn.createStatement().execute(ddl);
         ddl = "CREATE TABLE " + tableName2 + " ( ID integer primary key)";
@@ -846,7 +846,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedDateTimestampUnequal() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, timestamps TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -889,7 +889,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedTimeTimestampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times TIME, timestamps TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -932,7 +932,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedDateTimeCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, times TIME)";
         conn.createStatement().execute(ddl);
@@ -965,7 +965,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedDateUnsignedTimestampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, timestamps UNSIGNED_TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -1008,7 +1008,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedTimeUnsignedTimestampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times TIME, timestamps UNSIGNED_TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -1051,7 +1051,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedDateUnsignedTimeCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates DATE, times UNSIGNED_TIME)";
         conn.createStatement().execute(ddl);
@@ -1084,7 +1084,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedDateTimestampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, timestamps TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -1127,7 +1127,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedTimeTimestampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times UNSIGNED_TIME, timestamps TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -1170,7 +1170,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedDateTimeCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, times TIME)";
         conn.createStatement().execute(ddl);
@@ -1203,7 +1203,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedDateUnsignedTimestampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, timestamps UNSIGNED_TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -1246,7 +1246,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedTimeUnsignedTimestampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, times UNSIGNED_TIME, timestamps UNSIGNED_TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -1289,7 +1289,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedDateUnsignedTimeCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, dates UNSIGNED_DATE, times UNSIGNED_TIME)";
         conn.createStatement().execute(ddl);
@@ -1322,7 +1322,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedDateDateCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, date1 DATE, date2 DATE)";
         conn.createStatement().execute(ddl);
@@ -1355,7 +1355,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedDateUnsignedDateCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, date1 UNSIGNED_DATE, date2 UNSIGNED_DATE)";
         conn.createStatement().execute(ddl);
@@ -1388,7 +1388,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedTimeTimeCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, time1 TIME, time2 TIME)";
         conn.createStatement().execute(ddl);
@@ -1421,7 +1421,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedTimeUnsignedTimeCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, time1 UNSIGNED_TIME, time2 UNSIGNED_TIME)";
         conn.createStatement().execute(ddl);
@@ -1454,7 +1454,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedTimeStampTimeStampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, timestamp1 TIMESTAMP, timestamp2 TIMESTAMP)";
         conn.createStatement().execute(ddl);
@@ -1497,7 +1497,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testProjectedUnsignedTimeStampUnsignedTimeStampCompare() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
                 "CREATE TABLE IF NOT EXISTS " + tableName + " (k1 INTEGER PRIMARY KEY, timestamp1 UNSIGNED_TIMESTAMP, timestamp2 UNSIGNED_TIMESTAMP)";
         conn.createStatement().execute(ddl);

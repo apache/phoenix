@@ -111,10 +111,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
-import org.apache.commons.lang.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -189,26 +189,6 @@ import com.google.inject.util.Providers;
  */
 
 public abstract class BaseTest {
-    protected static final String TEST_TABLE_SCHEMA = "(" +
-            "   varchar_pk VARCHAR NOT NULL, " +
-            "   char_pk CHAR(10) NOT NULL, " +
-            "   int_pk INTEGER NOT NULL, "+ 
-            "   long_pk BIGINT NOT NULL, " +
-            "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-            "   date_pk DATE NOT NULL, " +
-            "   a.varchar_col1 VARCHAR, " +
-            "   a.char_col1 CHAR(10), " +
-            "   a.int_col1 INTEGER, " +
-            "   a.long_col1 BIGINT, " +
-            "   a.decimal_col1 DECIMAL(31, 10), " +
-            "   a.date1 DATE, " +
-            "   b.varchar_col2 VARCHAR, " +
-            "   b.char_col2 CHAR(10), " +
-            "   b.int_col2 INTEGER, " +
-            "   b.long_col2 BIGINT, " +
-            "   b.decimal_col2 DECIMAL(31, 10), " +
-            "   b.date2 DATE " +
-            "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
     protected static final int DEFAULT_TXN_TIMEOUT_SECONDS = 30;
@@ -801,8 +781,16 @@ public abstract class BaseTest {
         createTestTable(url, ddl, splits, ts);
     }
 
-    public static String generateRandomString() {
-      return RandomStringUtils.randomAlphabetic(20).toUpperCase();
+    private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);
+    private static final int MAX_SUFFIX_VALUE = 1000000;
+    
+    public static String generateUniqueName() {
+        int nextName = NAME_SUFFIX.incrementAndGet();
+        if (nextName >= MAX_SUFFIX_VALUE) {
+            throw new IllegalStateException("Used up all unique names");
+        }
+        return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+        //return RandomStringUtils.randomAlphabetic(20).toUpperCase();
     }
 
     protected static void createTestTable(String url, String ddl) throws SQLException {
@@ -1112,7 +1100,7 @@ public abstract class BaseTest {
     
     protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if(tableName == null) {
-            tableName = generateRandomString();
+            tableName = generateUniqueName();
         }
         String tableDDLType = ATABLE_NAME;
         if (ts == null) {

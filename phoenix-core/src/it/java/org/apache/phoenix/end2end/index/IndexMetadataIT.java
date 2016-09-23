@@ -50,6 +50,7 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -119,11 +120,11 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        String indexDataTable = generateRandomString();
+        String indexDataTable = generateUniqueName();
         String fullIndexDataTable = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         try {
-            String tableDDL = "create table " + fullIndexDataTable + TEST_TABLE_SCHEMA;
+            String tableDDL = "create table " + fullIndexDataTable + TestUtil.TEST_TABLE_SCHEMA;
             conn.createStatement().execute(tableDDL);
             String ddl = "CREATE INDEX " + indexName + " ON " + fullIndexDataTable
                     + " (varchar_col1 ASC, varchar_col2 ASC, int_pk DESC)"
@@ -296,12 +297,12 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
     	// column. The definition is defined in IndexUtil.getIndexColumnDataType.
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String indexDataTable = generateRandomString();
-        String indexName = generateRandomString();
+        String indexDataTable = generateUniqueName();
+        String indexName = generateUniqueName();
         conn.setAutoCommit(false);
         try {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
             String ddl = "CREATE INDEX " + indexName + " ON " + fullTableName
                     + " (char_col1 ASC, int_col2 ASC, long_col2 DESC)"
                     + " INCLUDE (int_col1)";
@@ -359,10 +360,10 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String indexName = "\"lowerCaseIndex\"";
-        String indexDataTable = generateRandomString();
+        String indexDataTable = generateUniqueName();
         try {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
             String ddl = "CREATE INDEX " + indexName + " ON " + fullTableName
                     + " (char_col1 ASC, int_col2 ASC, long_col2 DESC)"
                     + " INCLUDE (int_col1)";
@@ -394,11 +395,11 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        String indexDataTable = generateRandomString();
-        String indexName = generateRandomString();
+        String indexDataTable = generateUniqueName();
+        String indexName = generateUniqueName();
         try {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
             String ddl = "CREATE INDEX " + indexName + " ON " + fullTableName
             		+ " (a.int_col1, a.long_col1, b.int_col2, b.long_col2)"
             		+ " INCLUDE(int_col1, int_col2)";
@@ -456,8 +457,8 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        String testTable = generateRandomString();
-        String indexName = generateRandomString();
+        String testTable = generateUniqueName();
+        String indexName = generateUniqueName();
         String ddl = "create table " + testTable  + " (char_pk varchar not null,"
         		+ " a.int_col integer, a.long_col integer,"
         		+ " b.int_col integer, b.long_col integer"
@@ -483,8 +484,8 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
     @Test
     public void testBinaryNonnullableIndex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateRandomString();
-        String indexName = generateRandomString();
+        String testTable = generateUniqueName();
+        String indexName = generateUniqueName();
         try {
             String ddl =
                     "CREATE TABLE " + testTable  + " ( "
@@ -533,13 +534,13 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        String testTable = generateRandomString();
+        String testTable = generateUniqueName();
 
 
         String ddl = "create table " + testTable  + " (k varchar primary key, v1 varchar, v2 varchar, v3 varchar)";
         PreparedStatement stmt = conn.prepareStatement(ddl);
         stmt.execute();
-        String indexName = "ASYNCIND_" + generateRandomString();
+        String indexName = "ASYNCIND_" + generateUniqueName();
         
         ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (v1) ASYNC";
         stmt = conn.prepareStatement(ddl);

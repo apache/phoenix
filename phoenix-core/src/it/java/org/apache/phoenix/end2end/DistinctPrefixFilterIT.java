@@ -36,8 +36,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
-    private static final String testTableF = generateRandomString();
-    private static final String testTableV = generateRandomString();
+    private static final String testTableF = generateUniqueName();
+    private static final String testTableV = generateUniqueName();
     private static final String testSeq = testTableF + "_seq";
     private static final String PREFIX = "SERVER DISTINCT PREFIX";
     private static Connection conn;
@@ -110,7 +110,7 @@ public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCornerCases() throws Exception {
-        String testTable = generateRandomString();
+        String testTable = generateUniqueName();
         String ddl = "CREATE TABLE " + testTable +
                 "  (prefix1 INTEGER NOT NULL, prefix2 SMALLINT NOT NULL, prefix3 INTEGER NOT NULL, " +
                 "col1 FLOAT, CONSTRAINT pk PRIMARY KEY(prefix1, prefix2, prefix3))";

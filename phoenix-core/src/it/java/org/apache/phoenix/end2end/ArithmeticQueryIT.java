@@ -48,7 +48,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String testDecimalArithmetic = generateRandomString();
+            String testDecimalArithmetic = generateUniqueName();
             String ddl = "CREATE TABLE " + testDecimalArithmetic +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, " +
                     "col1 DECIMAL(31,0), col2 DECIMAL(5), col3 DECIMAL(5,2), col4 DECIMAL)";
@@ -139,11 +139,11 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String source = generateRandomString();
+            String source = generateUniqueName();
             String ddl = "CREATE TABLE " + source +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col1 DECIMAL(5,2), col2 DECIMAL(5,1), col3 DECIMAL(5,2), col4 DECIMAL(4,4))";
             createTestTable(getUrl(), ddl);
-            String target = generateRandomString();
+            String target = generateUniqueName();
             ddl = "CREATE TABLE " + target +
                     " (pk VARCHAR NOT NULL PRIMARY KEY, col1 DECIMAL(5,1), col2 DECIMAL(5,2), col3 DECIMAL(4,4))";
             createTestTable(getUrl(), ddl);
@@ -249,7 +249,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String testDecimalArithmetic = generateRandomString();
+            String testDecimalArithmetic = generateUniqueName();
             String ddl = "CREATE TABLE " + testDecimalArithmetic +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, col1 DECIMAL(31, 11), col2 DECIMAL(31,1), col3 DECIMAL(38,1))";
             createTestTable(getUrl(), ddl);
@@ -311,7 +311,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String testRandomFunction = generateRandomString();
+            String testRandomFunction = generateUniqueName();
             String ddl =
                 "CREATE TABLE " + testRandomFunction + " (pk VARCHAR NOT NULL PRIMARY KEY)";
             createTestTable(getUrl(), ddl);
@@ -368,7 +368,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertTrue(rand12 == rs.getDouble(3));
 
-            String testRandomFunction1 = generateRandomString();
+            String testRandomFunction1 = generateUniqueName();
             ddl = "CREATE TABLE " + testRandomFunction1
                 + " (pk VARCHAR NOT NULL PRIMARY KEY, v1 UNSIGNED_DOUBLE)";
             createTestTable(getUrl(), ddl);
@@ -427,7 +427,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String testDecimalArithmetic = generateRandomString();
+            String testDecimalArithmetic = generateUniqueName();
             String ddl = "CREATE TABLE " + testDecimalArithmetic +
                     "  (pk VARCHAR NOT NULL PRIMARY KEY, " +
                     "col1 DECIMAL(38,0), col2 DECIMAL(5, 2), col3 INTEGER, col4 BIGINT, col5 DECIMAL)";
@@ -656,7 +656,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     }
     @Test
     public void testSumDouble() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
         initSumDoubleValues(tableName, null, getUrl());
         String query = "SELECT SUM(d) FROM " + tableName ;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -674,7 +674,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSumUnsignedDouble() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
         initSumDoubleValues(tableName, null, getUrl());
         String query = "SELECT SUM(ud) FROM " + tableName ;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -692,7 +692,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSumFloat() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
         initSumDoubleValues(tableName, null, getUrl());
         String query = "SELECT SUM(f) FROM " + tableName ;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -710,7 +710,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testSumUnsignedFloat() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
         initSumDoubleValues(tableName, null, getUrl());
         String query = "SELECT SUM(uf) FROM " + tableName;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -727,7 +727,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     }
     
     private String initIntegerTable(Connection conn) throws SQLException {
-        String arithmetic_test = generateRandomString();
+        String arithmetic_test = generateUniqueName();
         String ddl = "CREATE TABLE " + arithmetic_test
             + " (six INTEGER PRIMARY KEY, four INTEGER, three INTEGER)";
         conn.createStatement().execute(ddl);
@@ -970,7 +970,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testCastingOnConstantAddInArithmeticEvaluation() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateRandomString();
+        String testTable = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + testTable
             + " (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -988,7 +988,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testCastingOnConstantSubInArithmeticEvaluation() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateRandomString();
+        String testTable = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + testTable
             + " (k1 INTEGER NOT NULL, v1 INTEGER CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -1005,7 +1005,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testFloatingPointUpsert() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String test = generateRandomString();
+        String test = generateUniqueName();
         String ddl =
             "CREATE TABLE " + test + " (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
         conn.createStatement().execute(ddl);
@@ -1021,7 +1021,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testFloatingPointMultiplicationUpsert() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String test = generateRandomString();
+        String test = generateUniqueName();
         String ddl =
             "CREATE TABLE " + test + " (id VARCHAR not null primary key, name VARCHAR, lat FLOAT)";
         conn.createStatement().execute(ddl);
@@ -1038,7 +1038,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     @Test
     public void testSystemTableHasDoubleForExponentialNumber() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String test = generateRandomString();
+        String test = generateUniqueName();
         String ddl = "CREATE TABLE " + test + " (id VARCHAR not null primary key, num FLOAT)";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + test + "(id,num) VALUES ('testid', 1.2E3)";
@@ -1072,7 +1072,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
     
     private ResultSet createTableWithValues(String[] values, String valueType) throws SQLException {
     	Connection conn = DriverManager.getConnection(getUrl());
-        String test = generateRandomString();
+        String test = generateUniqueName();
         StringBuilder ddl = new StringBuilder(
             "CREATE TABLE " + test + " (id VARCHAR not null primary key");
         StringBuilder dmll = new StringBuilder("UPSERT INTO " + test + "(id,");

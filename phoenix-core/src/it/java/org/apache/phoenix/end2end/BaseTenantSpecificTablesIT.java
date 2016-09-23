@@ -47,14 +47,14 @@ public abstract class BaseTenantSpecificTablesIT extends ParallelStatsEnabledIT 
     
     @Before
     public void createTables() throws SQLException {
-        TENANT_ID = "T_" + BaseTest.generateRandomString();
-        TENANT_ID2 = "T_" + BaseTest.generateRandomString();
+        TENANT_ID = "T_" + BaseTest.generateUniqueName();
+        TENANT_ID2 = "T_" + BaseTest.generateUniqueName();
         PHOENIX_JDBC_TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID;
         PHOENIX_JDBC_TENANT_SPECIFIC_URL2 = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + TENANT_ID2;
-        PARENT_TABLE_NAME = "P_" + BaseTest.generateRandomString();
-        TENANT_TABLE_NAME = "V_" + BaseTest.generateRandomString();
-        PARENT_TABLE_NAME_NO_TENANT_TYPE_ID = "P_" + BaseTest.generateRandomString();
-        TENANT_TABLE_NAME_NO_TENANT_TYPE_ID = "V_" + BaseTest.generateRandomString();
+        PARENT_TABLE_NAME = "P_" + BaseTest.generateUniqueName();
+        TENANT_TABLE_NAME = "V_" + BaseTest.generateUniqueName();
+        PARENT_TABLE_NAME_NO_TENANT_TYPE_ID = "P_" + BaseTest.generateUniqueName();
+        TENANT_TABLE_NAME_NO_TENANT_TYPE_ID = "V_" + BaseTest.generateUniqueName();
         PARENT_TABLE_DDL = "CREATE TABLE " + PARENT_TABLE_NAME + " ( \n" + 
                 "                user VARCHAR ,\n" + 
                 "                tenant_id VARCHAR NOT NULL,\n" + 

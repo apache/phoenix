@@ -35,7 +35,7 @@ import org.junit.Test;
 
 public class LikeExpressionIT extends ParallelStatsDisabledIT {
 
-    private static final String TEST_TABLE = generateRandomString();
+    private static final String TEST_TABLE = generateUniqueName();
 
     @BeforeClass
     public static void doBeforeTestSetup() throws Exception {
@@ -94,7 +94,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testLikeEverythingExpression() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String table = generateRandomString();
+        String table = generateUniqueName();
         String ddl = "CREATE TABLE " + table
                 + " (k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))";
         conn.createStatement().execute(ddl);
@@ -153,7 +153,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testLikeWithEscapenLParen() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t = generateRandomString();
+        String t = generateUniqueName();
         String ddl = "CREATE TABLE " + t + " (k VARCHAR, v VARCHAR, CONSTRAINT pk PRIMARY KEY (k))";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO " + t + " VALUES('aa','bb')");
@@ -175,7 +175,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testNewLine() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t = generateRandomString();
+        String t = generateUniqueName();
         String ddl = "CREATE TABLE " + t + " (k VARCHAR NOT NULL PRIMARY KEY)";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO " + t + " VALUES('AA\nA')");
@@ -204,7 +204,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testOneChar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t = generateRandomString();
+        String t = generateUniqueName();
         String ddl = "CREATE TABLE " + t + " (k VARCHAR NOT NULL PRIMARY KEY)";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO " + t + " VALUES('A')");
@@ -227,7 +227,7 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testNull() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String table = generateRandomString();
+        String table = generateUniqueName();
         String ddl = "CREATE TABLE " + table
                 + " (pk INTEGER PRIMARY KEY, str VARCHAR)";
         conn.createStatement().execute(ddl);

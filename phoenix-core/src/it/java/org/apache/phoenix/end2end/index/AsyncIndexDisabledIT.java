@@ -52,8 +52,8 @@ public class AsyncIndexDisabledIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
             Statement stmt = conn.createStatement();
-            String tableName = "TBL_" + generateRandomString();
-            String indexName = "IND_" + generateRandomString();
+            String tableName = "TBL_" + generateUniqueName();
+            String indexName = "IND_" + generateUniqueName();
             
             String ddl = "CREATE TABLE " + tableName + " (pk INTEGER NOT NULL PRIMARY KEY, val VARCHAR)";
             stmt.execute(ddl);

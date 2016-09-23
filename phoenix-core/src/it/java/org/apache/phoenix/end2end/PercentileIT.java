@@ -52,6 +52,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -406,13 +407,13 @@ public class PercentileIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPercentileContOnDescPKColumn() throws Exception {
-        String indexDataTableName = generateRandomString();
+        String indexDataTableName = generateUniqueName();
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
         String query = "SELECT PERCENTILE_CONT(1) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + fullTableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
             populateINDEX_DATA_TABLETable(indexDataTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -428,12 +429,12 @@ public class PercentileIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPercentRankOnDescPKColumn() throws Exception {
-        String indexDataTableName = generateRandomString();
+        String indexDataTableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
             String query = "SELECT PERCENT_RANK(2) WITHIN GROUP (ORDER BY long_pk ASC) FROM " + fullTableName;
-            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
             populateINDEX_DATA_TABLETable(indexDataTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -449,13 +450,13 @@ public class PercentileIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPercentileDiscOnDescPKColumn() throws Exception {
-        String indexDataTableName = generateRandomString();
+        String indexDataTableName = generateUniqueName();
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTableName;
             String query = "SELECT PERCENTILE_DISC(0.4) WITHIN GROUP (ORDER BY long_pk DESC) FROM " + fullTableName;
-            conn.createStatement().execute("create table " + fullTableName + TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
+            conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "IMMUTABLE_ROWS=true");
             populateINDEX_DATA_TABLETable(indexDataTableName);
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -508,7 +509,7 @@ public class PercentileIT extends ParallelStatsDisabledIT {
 
     private static String initATableValues(String tenantId1, String tenantId2, byte[][] splits,
             Date date, Long ts) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         if (ts == null) {
             ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits);
         } else {

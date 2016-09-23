@@ -28,7 +28,7 @@ import org.junit.Test;
 
 public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     private String initTables(Connection conn) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[])";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + "(region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2) VALUES('SF Bay Area'," +
@@ -49,7 +49,7 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     }
 
     private String initTablesDesc(Connection conn, String type, String val) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (pk " + type + " PRIMARY KEY DESC,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],chars2 CHAR(15)[], bools BOOLEAN[])";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + "(pk,varchars,integers,doubles,bigints,chars,chars2,bools) VALUES(" + val + "," +
@@ -268,7 +268,7 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayAppendFunctionWithUpsert1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
@@ -292,7 +292,7 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayAppendFunctionWithUpsert2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,integers INTEGER[])";
         conn.createStatement().execute(ddl);
 
@@ -316,7 +316,7 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayAppendFunctionWithUpsert3() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
 
@@ -340,8 +340,8 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayAppendFunctionWithUpsertSelect1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String sourceTableName = generateRandomString();
-        String targetTableName = generateRandomString();
+        String sourceTableName = generateUniqueName();
+        String targetTableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + sourceTableName + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
@@ -381,8 +381,8 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayAppendFunctionWithUpsertSelect2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String sourceTableName = generateRandomString();
-        String targetTableName = generateRandomString();
+        String sourceTableName = generateUniqueName();
+        String targetTableName = generateUniqueName();
         String ddl = "CREATE TABLE " + sourceTableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
