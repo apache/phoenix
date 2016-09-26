@@ -33,6 +33,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 public final class QueryServicesImpl extends BaseQueryServicesImpl {
     
     public QueryServicesImpl(ReadOnlyProps defaultProps) {
-        super(defaultProps, QueryServicesOptions.withDefaults());
+        super(defaultProps, QueryServicesOptions.withDefaults().setAll(defaultProps));
     }
 }
