@@ -41,12 +41,47 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
  * Test compilation of queries containing joins.
  */
 public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
+    
+    @BeforeClass
+    public static void createJoinTables() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("create table " + JOIN_ORDER_TABLE_FULL_NAME +
+                    "   (\"order_id\" varchar(15) not null primary key, " +
+                    "    \"customer_id\" varchar(10), " +
+                    "    \"item_id\" varchar(10), " +
+                    "    price integer, " +
+                    "    quantity integer, " +
+                    "    date timestamp)");
+            conn.createStatement().execute("create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
+                    "   (\"customer_id\" varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    phone varchar(12), " +
+                    "    address varchar, " +
+                    "    loc_id varchar(5), " +
+                    "    date date)");
+            conn.createStatement().execute("create table " + JOIN_ITEM_TABLE_FULL_NAME +
+                    "   (\"item_id\" varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    price integer, " +
+                    "    discount1 integer, " +
+                    "    discount2 integer, " +
+                    "    \"supplier_id\" varchar(10), " +
+                    "    description varchar)");
+            conn.createStatement().execute("create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
+                    "   (\"supplier_id\" varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    phone varchar(12), " +
+                    "    address varchar, " +
+                    "    loc_id varchar(5))");
+        }
+    }
     
     @Test
     public void testExplainPlan() throws Exception {

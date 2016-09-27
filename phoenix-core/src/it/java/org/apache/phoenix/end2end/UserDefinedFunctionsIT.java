@@ -792,13 +792,159 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         assertFalse(rs.next());
     }
 
+    private static void initJoinTableValues(Connection conn) throws Exception {
+        conn.createStatement().execute("create table " + JOIN_ITEM_TABLE_FULL_NAME +
+                "   (\"item_id\" varchar(10) not null primary key, " +
+                "    name varchar, " +
+                "    price integer, " +
+                "    discount1 integer, " +
+                "    discount2 integer, " +
+                "    \"supplier_id\" varchar(10), " +
+                "    description varchar)");
+        conn.createStatement().execute("create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
+                "   (\"supplier_id\" varchar(10) not null primary key, " +
+                "    name varchar, " +
+                "    phone varchar(12), " +
+                "    address varchar, " +
+                "    loc_id varchar(5))");
+        PreparedStatement stmt;
+        conn.createStatement().execute("CREATE SEQUENCE my.seq");
+        
+        // Insert into item table
+        stmt = conn.prepareStatement(
+                "upsert into " + JOIN_ITEM_TABLE_FULL_NAME +
+                "   (\"item_id\", " +
+                "    NAME, " +
+                "    PRICE, " +
+                "    DISCOUNT1, " +
+                "    DISCOUNT2, " +
+                "    \"supplier_id\", " +
+                "    DESCRIPTION) " +
+                "values (?, ?, ?, ?, ?, ?, ?)");
+        stmt.setString(1, "0000000001");
+        stmt.setString(2, "T1");
+        stmt.setInt(3, 100);
+        stmt.setInt(4, 5);
+        stmt.setInt(5, 10);
+        stmt.setString(6, "0000000001");
+        stmt.setString(7, "Item T1");
+        stmt.execute();
+
+        stmt.setString(1, "0000000002");
+        stmt.setString(2, "T2");
+        stmt.setInt(3, 200);
+        stmt.setInt(4, 5);
+        stmt.setInt(5, 8);
+        stmt.setString(6, "0000000001");
+        stmt.setString(7, "Item T2");
+        stmt.execute();
+
+        stmt.setString(1, "0000000003");
+        stmt.setString(2, "T3");
+        stmt.setInt(3, 300);
+        stmt.setInt(4, 8);
+        stmt.setInt(5, 12);
+        stmt.setString(6, "0000000002");
+        stmt.setString(7, "Item T3");
+        stmt.execute();
+
+        stmt.setString(1, "0000000004");
+        stmt.setString(2, "T4");
+        stmt.setInt(3, 400);
+        stmt.setInt(4, 6);
+        stmt.setInt(5, 10);
+        stmt.setString(6, "0000000002");
+        stmt.setString(7, "Item T4");
+        stmt.execute();
+
+        stmt.setString(1, "0000000005");
+        stmt.setString(2, "T5");
+        stmt.setInt(3, 500);
+        stmt.setInt(4, 8);
+        stmt.setInt(5, 15);
+        stmt.setString(6, "0000000005");
+        stmt.setString(7, "Item T5");
+        stmt.execute();
+
+        stmt.setString(1, "0000000006");
+        stmt.setString(2, "T6");
+        stmt.setInt(3, 600);
+        stmt.setInt(4, 8);
+        stmt.setInt(5, 15);
+        stmt.setString(6, "0000000006");
+        stmt.setString(7, "Item T6");
+        stmt.execute();
+        
+        stmt.setString(1, "invalid001");
+        stmt.setString(2, "INVALID-1");
+        stmt.setInt(3, 0);
+        stmt.setInt(4, 0);
+        stmt.setInt(5, 0);
+        stmt.setString(6, "0000000000");
+        stmt.setString(7, "Invalid item for join test");
+        stmt.execute();
+
+        // Insert into supplier table
+        stmt = conn.prepareStatement(
+                "upsert into " + JOIN_SUPPLIER_TABLE_FULL_NAME +
+                "   (\"supplier_id\", " +
+                "    NAME, " +
+                "    PHONE, " +
+                "    ADDRESS, " +
+                "    LOC_ID) " +
+                "values (?, ?, ?, ?, ?)");
+        stmt.setString(1, "0000000001");
+        stmt.setString(2, "S1");
+        stmt.setString(3, "888-888-1111");
+        stmt.setString(4, "101 YYY Street");
+        stmt.setString(5, "10001");
+        stmt.execute();
+            
+        stmt.setString(1, "0000000002");
+        stmt.setString(2, "S2");
+        stmt.setString(3, "888-888-2222");
+        stmt.setString(4, "202 YYY Street");
+        stmt.setString(5, "10002");
+        stmt.execute();
+
+        stmt.setString(1, "0000000003");
+        stmt.setString(2, "S3");
+        stmt.setString(3, "888-888-3333");
+        stmt.setString(4, "303 YYY Street");
+        stmt.setString(5, null);
+        stmt.execute();
+
+        stmt.setString(1, "0000000004");
+        stmt.setString(2, "S4");
+        stmt.setString(3, "888-888-4444");
+        stmt.setString(4, "404 YYY Street");
+        stmt.setString(5, null);
+        stmt.execute();
+
+        stmt.setString(1, "0000000005");
+        stmt.setString(2, "S5");
+        stmt.setString(3, "888-888-5555");
+        stmt.setString(4, "505 YYY Street");
+        stmt.setString(5, "10005");
+        stmt.execute();
+
+        stmt.setString(1, "0000000006");
+        stmt.setString(2, "S6");
+        stmt.setString(3, "888-888-6666");
+        stmt.setString(4, "606 YYY Street");
+        stmt.setString(5, "10006");
+        stmt.execute();
+
+        conn.commit();
+    }
+    
     @Test
     public void testUdfWithJoin() throws Exception {
         String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", myreverse8(supp.name) FROM "
                 + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp RIGHT JOIN " + JOIN_ITEM_TABLE_FULL_NAME
                 + " item ON myreverse8(item.\"supplier_id\") = myreverse8(supp.\"supplier_id\") ORDER BY \"item_id\"";
         Connection conn = driver.connect(url, EMPTY_PROPS);
-        initJoinTableValues(url, null, null);
+        initJoinTableValues(conn);
         conn.createStatement().execute(
                 "create function myreverse8(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end.MyReverse' using jar "
                         + "'" + util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar1.jar" + "'");
