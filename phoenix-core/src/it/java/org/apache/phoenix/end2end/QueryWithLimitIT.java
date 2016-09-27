@@ -53,6 +53,7 @@ public class QueryWithLimitIT extends BaseOwnClusterIT {
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1));
         props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
         props.put(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB, Integer.toString(0)); // Prevents RejectedExecutionException when deleting sequences
+        props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(4));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
