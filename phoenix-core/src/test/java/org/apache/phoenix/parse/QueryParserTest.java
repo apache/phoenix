@@ -162,7 +162,7 @@ public class QueryParserTest {
             "and (cft.organization_id = '00D300000000XHP')\n" + 
             "and (t.organization_id = '00D300000000XHP')\n" + 
             "and (t.deleted = '0')\n" + 
-            "and (t.account_id <> '000000000000000'))\n" + 
+            "and (t.account_id != '000000000000000'))\n" + 
             "where (\"Marketing_Offer_Code__c\" = 'FSCR')"
             ));
         parseQuery(sql);

@@ -436,7 +436,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT * FROM " + JOIN_COITEM_TABLE_FULL_NAME + " WHERE (item_id, item_name) <> ALL (SELECT \"item_id\", name FROM " + JOIN_ITEM_TABLE_FULL_NAME + ")";
+            query = "SELECT * FROM " + JOIN_COITEM_TABLE_FULL_NAME + " WHERE (item_id, item_name) != ALL (SELECT \"item_id\", name FROM " + JOIN_ITEM_TABLE_FULL_NAME + ")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -704,7 +704,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
 
             query = "SELECT \"order_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
                     " o WHERE quantity = (SELECT quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
-                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" <> '000000000000004')";
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004')";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -720,7 +720,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
 
             query = "SELECT \"order_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
                     " o WHERE quantity = (SELECT quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
-                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" <> '000000000000003')";
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003')";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             try {
@@ -731,7 +731,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
 
             query = "SELECT \"order_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
                     " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
-                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" <> '000000000000004' GROUP BY \"order_id\")";
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004' GROUP BY \"order_id\")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -747,7 +747,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
 
             query = "SELECT \"order_id\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
                     " o WHERE quantity = (SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + 
-                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" <> '000000000000003' GROUP BY \"order_id\")";
+                    " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003' GROUP BY \"order_id\")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             try {
@@ -780,7 +780,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT \"order_id\", name FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity <> ALL(SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")";
+            query = "SELECT \"order_id\", name FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ALL(SELECT max(quantity) FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -789,7 +789,7 @@ public class SubqueryIT extends BaseHBaseManagedTimeIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT \"order_id\", name FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity <> ANY(SELECT quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity)";
+            query = "SELECT \"order_id\", name FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ANY(SELECT quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity)";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());

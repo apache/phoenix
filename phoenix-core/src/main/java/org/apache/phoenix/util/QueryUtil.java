@@ -92,7 +92,7 @@ public final class QueryUtil {
 
     static {
         CompareOpString[CompareOp.EQUAL.ordinal()] = "=";
-        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = "<>";
+        CompareOpString[CompareOp.NOT_EQUAL.ordinal()] = "!=";
         CompareOpString[CompareOp.GREATER.ordinal()] = ">";
         CompareOpString[CompareOp.LESS.ordinal()] = "<";
         CompareOpString[CompareOp.GREATER_OR_EQUAL.ordinal()] = ">=";

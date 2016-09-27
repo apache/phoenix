@@ -1052,7 +1052,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertQueryConditionAlwaysFalse(query);
         // Case 2: int != long, comparison always true, no key set since we need to do a full
         // scan all the time.
-        query = "SELECT * FROM PKintValueTest where pk <> " + Long.MAX_VALUE;
+        query = "SELECT * FROM PKintValueTest where pk != " + Long.MAX_VALUE;
         assertQueryConditionAlwaysTrue(query);
         // Case 3: int > positive long, comparison always false;
         query = "SELECT * FROM PKintValueTest where pk >= " + Long.MAX_VALUE;
@@ -1077,7 +1077,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         query = "SELECT * FROM PKUnsignedIntValueTest where pk = -1";
         assertQueryConditionAlwaysFalse(query);
         // Case 2: unsigned_int != negative int, always true;
-        query = "SELECT * FROM PKUnsignedIntValueTest where pk <> -1";
+        query = "SELECT * FROM PKUnsignedIntValueTest where pk != -1";
         assertQueryConditionAlwaysTrue(query);
         // Case 3: unsigned_int > negative int, always true;
         query = "SELECT * FROM PKUnsignedIntValueTest where pk > " + (Long.MIN_VALUE + 1);
@@ -1090,7 +1090,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         query = "SELECT * FROM PKUnsignedIntValueTest where pk = " + Long.MAX_VALUE;
         assertQueryConditionAlwaysFalse(query);
         // Case 2: unsigned_int != big positive long, always true;
-        query = "SELECT * FROM PKUnsignedIntValueTest where pk <> " + Long.MAX_VALUE;
+        query = "SELECT * FROM PKUnsignedIntValueTest where pk != " + Long.MAX_VALUE;
         assertQueryConditionAlwaysTrue(query);
         // Case 3: unsigned_int > big positive long, always false;
         query = "SELECT * FROM PKUnsignedIntValueTest where pk >= " + Long.MAX_VALUE;
@@ -1109,7 +1109,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         query = "SELECT * FROM PKUnsignedLongValueTest where pk = -1";
         assertQueryConditionAlwaysFalse(query);
         // Case 2: unsigned_long = negative int/long, always true;
-        query = "SELECT * FROM PKUnsignedLongValueTest where pk <> " + (Long.MIN_VALUE + 1);
+        query = "SELECT * FROM PKUnsignedLongValueTest where pk != " + (Long.MIN_VALUE + 1);
         assertQueryConditionAlwaysTrue(query);
         // Case 3: unsigned_long > negative int/long, always true;
         query = "SELECT * FROM PKUnsignedLongValueTest where pk > -1";

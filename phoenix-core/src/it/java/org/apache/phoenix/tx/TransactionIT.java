@@ -969,14 +969,14 @@ public class TransactionIT extends ParallelStatsDisabledIT {
                 // If the AndExpression were to see the uncommitted row from conn2, the filter would
                 // filter the row out early and no longer continue to evaluate other cells due to
                 // the way partial evaluation holds state.
-                rs = conn1.createStatement().executeQuery("SELECT * FROM " +  transactTableName + " WHERE v1 <> 'c' AND v2 = 'x'");
+                rs = conn1.createStatement().executeQuery("SELECT * FROM " +  transactTableName + " WHERE v1 != 'c' AND v2 = 'x'");
                 assertTrue(rs.next());
                 assertEquals("a", rs.getString(1));
                 assertEquals("b", rs.getString(2));
                 assertFalse(rs.next());
                 
                 // Same as above for conn1 data
-                rs = conn2.createStatement().executeQuery("SELECT * FROM " + transactTableName + " WHERE v1 <> 'b' AND v2 = 'x'");
+                rs = conn2.createStatement().executeQuery("SELECT * FROM " + transactTableName + " WHERE v1 != 'b' AND v2 = 'x'");
                 assertTrue(rs.next());
                 assertEquals("a", rs.getString(1));
                 assertEquals("c", rs.getString(2));

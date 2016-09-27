@@ -192,7 +192,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
 
             // (groupby where) where
-            query = "SELECT t.a, t.c, t.m FROM (SELECT a_string a, count(*) c, max(a_byte) m FROM aTable WHERE a_byte <> 8 GROUP BY a_string) AS t WHERE t.c > 1";
+            query = "SELECT t.a, t.c, t.m FROM (SELECT a_string a, count(*) c, max(a_byte) m FROM aTable WHERE a_byte != 8 GROUP BY a_string) AS t WHERE t.c > 1";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -207,7 +207,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // (groupby having where) where
-            query = "SELECT t.a, t.c, t.m FROM (SELECT a_string a, count(*) c, max(a_byte) m FROM aTable WHERE a_byte <> 8 GROUP BY a_string HAVING count(*) >= 2) AS t WHERE t.a <> '" + A_VALUE + "'";
+            query = "SELECT t.a, t.c, t.m FROM (SELECT a_string a, count(*) c, max(a_byte) m FROM aTable WHERE a_byte != 8 GROUP BY a_string HAVING count(*) >= 2) AS t WHERE t.a != '" + A_VALUE + "'";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -298,7 +298,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // () groupby having
-            String query = "SELECT t.a, count(*), max(t.s) FROM (SELECT a_string a, a_byte s FROM aTable WHERE a_byte <> 8) AS t GROUP BY t.a HAVING count(*) > 1";
+            String query = "SELECT t.a, count(*), max(t.s) FROM (SELECT a_string a, a_byte s FROM aTable WHERE a_byte != 8) AS t GROUP BY t.a HAVING count(*) > 1";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -388,7 +388,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertEquals(plans[1], QueryUtil.getExplainPlan(rs));
             
             // (orderby) groupby
-            query = "SELECT t.a_string, count(*) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte <> 8 group by t.a_string";
+            query = "SELECT t.a_string, count(*) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8 group by t.a_string";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -708,7 +708,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // (distinct)
-            String query = "SELECT * FROM (SELECT DISTINCT a_string, b_string FROM aTable) AS t WHERE t.b_string <> '" + C_VALUE + "' ORDER BY t.b_string, t.a_string";
+            String query = "SELECT * FROM (SELECT DISTINCT a_string, b_string FROM aTable) AS t WHERE t.b_string != '" + C_VALUE + "' ORDER BY t.b_string, t.a_string";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -730,7 +730,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // distinct ()
-            query = "SELECT DISTINCT t.a, t.b FROM (SELECT a_string a, b_string b FROM aTable) AS t WHERE t.b <> '" + C_VALUE + "' ORDER BY t.b, t.a";
+            query = "SELECT DISTINCT t.a, t.b FROM (SELECT a_string a, b_string b FROM aTable) AS t WHERE t.b != '" + C_VALUE + "' ORDER BY t.b, t.a";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -811,7 +811,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // (count)
-            String query = "SELECT * FROM (SELECT count(*) FROM aTable WHERE a_byte <> 8) AS t";
+            String query = "SELECT * FROM (SELECT count(*) FROM aTable WHERE a_byte != 8) AS t";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -820,7 +820,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // count ()
-            query = "SELECT count(*) FROM (SELECT a_byte FROM aTable) AS t WHERE t.a_byte <> 8";
+            query = "SELECT count(*) FROM (SELECT a_byte FROM aTable) AS t WHERE t.a_byte != 8";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -856,7 +856,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // count (subquery)
-            query = "SELECT count(*) FROM (SELECT * FROM aTable WHERE (organization_id, entity_id) in (SELECT organization_id, entity_id FROM aTable WHERE a_byte <> 8)) AS t";
+            query = "SELECT count(*) FROM (SELECT * FROM aTable WHERE (organization_id, entity_id) in (SELECT organization_id, entity_id FROM aTable WHERE a_byte != 8)) AS t";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -865,7 +865,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             assertFalse(rs.next());
             
             // count (orderby)
-            query = "SELECT count(a_byte) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte <> 8";
+            query = "SELECT count(a_byte) FROM (SELECT * FROM aTable order by a_integer) AS t where a_byte != 8";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -887,7 +887,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             // groupby (join)
             String query = "SELECT q.id1, count(q.id2) FROM (SELECT t1.entity_id id1, t2.entity_id id2, t2.a_byte b2" 
                         + " FROM aTable t1 JOIN aTable t2 ON t1.a_string = t2.b_string" 
-                        + " WHERE t1.a_byte >= 8) AS q WHERE q.b2 <> 5 GROUP BY q.id1";
+                        + " WHERE t1.a_byte >= 8) AS q WHERE q.b2 != 5 GROUP BY q.id1";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -902,7 +902,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             // distinct (join)
             query = "SELECT DISTINCT q.id1 FROM (SELECT t1.entity_id id1, t2.a_byte b2" 
                         + " FROM aTable t1 JOIN aTable t2 ON t1.a_string = t2.b_string" 
-                        + " WHERE t1.a_byte >= 8) AS q WHERE q.b2 <> 5";
+                        + " WHERE t1.a_byte >= 8) AS q WHERE q.b2 != 5";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -915,7 +915,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             // count (join)
             query = "SELECT COUNT(*) FROM (SELECT t2.a_byte b2" 
                         + " FROM aTable t1 JOIN aTable t2 ON t1.a_string = t2.b_string" 
-                        + " WHERE t1.a_byte >= 8) AS q WHERE q.b2 <> 5";
+                        + " WHERE t1.a_byte >= 8) AS q WHERE q.b2 != 5";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -966,7 +966,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
             // select(select(select) join (select(select)))
             query = "SELECT q1.id, q2.id FROM (SELECT t.eid id, t.astr a, t.bstr b FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM aTable) AS t WHERE t.abyte >= ?) AS q1" 
                         + " JOIN (SELECT t.eid id, t.astr a, t.bstr b, t.abyte x FROM (SELECT entity_id eid, a_string astr, b_string bstr, a_byte abyte FROM aTable) AS t) AS q2 ON q1.a = q2.b" 
-                        + " WHERE q2.x <> ? ORDER BY q1.id, q2.id DESC";
+                        + " WHERE q2.x != ? ORDER BY q1.id, q2.id DESC";
             statement = conn.prepareStatement(query);
             statement.setInt(1, 8);
             statement.setInt(2, 5);

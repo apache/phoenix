@@ -135,9 +135,9 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "CLIENT FILTER BY MAX(A_STRING) = 'a'\n" +
                 "CLIENT SORTED BY [B_STRING]",
 
-                "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id <> '000000000000002' AND x_integer = 2 AND a_integer < 5 LIMIT 10",
+                "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id != '000000000000002' AND x_integer = 2 AND a_integer < 5 LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
-                "    SERVER FILTER BY (ENTITY_ID <> '000000000000002' AND X_INTEGER = 2 AND A_INTEGER < 5)\n" + 
+                "    SERVER FILTER BY (ENTITY_ID != '000000000000002' AND X_INTEGER = 2 AND A_INTEGER < 5)\n" + 
                 "    SERVER 10 ROW LIMIT\n" + 
                 "CLIENT 10 ROW LIMIT",
 

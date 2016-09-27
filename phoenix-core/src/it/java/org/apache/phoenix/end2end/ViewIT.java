@@ -222,7 +222,7 @@ public class ViewIT extends BaseViewIT {
             assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         
-        ddl = "CREATE VIEW v2 AS SELECT * FROM v1 WHERE v2 <> 'foo'";
+        ddl = "CREATE VIEW v2 AS SELECT * FROM v1 WHERE v2 != 'foo'";
         conn.createStatement().execute(ddl);
 
         try {
