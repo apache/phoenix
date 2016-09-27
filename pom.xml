@@ -117,7 +117,7 @@
     <maven.assembly.version>2.5.2</maven.assembly.version>
 
     <!-- Plugin options -->
-    <numForkedUT>3</numForkedUT>
+    <numForkedUT>6</numForkedUT>
     <numForkedIT>6</numForkedIT>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
@@ -234,9 +234,10 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <!--parallel>methods</parallel>
-                <threadCount>20</threadCount-->
-                <argLine>-enableassertions -Xmx3072m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <!--parallel>classesAndMethods</parallel>
+                <threadCount>20</threadCount>
+		<enableAssertions>false</enableAssertions-->
+                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -261,9 +262,10 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <!--parallel>methods</parallel>
-                <threadCount>20</threadCount-->
-                <argLine>-enableassertions -Xmx3072m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <!--parallel>classesAndMethods</parallel>
+                <threadCount>20</threadCount>
+		<enableAssertions>false</enableAssertions-->
+                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
