@@ -31,6 +31,7 @@ import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.validate.SqlConformance;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
 import org.apache.phoenix.calcite.type.PhoenixRelDataTypeSystem;
@@ -84,8 +85,14 @@ public abstract class PhoenixCalciteEmbeddedDriver extends Driver implements SQL
         }
         
         Properties info2 = new Properties(info);
-        info2.setProperty(CalciteConnectionProperty.TYPE_SYSTEM.camelName(),
+        setPropertyIfNotSpecified(
+                info2,
+                CalciteConnectionProperty.TYPE_SYSTEM.camelName(),
                 PhoenixRelDataTypeSystem.class.getName());
+        setPropertyIfNotSpecified(
+                info2,
+                CalciteConnectionProperty.CONFORMANCE.camelName(),
+                SqlConformance.ORACLE_10.toString());
         
         final String prefix = getConnectStringPrefix();
         assert url.startsWith(prefix);
@@ -112,5 +119,11 @@ public abstract class PhoenixCalciteEmbeddedDriver extends Driver implements SQL
         connection.setSchema("phoenix");
         
         return connection;
+    }
+    
+    private static void setPropertyIfNotSpecified(Properties props, String key, String value) {
+        if (props.getProperty(key) == null) {
+            props.setProperty(key, value);
+        }
     }
 }
