@@ -350,8 +350,12 @@ public class ParseNodeFactory {
         return new DropIndexStatement(indexName, tableName, ifExists);
     }
 
+    public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean async) {
+        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, async);
+    }
+    
     public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
-        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state);
+        return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, false);
     }
 
     public TraceStatement trace(boolean isTraceOn, double samplingRate) {

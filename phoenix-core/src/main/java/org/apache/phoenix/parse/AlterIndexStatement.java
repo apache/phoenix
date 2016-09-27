@@ -23,12 +23,14 @@ public class AlterIndexStatement extends SingleTableStatement {
     private final String dataTableName;
     private final boolean ifExists;
     private final PIndexState indexState;
+    private boolean async;
 
-    public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState indexState) {
+    public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState indexState, boolean async) {
         super(indexTableNode,0);
         this.dataTableName = dataTableName;
         this.ifExists = ifExists;
         this.indexState = indexState;
+        this.async = async;
     }
 
     public String getTableName() {
@@ -46,6 +48,10 @@ public class AlterIndexStatement extends SingleTableStatement {
 
     public PIndexState getIndexState() {
         return indexState;
+    }
+
+    public boolean isAsync() {
+        return async;
     }
 
 }

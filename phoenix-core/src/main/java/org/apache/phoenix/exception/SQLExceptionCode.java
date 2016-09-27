@@ -410,7 +410,8 @@ public enum SQLExceptionCode {
             724, "43M07", "Schema name not allowed!!"), CREATE_SCHEMA_NOT_ALLOWED(725, "43M08",
                     "Cannot create schema because config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                             + " for enabling name space mapping isn't enabled."), INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES(
-                                    726, "43M10", " Inconsistent namespace mapping properites..");
+                                    726, "43M10", " Inconsistent namespace mapping properites.."), ASYNC_NOT_ALLOWED(
+                                    727, "43M11", " ASYNC option is not allowed.. ");
 
     private final int errorCode;
     private final String sqlState;

@@ -126,6 +126,7 @@ public interface QueryServices extends SQLCloseable {
 
     // A master switch if to enable auto rebuild an index which failed to be updated previously
     public static final String INDEX_FAILURE_HANDLING_REBUILD_ATTRIB = "phoenix.index.failure.handling.rebuild";
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_BATCH_SIZE_ATTRIB = "phoenix.index.failure.handling.rebuild.batchSize";
 
     // Time interval to check if there is an index needs to be rebuild
     public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB =
