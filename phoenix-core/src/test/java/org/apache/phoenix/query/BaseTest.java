@@ -2017,14 +2017,22 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-
-    protected static void verifySequence(String tenantID, String sequenceName, String sequenceSchemaName, boolean exists) throws SQLException {
+    protected static void verifySequenceNotExists(String tenantID, String sequenceName, String sequenceSchemaName) throws SQLException {
+        verifySequence(tenantID, sequenceName, sequenceSchemaName, false, 0);
+    }
+    
+    protected static void verifySequenceValue(String tenantID, String sequenceName, String sequenceSchemaName, long value) throws SQLException {
+        verifySequence(tenantID, sequenceName, sequenceSchemaName, true, value);
+    }
+    
+    private  static void verifySequence(String tenantID, String sequenceName, String sequenceSchemaName, boolean exists, long value) throws SQLException {
 
         PhoenixConnection phxConn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
         String ddl = "SELECT "
                 + PhoenixDatabaseMetaData.TENANT_ID + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
-                + PhoenixDatabaseMetaData.SEQUENCE_NAME
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME + ","
+                + PhoenixDatabaseMetaData.CURRENT_VALUE
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
                 + " WHERE ";
 
@@ -2036,6 +2044,7 @@ public abstract class BaseTest {
 
         if(exists) {
             assertTrue(rs.next());
+            assertEquals(value, rs.getLong(4));
         } else {
             assertFalse(rs.next());
         }

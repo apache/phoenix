@@ -210,11 +210,10 @@ public class LocalIndexIT extends ParallelStatsDisabledIT {
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
         conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
-        verifySequence(null, sequenceName, sequenceSchemaName, true);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName,-32767);
         conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
         conn1.createStatement().execute("DROP TABLE "+ tableName);
-
-        verifySequence(null, sequenceName, sequenceSchemaName, false);
+        verifySequenceNotExists(null, sequenceName, sequenceSchemaName);
     }
     
     @Test
