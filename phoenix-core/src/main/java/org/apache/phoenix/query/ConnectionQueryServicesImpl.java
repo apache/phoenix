@@ -2314,8 +2314,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         boolean success = false;
                         String snapshotName = null;
                         String sysCatalogTableName = null;
+                        boolean hConnectionEstablished = false;
                         try {
                             openConnection();
+                            hConnectionEstablished = true;
                             String noUpgradeProp = props.getProperty(PhoenixRuntime.NO_UPGRADE_ATTRIB);
                             boolean upgradeSystemTables = !Boolean.TRUE.equals(Boolean.valueOf(noUpgradeProp));
                             Properties scnProps = PropertiesUtil.deepCopy(props);
@@ -2596,13 +2598,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     } else {
                                         initializationException = e;
                                     }
-                                }
-                                try {
-                                    if (initializationException != null) {
-                                        throw initializationException;
-                                    }
                                 } finally {
-                                    initialized = true;
+                                    try {
+                                        if (!success && hConnectionEstablished) {
+                                            connection.close();
+                                        }
+                                    } catch (IOException e) {
+                                        SQLException ex = new SQLException(e);
+                                        if (initializationException != null) {
+                                            initializationException.setNextException(ex);
+                                        } else {
+                                            initializationException = ex;
+                                        }
+                                    } finally {
+                                        initialized = true;
+                                        if (initializationException != null) {
+                                            throw initializationException;
+                                        }
+                                    }
                                 }
                             }
                         }
