@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.calcite.avatica.util.ByteString;
@@ -27,14 +28,24 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexVisitorImpl;
+import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.tools.FrameworkConfig;
+import org.apache.calcite.tools.Frameworks;
+import org.apache.calcite.tools.Planner;
 import org.apache.calcite.util.NlsString;
 import org.apache.calcite.util.Util;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -110,6 +121,7 @@ import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.phoenix.util.ExpressionUtil;
 
 /**
  * Utilities for interacting with Calcite.
@@ -1034,6 +1046,42 @@ public class CalciteUtils {
                 sequenceValueCall = call;
             }
             return null;
+        }
+    }
+
+    public static Object convertLiteral(SqlLiteral literal, PhoenixRelImplementor implementor) {
+        try {
+            final SchemaPlus rootSchema = Frameworks.createRootSchema(true);
+            final FrameworkConfig config = Frameworks.newConfigBuilder()
+                    .parserConfig(SqlParser.Config.DEFAULT)
+                    .defaultSchema(rootSchema).build();
+            Planner planner = Frameworks.getPlanner(config);
+
+            SqlParserPos POS = SqlParserPos.ZERO;
+            final SqlNodeList selectList =
+                    new SqlNodeList(
+                            Collections.singletonList(literal),
+                            SqlParserPos.ZERO);
+
+
+            String sql = new SqlSelect(POS, SqlNodeList.EMPTY, selectList, null, null, null, null,
+                    SqlNodeList.EMPTY, null, null, null).toString();
+            SqlNode sqlNode = planner.parse(sql);
+            sqlNode = planner.validate(sqlNode);
+            Project proj = (Project) (planner.rel(sqlNode).rel);
+            RexNode rex = proj.getChildExps().get(0);
+
+            Expression e = CalciteUtils.toExpression(rex, implementor);
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            e = ExpressionUtil.getConstantExpression(e, ptr);
+            Object ret = e.getDataType().toObject(ptr);
+            if(ret instanceof NlsString){
+                ret = ((NlsString) ret).toString();
+            }
+            return ret;
+        }
+        catch (Exception e){
+            throw new RuntimeException("Could not convert literal to its object type: " + e);
         }
     }
 }
