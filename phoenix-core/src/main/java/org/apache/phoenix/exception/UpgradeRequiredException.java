@@ -17,9 +17,8 @@
  */
 package org.apache.phoenix.exception;
 
-import java.sql.SQLException;
 
-public class UpgradeRequiredException extends SQLException {
+public class UpgradeRequiredException extends RetriableUpgradeException {
 
     public UpgradeRequiredException() {
         super("Operation not allowed since cluster hasn't been upgraded. Call EXECUTE UPGRADE. ",

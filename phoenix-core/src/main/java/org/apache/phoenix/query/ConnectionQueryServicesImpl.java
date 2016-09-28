@@ -130,6 +130,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.exception.PhoenixIOException;
+import org.apache.phoenix.exception.RetriableUpgradeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeInProgressException;
@@ -2316,8 +2317,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             return null;
                         }
                         checkClosed();
+                        boolean hConnectionEstablished = false;
+                        boolean success = false;
                         try {
                             openConnection();
+                            hConnectionEstablished = true;
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             try (HBaseAdmin admin = getAdmin()) {
                                 boolean mappedSystemCatalogExists = admin
@@ -2364,6 +2368,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
                             }
                             scheduleRenewLeaseTasks();
+                            success = true;
+                        } catch (RetriableUpgradeException e) {
+                            // Don't set it as initializationException because otherwise the clien't won't be able
+                            // to retry establishing connection.
+                            throw e;
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
                                 initializationException = (SQLException)e;
@@ -2372,7 +2381,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 initializationException = new SQLException(e);
                             }
                         } finally {
-                            initialized = true;
+                            try {
+                                if (!success && hConnectionEstablished) {
+                                    connection.close();
+                                }
+                            } catch (IOException e) {
+                                SQLException ex = new SQLException(e);
+                                if (initializationException != null) {
+                                    initializationException.setNextException(ex);
+                                } else {
+                                    initializationException = ex;
+                                }
+                            } finally {
+                                initialized = true;
+                            }
                         }
                     } 
                     return null;
