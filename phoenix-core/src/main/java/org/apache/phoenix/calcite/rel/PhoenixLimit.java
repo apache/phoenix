@@ -76,7 +76,10 @@ public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
     
     @Override 
     public double estimateRowCount(RelMetadataQuery mq) {
-        double rows = super.estimateRowCount(mq);        
+        double rows = super.estimateRowCount(mq);
+        if(offset != null) {
+            return Math.max(0, Math.min(RexLiteral.intValue(fetch), rows - RexLiteral.intValue(offset)));
+        }
         return Math.min(RexLiteral.intValue(fetch), rows);
     }
 
@@ -84,12 +87,16 @@ public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
     public QueryPlan implement(PhoenixRelImplementor implementor) {
         QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
         int fetchValue = RexLiteral.intValue(fetch);
+        int offsetValue = 0;
+        if (offset != null){
+            offsetValue = RexLiteral.intValue(offset);
+        }
         if (plan.getLimit() == null) {
-            return plan.limit(fetchValue);
+            return plan.limit(fetchValue, offsetValue);
         }
         
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), 
                 implementor.getTableMapping().getTableRef(), RowProjector.EMPTY_PROJECTOR, 
-                fetchValue, null, null, OrderBy.EMPTY_ORDER_BY, plan);
+                fetchValue, offsetValue, null, OrderBy.EMPTY_ORDER_BY, plan);
     }
 }

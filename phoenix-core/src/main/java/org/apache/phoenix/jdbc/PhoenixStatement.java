@@ -591,7 +591,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 }
 
                 @Override
-                public QueryPlan limit(Integer limit) {
+                public QueryPlan limit(Integer limit, Integer offset) {
                     return this;
                 }
                 

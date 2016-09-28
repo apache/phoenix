@@ -269,16 +269,25 @@ public class ScanPlan extends BaseQueryPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
-            return this;
-        
+    public QueryPlan limit(Integer limit, Integer offset) {
         try {
-            return new ScanPlan(this.context, this.statement, this.tableRef, this.tableRefs.iterator().next(), this.projection, 
-                    limit, this.offset, this.orderBy, this.parallelIteratorFactory, this.allowPageFilter, this.dynamicFilter);
+            if (limit == this.limit || (limit != null && limit.equals(this.limit))) {
+                return this;
+            }
+
+            if (offset == this.offset || (offset != null && offset.equals(this.offset))) {
+                return new ScanPlan(this.context, this.statement, this.tableRef,
+                        this.tableRefs.iterator().next(), this.projection,
+                        limit, this.offset, this.orderBy, this.parallelIteratorFactory,
+                        this.allowPageFilter, this.dynamicFilter);
+            }
+            return new ScanPlan(this.context, this.statement, this.tableRef,
+                    this.tableRefs.iterator().next(), this.projection,
+                    limit, offset, this.orderBy, this.parallelIteratorFactory,
+                    this.allowPageFilter, this.dynamicFilter);
+
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
-
 }

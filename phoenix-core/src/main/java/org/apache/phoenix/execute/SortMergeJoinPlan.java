@@ -667,16 +667,23 @@ public class SortMergeJoinPlan implements QueryPlan {
         return false;
     }
 
+
     @Override
-    public QueryPlan limit(Integer limit) {
+    public QueryPlan limit(Integer limit, Integer offset) {
         if (limit == null)
             return this;
-        
+
+        if (offset == null){
+            return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
+                    this.getProjector(), limit, this.getOffset(), null, OrderBy.EMPTY_ORDER_BY, this);
+        }
+
         return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
-                this.getProjector(), limit, this.getOffset(), null, OrderBy.EMPTY_ORDER_BY, this);
+                this.getProjector(), limit, offset, null, OrderBy.EMPTY_ORDER_BY, this);
     }
 
     public Set<TableRef> getSourceRefs() {
         return tableRefs;
     }
 }
+

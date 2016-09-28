@@ -83,6 +83,11 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     }
 
     @Override
+    public Integer getOffset() {
+        return delegate.getOffset();
+    }
+
+    @Override
     public OrderBy getOrderBy() {
         return delegate.getOrderBy();
     }
@@ -126,11 +131,6 @@ public abstract class DelegateQueryPlan implements QueryPlan {
 	public Operation getOperation() {
 		return delegate.getOperation();
 	}
-	
-	@Override
-    public Integer getOffset() {
-        return delegate.getOffset();
-    }
      
     @Override
     public ResultIterator iterator() throws SQLException {

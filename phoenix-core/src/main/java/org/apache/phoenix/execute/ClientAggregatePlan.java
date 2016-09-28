@@ -247,12 +247,20 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+    public QueryPlan limit(Integer limit, Integer offset) {
+        if (limit == this.limit || (limit != null && limit.equals(this.limit))) {
             return this;
-        
-        return new ClientAggregatePlan(this.context, this.statement, this.table, 
-                this.projector, limit, this.offset, this.where, this.orderBy, this.groupBy, this.having, 
+        }
+
+        if (offset == this.offset || (offset != null && offset.equals(this.offset))) {
+            return new ClientAggregatePlan(this.context, this.statement, this.table,
+                    this.projector, limit, this.offset, this.where, this.orderBy, this.groupBy,
+                    this.having,
+                    this.delegate, this.serverAggregators, this.clientAggregators);
+        }
+
+        return new ClientAggregatePlan(this.context, this.statement, this.table,
+                this.projector, limit, offset, this.where, this.orderBy, this.groupBy, this.having,
                 this.delegate, this.serverAggregators, this.clientAggregators);
     }
 }
