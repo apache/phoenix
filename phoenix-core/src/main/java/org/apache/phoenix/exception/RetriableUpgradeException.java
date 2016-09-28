@@ -17,11 +17,15 @@
  */
 package org.apache.phoenix.exception;
 
+import java.sql.SQLException;
 
-public class UpgradeInProgressException extends RetriableUpgradeException {
-    public UpgradeInProgressException(String upgradeFrom, String upgradeTo) {
-        super("Cluster is being concurrently upgraded from " + upgradeFrom + " to " + upgradeTo
-                + ". Please retry establishing connection.", SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS
-                .getSQLState(), SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS.getErrorCode());
+/**
+ *
+ * Super class for upgrade related exceptions whose occurrence shouldn't prevent the
+ * client from retrying or reestablishing connection.
+ */
+public abstract class RetriableUpgradeException extends SQLException {
+    public RetriableUpgradeException(String message, String sqlState, int sqlExceptionCode) {
+        super(message, sqlState, sqlExceptionCode);
     }
 }
