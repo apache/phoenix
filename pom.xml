@@ -234,9 +234,8 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <!--parallel>classesAndMethods</parallel>
+                <parallel>classesAndMethods</parallel>
                 <threadCount>20</threadCount>
-		<enableAssertions>false</enableAssertions-->
                 <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <shutdown>kill</shutdown>
@@ -262,9 +261,16 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <!--parallel>classesAndMethods</parallel>
+                <parallel>classesAndMethods</parallel>
                 <threadCount>20</threadCount>
-		<enableAssertions>false</enableAssertions-->
+                <!-- We're intermittantly hitting this assertion:
+                     Caused by: java.lang.AssertionError: we should never remove a different context
+	                 at org.apache.hadoop.hbase.regionserver.HRegion$RowLockContext.cleanUp(HRegion.java:5206)
+	                 at org.apache.hadoop.hbase.regionserver.HRegion$RowLockImpl.release(HRegion.java:5246)
+	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2898)
+	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2835)
+	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.getTable(MetaDataEndpointImpl.java:490) -->
+		<enableAssertions>false</enableAssertions>
                 <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <shutdown>kill</shutdown>
