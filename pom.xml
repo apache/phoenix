@@ -422,7 +422,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <version>${maven-surefire-plugin.version}</version>
         <configuration>
-          <!--skip>true</skip-->
+          <testFailureIgnore>true</testFailureIgnore>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
           <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m
