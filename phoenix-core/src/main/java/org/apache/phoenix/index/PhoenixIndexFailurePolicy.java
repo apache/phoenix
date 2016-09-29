@@ -129,7 +129,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
                 for (Mutation m : mutations) {
                     for (List<Cell> kvs : m.getFamilyCellMap().values()) {
                         for (Cell kv : kvs) {
-                            if (minTimeStamp == 0 || (kv.getTimestamp() >= 0 && minTimeStamp < kv.getTimestamp())) {
+                            if (minTimeStamp == 0 || (kv.getTimestamp() >= 0 && minTimeStamp > kv.getTimestamp())) {
                                 minTimeStamp = kv.getTimestamp();
                             }
                         }
