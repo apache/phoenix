@@ -250,12 +250,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
             Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped) throws SQLException {
+            boolean isNamespaceMapped, boolean allocateIndexId) throws SQLException {
         if (splits != null) {
             byte[] tableName = getTableName(tableMetaData, physicalName);
             tableSplits.put(Bytes.toString(tableName), generateRegionLocations(tableName, splits));
         }
-        return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
+        if (!allocateIndexId) {
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null);
+        } else {
+            return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0, null, Short.MIN_VALUE);
+        }
     }
 
     @Override

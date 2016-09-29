@@ -195,6 +195,9 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SequenceAllocation;
+import org.apache.phoenix.schema.SequenceAlreadyExistsException;
+import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -1481,6 +1484,53 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         cell.getTimestamp(), Type.codeToType(cell.getTypeByte()), bytes);
                     cells.add(viewConstantCell);
                 }
+                Short indexId = null;
+                if (request.hasAllocateIndexId() && request.getAllocateIndexId()) {
+                    String tenantIdStr = tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
+                    final Properties props = new Properties();
+                    UpgradeUtil.doNotUpgradeOnFirstConnection(props);
+                    try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class)){
+                    PName physicalName = parentTable.getPhysicalName();
+                    int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
+                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName,
+                            nSequenceSaltBuckets, parentTable.isNamespaceMapped() );
+                        // TODO Review Earlier sequence was created at (SCN-1/LATEST_TIMESTAMP) and incremented at the client max(SCN,dataTable.getTimestamp), but it seems we should
+                        // use always LATEST_TIMESTAMP to avoid seeing wrong sequence values by different connection having SCN
+                        // or not. 
+                    long sequenceTimestamp = HConstants.LATEST_TIMESTAMP;
+                    try {
+                        connection.getQueryServices().createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
+                                Short.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, sequenceTimestamp);
+                    } catch (SequenceAlreadyExistsException e) {
+                    }
+                    long[] seqValues = new long[1];
+                    SQLException[] sqlExceptions = new SQLException[1];
+                    connection.getQueryServices().incrementSequences(Collections.singletonList(new SequenceAllocation(key, 1)),
+                            HConstants.LATEST_TIMESTAMP, seqValues, sqlExceptions);
+                    if (sqlExceptions[0] != null) {
+                        throw sqlExceptions[0];
+                    }
+                    long seqValue = seqValues[0];
+                    if (seqValue > Short.MAX_VALUE) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
+                    Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+                    NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
+                    List<Cell> cells = familyCellMap.get(TABLE_FAMILY_BYTES);
+                    Cell cell = cells.get(0);
+                    PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
+                    Object val = dataType.toObject(seqValue, PLong.INSTANCE);
+                    byte[] bytes = new byte [dataType.getByteSize() + 1];
+                    dataType.toBytes(val, bytes, 0);
+                    Cell indexIdCell = new KeyValue(cell.getRow(), cell.getFamily(), VIEW_INDEX_ID_BYTES,
+                            cell.getTimestamp(), Type.codeToType(cell.getTypeByte()), bytes);
+                    cells.add(indexIdCell);
+                    indexId = (short) seqValue;
+                    }
+                }
                 
                 // TODO: Switch this to HRegion#batchMutate when we want to support indexes on the
                 // system table. Basically, we get all the locks that we don't already hold for all the
@@ -1500,6 +1550,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // Get timeStamp from mutations - the above method sets it if it's unset
                 long currentTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
+                if (indexId != null) {
+                    builder.setViewIndexId(indexId);
+                }
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
                 return;

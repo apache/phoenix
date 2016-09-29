@@ -108,14 +108,17 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
         String seqName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, !isNamespaceMapped);
         String seqSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), !isNamespaceMapped);
-        verifySequence(null, sequenceName, sequenceSchemaName, true);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
+        conn1.createStatement().execute("CREATE INDEX " + indexName + "_2 ON " + viewName + " (v1)");
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32766);
         // Check other format of sequence is not there as Sequences format is different for views/indexes created on
         // table which are namespace mapped and which are not.
-        verifySequence(null, seqName, seqSchemaName, false);
+        verifySequenceNotExists(null, seqName, seqSchemaName);
         conn1.createStatement().execute("DROP VIEW " + viewName);
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         
-        verifySequence(null, sequenceName, sequenceSchemaName, false);
+        verifySequenceNotExists(null, sequenceName, sequenceSchemaName);
     }
     
     @Test

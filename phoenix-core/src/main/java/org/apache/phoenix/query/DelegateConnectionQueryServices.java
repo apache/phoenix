@@ -120,9 +120,9 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName, PTableType tableType,
             Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families, byte[][] splits,
-            boolean isNamespaceMapped) throws SQLException {
+            boolean isNamespaceMapped, boolean allocateIndexId) throws SQLException {
         return getDelegate().createTable(tableMetaData, physicalName, tableType, tableProps, families, splits,
-                isNamespaceMapped);
+                isNamespaceMapped, allocateIndexId);
     }
 
     @Override
