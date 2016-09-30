@@ -35,7 +35,7 @@ public class SqlColumnDefNode extends SqlNode{
             SqlParserPos pos,
             SqlIdentifier columnName,
             SqlDataTypeNode dataType,
-            boolean isNullable,
+            Boolean isNullable,
             boolean isPk,
             SortOrder sortOrder,
             String expressionStr,

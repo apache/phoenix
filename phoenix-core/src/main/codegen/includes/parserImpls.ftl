@@ -543,7 +543,7 @@ SqlColumnDefNode ColumnDef() :
 {
     SqlIdentifier columnName;
     SqlDataTypeNode dataType;
-    boolean isNull = true;
+    Boolean isNull = null;
     boolean isPk = false;
     SortOrder sortOrder = SortOrder.getDefault();
     boolean isRowTimestamp = false;
