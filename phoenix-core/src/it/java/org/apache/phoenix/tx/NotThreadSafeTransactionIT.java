@@ -18,21 +18,38 @@
 package org.apache.phoenix.tx;
 
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.createTransactionalTable;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Properties;
 
 import javax.annotation.concurrent.NotThreadSafe;
 
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.tephra.TransactionContext;
+import org.apache.tephra.TransactionSystemClient;
+import org.apache.tephra.TxConstants;
+import org.apache.tephra.hbase.TransactionAwareHTable;
 import org.junit.Test;
 
 /**
@@ -188,6 +205,127 @@ public class NotThreadSafeTransactionIT extends ParallelStatsDisabledIT {
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
         }
+    }
+
+    @Test
+    public void testExternalTxContext() throws Exception {
+        ResultSet rs;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String fullTableName = generateUniqueName();
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        
+        TransactionSystemClient txServiceClient = pconn.getQueryServices().getTransactionSystemClient();
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true");
+        HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
+        stmt.executeUpdate("upsert into " + fullTableName + " values('x', 'a', 'a')");
+        conn.commit();
+
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));
+        }
+
+        // Use HBase level Tephra APIs to start a new transaction
+        TransactionAwareHTable txAware = new TransactionAwareHTable(htable, TxConstants.ConflictDetection.ROW);
+        TransactionContext txContext = new TransactionContext(txServiceClient, txAware);
+        txContext.start();
+        
+        // Use HBase APIs to add a new row
+        Put put = new Put(Bytes.toBytes("z"));
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("V1"), Bytes.toBytes("b"));
+        txAware.put(put);
+        
+        // Use Phoenix APIs to add new row (sharing the transaction context)
+        pconn.setTransactionContext(txContext);
+        conn.createStatement().executeUpdate("upsert into " + fullTableName + " values('y', 'c', 'c')");
+
+        // New connection should not see data as it hasn't been committed yet
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(1,rs.getInt(1));
+        }
+        
+        // Use new connection to create a row with a conflict
+        Connection connWithConflict = DriverManager.getConnection(getUrl(), props);
+        connWithConflict.createStatement().execute("upsert into " + fullTableName + " values('z', 'd', 'd')");
+        
+        // Existing connection should see data even though it hasn't been committed yet
+        rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+        
+        // Use Tephra APIs directly to finish (i.e. commit) the transaction
+        txContext.finish();
+        
+        // Confirm that attempt to commit row with conflict fails
+        try {
+            connWithConflict.commit();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode(), e.getErrorCode());
+        } finally {
+            connWithConflict.close();
+        }
+        
+        // New connection should now see data as it has been committed
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(3,rs.getInt(1));
+        }
+        
+        // Repeat the same as above, but this time abort the transaction
+        txContext = new TransactionContext(txServiceClient, txAware);
+        txContext.start();
+        
+        // Use HBase APIs to add a new row
+        put = new Put(Bytes.toBytes("j"));
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("V1"), Bytes.toBytes("e"));
+        txAware.put(put);
+        
+        // Use Phoenix APIs to add new row (sharing the transaction context)
+        pconn.setTransactionContext(txContext);
+        conn.createStatement().executeUpdate("upsert into " + fullTableName + " values('k', 'f', 'f')");
+        
+        // Existing connection should see data even though it hasn't been committed yet
+        rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(5,rs.getInt(1));
+
+        connWithConflict.createStatement().execute("upsert into " + fullTableName + " values('k', 'g', 'g')");
+        rs = connWithConflict.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(4,rs.getInt(1));
+
+        // Use Tephra APIs directly to abort (i.e. rollback) the transaction
+        txContext.abort();
+        
+        rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(3,rs.getInt(1));
+
+        // Should succeed since conflicting row was aborted
+        connWithConflict.commit();
+
+        // New connection should now see data as it has been committed
+        try (Connection newConn = DriverManager.getConnection(getUrl(), props)) {
+            rs = newConn.createStatement().executeQuery("select count(*) from " + fullTableName);
+            assertTrue(rs.next());
+            assertEquals(4,rs.getInt(1));
+        }
+        
+        // Even using HBase APIs directly, we shouldn't find 'j' since a delete marker would have been
+        // written to hide it.
+        Result result = htable.get(new Get(Bytes.toBytes("j")));
+        assertTrue(result.isEmpty());
     }
 
 }
