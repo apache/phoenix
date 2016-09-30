@@ -17,6 +17,7 @@ import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.RelFieldCollation.NullDirection;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.type.RelDataType;
@@ -130,7 +131,11 @@ public class CalciteUtils {
     private CalciteUtils() {}
     
     private static AtomicInteger tempAliasCounter = new AtomicInteger(0);
-  
+    private static final SchemaPlus rootSchema = Frameworks.createRootSchema(true);
+    private static final FrameworkConfig config = Frameworks.newConfigBuilder()
+            .parserConfig(SqlParser.Config.DEFAULT)
+            .defaultSchema(rootSchema).build();
+
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();
     }
@@ -1049,13 +1054,9 @@ public class CalciteUtils {
         }
     }
 
-    public static Object convertLiteral(SqlLiteral literal, PhoenixRelImplementor implementor) {
+    public static Object convertSqlLiteral(SqlLiteral literal, PhoenixRelImplementor implementor) {
         try {
-            final SchemaPlus rootSchema = Frameworks.createRootSchema(true);
-            final FrameworkConfig config = Frameworks.newConfigBuilder()
-                    .parserConfig(SqlParser.Config.DEFAULT)
-                    .defaultSchema(rootSchema).build();
-            Planner planner = Frameworks.getPlanner(config);
+            final Planner planner = Frameworks.getPlanner(config);
 
             SqlParserPos POS = SqlParserPos.ZERO;
             final SqlNodeList selectList =
@@ -1068,20 +1069,21 @@ public class CalciteUtils {
                     SqlNodeList.EMPTY, null, null, null).toString();
             SqlNode sqlNode = planner.parse(sql);
             sqlNode = planner.validate(sqlNode);
-            Project proj = (Project) (planner.rel(sqlNode).rel);
+            RelNode relNode = planner.rel(sqlNode).rel;
+
+            assert(relNode instanceof Project);
+            Project proj = (Project) relNode;
+            assert(proj.getChildExps().size() == 1);
             RexNode rex = proj.getChildExps().get(0);
 
             Expression e = CalciteUtils.toExpression(rex, implementor);
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             e = ExpressionUtil.getConstantExpression(e, ptr);
-            Object ret = e.getDataType().toObject(ptr);
-            if(ret instanceof NlsString){
-                ret = ((NlsString) ret).toString();
-            }
-            return ret;
+            return e.getDataType().toObject(ptr);
         }
-        catch (Exception e){
-            throw new RuntimeException("Could not convert literal to its object type: " + e);
+        catch (Exception ex){
+            throw new RuntimeException("Could not convert literal " + literal.getValue()
+                    + " to its object type: " + ex.getMessage());
         }
     }
 }
