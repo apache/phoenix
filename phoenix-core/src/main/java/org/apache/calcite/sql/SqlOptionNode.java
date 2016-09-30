@@ -22,7 +22,11 @@ import org.apache.calcite.sql.util.SqlVisitor;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorScope;
 import org.apache.calcite.util.Litmus;
-import org.apache.calcite.util.NlsString;
+import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
+import org.apache.phoenix.calcite.rel.PhoenixRelImplementorImpl;
+import org.apache.phoenix.execute.RuntimeContext;
+import org.apache.phoenix.execute.RuntimeContextImpl;
 
 public class SqlOptionNode extends SqlNode {
     public final String familyName;
@@ -38,12 +42,10 @@ public class SqlOptionNode extends SqlNode {
             familyName = key.names.get(0);
             propertyName = key.names.get(1);
         }
-        final Object v = SqlLiteral.value(literal);
-        if (v instanceof NlsString) {
-            value = ((NlsString) v).toString();
-        } else {
-            value = v;
-        }
+
+        PhoenixRelImplementor
+                implementor = new PhoenixRelImplementorImpl(RuntimeContext.EMPTY_CONTEXT);
+        this.value = CalciteUtils.convertSqlLiteral(literal, implementor);
     }
 
     @Override

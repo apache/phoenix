@@ -32,6 +32,27 @@ public interface RuntimeContext {
         }
     };
     
+    public static RuntimeContext EMPTY_CONTEXT = new RuntimeContext() {
+
+        @Override
+        public void defineCorrelateVariable(String variableId, CorrelateVariable def) {
+        }
+
+        @Override
+        public CorrelateVariable getCorrelateVariable(String variableId) {
+            return null;
+        }
+
+        @Override
+        public void setBindParameterValues(Map<String, Object> values) {
+        }
+
+        @Override
+        public Object getBindParameterValue(String name) {
+            return null;
+        }       
+    };
+    
     public interface CorrelateVariable {
         public Expression newExpression(int index);        
         public Tuple getValue();        
