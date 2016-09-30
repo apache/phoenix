@@ -41,6 +41,7 @@ import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
@@ -301,6 +302,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
             TableRef tableRef = tableMapping.getTableRef();
             TableRef srcRef = tableMapping.getDataTableRef() == null ?
                     tableRef : tableMapping.getDataTableRef();
+            // FIXME this is just a temporary fix for schema caching problem.
+            tableRef.setTimeStamp(QueryConstants.UNSET_TIMESTAMP);
+            srcRef.setTimeStamp(QueryConstants.UNSET_TIMESTAMP);
             return new ScanPlan(context, select, tableRef, srcRef, RowProjector.EMPTY_PROJECTOR, null, null, orderBy, iteratorFactory, true, dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);

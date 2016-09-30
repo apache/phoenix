@@ -62,21 +62,20 @@ public class CalciteDMLIT extends BaseCalciteIT {
         startPhoenixStandalone(PROPS).sql("create table tgtTable(pk0 integer not null, pk1 integer not null, f0 varchar(5), f1 varchar(5), f2 varchar(5) constraint pk primary key (pk0, pk1))")
             .execute()
             .close();
-        start(PROPS).sql("upsert into srcTable values(1, 10, '00100', '01000')")
-            .executeUpdate()
-            .close();
-        start(PROPS).sql("upsert into srcTable values(2, 20, '00200', '02000')")
-            .executeUpdate()
-            .close();
-        start(PROPS).sql("upsert into srcTable values(3, 30, '00300', '03000')")
-            .executeUpdate()
-            .close();
-        final Sql sql = start(PROPS).sql("upsert into tgtTable(pk0, pk1, f0, f2) select * from srcTable where pk1 <> ?");
+        Start start = start(PROPS);
+        start.sql("upsert into srcTable values(1, 10, '00100', '01000')")
+            .executeUpdate();
+        start.sql("upsert into srcTable values(2, 20, '00200', '02000')")
+            .executeUpdate();
+        start.sql("upsert into srcTable values(3, 30, '00300', '03000')")
+            .executeUpdate();
+        start.commit();
+        final Sql sql = start.sql("upsert into tgtTable(pk0, pk1, f0, f2) select * from srcTable where pk1 <> ?");
         final PreparedStatement stmt = sql.prepareStatement();
         stmt.setInt(1, 20);
         stmt.executeUpdate();
-        sql.close();
-        start(false, 1L).sql("select * from tgtTable")
+        sql.commit();
+        start.sql("select * from tgtTable")
             .resultIs(0, new Object[][] {
                 {1, 10, "00100", null, "01000"},
                 {3, 30, "00300", null, "03000"}})

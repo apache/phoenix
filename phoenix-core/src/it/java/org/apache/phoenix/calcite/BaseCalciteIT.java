@@ -124,6 +124,16 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
             return connection;
         }
 
+        public void commit() {
+            if (connection != null) {
+                try {
+                    connection.commit();
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+
         public void close() {
             if (connection != null) {
                 try {
@@ -193,6 +203,10 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
         
         public PreparedStatement prepareStatement() throws SQLException {
             return start.getConnection().prepareStatement(sql);
+        }
+
+        public void commit() {
+            start.commit();
         }
 
         public void close() {
