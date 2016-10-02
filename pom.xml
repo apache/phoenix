@@ -235,9 +235,8 @@
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
                 <!--parallel>methods</parallel>
-                <threadCount>20</threadCount>
-		<enableAssertions>false</enableAssertions-->
-                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <threadCount>20</threadCount-->
+                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -263,9 +262,16 @@
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
                 <!--parallel>methods</parallel>
-                <threadCount>20</threadCount>
-		<enableAssertions>false</enableAssertions-->
-                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <threadCount>20</threadCount-->
+                <!-- We're intermittantly hitting this assertion:
+                     Caused by: java.lang.AssertionError: we should never remove a different context
+	                 at org.apache.hadoop.hbase.regionserver.HRegion$RowLockContext.cleanUp(HRegion.java:5206)
+	                 at org.apache.hadoop.hbase.regionserver.HRegion$RowLockImpl.release(HRegion.java:5246)
+	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2898)
+	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.doGetTable(MetaDataEndpointImpl.java:2835)
+	                 at org.apache.phoenix.coprocessor.MetaDataEndpointImpl.getTable(MetaDataEndpointImpl.java:490) -->
+		<!--enableAssertions>false</enableAssertions-->
+                <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68 -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <shutdown>kill</shutdown>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
@@ -289,7 +295,7 @@
                 <forkCount>${numForkedIT}</forkCount>
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>
@@ -313,7 +319,7 @@
                 <forkCount>${numForkedIT}</forkCount>
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx3072m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
+                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.HBaseManagedTimeTest</groups>
@@ -331,7 +337,7 @@
                  <forkCount>${numForkedIT}</forkCount>
                  <runOrder>alphabetical</runOrder>
                  <reuseForks>false</reuseForks>
-                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+                 <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                  <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                  <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
@@ -446,8 +452,8 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m 
-            -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"</argLine>
+          <argLine>-enableassertions -Xmx2250m -XX:MaxPermSize=128m
+            -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>kill</shutdown>
         </configuration>
