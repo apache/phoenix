@@ -33,8 +33,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import javax.annotation.concurrent.NotThreadSafe;
-
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Put;
@@ -58,8 +56,7 @@ import org.junit.Test;
  * TODO: review with Tephra community
  *
  */
-@NotThreadSafe // Prevents test methods from running in parallel
-public class NotThreadSafeTransactionIT extends ParallelStatsDisabledIT {
+public class FlappingTransactionIT extends ParallelStatsDisabledIT {
     @Test
     public void testDelete() throws Exception {
         String transTableName = generateUniqueName();

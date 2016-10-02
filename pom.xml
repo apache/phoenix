@@ -234,7 +234,7 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <!--parallel>classesAndMethods</parallel>
+                <!--parallel>methods</parallel>
                 <threadCount>20</threadCount>
 		<enableAssertions>false</enableAssertions-->
                 <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
@@ -262,7 +262,7 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <!--parallel>classesAndMethods</parallel>
+                <!--parallel>methods</parallel>
                 <threadCount>20</threadCount>
 		<enableAssertions>false</enableAssertions-->
                 <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
