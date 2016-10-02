@@ -234,7 +234,7 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <parallel>classesAndMethods</parallel>
+                <parallel>methods</parallel>
                 <threadCount>20</threadCount>
                 <argLine>-Xmx2000m -XX:MaxPermSize=256m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
@@ -261,7 +261,7 @@
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
                 <runOrder>alphabetical</runOrder>
-                <parallel>classesAndMethods</parallel>
+                <parallel>methods</parallel>
                 <threadCount>20</threadCount>
                 <!-- We're intermittantly hitting this assertion:
                      Caused by: java.lang.AssertionError: we should never remove a different context
