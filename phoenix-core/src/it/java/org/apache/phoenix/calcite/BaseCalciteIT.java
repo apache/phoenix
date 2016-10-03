@@ -428,9 +428,11 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
 
     protected static Properties getConnectionProps(boolean enableMaterialization, float rowCountFactor) {
         Properties props = new Properties();
-        props.setProperty(
-                CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
-                Boolean.toString(enableMaterialization));
+        if (!enableMaterialization) {
+            props.setProperty(
+                    CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
+                    Boolean.toString(enableMaterialization));
+        }
         props.setProperty(
                 CalciteConnectionProperty.CREATE_MATERIALIZATIONS.camelName(),
                 Boolean.toString(false));

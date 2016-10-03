@@ -131,9 +131,16 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             hooks.add(Hook.PARSE_TREE.add(new Function<Object[], Object>() {
                 @Override
                 public Object apply(Object[] input) {
-                    // TODO Auto-generated method stub
+                    for (CalciteSchema schema : rootSchema.getSubSchemaMap().values()) {
+                        if (schema.schema instanceof PhoenixSchema) {
+                            ((PhoenixSchema) schema.schema).clear();
+                            for (CalciteSchema subSchema : schema.getSubSchemaMap().values()) {
+                                ((PhoenixSchema) subSchema.schema).clear();
+                            }
+                        }
+                    }
                     return null;
-                }            
+                }
             }));
 
             hooks.add(Hook.TRIMMED.add(new Function<RelNode, Object>() {

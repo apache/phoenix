@@ -215,7 +215,13 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public boolean contentsHaveChangedSince(long lastCheck, long now) {
-        return false;
+        return lastCheck != now;
+    }
+    
+    public void clear() {
+        tables.clear();
+        views.clear();
+        viewTables.clear();
     }
     
     public void defineIndexesAsMaterializations() {
