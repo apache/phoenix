@@ -93,6 +93,10 @@ public abstract class PhoenixCalciteEmbeddedDriver extends Driver implements SQL
                 info2,
                 CalciteConnectionProperty.CONFORMANCE.camelName(),
                 SqlConformance.ORACLE_10.toString());
+        setPropertyIfNotSpecified(
+                info2,
+                CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
+                Boolean.TRUE.toString());
         
         final String prefix = getConnectStringPrefix();
         assert url.startsWith(prefix);

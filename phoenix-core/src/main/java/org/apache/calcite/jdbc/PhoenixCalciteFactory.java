@@ -35,14 +35,24 @@ import org.apache.calcite.jdbc.CalciteFactory;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Ord;
+import org.apache.calcite.prepare.Prepare.Materialization;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.runtime.Hook;
+import org.apache.calcite.runtime.Hook.Closeable;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.tools.Program;
+import org.apache.calcite.tools.Programs;
+import org.apache.calcite.util.Holder;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 
+import com.google.common.base.Function;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 public class PhoenixCalciteFactory extends CalciteFactory {
@@ -59,7 +69,8 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         AvaticaFactory factory, String url, Properties info,
         CalciteSchema rootSchema, JavaTypeFactory typeFactory) {
         return new PhoenixCalciteConnection(
-                (Driver) driver, factory, url, info, rootSchema, typeFactory);
+                (Driver) driver, factory, url, info,
+                CalciteSchema.createRootSchema(true, false), typeFactory);
     }
 
     @Override
@@ -108,14 +119,46 @@ public class PhoenixCalciteFactory extends CalciteFactory {
     }
 
     private static class PhoenixCalciteConnection extends CalciteConnectionImpl {
-        final Map<Meta.StatementHandle, ImmutableList<RuntimeContext>> runtimeContextMap =
+        private final Map<Meta.StatementHandle, ImmutableList<RuntimeContext>> runtimeContextMap =
                 new ConcurrentHashMap<Meta.StatementHandle, ImmutableList<RuntimeContext>>();
+        private final List<Closeable> hooks = Lists.newArrayList();
         
         public PhoenixCalciteConnection(Driver driver, AvaticaFactory factory, String url,
-                Properties info, CalciteSchema rootSchema,
+                Properties info, final CalciteSchema rootSchema,
                 JavaTypeFactory typeFactory) {
-            super(driver, factory, url, info,
-                    CalciteSchema.createRootSchema(true, false), typeFactory);
+            super(driver, factory, url, info, rootSchema, typeFactory);
+
+            hooks.add(Hook.PARSE_TREE.add(new Function<Object[], Object>() {
+                @Override
+                public Object apply(Object[] input) {
+                    // TODO Auto-generated method stub
+                    return null;
+                }            
+            }));
+
+            hooks.add(Hook.TRIMMED.add(new Function<RelNode, Object>() {
+                @Override
+                public Object apply(RelNode root) {
+                    for (CalciteSchema schema : rootSchema.getSubSchemaMap().values()) {
+                        if (schema.schema instanceof PhoenixSchema) {
+                            ((PhoenixSchema) schema.schema).defineIndexesAsMaterializations();
+                            for (CalciteSchema subSchema : schema.getSubSchemaMap().values()) {
+                                ((PhoenixSchema) subSchema.schema).defineIndexesAsMaterializations();
+                            }
+                        }
+                    }
+                    return null;
+                }
+            }));
+
+            hooks.add(Hook.PROGRAM.add(new Function<org.apache.calcite.util.Pair<List<Materialization>, Holder<Program>>, Object>() {
+                @Override
+                public Object apply(
+                        org.apache.calcite.util.Pair<List<Materialization>, Holder<Program>> input) {
+                    input.getValue().set(Programs.standard(PhoenixRel.METADATA_PROVIDER));
+                    return null;
+                }
+            }));
         }
 
         public <T> Enumerable<T> enumerable(Meta.StatementHandle handle,
@@ -230,6 +273,9 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                 public void call(PhoenixConnection conn) throws SQLException {
                     conn.close();
                 }});
+            for (Closeable hook : hooks) {
+                hook.close();
+            }
             super.close();
         }
         
