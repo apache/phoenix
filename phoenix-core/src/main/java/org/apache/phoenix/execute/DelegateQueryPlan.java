@@ -122,12 +122,12 @@ public abstract class DelegateQueryPlan implements QueryPlan {
         return delegate.useRoundRobinIterator();
     }
 
-	@Override
-	public Operation getOperation() {
-		return delegate.getOperation();
-	}
-	
-	@Override
+    @Override
+    public Operation getOperation() {
+        return delegate.getOperation();
+    }
+
+    @Override
     public Integer getOffset() {
         return delegate.getOffset();
     }

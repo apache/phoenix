@@ -21,6 +21,7 @@ import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -203,12 +204,14 @@ public class UnionPlan implements QueryPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+    public QueryPlan limit(Integer limit, Integer offset) {
+        if (Objects.equals(limit, this.limit) &&
+                Objects.equals(offset, this.offset)) {
             return this;
-        
+        }
+
         return new UnionPlan(this.parentContext, this.statement, this.tableRef, this.projector,
-            limit, this.offset, this.orderBy, this.groupBy, this.plans, this.paramMetaData);
+                limit, offset, this.orderBy, this.groupBy, this.plans, this.paramMetaData);
     }
 
 	@Override

@@ -21,6 +21,7 @@ package org.apache.phoenix.execute;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -268,11 +269,15 @@ public class AggregatePlan extends BaseQueryPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+    public QueryPlan limit(Integer limit, Integer offset) {
+        if (Objects.equals(limit, this.limit) &&
+                Objects.equals(offset, this.offset)) {
             return this;
-        
-        return new AggregatePlan(this.context, this.statement, this.tableRef, this.tableRefs.iterator().next(), this.projection,
-            limit, this.offset, this.orderBy, this.parallelIteratorFactory, this.groupBy, this.having, this.dynamicFilter);
+        }
+
+        return new AggregatePlan(this.context, this.statement, this.tableRef,
+                this.tableRefs.iterator().next(), this.projection,
+                limit, offset, this.orderBy, this.parallelIteratorFactory, this.groupBy,
+                        this.having, this.dynamicFilter);
     }
 }

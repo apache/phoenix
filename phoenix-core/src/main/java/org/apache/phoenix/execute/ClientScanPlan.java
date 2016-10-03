@@ -19,6 +19,7 @@ package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -106,12 +107,14 @@ public class ClientScanPlan extends ClientProcessingPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+    public QueryPlan limit(Integer limit, Integer offset) {
+        if (Objects.equals(limit, this.limit) &&
+                Objects.equals(offset, this.offset)) {
             return this;
-        
-        return new ClientScanPlan(this.context, this.statement, this.table,
-                this.projector, limit, this.offset, this.where, this.orderBy, this.delegate);
-    }
+        }
 
+        return new ClientScanPlan(this.context, this.statement, this.table,
+                this.projector, limit, offset, this.where, this.orderBy, this.delegate);
+
+    }
 }

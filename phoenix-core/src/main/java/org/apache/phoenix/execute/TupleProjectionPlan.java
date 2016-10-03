@@ -88,8 +88,8 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        QueryPlan delegate = this.delegate.limit(limit);
+    public QueryPlan limit(Integer limit, Integer offset) {
+        QueryPlan delegate = this.delegate.limit(limit, offset);
         if (delegate == this.delegate)
             return this;
         

@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -247,12 +248,14 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+    public QueryPlan limit(Integer limit, Integer offset) {
+        if (Objects.equals(limit, this.limit) &&
+                Objects.equals(offset, this.offset)) {
             return this;
-        
-        return new ClientAggregatePlan(this.context, this.statement, this.table, 
-                this.projector, limit, this.offset, this.where, this.orderBy, this.groupBy, this.having, 
+        }
+
+        return new ClientAggregatePlan(this.context, this.statement, this.table,
+                this.projector, limit, offset, this.where, this.orderBy, this.groupBy, this.having,
                 this.delegate, this.serverAggregators, this.clientAggregators);
     }
 }

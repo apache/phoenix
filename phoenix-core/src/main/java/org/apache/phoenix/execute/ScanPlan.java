@@ -24,6 +24,7 @@ import static org.apache.phoenix.util.ScanUtil.isRoundRobinPossible;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -269,16 +270,19 @@ public class ScanPlan extends BaseQueryPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit)))
+    public QueryPlan limit(Integer limit, Integer offset) {
+        if (Objects.equals(limit, this.limit) &&
+                Objects.equals(offset, this.offset)) {
             return this;
-        
+        }
+
         try {
-            return new ScanPlan(this.context, this.statement, this.tableRef, this.tableRefs.iterator().next(), this.projection, 
-                    limit, this.offset, this.orderBy, this.parallelIteratorFactory, this.allowPageFilter, this.dynamicFilter);
+            return new ScanPlan(this.context, this.statement, this.tableRef,
+                    this.tableRefs.iterator().next(), this.projection,
+                    limit, offset, this.orderBy, this.parallelIteratorFactory,
+                    this.allowPageFilter, this.dynamicFilter);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
-
 }
