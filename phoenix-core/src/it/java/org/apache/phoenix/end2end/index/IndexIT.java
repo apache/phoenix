@@ -230,6 +230,10 @@ public class IndexIT extends ParallelStatsDisabledIT {
         testCreateIndexAfterUpsertStarted(false, 
                 SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
                 SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()));
+    }
+
+    @Test
+    public void testCreateIndexAfterUpsertStartedTxnl() throws Exception {
         if (transactional) {
             testCreateIndexAfterUpsertStarted(true, 
                     SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
