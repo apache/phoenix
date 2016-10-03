@@ -26,7 +26,6 @@ import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementorImpl;
 import org.apache.phoenix.execute.RuntimeContext;
-import org.apache.phoenix.execute.RuntimeContextImpl;
 
 public class SqlOptionNode extends SqlNode {
     public final String familyName;

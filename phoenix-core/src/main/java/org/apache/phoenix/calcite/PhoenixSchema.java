@@ -165,7 +165,7 @@ public class PhoenixSchema implements Schema {
                         this.schemaName == null ? schema : parentSchema;
                 func = ViewTable.viewMacro(schema, viewSql,
                         CalciteSchema.from(viewSqlSchema).path(null),
-                        pTable.getViewType() == ViewType.UPDATABLE);
+                        null, pTable.getViewType() == ViewType.UPDATABLE);
                 views.put(name, func);
                 viewTables.add(tableRef);
             }
