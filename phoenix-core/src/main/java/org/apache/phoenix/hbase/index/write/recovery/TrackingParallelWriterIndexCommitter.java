@@ -23,13 +23,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.Stoppable;
-import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.phoenix.hbase.index.CapturingAbortable;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.exception.SingleIndexWriteFailureException;
@@ -48,7 +45,6 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -95,7 +91,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         new ThreadPoolBuilder(name, conf).setMaxThread(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY,
                                 DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).setCoreTimeout(
                                 INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent,
-                CachingHTableFactory.getCacheSize(conf));
+                CachingHTableFactory.getCacheSize(conf), env);
     }
 
     /**
@@ -103,9 +99,10 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
      * <p>
      * Exposed for TESTING
      */
-    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, int cacheSize) {
+    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, int cacheSize,
+            RegionCoprocessorEnvironment env) {
         this.pool = new WaitForCompletionTaskRunner(pool);
-        this.factory = new CachingHTableFactory(factory, cacheSize);
+        this.factory = new CachingHTableFactory(factory, cacheSize, env);
         this.abortable = new CapturingAbortable(abortable);
         this.stopped = stop;
     }
@@ -148,6 +145,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                 @SuppressWarnings("deprecation")
                 @Override
                 public Boolean call() throws Exception {
+                    HTableInterface table = null;
                     try {
                         // this may have been queued, but there was an abort/stop so we try to early exit
                         throwFailureIfDone();
@@ -168,7 +166,7 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                                 }
                             }
                         }
-                        HTableInterface table = factory.getTable(tableReference.get());
+                        table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations);
                     } catch (InterruptedException e) {
@@ -177,6 +175,10 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                         throw e;
                     } catch (Exception e) {
                         throw e;
+                    } finally {
+                        if (table != null) {
+                            table.close();
+                        }
                     }
                     return Boolean.TRUE;
                 }
