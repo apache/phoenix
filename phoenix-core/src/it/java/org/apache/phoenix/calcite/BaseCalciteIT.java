@@ -39,7 +39,6 @@ import java.text.DecimalFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.regex.Pattern;
 
 import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
