@@ -32,6 +32,7 @@ import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.validate.SqlConformance;
+import org.apache.phoenix.calcite.PhoenixPrepareImpl;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
 import org.apache.phoenix.calcite.type.PhoenixRelDataTypeSystem;

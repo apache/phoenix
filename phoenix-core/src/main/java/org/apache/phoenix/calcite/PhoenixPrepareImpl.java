@@ -1,4 +1,4 @@
-package org.apache.phoenix.calcite.jdbc;
+package org.apache.phoenix.calcite;
 
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -32,7 +32,6 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.parser.SqlParserUtil;
 import org.apache.calcite.util.NlsString;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateIndex;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
