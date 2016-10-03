@@ -17,14 +17,18 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.junit.Test;
-import org.mockito.Mockito;
 
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.table.CachingHTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.junit.Test;
+import org.mockito.Mockito;
 
 public class TestCachingHTableFactory {
 
@@ -32,27 +36,34 @@ public class TestCachingHTableFactory {
   public void testCacheCorrectlyExpiresTable() throws Exception {
     // setup the mocks for the tables we will request
     HTableFactory delegate = Mockito.mock(HTableFactory.class);
+    RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
+    Configuration conf =new Configuration();
+    Mockito.when(e.getConfiguration()).thenReturn(conf);
+    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     ImmutableBytesPtr t1 = new ImmutableBytesPtr(Bytes.toBytes("t1"));
     ImmutableBytesPtr t2 = new ImmutableBytesPtr(Bytes.toBytes("t2"));
     ImmutableBytesPtr t3 = new ImmutableBytesPtr(Bytes.toBytes("t3"));
     HTableInterface table1 = Mockito.mock(HTableInterface.class);
     HTableInterface table2 = Mockito.mock(HTableInterface.class);
     HTableInterface table3 = Mockito.mock(HTableInterface.class);
-    Mockito.when(delegate.getTable(t1)).thenReturn(table1);
-    Mockito.when(delegate.getTable(t2)).thenReturn(table2);
-    Mockito.when(delegate.getTable(t3)).thenReturn(table3);
+    
     
     // setup our factory with a cache size of 2
-    CachingHTableFactory factory = new CachingHTableFactory(delegate, 2);
-    factory.getTable(t1);
-    factory.getTable(t2);
-    factory.getTable(t3);
+    CachingHTableFactory factory = new CachingHTableFactory(delegate, 2, e);
+    Mockito.when(delegate.getTable(t1,factory.getPool())).thenReturn(table1);
+    Mockito.when(delegate.getTable(t2,factory.getPool())).thenReturn(table2);
+    Mockito.when(delegate.getTable(t3,factory.getPool())).thenReturn(table3);
+    
+    HTableInterface ft1 =factory.getTable(t1);
+    HTableInterface ft2 =factory.getTable(t2);
+    ft1.close();
+    HTableInterface ft3 = factory.getTable(t3);
     // get the same table a second time, after it has gone out of cache
     factory.getTable(t1);
     
-    Mockito.verify(delegate, Mockito.times(2)).getTable(t1);
-    Mockito.verify(delegate, Mockito.times(1)).getTable(t2);
-    Mockito.verify(delegate, Mockito.times(1)).getTable(t3);
+    Mockito.verify(delegate, Mockito.times(2)).getTable(t1,factory.getPool());
+    Mockito.verify(delegate, Mockito.times(1)).getTable(t2,factory.getPool());
+    Mockito.verify(delegate, Mockito.times(1)).getTable(t3,factory.getPool());
     Mockito.verify(table1).close();
   }
 }
