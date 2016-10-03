@@ -22,16 +22,19 @@ import static org.junit.Assert.assertTrue;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.hbase.index.StubAbortable;
@@ -62,8 +65,12 @@ public class TestParalleWriterIndexCommitter {
     ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
     Abortable mockAbort = Mockito.mock(Abortable.class);
     Stoppable mockStop = Mockito.mock(Stoppable.class);
+    RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
+    Configuration conf =new Configuration();
+    Mockito.when(e.getConfiguration()).thenReturn(conf);
+    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     // create a simple writer
-    writer.setup(factory, exec, mockAbort, mockStop, 1);
+    writer.setup(factory, exec, mockAbort, mockStop, 1, e);
     // stop the writer
     writer.stop(this.test.getTableNameString() + " finished");
     assertTrue("Factory didn't get shutdown after writer#stop!", factory.shutdown);
@@ -77,6 +84,10 @@ public class TestParalleWriterIndexCommitter {
     LOG.info("Starting " + test.getTableNameString());
     LOG.info("Current thread is interrupted: " + Thread.interrupted());
     Abortable abort = new StubAbortable();
+    RegionCoprocessorEnvironment e =Mockito.mock(RegionCoprocessorEnvironment.class);
+    Configuration conf =new Configuration();
+    Mockito.when(e.getConfiguration()).thenReturn(conf);
+    Mockito.when(e.getSharedData()).thenReturn(new ConcurrentHashMap<String,Object>());
     Stoppable stop = Mockito.mock(Stoppable.class);
     ExecutorService exec = Executors.newFixedThreadPool(1);
     Map<ImmutableBytesPtr, HTableInterface> tables =
@@ -107,7 +118,7 @@ public class TestParalleWriterIndexCommitter {
 
     // setup the writer and failure policy
     ParallelWriterIndexCommitter writer = new ParallelWriterIndexCommitter(VersionInfo.getVersion());
-    writer.setup(factory, exec, abort, stop, 1);
+    writer.setup(factory, exec, abort, stop, 1, e);
     writer.write(indexUpdates, true);
     assertTrue("Writer returned before the table batch completed! Likely a race condition tripped",
       completed[0]);
