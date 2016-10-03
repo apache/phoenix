@@ -67,7 +67,6 @@ public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
-        
         double rowCount = mq.getRowCount(this);
         return planner.getCostFactory()
                 .makeCost(rowCount, 0, 0)
@@ -77,26 +76,23 @@ public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
     @Override 
     public double estimateRowCount(RelMetadataQuery mq) {
         double rows = super.estimateRowCount(mq);
-        if(offset != null) {
-            return Math.max(0, Math.min(RexLiteral.intValue(fetch), rows - RexLiteral.intValue(offset)));
-        }
-        return Math.min(RexLiteral.intValue(fetch), rows);
+        int offset = this.offset == null ? 0 : RexLiteral.intValue(this.offset);
+        int fetch = this.fetch == null ? Integer.MAX_VALUE : RexLiteral.intValue(this.fetch);
+        return Math.max(0, Math.min(fetch, rows - offset));
     }
 
     @Override
     public QueryPlan implement(PhoenixRelImplementor implementor) {
         QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
-        int fetchValue = RexLiteral.intValue(fetch);
-        int offsetValue = 0;
-        if (offset != null){
-            offsetValue = RexLiteral.intValue(offset);
-        }
-        if (plan.getLimit() == null) {
-            return plan.limit(fetchValue, offsetValue);
+        Integer fetch = this.fetch == null ? null : RexLiteral.intValue(this.fetch);
+        Integer offset = this.offset == null ? null : RexLiteral.intValue(this.offset);
+
+        if (plan.getLimit() == null && plan.getOffset() == null) {
+            return plan.limit(fetch, offset);
         }
         
         return new ClientScanPlan(plan.getContext(), plan.getStatement(), 
                 implementor.getTableMapping().getTableRef(), RowProjector.EMPTY_PROJECTOR, 
-                fetchValue, offsetValue, null, OrderBy.EMPTY_ORDER_BY, plan);
+                fetch, offset, null, OrderBy.EMPTY_ORDER_BY, plan);
     }
 }

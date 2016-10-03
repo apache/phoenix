@@ -114,15 +114,9 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
 
     @Override
     public QueryPlan limit(Integer limit, Integer offset) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit))) {
+        if ((limit == this.limit || (limit != null && limit.equals(this.limit))) &&
+                (offset == this.offset || (offset != null && offset.equals(this.offset)))) {
             return this;
-        }
-
-        if (offset == this.offset || (offset != null && offset.equals(this.offset))) {
-            return new LiteralResultIterationPlan(this.tuples, this.context, this.statement,
-                    this.tableRef,
-                    this.projection, limit, this.offset, this.orderBy,
-                    this.parallelIteratorFactory);
         }
 
         return new LiteralResultIterationPlan(this.tuples, this.context, this.statement, this.tableRef,

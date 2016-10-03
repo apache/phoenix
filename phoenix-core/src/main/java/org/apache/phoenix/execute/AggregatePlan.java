@@ -269,15 +269,9 @@ public class AggregatePlan extends BaseQueryPlan {
 
     @Override
     public QueryPlan limit(Integer limit, Integer offset) {
-        if (limit == this.limit || (limit != null && limit.equals(this.limit))) {
+        if ((limit == this.limit || (limit != null && limit.equals(this.limit))) &&
+                (offset == this.offset || (offset != null && offset.equals(this.offset)))) {
             return this;
-        }
-
-        if (offset == this.offset || (offset != null && offset.equals(this.offset))) {
-            return new AggregatePlan(this.context, this.statement, this.tableRef,
-                    this.tableRefs.iterator().next(), this.projection,
-                    limit, this.offset, this.orderBy, this.parallelIteratorFactory,
-                    this.groupBy, this.having, this.dynamicFilter);
         }
 
         return new AggregatePlan(this.context, this.statement, this.tableRef,

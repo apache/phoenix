@@ -670,13 +670,8 @@ public class SortMergeJoinPlan implements QueryPlan {
 
     @Override
     public QueryPlan limit(Integer limit, Integer offset) {
-        if (limit == null)
+        if (limit == null && offset == null)
             return this;
-
-        if (offset == null){
-            return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
-                    this.getProjector(), limit, this.getOffset(), null, OrderBy.EMPTY_ORDER_BY, this);
-        }
 
         return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
                 this.getProjector(), limit, offset, null, OrderBy.EMPTY_ORDER_BY, this);

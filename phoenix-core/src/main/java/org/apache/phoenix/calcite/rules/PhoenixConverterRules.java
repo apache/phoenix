@@ -232,7 +232,7 @@ public class PhoenixConverterRules {
         private static Predicate<LogicalSort> HAS_FETCH = new Predicate<LogicalSort>() {
             @Override
             public boolean apply(LogicalSort input) {
-                return input.fetch != null;
+                return input.fetch != null || input.offset != null;
             }
         };
         
