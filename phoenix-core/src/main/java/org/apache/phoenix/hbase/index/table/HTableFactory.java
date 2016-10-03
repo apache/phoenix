@@ -19,9 +19,9 @@
 package org.apache.phoenix.hbase.index.table;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
-
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 public interface HTableFactory {
@@ -29,4 +29,6 @@ public interface HTableFactory {
   public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException;
 
   public void shutdown();
+
+  public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool) throws IOException;
 }
