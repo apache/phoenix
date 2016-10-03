@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -31,6 +30,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -42,7 +42,6 @@ import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -74,25 +73,8 @@ public class TableMapping {
             this.mappedColumns = Lists.newArrayList();
             this.mappedColumns.addAll(getMappedColumns(tableRef.getTable()));
             this.extendedColumnsOffset = mappedColumns.size();
-            Set<String> names = Sets.newHashSet();
-            for (PColumn column : this.mappedColumns) {
-                names.add(column.getName().getString());
-            }
-            PTable dataTable = dataTableRef.getTable();
-            List<PColumn> projectedColumns = new ArrayList<PColumn>();
-            for (PColumn sourceColumn : dataTable.getColumns()) {
-                if (!SchemaUtil.isPKColumn(sourceColumn)) {
-                    String colName = IndexUtil.getIndexColumnName(sourceColumn);
-                    if (!names.contains(colName)) {
-                        ColumnRef sourceColumnRef =
-                                new ColumnRef(dataTableRef, sourceColumn.getPosition());
-                        PColumn column = new ProjectedColumn(PNameFactory.newName(colName),
-                                sourceColumn.getFamilyName(), projectedColumns.size(),
-                                sourceColumn.isNullable(), sourceColumnRef);
-                        projectedColumns.add(column);
-                    }
-                }            
-            }
+            final PTable dataTable = dataTableRef.getTable();
+            final List<PColumn> projectedColumns = getDataTableMappedColumns(dataTableRef, mappedColumns);
             this.mappedColumns.addAll(projectedColumns);
             PTable extendedTable = PTableImpl.makePTable(dataTable.getTenantId(),
                     TupleProjectionCompiler.PROJECTED_TABLE_SCHEMA, dataTable.getName(),
@@ -108,7 +90,7 @@ public class TableMapping {
             this.extendedTableRef = new TableRef(extendedTable);
         }
     }
-    
+
     public TableRef getTableRef() {
         return tableRef;
     }
@@ -342,28 +324,43 @@ public class TableMapping {
     }
     
     private static List<PColumn> getMappedColumns(PTable pTable) {
-        if (pTable.getBucketNum() == null
-                && !pTable.isMultiTenant()
-                && pTable.getViewIndexId() == null) {
-            return pTable.getColumns();
+        int initPosition =
+                  (pTable.getBucketNum() ==null ? 0 : 1)
+                + (pTable.isMultiTenant() ? 1 : 0)
+                + (pTable.getViewIndexId() == null ? 0 : 1);
+        List<PColumn> columns = Lists.newArrayListWithExpectedSize(pTable.getColumns().size() - initPosition);
+        for (int i = initPosition; i < pTable.getPKColumns().size(); i++) {
+            columns.add(pTable.getPKColumns().get(i));
         }
-        
-        List<PColumn> columns = Lists.newArrayList(pTable.getColumns());
-        if (pTable.getViewIndexId() != null) {
-            for (Iterator<PColumn> iter = columns.iterator(); iter.hasNext();) {
-                if (iter.next().getName().getString().equals(MetaDataUtil.getViewIndexIdColumnName())) {
-                    iter.remove();
-                    break;
-                }
+        for (PColumnFamily family : pTable.getColumnFamilies()) {
+            for (PColumn column : family.getColumns()) {
+                columns.add(column);
             }
-        }
-        if (pTable.isMultiTenant()) {
-            columns.remove(pTable.getBucketNum() == null ? 0 : 1);
-        }
-        if (pTable.getBucketNum() != null) {
-            columns.remove(0);
         }
         
         return columns;
+    }
+    
+    private static List<PColumn> getDataTableMappedColumns(TableRef dataTableRef, List<PColumn> mappedColumns) {
+        Set<String> names = Sets.newHashSet();
+        for (PColumn column : mappedColumns) {
+            names.add(column.getName().getString());
+        }
+        List<PColumn> projectedColumns = new ArrayList<PColumn>();
+        for (PColumnFamily cf : dataTableRef.getTable().getColumnFamilies()) {
+            for (PColumn sourceColumn : cf.getColumns()) {
+                String colName = IndexUtil.getIndexColumnName(sourceColumn);
+                if (!names.contains(colName)) {
+                    ColumnRef sourceColumnRef =
+                            new ColumnRef(dataTableRef, sourceColumn.getPosition());
+                    PColumn column = new ProjectedColumn(PNameFactory.newName(colName),
+                            cf.getName(), projectedColumns.size(),
+                            sourceColumn.isNullable(), sourceColumnRef);
+                    projectedColumns.add(column);
+                }
+            }            
+        }
+        
+        return projectedColumns;
     }
 }

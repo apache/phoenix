@@ -65,9 +65,9 @@ public class CalciteLocalIndexIT extends BaseCalciteIndexIT {
                        "      PhoenixTableScan(table=[[phoenix, IDX_FULL]])\n")*/
             .close();
         start(true, 1000f).sql("select a_string, b_string from aTable where a_string = 'a'")
-            .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixServerProject(A_STRING=[$0], B_STRING=[$3])\n" +
-                       "    PhoenixTableScan(table=[[phoenix, IDX1]], filter=[=($0, 'a')])\n")
+            .explainMatches("PhoenixToEnumerableConverter\n" +
+                       "  PhoenixServerProject\\((0:)?A_STRING=\\[\\$0\\], (0:)?B_STRING=\\[\\$3\\]\\)\n" +
+                       "    PhoenixTableScan\\(table=\\[\\[phoenix, IDX1\\]\\], filter=\\[=\\(\\$0, 'a'\\)\\]\\)\n")
             .close();
         start(true, 1000f).sql("select a_string, b_string from aTable where b_string = 'b'")
             .explainIs("PhoenixToEnumerableConverter\n" +

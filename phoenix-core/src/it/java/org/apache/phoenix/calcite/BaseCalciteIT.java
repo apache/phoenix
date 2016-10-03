@@ -39,6 +39,7 @@ import java.text.DecimalFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
@@ -168,12 +169,27 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
         }
 
         public Sql explainIs(String expected) throws SQLException {
+            return checkExplain(expected, true);
+        }
+
+        public Sql explainMatches(String expected) throws SQLException {
+            return checkExplain(expected, false);
+        }
+
+        private Sql checkExplain(String expected, boolean exact) throws SQLException {
             final Statement statement = start.getConnection().createStatement();
             final ResultSet resultSet = statement.executeQuery(start.getExplainPlanString() + " " + sql);
             String explain = QueryUtil.getExplainPlan(resultSet);
             resultSet.close();
             statement.close();
-            Assert.assertEquals(explain, expected);
+            if (exact) {
+                Assert.assertEquals(explain, expected);
+            } else {
+                Assert.assertTrue(
+                        "Explain plan \"" + explain
+                        + "\" does not match \"" + expected + "\"",
+                        explain.matches(expected));
+            }
             return this;
         }
 
