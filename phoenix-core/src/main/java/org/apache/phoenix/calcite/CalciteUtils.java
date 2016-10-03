@@ -21,6 +21,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexDynamicParam;
@@ -144,7 +145,7 @@ public class CalciteUtils {
     }
     
     @SuppressWarnings("rawtypes")
-    public static PDataType relDataTypeToPDataType(RelDataType relDataType) {
+    public static PDataType relDataTypeToPDataType(final RelDataType relDataType) {
         SqlTypeName sqlTypeName = relDataType.getSqlTypeName();
         final boolean isArrayType = sqlTypeName == SqlTypeName.ARRAY;
         if (isArrayType) {
@@ -161,7 +162,33 @@ public class CalciteUtils {
         }
         return PDataType.fromTypeId(ordinal + (isArrayType ? PDataType.ARRAY_TYPE_BASE : 0));
     }
-    
+
+    @SuppressWarnings("rawtypes")
+    public static RelDataType pDataTypeToRelDataType(
+            final RelDataTypeFactory typeFactory, final PDataType pDataType,
+            final Integer maxLength, final Integer scale, final Integer arraySize) {
+        final boolean isArrayType = pDataType.isArrayType();
+        final PDataType baseType = isArrayType ?
+                        PDataType.fromTypeId(pDataType.getSqlType() - PDataType.ARRAY_TYPE_BASE) 
+                      : pDataType;
+        final int sqlTypeId = baseType.getResultSetSqlType();
+        final PDataType normalizedBaseType = PDataType.fromTypeId(sqlTypeId);
+        final SqlTypeName sqlTypeName = SqlTypeName.valueOf(normalizedBaseType.getSqlTypeName());
+        RelDataType type;
+        if (maxLength != null && scale != null) {
+            type = typeFactory.createSqlType(sqlTypeName, maxLength, scale);
+        } else if (maxLength != null) {
+            type = typeFactory.createSqlType(sqlTypeName, maxLength);
+        } else {
+            type = typeFactory.createSqlType(sqlTypeName);
+        }
+        if (isArrayType) {
+            type = typeFactory.createArrayType(type, arraySize == null ? -1 : arraySize);
+        }
+
+        return type;
+    }
+
     public static JoinType convertJoinType(JoinRelType type) {
         JoinType ret = null;
         switch (type) {

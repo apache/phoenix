@@ -124,34 +124,15 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
         return tableMapping.getMappedColumns();
     }
 
-    @SuppressWarnings("rawtypes")
     @Override
     public RelDataType getRowType(RelDataTypeFactory typeFactory) {
         final RelDataTypeFactory.FieldInfoBuilder builder = typeFactory.builder();
         final List<PColumn> columns = tableMapping.getMappedColumns();
         for (int i = 0; i < columns.size(); i++) {
             PColumn pColumn = columns.get(i);
-            final PDataType baseType = 
-                    pColumn.getDataType().isArrayType() ?
-                            PDataType.fromTypeId(pColumn.getDataType().getSqlType() - PDataType.ARRAY_TYPE_BASE) 
-                          : pColumn.getDataType();
-            final int sqlTypeId = baseType.getResultSetSqlType();
-            final PDataType pDataType = PDataType.fromTypeId(sqlTypeId);
-            final SqlTypeName sqlTypeName1 = SqlTypeName.valueOf(pDataType.getSqlTypeName());
-            final Integer maxLength = pColumn.getMaxLength();
-            final Integer scale = pColumn.getScale();
-            RelDataType type;
-            if (maxLength != null && scale != null) {
-                type = typeFactory.createSqlType(sqlTypeName1, maxLength, scale);
-            } else if (maxLength != null) {
-                type = typeFactory.createSqlType(sqlTypeName1, maxLength);
-            } else {
-                type = typeFactory.createSqlType(sqlTypeName1);
-            }
-            if (pColumn.getDataType().isArrayType()) {
-                final Integer arraySize = pColumn.getArraySize();
-                type = typeFactory.createArrayType(type, arraySize == null ? -1 : arraySize);
-            }
+            RelDataType type = CalciteUtils.pDataTypeToRelDataType(
+                    typeFactory, pColumn.getDataType(), pColumn.getMaxLength(),
+                    pColumn.getScale(), pColumn.getArraySize());
             builder.add(pColumn.getName().getString(), type);
             builder.nullable(pColumn.isNullable());
         }
