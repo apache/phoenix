@@ -40,7 +40,6 @@ import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -58,7 +57,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
 
     public static final String NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY = "index.writer.threads.max";
     private static final int DEFAULT_CONCURRENT_INDEX_WRITER_THREADS = 10;
-    private static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
+    public static final String INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY = "index.writer.threads.keepalivetime";
     private static final Log LOG = LogFactory.getLog(ParallelWriterIndexCommitter.class);
 
     private HTableFactory factory;
@@ -83,7 +82,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         new ThreadPoolBuilder(name, conf).setMaxThread(NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY,
                                 DEFAULT_CONCURRENT_INDEX_WRITER_THREADS).setCoreTimeout(
                                 INDEX_WRITER_KEEP_ALIVE_TIME_CONF_KEY), env), env.getRegionServerServices(), parent,
-                CachingHTableFactory.getCacheSize(conf));
+                CachingHTableFactory.getCacheSize(conf),env);
         this.kvBuilder = KeyValueBuilder.get(env.getHBaseVersion());
     }
 
@@ -92,8 +91,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
      * <p>
      * Exposed for TESTING
      */
-    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, int cacheSize) {
-        this.factory = new CachingHTableFactory(factory, cacheSize);
+    void setup(HTableFactory factory, ExecutorService pool, Abortable abortable, Stoppable stop, int cacheSize, RegionCoprocessorEnvironment env) {
+        this.factory = new CachingHTableFactory(factory, cacheSize, env);
         this.pool = new QuickFailingTaskRunner(pool);
         this.stopped = stop;
     }
@@ -150,6 +149,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
                     }
+                    HTableInterface table = null;
                     try {
                         if (allowLocalUpdates && env != null) {
                             try {
@@ -164,7 +164,7 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                 }
                             }
                         }
-                        HTableInterface table = factory.getTable(tableReference.get());
+                        table = factory.getTable(tableReference.get());
                         throwFailureIfDone();
                         table.batch(mutations);
                     } catch (SingleIndexWriteFailureException e) {
@@ -175,6 +175,11 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                         // reset the interrupt status on the thread
                         Thread.currentThread().interrupt();
                         throw new SingleIndexWriteFailureException(tableReference.toString(), mutations, e);
+                    }
+                    finally{
+                        if (table != null) {
+                            table.close();
+                        }
                     }
                     return null;
                 }
