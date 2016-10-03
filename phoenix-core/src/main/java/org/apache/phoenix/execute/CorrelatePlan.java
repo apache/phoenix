@@ -204,12 +204,16 @@ public class CorrelatePlan extends DelegateQueryPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
-        if (limit == null)
+    public Integer getOffset() {
+        return null;
+    }
+
+    @Override
+    public QueryPlan limit(Integer limit, Integer offset) {
+        if (limit == null && offset == null)
             return this;
         
         return new ClientScanPlan(this.getContext(), this.getStatement(), this.getTableRef(),
-                this.getProjector(), limit, this.getOffset(), null, OrderBy.EMPTY_ORDER_BY, this);
+                this.getProjector(), limit, offset, null, OrderBy.EMPTY_ORDER_BY, this);
     }
-
 }

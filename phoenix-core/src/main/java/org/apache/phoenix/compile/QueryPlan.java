@@ -88,12 +88,13 @@ public interface QueryPlan extends StatementPlan {
     public boolean useRoundRobinIterator() throws SQLException;
     
     /**
-     * Create a copy of the current QueryPlan with a new limit value.
+     * Create a copy of the current QueryPlan with a new limit and offset value.
      * 
-     * @param  limit the new limit value.
-     * @return the new QueryPlan or the current QueryPlan if the limit 
-     *         value is unchanged or if the limit value does not make a
+     * @param  limit the new limit value
+     * @param  offset is the new offset value
+     * @return the new QueryPlan or the current QueryPlan if the limit & offset
+     *         value is unchanged or if the limit & offset values do not make a
      *         difference in the QueryPlan's behavior.
      */
-    public QueryPlan limit(Integer limit);
+    public QueryPlan limit(Integer limit, Integer offset);
 }

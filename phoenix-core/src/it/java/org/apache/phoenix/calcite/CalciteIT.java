@@ -280,19 +280,19 @@ public class CalciteIT extends BaseCalciteIT {
                            "      PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], scanOrder=[FORWARD])\n")
                 .close();
-        
-        start(false, 1000f).sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
-                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" limit 2")
+
+        start(false, 1000f).sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN "
+                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" limit 2 offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                		   "  PhoenixClientProject(order_id=[$0], NAME=[$4], PRICE=[$5], DISCOUNT2=[$6], QUANTITY=[$2])\n" +
-                		   "    PhoenixLimit(fetch=[2])\n" +
-                		   "      PhoenixClientJoin(condition=[=($1, $3)], joinType=[left])\n" +
-                		   "        PhoenixClientSort(sort0=[$1], dir0=[ASC])\n" +
-                		   "          PhoenixLimit(fetch=[2])\n" +
-                		   "            PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4])\n" +
-                		   "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
-                		   "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4])\n" +
-                		   "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n")
+                        "  PhoenixClientProject(order_id=[$0], NAME=[$4], PRICE=[$5], DISCOUNT2=[$6], QUANTITY=[$2])\n" +
+                        "    PhoenixLimit(offset=[1], fetch=[2])\n" +
+                        "      PhoenixClientJoin(condition=[=($1, $3)], joinType=[left])\n" +
+                        "        PhoenixClientSort(sort0=[$1], dir0=[ASC])\n" +
+                        "          PhoenixLimit(offset=[1], fetch=[2])\n" +
+                        "            PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4])\n" +
+                        "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
+                        "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4])\n" +
+                        "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n")
                 .close();
     }
     
@@ -316,22 +316,22 @@ public class CalciteIT extends BaseCalciteIT {
                           {"00A423122312312", "a", "00D300000000XHP"}})
                 .close();
         
-        start(false, 1000f).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id")
+        start(false, 1000f).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id limit 8 offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$6], ORGANIZATION_ID=[$2])\n" +
-                           "    PhoenixClientJoin(condition=[AND(=($1, $5), =($0, $4))], joinType=[inner])\n" +
-                           "      PhoenixClientJoin(condition=[AND(=($1, $3), =($0, $2))], joinType=[inner])\n" +
+                           "    PhoenixLimit(offset=[1], fetch=[8])\n" +
+                           "      PhoenixClientJoin(condition=[AND(=($1, $5), =($0, $4))], joinType=[inner])\n" +
+                           "        PhoenixClientJoin(condition=[AND(=($1, $3), =($0, $2))], joinType=[inner])\n" +
+                           "          PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
+                           "            PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
+                           "              PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
+                           "          PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
+                           "            PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
+                           "              PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
                            "        PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
-                           "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "        PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
-                           "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n" +
-                           "      PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
-                           "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                           "          PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "            PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(0, new Object[][] {
-                          {"00A123122312312", "a", "00D300000000XHP"},
                           {"00A223122312312", "a", "00D300000000XHP"},
                           {"00A323122312312", "a", "00D300000000XHP"},
                           {"00A423122312312", "a", "00D300000000XHP"},
@@ -385,7 +385,7 @@ public class CalciteIT extends BaseCalciteIT {
                         {"00A223122312312", 1L}, 
                         {"00A323122312312", 1L}, 
                         {"00A423122312312", 1L}, 
-                        {"00B523122312312", 1L}, 
+                        {"00B523122312312", 1L},
                         {"00B623122312312", 1L}, 
                         {"00B723122312312", 1L}, 
                         {"00B823122312312", 1L}, 
@@ -610,8 +610,8 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
     }
     
-    @Test public void testSortWithLimit() throws Exception {
-        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id limit 5")
+    @Test public void testSortWithLimitOffset() throws Exception {
+        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by a_string, entity_id limit 5 offset 0")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixServerSort(sort0=[$2], sort1=[$1], dir0=[ASC], dir1=[ASC])\n" +
@@ -625,46 +625,45 @@ public class CalciteIT extends BaseCalciteIT {
                           {"00D300000000XHP", "00B523122312312", "b"}})
                 .close();
         
-        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id, entity_id limit 5")
+        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id, entity_id limit 5 offset 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixLimit(fetch=[5])\n" +
+                           "  PhoenixLimit(offset=[3], fetch=[5])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
                 .resultIs(new Object[][] {
-                          {"00D300000000XHP", "00A123122312312", "a"}, 
-                          {"00D300000000XHP", "00A223122312312", "a"}, 
-                          {"00D300000000XHP", "00A323122312312", "a"}, 
                           {"00D300000000XHP", "00A423122312312", "a"}, 
-                          {"00D300000000XHP", "00B523122312312", "b"}})
+                          {"00D300000000XHP", "00B523122312312", "b"},
+                          {"00D300000000XHP", "00B623122312312", "b"},
+                          {"00D300000000XHP", "00B723122312312", "b"},
+                          {"00D300000000XHP", "00B823122312312", "b"}})
                 .close();
         
-        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id DESC limit 5")
+        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id DESC limit 5 offset 5")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixLimit(fetch=[5])\n" +
+                           "  PhoenixLimit(offset=[5], fetch=[5])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[REVERSE])\n")
                 .resultIs(new Object[][] {
-                          {"00D300000000XHP", "00C923122312312", "c"},
-                          {"00D300000000XHP", "00B823122312312", "b"}, 
-                          {"00D300000000XHP", "00B723122312312", "b"}, 
-                          {"00D300000000XHP", "00B623122312312", "b"}, 
-                          {"00D300000000XHP", "00B523122312312", "b"}})
+                          {"00D300000000XHP", "00A423122312312", "a"},
+                          {"00D300000000XHP", "00A323122312312", "a"},
+                          {"00D300000000XHP", "00A223122312312", "a"},
+                          {"00D300000000XHP", "00A123122312312", "a"}})
                 .close();
         
-        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id DESC, entity_id DESC limit 5")
+        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id DESC, entity_id DESC limit 5 offset 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixLimit(fetch=[5])\n" +
+                           "  PhoenixLimit(offset=[2], fetch=[5])\n" +
                            "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
                            "      PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[REVERSE])\n")
                 .resultIs(new Object[][] {
-                          {"00D300000000XHP", "00C923122312312", "c"},
-                          {"00D300000000XHP", "00B823122312312", "b"}, 
                           {"00D300000000XHP", "00B723122312312", "b"}, 
                           {"00D300000000XHP", "00B623122312312", "b"}, 
-                          {"00D300000000XHP", "00B523122312312", "b"}})
+                          {"00D300000000XHP", "00B523122312312", "b"},
+                          {"00D300000000XHP", "00A423122312312", "a"},
+                          {"00D300000000XHP", "00A323122312312", "a"}})
                 .close();
 
-        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id ASC, entity_id DESC limit 5")
+        start(false, 1000f).sql("select organization_id, entity_id, a_string from aTable order by organization_id ASC, entity_id DESC limit 5 offset 0")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixLimit(fetch=[5])\n" +
                            "    PhoenixServerSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[DESC])\n" +
@@ -678,21 +677,21 @@ public class CalciteIT extends BaseCalciteIT {
                           {"00D300000000XHP", "00B523122312312", "b"}})
                 .close();
         
-        start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc limit 2")
+        start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc limit 2 offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
-                           "    PhoenixLimit(fetch=[2])\n" +
+                           "    PhoenixLimit(offset=[1], fetch=[2])\n" +
                            "      PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "        PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIs(new Object[][] {
-                          {1L, "c"},
-                          {4L, "b"}})
+                          {4L, "b"},
+                          {4L, "a"}})
                 .close();
         
-        start(false, 1000f).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc limit 3")
+        start(false, 1000f).sql("select s.name, count(\"item_id\") from " + JOIN_SUPPLIER_TABLE_FULL_NAME + " s join " + JOIN_ITEM_TABLE_FULL_NAME + " i on s.\"supplier_id\" = i.\"supplier_id\" group by s.name order by count(\"item_id\"), s.name desc limit 3 offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixLimit(fetch=[3])\n" +
+                           "  PhoenixLimit(offset=[1], fetch=[3])\n" +
                            "    PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "      PhoenixServerAggregate(group=[{1}], EXPR$1=[COUNT()], isOrdered=[false])\n" +
                            "        PhoenixServerJoin(condition=[=($0, $2)], joinType=[inner])\n" +
@@ -701,9 +700,9 @@ public class CalciteIT extends BaseCalciteIT {
                            "          PhoenixServerProject(supplier_id=[$5])\n" +
                            "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n")
                 .resultIs(new Object[][] {
-                          {"S6", 1L},
                           {"S5", 1L},
-                          {"S2", 2L}})
+                          {"S2", 2L},
+                          {"S1", 2L}})
                 .close();
         
         start(false, 1000f).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc limit 3")
@@ -796,6 +795,134 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
     }
 
+    // PHOENIX CALCITE INTEGRATION : PHOENIX-2827
+    @Test public void testLimitOffset() throws Exception {
+        start(false, 1000f).sql(
+                "select organization_id, entity_id, a_string from aTable limit 5 offset 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixLimit(offset=[3], fetch=[5])\n" +
+                        "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                        "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                        { "00D300000000XHP", "00A423122312312", "a" },
+                        { "00D300000000XHP", "00B523122312312", "b" },
+                        { "00D300000000XHP", "00B623122312312", "b" },
+                        { "00D300000000XHP", "00B723122312312", "b" },
+                        { "00D300000000XHP", "00B823122312312", "b" }, })
+                .close();
+
+        start(false, 1000f).sql(
+                "select organization_id, entity_id, a_string from aTable limit 13 offset 12")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixLimit(offset=[12], fetch=[13])\n" +
+                        "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                        "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {})
+                .close();
+
+        start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string limit 2 offset 0")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
+                        "    PhoenixLimit(fetch=[2])\n" +
+                        "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
+                        "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIsSomeOf(2, new Object[][] {
+                        {4L, "a"},
+                        {4L, "b"},
+                        {1L, "c"}})
+                .close();
+
+        start(false, 1000f).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3 offset 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                        "    PhoenixLimit(offset=[3], fetch=[3])\n" +
+                        "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
+                        "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                        "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                        "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                        "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
+                .resultIsSomeOf(3, new Object[][] {
+                        { "0000000001", "T1", "0000000001", "S1" },
+                        { "0000000002", "T2", "0000000001", "S1" },
+                        { "0000000003", "T3", "0000000002", "S2" },
+                        { "0000000004", "T4", "0000000002", "S2" },
+                        { "0000000005", "T5", "0000000005", "S5" },
+                        { "0000000006", "T6", "0000000006", "S6" } })
+                .close();
+
+        start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 2 offset 2")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(X=[$0])\n" +
+                        "    PhoenixLimit(offset=[2], fetch=[2])\n" +
+                        "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
+                .resultIs(new Object[][] {{3}})
+                .close();
+
+        start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 3 offset 4")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(X=[$0])\n" +
+                        "    PhoenixLimit(offset=[4], fetch=[3])\n" +
+                        "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
+                .resultIs(new Object[][] {})
+                .close();
+    }
+
+    @Test public void testOffset() throws Exception {
+        start(false, 1000f).sql(
+                "select organization_id, entity_id, a_string from aTable offset 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixLimit(offset=[3])\n" +
+                        "    PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                        "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                        { "00D300000000XHP", "00A423122312312", "a" },
+                        { "00D300000000XHP", "00B523122312312", "b" },
+                        { "00D300000000XHP", "00B623122312312", "b" },
+                        { "00D300000000XHP", "00B723122312312", "b" },
+                        { "00D300000000XHP", "00B823122312312", "b" },
+                        { "00D300000000XHP", "00C923122312312", "c" }})
+                .close();
+
+        start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string offset 1")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
+                        "    PhoenixLimit(offset=[1])\n" +
+                        "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
+                        "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIsSomeOf(2, new Object[][] {
+                        {4L, "a"},
+                        {4L, "b"},
+                        {1L, "c"}})
+                .close();
+
+        start(false, 1000f).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" offset 7")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
+                        "    PhoenixLimit(offset=[7])\n" +
+                        "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
+                        "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
+                        "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
+                        "        PhoenixServerProject(supplier_id=[$0], NAME=[$1])\n" +
+                        "          PhoenixTableScan(table=[[phoenix, Join, SupplierTable]])\n")
+                .resultIs(new Object [][] {})
+                .close();
+
+        start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) offset 0")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(X=[$0])\n" +
+                        "    PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
+                .resultIs(new Object[][] {{1},{2},{3}})
+                .close();
+
+        start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) offset 3")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(X=[$0])\n" +
+                        "    PhoenixLimit(offset=[3])\n" +
+                        "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
+                .resultIs(new Object[][] {})
+                .close();
+    }
+
     @Ignore // CALCITE-1045
     @Test public void testScalarSubquery() throws Exception {
         start(false, 1000f).sql("select \"item_id\", name, (select max(quantity) sq \n"
@@ -874,22 +1001,20 @@ public class CalciteIT extends BaseCalciteIT {
                         {"00B823122312312"}})
                 .close();
         
-        start(false, 1000f).sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc limit 3")
+        start(false, 1000f).sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc limit 3 offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixLimit(fetch=[3])\n" +
+                           "  PhoenixLimit(offset=[1], fetch=[3])\n" +
                            "    PhoenixMergeSortUnion(all=[true])\n" +
-                           "      PhoenixLimit(fetch=[3])\n" +
-                           "        PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
-                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
-                           "      PhoenixLimit(fetch=[3])\n" +
-                           "        PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
-                           "          PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
-                           "            PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
+                           "      PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "        PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
+                           "      PhoenixServerSort(sort0=[$0], dir0=[DESC])\n" +
+                           "        PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2])\n" +
+                           "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'c')])\n")
                 .resultIs(new Object[][] {
-                        {"00C923122312312", "c"},
                         {"00A423122312312", "a"},
-                        {"00A323122312312", "a"}})
+                        {"00A323122312312", "a"},
+                        {"00A223122312312", "a"}})
                 .close();
         
         start(false, 1000f).sql("select entity_id, a_string from atable where a_string = 'a' union all select entity_id, a_string from atable where a_string = 'c' order by entity_id desc")

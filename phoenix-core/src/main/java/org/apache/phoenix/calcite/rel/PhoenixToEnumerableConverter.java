@@ -121,8 +121,8 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
                 return delegate.iterator(scanGrouper);
             }
             @Override
-            public QueryPlan limit(Integer limit) {
-                return delegate.limit(limit);
+            public QueryPlan limit(Integer limit, Integer offset) {
+                return delegate.limit(limit, offset);
             }
             @Override
             public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {

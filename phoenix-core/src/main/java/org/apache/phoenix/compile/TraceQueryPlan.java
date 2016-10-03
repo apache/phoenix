@@ -261,7 +261,7 @@ public class TraceQueryPlan implements QueryPlan {
     }
 
     @Override
-    public QueryPlan limit(Integer limit) {
+    public QueryPlan limit(Integer limit, Integer offset) {
         return this;
     }
 }
