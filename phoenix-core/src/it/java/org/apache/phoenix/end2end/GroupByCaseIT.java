@@ -451,32 +451,35 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     public void testGroupByWithAliasWithSameColumnName() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table test3 (pk integer primary key, col integer)";
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        String tableName3 = generateUniqueName();
+        String ddl = "create table " + tableName1 + " (pk integer primary key, col integer)";
         conn.createStatement().execute(ddl);
-        ddl = "create table test4 (pk integer primary key, col integer)";
+        ddl = "create table " + tableName2 + " (pk integer primary key, col integer)";
         conn.createStatement().execute(ddl);
-        ddl = "create table test5 (notPk integer primary key, col integer)";
+        ddl = "create table " + tableName3 + " (notPk integer primary key, col integer)";
         conn.createStatement().execute(ddl);
-        conn.createStatement().execute("UPSERT INTO test3 VALUES (1,2)");
-        conn.createStatement().execute("UPSERT INTO test4 VALUES (1,2)");
-        conn.createStatement().execute("UPSERT INTO test5 VALUES (1,2)");
-        conn.createStatement().executeQuery("select test3.pk as pk from test3 group by pk");
-        conn.createStatement().executeQuery("select test3.pk as pk from test3 group by test3.pk");
-        conn.createStatement().executeQuery("select test3.pk as pk from test3 as t group by t.pk");
-        conn.createStatement().executeQuery("select test3.col as pk from test3");
+        conn.createStatement().execute("UPSERT INTO " + tableName1 + " VALUES (1,2)");
+        conn.createStatement().execute("UPSERT INTO " + tableName2 + " VALUES (1,2)");
+        conn.createStatement().execute("UPSERT INTO " + tableName3 + " VALUES (1,2)");
+        conn.createStatement().executeQuery("select " + tableName1 + ".pk as pk from " + tableName1 + " group by pk");
+        conn.createStatement().executeQuery("select " + tableName1 + ".pk as pk from " + tableName1 + " group by " + tableName1 + ".pk");
+        conn.createStatement().executeQuery("select " + tableName1 + ".pk as pk from " + tableName1 + " as t group by t.pk");
+        conn.createStatement().executeQuery("select " + tableName1 + ".col as pk from " + tableName1);
         conn.createStatement()
-                .executeQuery("select test3.pk as pk from test3 join test5 on (test3.pk=test5.notPk) group by pk");
+                .executeQuery("select " + tableName1 + ".pk as pk from " + tableName1 + " join " + tableName3 + " on (" + tableName1 + ".pk=" + tableName3 + ".notPk) group by pk");
         try {
-            conn.createStatement().executeQuery("select test3.col as pk from test3 group by pk");
+            conn.createStatement().executeQuery("select " + tableName1 + ".col as pk from " + tableName1 + " group by pk");
             fail();
         } catch (AmbiguousColumnException e) {}
         try {
-            conn.createStatement().executeQuery("select col as pk from test3 group by pk");
+            conn.createStatement().executeQuery("select col as pk from " + tableName1 + " group by pk");
             fail();
         } catch (AmbiguousColumnException e) {}
         try {
             conn.createStatement()
-                    .executeQuery("select test3.pk as pk from test3 join test4 on (test3.pk=test4.pk) group by pk");
+                    .executeQuery("select " + tableName1 + ".pk as pk from " + tableName1 + " join " + tableName2 + " on (" + tableName1 + ".pk=" + tableName2 + ".pk) group by pk");
             fail();
         } catch (AmbiguousColumnException e) {}
         conn.close();
