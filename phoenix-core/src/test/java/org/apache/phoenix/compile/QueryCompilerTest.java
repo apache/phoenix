@@ -2257,6 +2257,22 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testNegativeGuidePostWidth() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            try {
+                conn.createStatement().execute(
+                                "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) GUIDE_POST_WIDTH = -1");
+                fail();
+            } catch (SQLException e) {
+                assertEquals("Unexpected Exception",
+                        SQLExceptionCode.PARSER_ERROR
+                                .getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
     private static void assertFamilies(Scan s, String... families) {
         assertEquals(families.length, s.getFamilyMap().size());
         for (String fam : families) {

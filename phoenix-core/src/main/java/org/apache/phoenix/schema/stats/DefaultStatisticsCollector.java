@@ -21,12 +21,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
@@ -35,11 +40,14 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,24 +61,21 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     private static final Logger logger = LoggerFactory.getLogger(DefaultStatisticsCollector.class);
     private final Map<ImmutableBytesPtr, Pair<Long, GuidePostsInfoBuilder>> guidePostsInfoWriterMap = Maps.newHashMap();
     private final StatisticsWriter statsWriter;
-    private final Pair<Long, GuidePostsInfoBuilder> cachedGps;
+    private final Pair<Long, GuidePostsInfoBuilder> cachedGuidePosts;
+    private final byte[] guidePostWidthBytes;
+    private final byte[] guidePostPerRegionBytes;
+    // Where to look for GUIDE_POST_WIDTH in SYSTEM.CATALOG
+    private final byte[] ptableKey;
+    private final RegionCoprocessorEnvironment env;
 
-    private long guidepostDepth;
+    private long guidePostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
 
     DefaultStatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family,
             byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
-        Configuration config = env.getConfiguration();
-        int guidepostPerRegion = gp_per_region_bytes == null
-                ? config.getInt(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
-                        QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION)
-                : PInteger.INSTANCE.getCodec().decodeInt(gp_per_region_bytes, 0, SortOrder.getDefault());
-        long guidepostWidth = gp_width_bytes == null
-                ? config.getLong(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
-                        QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES)
-                : PLong.INSTANCE.getCodec().decodeInt(gp_width_bytes, 0, SortOrder.getDefault());
-        this.guidepostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
-                env.getRegion().getTableDesc());
+        this.env = env;
+        this.guidePostWidthBytes = gp_width_bytes;
+        this.guidePostPerRegionBytes = gp_per_region_bytes;
         // Provides a means of clients controlling their timestamps to not use current time
         // when background tasks are updating stats. Instead we track the max timestamp of
         // the cells and use that.
@@ -80,16 +85,64 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
         if (!useCurrentTime) {
             clientTimeStamp = StatisticsCollector.NO_TIMESTAMP;
         }
+        String pName = tableName;
+        // For view index, get GUIDE_POST_WIDTH from data physical table
+        // since there's no row representing those in SYSTEM.CATALOG.
+        if (MetaDataUtil.isViewIndex(tableName)) {
+            pName = MetaDataUtil.getViewIndexUserTableName(tableName);
+        }
+        ptableKey = SchemaUtil.getTableKeyFromFullName(pName);
         // Get the stats table associated with the current table on which the CP is
         // triggered
         this.statsWriter = StatisticsWriter.newWriter(env, tableName, clientTimeStamp);
         // in a compaction we know the one family ahead of time
         if (family != null) {
             ImmutableBytesPtr cfKey = new ImmutableBytesPtr(family);
-            cachedGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
-            guidePostsInfoWriterMap.put(cfKey, cachedGps);
+            cachedGuidePosts = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
+            guidePostsInfoWriterMap.put(cfKey, cachedGuidePosts);
         } else {
-            cachedGps = null;
+            cachedGuidePosts = null;
+        }
+    }
+    
+    private void initGuidepostDepth() throws IOException {
+        // First check is if guidepost info set on statement itself
+        if (guidePostPerRegionBytes != null || guidePostWidthBytes != null) {
+            int guidepostPerRegion = 0;
+            long guidepostWidth = QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES;
+            if (guidePostPerRegionBytes != null) {
+                guidepostPerRegion = PInteger.INSTANCE.getCodec().decodeInt(guidePostPerRegionBytes, 0, SortOrder.getDefault());
+            }
+            if (guidePostWidthBytes != null) {
+                guidepostWidth = PLong.INSTANCE.getCodec().decodeInt(guidePostWidthBytes, 0, SortOrder.getDefault());
+            }
+            this.guidePostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
+                    env.getRegion().getTableDesc());
+        } else {
+            // Next check for GUIDE_POST_WIDTH on table
+            HTableInterface htable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
+            Get get = new Get(ptableKey);
+            get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+            Result result = htable.get(get);
+            long guidepostWidth = 0;
+            if (!result.isEmpty()) {
+                Cell cell = result.listCells().get(0);
+                guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
+            }
+            if (guidepostWidth > 0) {
+                this.guidePostDepth = guidepostWidth;
+            } else {
+                // Last use global config value
+                Configuration config = env.getConfiguration();
+                this.guidePostDepth = StatisticsUtil.getGuidePostDepth(
+                        config.getInt(
+                            QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB,
+                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_PER_REGION),
+                        config.getLong(
+                            QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB,
+                            QueryServicesOptions.DEFAULT_STATS_GUIDEPOST_WIDTH_BYTES),
+                        env.getRegion().getTableDesc());
+            }
         }
     }
 
@@ -114,28 +167,32 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
             commitStats(mutations);
         } catch (IOException e) {
             logger.error("Unable to commit new stats", e);
-        } finally {
-            clear();
         }
     }
 
     private void writeStatsToStatsTable(final HRegion region, boolean delete, List<Mutation> mutations, long currentTime)
             throws IOException {
         try {
+            Set<ImmutableBytesPtr> fams = guidePostsInfoWriterMap.keySet();
             // update the statistics table
             // Delete statistics for a region if no guidepost is collected for that region during UPDATE STATISTICS
             // This will not impact a stats collection of single column family during compaction as
             // guidePostsInfoWriterMap cannot be empty in this case.
-            if (cachedGps == null) {
+            if (cachedGuidePosts == null) {
+                boolean collectingForLocalIndex = !fams.isEmpty() && MetaDataUtil.isLocalIndexFamily(fams.iterator().next());
                 for (byte[] fam : region.getStores().keySet()) {
                     ImmutableBytesPtr cfKey = new ImmutableBytesPtr(fam);
+                    boolean isLocalIndexStore = MetaDataUtil.isLocalIndexFamily(cfKey);
+                    if (isLocalIndexStore != collectingForLocalIndex) {
+                        continue;
+                    }
                     if (!guidePostsInfoWriterMap.containsKey(cfKey)) {
                         Pair<Long, GuidePostsInfoBuilder> emptyGps = new Pair<Long, GuidePostsInfoBuilder>(0l, new GuidePostsInfoBuilder());
                         guidePostsInfoWriterMap.put(cfKey, emptyGps);
                     }
                 }
             }
-            for (ImmutableBytesPtr fam : guidePostsInfoWriterMap.keySet()) {
+            for (ImmutableBytesPtr fam : fams) {
                 if (delete) {
                     if (logger.isDebugEnabled()) {
                         logger.debug("Deleting the stats for the region " + region.getRegionInfo());
@@ -162,6 +219,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
      * 
      * @param results
      *            next batch of {@link KeyValue}s
+     * @throws IOException 
      */
     @Override
     public void collectStatistics(final List<Cell> results) {
@@ -171,7 +229,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
             KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
             maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
             Pair<Long, GuidePostsInfoBuilder> gps;
-            if (cachedGps == null) {
+            if (cachedGuidePosts == null) {
                 ImmutableBytesPtr cfKey = new ImmutableBytesPtr(kv.getFamilyArray(), kv.getFamilyOffset(),
                         kv.getFamilyLength());
                 gps = guidePostsInfoWriterMap.get(cfKey);
@@ -185,16 +243,16 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                     gps.getSecond().incrementRowCount();
                 }
             } else {
-                gps = cachedGps;
+                gps = cachedGuidePosts;
                 if (incrementRow) {
-                    cachedGps.getSecond().incrementRowCount();
+                    cachedGuidePosts.getSecond().incrementRowCount();
                     incrementRow = false;
                 }
             }
             int kvLength = kv.getLength();
             long byteCount = gps.getFirst() + kvLength;
             gps.setFirst(byteCount);
-            if (byteCount >= guidepostDepth) {
+            if (byteCount >= guidePostDepth) {
                 ImmutableBytesWritable row = new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
                 if (gps.getSecond().addGuidePosts(row, byteCount, gps.getSecond().getRowCount())) {
                     gps.setFirst(0l);
@@ -221,9 +279,10 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public void clear() {
+    public void init() throws IOException {
         this.guidePostsInfoWriterMap.clear();
         maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+        initGuidepostDepth();
     }
 
     @Override

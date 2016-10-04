@@ -38,7 +38,11 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -59,7 +63,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         if (isNamespaceMapped) {
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
         }
-        String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
+        String ddl = "CREATE TABLE " + SchemaUtil.getTableName(schemaName, tableName) + " (t_id VARCHAR NOT NULL,\n" +
                 "k1 VARCHAR NOT NULL,\n" +
                 "k2 INTEGER NOT NULL,\n" +
                 "v1 VARCHAR,\n" +
@@ -93,30 +97,31 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
         String schemaName = generateUniqueName();
-        String tableName = schemaName + "." + generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         String indexName = "IND_" + generateUniqueName();
-        String VIEW_NAME = "VIEW_" + generateUniqueName();
-        String viewName = schemaName + "." + VIEW_NAME;
+        String viewName = "VIEW_" + generateUniqueName();
+        String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
 
         createBaseTable(schemaName, tableName, false, null, null);
         Connection conn1 = getConnection();
         Connection conn2 = getConnection();
-        conn1.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
-        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + " (v1)");
-        conn2.createStatement().executeQuery("SELECT * FROM " + tableName).next();
-        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, isNamespaceMapped);
-        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
-        String seqName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, !isNamespaceMapped);
-        String seqSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), !isNamespaceMapped);
+        conn1.createStatement().execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+        conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullViewName + " (v1)");
+        conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName).next();
+        String sequenceName = getViewIndexSequenceName(PNameFactory.newName(fullTableName), null, isNamespaceMapped);
+        String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(fullTableName), isNamespaceMapped);
+        String seqName = getViewIndexSequenceName(PNameFactory.newName(fullTableName), null, !isNamespaceMapped);
+        String seqSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(fullTableName), !isNamespaceMapped);
         verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
         verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
-        conn1.createStatement().execute("CREATE INDEX " + indexName + "_2 ON " + viewName + " (v1)");
+        conn1.createStatement().execute("CREATE INDEX " + indexName + "_2 ON " + fullViewName + " (v1)");
         verifySequenceValue(null, sequenceName, sequenceSchemaName, -32766);
         // Check other format of sequence is not there as Sequences format is different for views/indexes created on
         // table which are namespace mapped and which are not.
         verifySequenceNotExists(null, seqName, seqSchemaName);
-        conn1.createStatement().execute("DROP VIEW " + viewName);
-        conn1.createStatement().execute("DROP TABLE "+ tableName);
+        conn1.createStatement().execute("DROP VIEW " + fullViewName);
+        conn1.createStatement().execute("DROP TABLE "+ fullTableName);
         
         verifySequenceNotExists(null, sequenceName, sequenceSchemaName);
     }
@@ -126,11 +131,13 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName =  generateUniqueName();
         String indexName = "IND_" + generateUniqueName();
-        String VIEW_NAME = "VIEW_" + generateUniqueName();
+        String viewName = "VIEW_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        
         createBaseTable(schemaName, tableName, true, null, null);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
-                "UPSERT INTO " + tableName
+                "UPSERT INTO " + fullTableName
                 + " VALUES(?,?,?,?,?)");
         stmt.setString(1, "10");
         stmt.setString(2, "a");
@@ -144,29 +151,60 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         stmt.setString(4, "x2");
         stmt.setInt(5, 200);
         stmt.execute();
+        stmt.setString(1, "30");
+        stmt.setString(2, "c");
+        stmt.setInt(3, 3);
+        stmt.setString(4, "x3");
+        stmt.setInt(5, 300);
+        stmt.execute();
+        stmt.setString(1, "40");
+        stmt.setString(2, "d");
+        stmt.setInt(3, 4);
+        stmt.setString(4, "x4");
+        stmt.setInt(5, 400);
+        stmt.execute();
         conn.commit();
-        conn.close();
         
-        Properties props  = new Properties();
+        Properties props  = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         props.setProperty("TenantId", "10");
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
-        conn1.createStatement().execute("CREATE VIEW " + VIEW_NAME
-                + " AS select * from " + tableName);
+        conn1.createStatement().execute("CREATE VIEW " + viewName
+                + " AS select * from " + fullTableName);
         conn1.createStatement().execute("CREATE LOCAL INDEX "
                 + indexName + " ON "
-                + VIEW_NAME + "(v2)");
+                + viewName + "(v2)");
         conn1.commit();
         
-        String sql = "SELECT * FROM " + VIEW_NAME + " WHERE v2 = 100";
+        String sql = "SELECT * FROM " + viewName + " WHERE v2 = 100";
         ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
         assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'10',100]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + SchemaUtil.getPhysicalHBaseTableName(fullTableName, isNamespaceMapped, PTableType.TABLE) + " [1,'10',100]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
         rs = conn1.prepareStatement(sql).executeQuery();
         assertTrue(rs.next());
         assertFalse(rs.next());
+        
+//        TestUtil.analyzeTable(conn, fullTableName);
+//        List<KeyRange> guideposts = TestUtil.getAllSplits(conn, fullTableName);
+//        assertEquals(1, guideposts.size());
+//        assertEquals(KeyRange.EVERYTHING_RANGE, guideposts.get(0));
+//        
+//        conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET GUIDE_POST_WIDTH=20");
+//        
+//        TestUtil.analyzeTable(conn, fullTableName);
+//        guideposts = TestUtil.getAllSplits(conn, fullTableName);
+//        assertEquals(5, guideposts.size());
+//
+//        // Confirm that when view index used, the GUIDE_POST_WIDTH from the data physical table
+//        // was used
+//        sql = "SELECT * FROM " + viewName + " WHERE v2 > 100";
+//        stmt = conn1.prepareStatement(sql);
+//        stmt.executeQuery();
+//        QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+//        assertEquals(5, plan.getSplits().size());
     }
+    
     
     @Test
     public void testCreatingIndexOnGlobalView() throws Exception {
@@ -184,6 +222,30 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             stmt.setString(4, "KV1");
             stmt.setString(5, "KV3");
             stmt.executeUpdate();
+            stmt.setString(1, "tenantId");
+            stmt.setDate(2, new Date(100));
+            stmt.setInt(3, 2);
+            stmt.setString(4, "KV4");
+            stmt.setString(5, "KV5");
+            stmt.executeUpdate();
+            stmt.setString(1, "tenantId");
+            stmt.setDate(2, new Date(100));
+            stmt.setInt(3, 3);
+            stmt.setString(4, "KV6");
+            stmt.setString(5, "KV7");
+            stmt.executeUpdate();
+            stmt.setString(1, "tenantId");
+            stmt.setDate(2, new Date(100));
+            stmt.setInt(3, 4);
+            stmt.setString(4, "KV8");
+            stmt.setString(5, "KV9");
+            stmt.executeUpdate();
+            stmt.setString(1, "tenantId");
+            stmt.setDate(2, new Date(100));
+            stmt.setInt(3, 5);
+            stmt.setString(4, "KV10");
+            stmt.setString(5, "KV11");
+            stmt.executeUpdate();
             conn.commit();
             
             // Verify that query against the global view index works
@@ -196,6 +258,27 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("KV1", rs.getString(1));
             assertFalse(rs.next());
+            
+//            TestUtil.analyzeTable(conn, baseTable);
+//            List<KeyRange> guideposts = TestUtil.getAllSplits(conn, baseTable);
+//            assertEquals(1, guideposts.size());
+//            assertEquals(KeyRange.EVERYTHING_RANGE, guideposts.get(0));
+//            
+//            conn.createStatement().execute("ALTER TABLE " + baseTable + " SET GUIDE_POST_WIDTH=20");
+//            
+//            TestUtil.analyzeTable(conn, baseTable);
+//            guideposts = TestUtil.getAllSplits(conn, baseTable);
+//            assertEquals(6, guideposts.size());
+//
+//            // Confirm that when view index used, the GUIDE_POST_WIDTH from the data physical table
+//            // was used
+//            stmt = conn.prepareStatement("SELECT KV1 FROM  " + globalView + " WHERE PK3 = ? AND KV3 >= ?");
+//            stmt.setInt(1, 1);
+//            stmt.setString(2, "KV3");
+//            rs = stmt.executeQuery();
+//            plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+//            assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
+//            assertEquals(6, plan.getSplits().size());
         }
     }
 }

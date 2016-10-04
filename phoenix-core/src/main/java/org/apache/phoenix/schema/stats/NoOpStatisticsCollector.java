@@ -59,8 +59,8 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
         return delegate;
     }
 
-    @Override
-    public void clear() {
+    @Override 
+    public void init() {
         // No-op
     }
 

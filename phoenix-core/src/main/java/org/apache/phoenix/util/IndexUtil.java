@@ -489,7 +489,7 @@ public class IndexUtil {
                 joinResult = dataRegion.get(get);
             } else {
                 TableName dataTable =
-                        TableName.valueOf(MetaDataUtil.getUserTableName(c.getEnvironment()
+                        TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(c.getEnvironment()
                                 .getRegion().getTableDesc().getNameAsString()));
                 HTableInterface table = null;
                 try {

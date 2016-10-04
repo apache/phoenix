@@ -23,20 +23,24 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -401,12 +405,29 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testAvgGroupByOrderPreserving() throws Exception {
+    public void testAvgGroupByOrderPreservingWithStats() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
-
-        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE " + tableName + " (k1 char(1) not null, k2 integer not null, constraint pk primary key (k1,k2)) split on (?,?,?)");
+        initAvgGroupTable(conn, tableName, " GUIDE_POST_WIDTH=20 ");
+        testAvgGroupByOrderPreserving(conn, tableName, 13);
+        conn.createStatement().execute("ALTER TABLE " + tableName + " SET GUIDE_POST_WIDTH=" + 100);
+        testAvgGroupByOrderPreserving(conn, tableName, 6);
+        conn.createStatement().execute("ALTER TABLE " + tableName + " SET GUIDE_POST_WIDTH=null");
+        testAvgGroupByOrderPreserving(conn, tableName, 4);
+    }
+    
+    @Test
+    public void testAvgGroupByOrderPreservingWithNoStats() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        initAvgGroupTable(conn, tableName, "");
+        testAvgGroupByOrderPreserving(conn, tableName, 4);
+    }
+    
+    private void initAvgGroupTable(Connection conn, String tableName, String tableProps) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement("CREATE TABLE " + tableName + " (k1 char(1) not null, k2 integer not null, constraint pk primary key (k1,k2)) " + tableProps + " split on (?,?,?)");
         stmt.setBytes(1, ByteUtil.concat(PChar.INSTANCE.toBytes("a"), PInteger.INSTANCE.toBytes(3)));
         stmt.setBytes(2, ByteUtil.concat(PChar.INSTANCE.toBytes("j"), PInteger.INSTANCE.toBytes(3)));
         stmt.setBytes(3, ByteUtil.concat(PChar.INSTANCE.toBytes("n"), PInteger.INSTANCE.toBytes(3)));
@@ -425,6 +446,9 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('n', 3)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('n', 2)");
         conn.commit();
+    }
+    
+    private void testAvgGroupByOrderPreserving(Connection conn, String tableName, int nGuidePosts) throws SQLException, IOException {
         String query = "SELECT k1,avg(k2) FROM " + tableName + " GROUP BY k1";
         ResultSet rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
@@ -445,6 +469,9 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName + "\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY\n" + 
                 "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]", QueryUtil.getExplainPlan(rs));
+        TestUtil.analyzeTable(conn, tableName);
+        List<KeyRange> splits = TestUtil.getAllSplits(conn, tableName);
+        assertEquals(nGuidePosts, splits.size());
     }
     
     @Test

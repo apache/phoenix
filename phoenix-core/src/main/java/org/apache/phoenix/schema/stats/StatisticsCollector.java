@@ -49,6 +49,7 @@ public interface StatisticsCollector extends Closeable {
     /**
      * Collect statistics for the given list of cells. This method can be called multiple times
      * during collection of statistics.
+     * @throws IOException 
      */
     void collectStatistics(List<Cell> results);
 
@@ -59,9 +60,10 @@ public interface StatisticsCollector extends Closeable {
             InternalScanner delegate) throws IOException;
 
     /**
-     * Clear all statistics information that has been collected.
+     * Called before beginning the collection of statistics through {@link #collectStatistics(List)}
+     * @throws IOException 
      */
-    void clear();
+    void init() throws IOException;
 
     /**
      * Retrieve the calculated guide post info for the given column family.
