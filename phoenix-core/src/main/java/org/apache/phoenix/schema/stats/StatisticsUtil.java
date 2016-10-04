@@ -20,7 +20,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedMap;
@@ -30,7 +29,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
@@ -99,7 +97,7 @@ public class StatisticsUtil {
         return rowKey;
     }
 
-    public static byte[] getKey(byte[] table, ImmutableBytesPtr fam) {
+    private static byte[] getKey(byte[] table, ImmutableBytesPtr fam) {
         // always starts with the source table and column family
         byte[] rowKey = new byte[table.length + fam.getLength() + 1];
         int offset = 0;
@@ -111,11 +109,7 @@ public class StatisticsUtil {
         return rowKey;
     }
 
-    public static byte[] copyRow(KeyValue kv) {
-        return Arrays.copyOfRange(kv.getRowArray(), kv.getRowOffset(), kv.getRowOffset() + kv.getRowLength());
-    }
-
-    public static byte[] getAdjustedKey(byte[] key, byte[] tableNameBytes, ImmutableBytesPtr cf, boolean nextKey) {
+    private static byte[] getAdjustedKey(byte[] key, byte[] tableNameBytes, ImmutableBytesPtr cf, boolean nextKey) {
         if (Bytes.compareTo(key, ByteUtil.EMPTY_BYTE_ARRAY) != 0) { return getRowKey(tableNameBytes, cf, key); }
         key = ByteUtil.concat(getKey(tableNameBytes, cf), QueryConstants.SEPARATOR_BYTE_ARRAY);
         if (nextKey) {

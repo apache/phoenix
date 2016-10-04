@@ -77,6 +77,13 @@ public enum TableProperty {
 	},
 	
 	APPEND_ONLY_SCHEMA(PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, true),
+    GUIDE_POSTS_WIDTH(PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH, true, false) {
+        @Override
+        public Object getValue(Object value) {
+            return value == null ? null : ((Number) value).longValue();
+        }       
+	    
+	},
     ;
 
 	private final String propertyName;

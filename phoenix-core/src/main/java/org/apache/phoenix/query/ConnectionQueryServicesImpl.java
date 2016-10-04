@@ -36,6 +36,7 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2257,6 +2258,41 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     }
 
+    private PhoenixConnection removeNotNullConstraint(PhoenixConnection oldMetaConnection, String schemaName, String tableName, long timestamp, String columnName) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+        // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
+        PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
+        SQLException sqlE = null;
+        try {
+            metaConnection.createStatement().executeUpdate("UPSERT INTO " + SYSTEM_STATS_NAME + " (" + 
+                    PhoenixDatabaseMetaData.TENANT_ID + "," + PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
+                    PhoenixDatabaseMetaData.TABLE_NAME + "," + PhoenixDatabaseMetaData.COLUMN_NAME + "," +
+                    PhoenixDatabaseMetaData.COLUMN_FAMILY + "," + PhoenixDatabaseMetaData.NULLABLE + ") VALUES (" +
+                    "null," + schemaName + "," + tableName + "," + columnName + "," + QueryConstants.DEFAULT_COLUMN_FAMILY + "," + 
+                    ResultSetMetaData.columnNullable + ")");
+            metaConnection.commit();
+        } catch (NewerTableAlreadyExistsException e) {
+            logger.warn("Table already modified at this timestamp, so assuming column already nullable: " + columnName);
+        } catch (SQLException e) {
+            logger.warn("Add column failed due to:" + e);
+            sqlE = e;
+        } finally {
+            try {
+                oldMetaConnection.close();
+            } catch (SQLException e) {
+                if (sqlE != null) {
+                    sqlE.setNextException(e);
+                } else {
+                    sqlE = e;
+                }
+            }
+            if (sqlE != null) {
+                throw sqlE;
+            }
+        }
+        return metaConnection;
+    }
     /**
      * This closes the passed connection.
      */
@@ -2474,7 +2510,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
                                     && table.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME) != null) {
                                 table.setValue(MetaDataUtil.PARENT_TABLE_KEY,
-                                        MetaDataUtil.getUserTableName(table.getNameAsString()));
+                                        MetaDataUtil.getLocalIndexUserTableName(table.getNameAsString()));
                                 // Explicitly disable, modify and enable the table to ensure
                                 // co-location of data and index regions. If we just modify the
                                 // table descriptor when online schema change enabled may reopen 
@@ -2620,6 +2656,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
                     clearCache();
                 }
+                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
+                    metaConnection = addColumnsIfNotExists(
+                            metaConnection,
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
+                            PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + " "
+                                    + PLong.INSTANCE.getSqlTypeName());
+                    ConnectionQueryServicesImpl.this.removeTable(null,
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0);
+                    clearCache();
+                }
             }
 
 
@@ -2676,7 +2724,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 metaConnection.createStatement().executeUpdate(
                         QueryConstants.CREATE_STATS_TABLE_METADATA);
-            } catch (NewerTableAlreadyExistsException ignore) {} catch (TableAlreadyExistsException e) {
+            } catch (NewerTableAlreadyExistsException ignore) {
+                
+            } catch (TableAlreadyExistsException e) {
                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
                     metaConnection = addColumnsIfNotExists(
@@ -2685,6 +2735,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
                             PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
                                     + PLong.INSTANCE.getSqlTypeName());
+                }
+                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
+                    // The COLUMN_FAMILY column should be nullable as we create a row in it without
+                    // any column family to mark when guideposts were last collected.
+                    metaConnection = removeNotNullConstraint(metaConnection,
+                            PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                            PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
+                            PhoenixDatabaseMetaData.COLUMN_FAMILY);
+                    ConnectionQueryServicesImpl.this.removeTable(null,
+                            PhoenixDatabaseMetaData.SYSTEM_STATS_NAME, null,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0);
+                    clearCache();
                 }
             }
             try {

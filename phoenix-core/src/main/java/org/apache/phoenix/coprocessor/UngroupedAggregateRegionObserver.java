@@ -49,10 +49,8 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.RegionTooBusyException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -113,14 +111,13 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
+import org.apache.tephra.TxConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
-import org.apache.tephra.TxConstants;
 
 
 /**
@@ -229,9 +226,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         s = super.preScannerOpen(e, scan, s);
         if (ScanUtil.isAnalyzeTable(scan)) {
-            if (!ScanUtil.isLocalIndex(scan)) {
-                scan.getFamilyMap().clear();
-            }
+//            if (!ScanUtil.isLocalIndex(scan)) {
+//                scan.getFamilyMap().clear();
+//            }
+//            scan.getFamilyMap().clear();
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
@@ -815,6 +813,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             long rowCount = 0;
             try {
                 if (!compactionRunning) {
+                    stats.init();
                     synchronized (innerScanner) {
                         do {
                             List<Cell> results = new ArrayList<Cell>();
