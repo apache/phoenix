@@ -82,7 +82,7 @@ public class PostDDLCompiler {
         scan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, QueryConstants.TRUE);
     }
 
-    public MutationPlan compile(final List<TableRef> tableRefs, final byte[] emptyCF, final byte[] projectCF, final List<PColumn> deleteList,
+    public MutationPlan compile(final List<TableRef> tableRefs, final byte[] emptyCF, final List<byte[]> projectCFs, final List<PColumn> deleteList,
             final long timestamp) throws SQLException {
         PhoenixStatement statement = new PhoenixStatement(connection);
         final StatementContext context = new StatementContext(
@@ -244,12 +244,14 @@ public class PostDDLCompiler {
                                 }
                             }
                             List<byte[]> columnFamilies = Lists.newArrayListWithExpectedSize(tableRef.getTable().getColumnFamilies().size());
-                            if (projectCF == null) {
+                            if (projectCFs == null) {
                                 for (PColumnFamily family : tableRef.getTable().getColumnFamilies()) {
                                     columnFamilies.add(family.getName().getBytes());
                                 }
                             } else {
-                                columnFamilies.add(projectCF);
+                                for (byte[] projectCF : projectCFs) {
+                                    columnFamilies.add(projectCF);
+                                }
                             }
                             // Need to project all column families into the scan, since we haven't yet created our empty key value
                             RowProjector projector = ProjectionCompiler.compile(context, SelectStatement.COUNT_ONE, GroupBy.EMPTY_GROUP_BY);

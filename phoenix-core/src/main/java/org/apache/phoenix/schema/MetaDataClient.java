@@ -42,6 +42,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
@@ -256,8 +257,9 @@ public class MetaDataClient {
                     UPDATE_CACHE_FREQUENCY + "," +
                     IS_NAMESPACE_MAPPED + "," +
                     AUTO_PARTITION_SEQ +  "," +
-                    APPEND_ONLY_SCHEMA +
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    APPEND_ONLY_SCHEMA + "," +
+                    GUIDE_POSTS_WIDTH + 
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -993,30 +995,20 @@ public class MetaDataClient {
             // If analyzing the indexes of a multi-tenant table or a table with view indexes
             // then analyze all of those indexes too.
             if (table.getType() != PTableType.VIEW) {
-                List<PName> names = Lists.newArrayListWithExpectedSize(2);
-                final List<PName> physicalNames = Lists.newArrayListWithExpectedSize(2);
                 if (table.isMultiTenant() || MetaDataUtil.hasViewIndexTable(connection, table.getPhysicalName())) {
-                    names.add(PNameFactory.newName(SchemaUtil.getTableName(
-                            MetaDataUtil.getViewIndexSchemaName(table.getSchemaName().getString()),
-                            MetaDataUtil.getViewIndexTableName(table.getTableName().getString()))));
-                    physicalNames.add(PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes())));
-                }
-                if (MetaDataUtil.hasLocalIndexTable(connection, table.getPhysicalName())) {
-                    names.add(PNameFactory.newName(SchemaUtil.getTableName(
-                            MetaDataUtil.getLocalIndexSchemaName(table.getSchemaName().getString()),
-                            MetaDataUtil.getLocalIndexTableName(table.getTableName().getString()))));
-                    physicalNames.add(PNameFactory.newName(MetaDataUtil.getLocalIndexPhysicalName(table.getPhysicalName().getBytes())));
-                }
-                int i = 0;
-                for (final PName name : names) {
-                    final int index = i++;
+                    final PName physicalName = PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(table.getPhysicalName().getBytes()));
                     PTable indexLogicalTable = new DelegateTable(table) {
                         @Override
                         public PName getPhysicalName() {
-                            return physicalNames.get(index);
+                            return physicalName;
                         }
                     };
-                    rowCount += updateStatisticsInternal(name, indexLogicalTable, updateStatisticsStmt.getProps());
+                    rowCount += updateStatisticsInternal(physicalName, indexLogicalTable, updateStatisticsStmt.getProps());
+                }
+                PName physicalName = table.getPhysicalName();
+                List<byte[]> localCFs = MetaDataUtil.getLocalIndexColumnFamilies(connection, physicalName.getBytes());
+                if (!localCFs.isEmpty()) {
+                    rowCount += updateStatisticsInternal(physicalName, table, updateStatisticsStmt.getProps(), localCFs);
                 }
             }
         }
@@ -1030,6 +1022,10 @@ public class MetaDataClient {
     }
 
     private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps) throws SQLException {
+        return updateStatisticsInternal(physicalName, logicalTable, statsProps, null);
+    }
+    
+    private long updateStatisticsInternal(PName physicalName, PTable logicalTable, Map<String, Object> statsProps, List<byte[]> cfs) throws SQLException {
         ReadOnlyProps props = connection.getQueryServices().getProps();
         final long msMinBetweenUpdates = props
                 .getLong(QueryServices.MIN_STATS_UPDATE_FREQ_MS_ATTRIB,
@@ -1063,7 +1059,7 @@ public class MetaDataClient {
                 }
             };
             TableRef tableRef = new TableRef(null, nonTxnLogicalTable, clientTimeStamp, false);
-            MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null, clientTimeStamp);
+            MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, cfs, null, clientTimeStamp);
             Scan scan = plan.getContext().getScan();
             scan.setCacheBlocks(false);
             scan.setAttribute(ANALYZE_TABLE, TRUE_BYTES);
@@ -1764,6 +1760,7 @@ public class MetaDataClient {
                 updateCacheFrequency = updateCacheFrequencyProp;
             }
             String autoPartitionSeq = (String) TableProperty.AUTO_PARTITION_SEQ.getValue(tableProps);
+            Long guidePostWidth = (Long) TableProperty.GUIDE_POSTS_WIDTH.getValue(tableProps);
 
             Boolean storeNullsProp = (Boolean) TableProperty.STORE_NULLS.getValue(tableProps);
             if (storeNullsProp == null) {
@@ -2230,6 +2227,11 @@ public class MetaDataClient {
                 tableUpsert.setString(23, autoPartitionSeq);
             }
             tableUpsert.setBoolean(24, isAppendOnlySchema);
+            if (guidePostWidth == null) {
+                tableUpsert.setNull(25, Types.BIGINT);                
+            } else {
+                tableUpsert.setLong(25, guidePostWidth);
+            }
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -2631,11 +2633,12 @@ public class MetaDataClient {
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional, Long updateCacheFrequency) throws SQLException {
-        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null);
+        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null, -1L);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
-            Boolean isTransactional, Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL, Boolean isMultiTenant, Boolean storeNulls)
+            Boolean isTransactional, Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
+            Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -2673,6 +2676,9 @@ public class MetaDataClient {
         if (updateCacheFrequency != null) {
             mutateLongProperty(tenantId, schemaName, tableName, UPDATE_CACHE_FREQUENCY, updateCacheFrequency);
         }
+        if (guidePostWidth == null || guidePostWidth >= 0) {
+            mutateLongProperty(tenantId, schemaName, tableName, GUIDE_POSTS_WIDTH, guidePostWidth);
+        }
         return seqNum;
     }
 
@@ -2694,7 +2700,7 @@ public class MetaDataClient {
     }
 
     private void mutateLongProperty(String tenantId, String schemaName, String tableName,
-            String propertyName, long propertyValue) throws SQLException {
+            String propertyName, Long propertyValue) throws SQLException {
         String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                 TENANT_ID + "," +
                 TABLE_SCHEM + "," +
@@ -2705,7 +2711,11 @@ public class MetaDataClient {
             tableBoolUpsert.setString(1, tenantId);
             tableBoolUpsert.setString(2, schemaName);
             tableBoolUpsert.setString(3, tableName);
-            tableBoolUpsert.setLong(4, propertyValue);
+            if (propertyValue == null) {
+                tableBoolUpsert.setNull(4, Types.BIGINT);
+            } else {
+                tableBoolUpsert.setLong(4, propertyValue);
+            }
             tableBoolUpsert.execute();
         }
     }
@@ -2733,6 +2743,7 @@ public class MetaDataClient {
             Boolean storeNullsProp = null;
             Boolean isTransactionalProp = null;
             Long updateCacheFrequencyProp = null;
+            Long guidePostWidth = -1L;
 
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
             List<ColumnDef> columnDefs = null;
@@ -2791,6 +2802,8 @@ public class MetaDataClient {
                             isTransactionalProp = (Boolean)value;
                         } else if (propName.equals(UPDATE_CACHE_FREQUENCY)) {
                             updateCacheFrequencyProp = (Long)value;
+                        } else if (propName.equals(GUIDE_POSTS_WIDTH)) {
+                            guidePostWidth = (Long)value;
                         }
                     }
                     // if removeTableProps is true only add the property if it is not a HTable or Phoenix Table property
@@ -2856,6 +2869,9 @@ public class MetaDataClient {
                         updateCacheFrequency = updateCacheFrequencyProp;
                         changingPhoenixTableProperty = true;
                     }
+                }
+                if (guidePostWidth == null || guidePostWidth >= 0) {
+                    changingPhoenixTableProperty = true;
                 }
                 Boolean storeNulls = null;
                 if (storeNullsProp != null) {
@@ -2996,7 +3012,8 @@ public class MetaDataClient {
                 }
                 long seqNum = table.getSequenceNumber();
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
-                    seqNum = incrementTableSeqNum(table, tableType, columnDefs.size(), isTransactional, updateCacheFrequency, isImmutableRows, disableWAL, multiTenant, storeNulls);
+                    seqNum = incrementTableSeqNum(table, tableType, columnDefs.size(), isTransactional, updateCacheFrequency, isImmutableRows,
+                            disableWAL, multiTenant, storeNulls, guidePostWidth);
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
@@ -3091,7 +3108,7 @@ public class MetaDataClient {
                         connection.setAutoCommit(true);
                         // Delete everything in the column. You'll still be able to do queries at earlier timestamps
                         long ts = (scn == null ? result.getMutationTime() : scn);
-                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(new TableRef(null, table, ts, false)), emptyCF, projectCF, null, ts);
+                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(new TableRef(null, table, ts, false)), emptyCF, Collections.singletonList(projectCF), null, ts);
                         return connection.getQueryServices().updateData(plan);
                     }
                     return new MutationState(0,connection);
