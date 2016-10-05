@@ -90,17 +90,17 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 1)); // Execute at timestamp 1
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String dateString = "1999-01-01 02:00:00";
-        PreparedStatement upsertStmt = conn.prepareStatement("upsert into ptsdb(inst,host,date) values('aaa','bbb',to_date('" + dateString + "'))");
+        PreparedStatement upsertStmt = conn.prepareStatement("upsert into ptsdb(inst,host,\"DATE\") values('aaa','bbb',to_date('" + dateString + "'))");
         int rowsInserted = upsertStmt.executeUpdate();
         assertEquals(1, rowsInserted);
-        upsertStmt = conn.prepareStatement("upsert into ptsdb(inst,host,date) values('ccc','ddd',current_date())");
+        upsertStmt = conn.prepareStatement("upsert into ptsdb(inst,host,\"DATE\") values('ccc','ddd',current_date())");
         rowsInserted = upsertStmt.executeUpdate();
         assertEquals(1, rowsInserted);
         conn.commit();
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 1
         conn = DriverManager.getConnection(getUrl(), props);
-        String select = "SELECT date,current_date() FROM ptsdb";
+        String select = "SELECT \"DATE\",current_date() FROM ptsdb";
         ResultSet rs = conn.createStatement().executeQuery(select);
         Date then = new Date(System.currentTimeMillis());
         assertTrue(rs.next());
@@ -146,7 +146,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("create table UpsertDateTest (k VARCHAR not null primary key,date DATE)");
+        conn.createStatement().execute("create table UpsertDateTest (k VARCHAR not null primary key,\"DATE\" DATE)");
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
@@ -157,7 +157,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
         conn = DriverManager.getConnection(getUrl(), props);
-        ResultSet rs = conn.createStatement().executeQuery("select k,to_char(date) from UpsertDateTest");
+        ResultSet rs = conn.createStatement().executeQuery("select k,to_char(\"DATE\") from UpsertDateTest");
         assertTrue(rs.next());
         assertEquals("a", rs.getString(1));
         assertEquals("2013-06-08 00:00:00.000", rs.getString(2));

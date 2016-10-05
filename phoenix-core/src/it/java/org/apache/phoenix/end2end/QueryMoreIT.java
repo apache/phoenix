@@ -348,11 +348,11 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         try (Statement stmt = conn.createStatement()) {
             assertFalse(stmt.execute("CREATE TABLE IF NOT EXISTS " + table + " (\n" +
                 "PK VARCHAR(15) NOT NULL\n," +
-                "DEC DECIMAL,\n" +
+                "\"DEC\" DECIMAL,\n" +
                 "CONSTRAINT TABLE_PK PRIMARY KEY (PK))"));
         }
 
-        try (PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + table + " (PK, DEC) VALUES(?, ?)")) {
+        try (PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + table + " (PK, \"DEC\") VALUES(?, ?)")) {
             stmt.setString(1, "key");
             stmt.setBigDecimal(2, null);
             assertFalse(stmt.execute());

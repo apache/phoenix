@@ -314,7 +314,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                     "    PHONE, " +
                     "    ADDRESS, " +
                     "    LOC_ID, " +
-                    "    DATE) " +
+                    "    \"DATE\") " +
                     "values (?, ?, ?, ?, ?, ?)");
             stmt.setString(1, "0000000001");
             stmt.setString(2, "C1");
@@ -497,7 +497,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseHBaseManagedTimeIT {
                     "    \"item_id\", " +
                     "    PRICE, " +
                     "    QUANTITY," +
-                    "    DATE) " +
+                    "    \"DATE\") " +
                     "values (?, ?, ?, ?, ?, ?)");
             stmt.setString(1, "000000000000001");
             stmt.setString(2, "0000000004");

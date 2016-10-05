@@ -68,25 +68,25 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
 
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
-                + " date INTEGER, \"value\" UNSIGNED_LONG)";
+                + " \"DATE\" INTEGER, \"value\" UNSIGNED_LONG)";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute("UPSERT INTO " + nth_test_table
-            + " (id, page_id, date, \"value\") VALUES (1, 8, 0, 300)");
+            + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, 0, 300)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (2, 8, 1, 7)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, 1, 7)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (3, 8, 2, 9)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (3, 8, 2, 9)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (4, 8, 3, 4)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (4, 8, 3, 4)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (5, 8, 4, 2)");
         conn.createStatement().execute("UPSERT INTO " + nth_test_table
-            + " (id, page_id, date, \"value\") VALUES (6, 8, 5, 150)");
+            + " (id, page_id, \"DATE\", \"value\") VALUES (6, 8, 5, 150)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT NTH_VALUE(\"value\", 2)  WITHIN GROUP (ORDER BY date ASC) FROM "
+            "SELECT NTH_VALUE(\"value\", 2)  WITHIN GROUP (ORDER BY \"DATE\" ASC) FROM "
                 + nth_test_table + " GROUP BY page_id");
 
         assertTrue(rs.next());
@@ -101,25 +101,25 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
         String nth_test_table = generateRandomString();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
-                + " date INTEGER, \"value\" UNSIGNED_LONG)";
+                + " \"DATE\" INTEGER, \"value\" UNSIGNED_LONG)";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute("UPSERT INTO " + nth_test_table
-            + " (id, page_id, date, \"value\") VALUES (1, 8, 0, 300)");
+            + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, 0, 300)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (2, 8, 1, 7)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, 1, 7)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (3, 8, 2, 9)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (3, 8, 2, 9)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (4, 8, 3, 4)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (4, 8, 3, 4)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (5, 8, 4, 2)");
         conn.createStatement().execute("UPSERT INTO " + nth_test_table
-            + " (id, page_id, date, \"value\") VALUES (6, 8, 5, 150)");
+            + " (id, page_id, \"DATE\", \"value\") VALUES (6, 8, 5, 150)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT NTH_VALUE(\"value\", 2)  WITHIN GROUP (ORDER BY date DESC) FROM "
+            "SELECT NTH_VALUE(\"value\", 2)  WITHIN GROUP (ORDER BY \"DATE\" DESC) FROM "
                 + nth_test_table + " GROUP BY page_id");
 
         assertTrue(rs.next());
@@ -134,25 +134,25 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
         String nth_test_table = generateRandomString();
         String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
-                + " date INTEGER, \"value\" UNSIGNED_LONG)";
+                + " \"DATE\" INTEGER, \"value\" UNSIGNED_LONG)";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (1, 8, 5, 8)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, 5, 8)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, 2, 7)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (3, 8, 1, 9)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (3, 8, 1, 9)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (4, 8, 4, 4)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (4, 8, 4, 4)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (5, 8, 3, 2)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (5, 8, 3, 2)");
         conn.createStatement().execute(
-            "UPSERT INTO " + nth_test_table + " (id, page_id, date, \"value\") VALUES (6, 8, 0, 1)");
+            "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (6, 8, 0, 1)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT NTH_VALUE(\"value\", 2)  WITHIN GROUP (ORDER BY date DESC) FROM "
+            "SELECT NTH_VALUE(\"value\", 2)  WITHIN GROUP (ORDER BY \"DATE\" DESC) FROM "
                 + nth_test_table + " GROUP BY page_id");
 
         assertTrue(rs.next());
