@@ -71,7 +71,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl = "CREATE TABLE IF NOT EXISTS " + tableName
-                + " (s VARCHAR NOT NULL PRIMARY KEY, dt DATE, t TIME, ts TIMESTAMP, dec DECIMAL, doub DOUBLE, undoub UNSIGNED_DOUBLE, fl FLOAT, unfl UNSIGNED_FLOAT)";
+                + " (s VARCHAR NOT NULL PRIMARY KEY, dt DATE, t TIME, ts TIMESTAMP, \"DEC\" DECIMAL, doub DOUBLE, undoub UNSIGNED_DOUBLE, fl FLOAT, unfl UNSIGNED_FLOAT)";
             conn.createStatement().execute(ddl);
             
             Date dateUpserted = DateUtil.parseDate("2012-01-01 14:25:28");
@@ -369,7 +369,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     public void testRoundingUpDecimal() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT ROUND(dec), ROUND(dec, 1), ROUND(dec, 2), ROUND(dec, 3) FROM " + tableName);
+            "SELECT ROUND(\"DEC\"), ROUND(\"DEC\", 1), ROUND(\"DEC\", 2), ROUND(\"DEC\", 3) FROM " + tableName);
         assertTrue(rs.next());
         BigDecimal expectedBd = BigDecimal.valueOf(1);
         assertEquals(expectedBd, rs.getBigDecimal(1));
@@ -385,7 +385,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     public void testRoundingUpDecimalInWhere() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT * FROM " + tableName + " WHERE ROUND(dec, 2) = 1.26");
+            "SELECT * FROM " + tableName + " WHERE ROUND(\"DEC\", 2) = 1.26");
         assertTrue(rs.next());
     }
     
@@ -393,7 +393,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     public void testFloorDecimal() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT FLOOR(dec), FLOOR(dec, 1), FLOOR(dec, 2), FLOOR(dec, 3) FROM " + tableName);
+            "SELECT FLOOR(\"DEC\"), FLOOR(\"DEC\", 1), FLOOR(\"DEC\", 2), FLOOR(\"DEC\", 3) FROM " + tableName);
         assertTrue(rs.next());
         BigDecimal expectedBd = BigDecimal.valueOf(1);
         assertEquals(expectedBd, rs.getBigDecimal(1));
@@ -409,7 +409,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     public void testFloorDecimalInWhere() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT * FROM " + tableName + " WHERE FLOOR(dec, 2) = 1.26");
+            "SELECT * FROM " + tableName + " WHERE FLOOR(\"DEC\", 2) = 1.26");
         assertTrue(rs.next());
     }
     
@@ -417,7 +417,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     public void testCeilDecimal() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT CEIL(dec), CEIL(dec, 1), CEIL(dec, 2), CEIL(dec, 3) FROM " + tableName);
+            "SELECT CEIL(\"DEC\"), CEIL(\"DEC\", 1), CEIL(\"DEC\", 2), CEIL(\"DEC\", 3) FROM " + tableName);
         assertTrue(rs.next());
         BigDecimal expectedBd = BigDecimal.valueOf(2);
         assertEquals(expectedBd, rs.getBigDecimal(1));
@@ -433,7 +433,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     public void testCeilDecimalInWhere() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT * FROM " + tableName + " WHERE CEIL(dec, 2) = 1.27");
+            "SELECT * FROM " + tableName + " WHERE CEIL(\"DEC\", 2) = 1.27");
         assertTrue(rs.next());
     }
     @Test
@@ -452,7 +452,7 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
 	public void testRoundingUpDoubleInWhere() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
 		ResultSet rs = conn.createStatement().executeQuery(
-        "SELECT * FROM " + tableName + " WHERE ROUND(dec, 2) = 1.26");
+        "SELECT * FROM " + tableName + " WHERE ROUND(\"DEC\", 2) = 1.26");
 		assertTrue(rs.next());
 	}
 

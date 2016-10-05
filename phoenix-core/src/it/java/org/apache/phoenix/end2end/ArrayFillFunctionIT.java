@@ -44,10 +44,10 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
         tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE " + tableName
-            + " (region_name VARCHAR PRIMARY KEY,length1 INTEGER, length2 INTEGER,date DATE,time TIME,timestamp TIMESTAMP,varchar VARCHAR,integer INTEGER,double DOUBLE,bigint BIGINT,char CHAR(15),double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], varchars2 VARCHAR[])";
+            + " (region_name VARCHAR PRIMARY KEY,length1 INTEGER, length2 INTEGER,\"DATE\" DATE,time TIME,timestamp TIMESTAMP,varchar VARCHAR,integer INTEGER,double DOUBLE,bigint BIGINT,char CHAR(15),double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], varchars2 VARCHAR[])";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName
-            + "(region_name,length1,length2,date,time,timestamp,varchar,integer,double,bigint,char,double1,char1,nullcheck,chars2,varchars2) VALUES('SF Bay Area',"
+            + "(region_name,length1,length2,\"DATE\",time,timestamp,varchar,integer,double,bigint,char,double1,char1,nullcheck,chars2,varchars2) VALUES('SF Bay Area',"
             +
                 "0," +
                 "-3," +
@@ -181,7 +181,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(date,3) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"DATE\",3) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Date(1432102334184l), new Date(1432102334184l), new Date(1432102334184l)};
