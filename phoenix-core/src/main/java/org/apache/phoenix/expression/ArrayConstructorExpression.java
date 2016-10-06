@@ -31,6 +31,7 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 public class ArrayConstructorExpression extends BaseCompoundExpression {
     private PDataType baseType;
     private int position = -1;
+    private int nNulls = 0;
     private Object[] elements;
     private final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
     private int estimatedSize = 0;
@@ -71,6 +72,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
     public void reset() {
         super.reset();
         position = 0;
+        nNulls = 0;
         Arrays.fill(elements, null);
         valuePtr.set(ByteUtil.EMPTY_BYTE_ARRAY);
     }
@@ -85,7 +87,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
         DataOutputStream oStream = new DataOutputStream(byteStream);
         try {
             int noOfElements =  children.size();
-            int nNulls = 0;
+            nNulls = 0;
             for (int i = position >= 0 ? position : 0; i < elements.length; i++) {
                 Expression child = children.get(i);
                 if (!child.evaluate(tuple, ptr)) {
@@ -115,6 +117,7 @@ public class ArrayConstructorExpression extends BaseCompoundExpression {
                             offsetPos[i] = byteStream.size();
                             oStream.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                             oStream.write(PArrayDataType.getSeparatorByte(rowKeyOrderOptimizable, getSortOrder()));
+                            nNulls=0;
                         }
                     } else { // No nulls for fixed length
                         oStream.write(ptr.get(), ptr.getOffset(), ptr.getLength());
