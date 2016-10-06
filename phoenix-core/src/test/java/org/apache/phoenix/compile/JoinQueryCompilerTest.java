@@ -51,7 +51,7 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testExplainPlan() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.\"DATE\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN "
     	+ JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" AND c.name LIKE 'C%' LEFT JOIN " 
     	+ JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN " 
     	+ JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";
