@@ -187,7 +187,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testDefaultJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -232,7 +234,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testInnerJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item INNER JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + tableName1 + " item INNER JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -283,10 +287,12 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testLeftJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
         String query[] = new String[3];
-        query[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
-        query[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".\"item_id\", " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".name, " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ".\"supplier_id\", " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ".name, next value for " + seqName + " FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " ON " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".\"supplier_id\" = " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ".\"supplier_id\" ORDER BY \"item_id\"";
-        query[2] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".name, supp.\"supplier_id\", " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ".name, next value for " + seqName + " FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        query[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name, next value for " + seqName + " FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        query[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ " + tableName1 + ".\"item_id\", " + tableName1 + ".name, " + tableName2 + ".\"supplier_id\", " + tableName2 + ".name, next value for " + seqName + " FROM " + tableName1 + " LEFT JOIN " + tableName2 + " ON " + tableName1 + ".\"supplier_id\" = " + tableName2 + ".\"supplier_id\" ORDER BY \"item_id\"";
+        query[2] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", " + tableName1 + ".name, supp.\"supplier_id\", " + tableName2 + ".name, next value for " + seqName + " FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON " + tableName1 + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         try {
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
@@ -340,7 +346,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testRightJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp RIGHT JOIN " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName2 + " supp RIGHT JOIN " + tableName1 + " item ON item.\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -390,8 +398,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testInnerJoinWithPreFilters() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item INNER JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005' ORDER BY \"item_id\"";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item INNER JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005') ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item INNER JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005' ORDER BY \"item_id\"";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item INNER JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005') ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -452,7 +462,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testLeftJoinWithPreFilters() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005') ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005') ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -502,8 +514,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithPostFilters() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp RIGHT JOIN " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005' ORDER BY \"item_id\"";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005' ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName2 + " supp RIGHT JOIN " + tableName1 + " item ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" BETWEEN '0000000001' AND '0000000005' ORDER BY \"item_id\"";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE supp.\"supplier_id\" = '0000000001' OR supp.\"supplier_id\" = '0000000005' ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -564,22 +578,25 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testStarJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         String[] query = new String[5];
-        query[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o JOIN " 
-            + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
-        query[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o, " 
-                + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c, " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
-        query[2] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o JOIN " 
-                + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
-        query[3] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM (" + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o, " 
-                + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c), " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
-        query[4] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o, (" 
-                + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c, " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i) WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
+        query[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName4 + " o JOIN " 
+            + tableName3 + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
+            + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
+        query[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName4 + " o, " 
+                + tableName3 + " c, " 
+                + tableName1 + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
+        query[2] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName4 + " o JOIN " 
+                + tableName3 + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
+                + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
+        query[3] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM (" + tableName4 + " o, " 
+                + tableName3 + " c), " 
+                + tableName1 + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
+        query[4] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName4 + " o, (" 
+                + tableName3 + " c, " 
+                + tableName1 + " i) WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
         try {
             for (int i = 0; i < query.length; i++) {
                 PreparedStatement statement = conn.prepareStatement(query[i]);
@@ -630,12 +647,14 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testLeftJoinWithAggregation() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, sum(quantity) FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.\"item_id\" iid, sum(quantity) q FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC";
-        String query3 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.\"item_id\" iid, sum(quantity) q FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i LEFT JOIN " 
-                + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, sum(quantity) FROM " + tableName4 + " o LEFT JOIN " 
+            + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.\"item_id\" iid, sum(quantity) q FROM " + tableName4 + " o LEFT JOIN " 
+                + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC";
+        String query3 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.\"item_id\" iid, sum(quantity) q FROM " + tableName1 + " i LEFT JOIN " 
+                + tableName4 + " o ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -705,10 +724,12 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testRightJoinWithAggregation() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, sum(quantity) FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.\"item_id\" iid, sum(quantity) q FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, sum(quantity) FROM " + tableName4 + " o RIGHT JOIN " 
+            + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.\"item_id\" iid, sum(quantity) q FROM " + tableName4 + " o RIGHT JOIN " 
+            + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" GROUP BY i.\"item_id\" ORDER BY q DESC NULLS LAST, iid";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -770,11 +791,14 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testLeftRightJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
-                + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                + "(" + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i RIGHT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + tableName4 + " o LEFT JOIN " 
+                + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+                + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + tableName4 + " o LEFT JOIN " 
+                + "(" + tableName1 + " i RIGHT JOIN " + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
@@ -873,11 +897,14 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testRightLeftJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i RIGHT JOIN " 
-                + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
-                + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\"";
-        String query2 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN " 
-                + "(" + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + tableName1 + " i RIGHT JOIN " 
+                + tableName4 + " o ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
+                + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\"";
+        String query2 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + tableName4 + " o RIGHT JOIN " 
+                + "(" + tableName1 + " i LEFT JOIN " + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
@@ -976,12 +1003,15 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testMultiLeftJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         String[] queries = {
-                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                        + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
-                        + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\"",
-                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                        + "(" + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\") " 
+                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + tableName4 + " o LEFT JOIN " 
+                        + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
+                        + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\"",
+                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + tableName4 + " o LEFT JOIN " 
+                        + "(" + tableName1 + " i LEFT JOIN " + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\") " 
                         + "ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\""};
         try {
             for (String query : queries) {
@@ -1029,9 +1059,12 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testMultiRightJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
-            + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + tableName4 + " o RIGHT JOIN " 
+            + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+            + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1104,9 +1137,12 @@ public class SortMergeJoinIT extends BaseJoinIT {
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "1");
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN "
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
-                + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, date FROM " + tableName4 + " o RIGHT JOIN "
+                + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+                + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1175,7 +1211,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithWildcard() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM " + tableName1 + " LEFT JOIN " + tableName2 + " supp ON " + tableName1 + ".\"supplier_id\" = supp.\"supplier_id\" ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1281,9 +1319,12 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithTableWildcard() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ s.*, "+ getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ".*, \"order_id\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
-                + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ s.*, "+ tableName1 + ".*, \"order_id\" FROM " + tableName4 + " o RIGHT JOIN " 
+                + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
+                + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1427,7 +1468,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinMultiJoinKeys() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ c.name, s.name FROM " + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON \"customer_id\" = \"supplier_id\" AND c.loc_id = s.loc_id AND substr(s.name, 2, 1) = substr(c.name, 2, 1) ORDER BY \"customer_id\"";
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ c.name, s.name FROM " + tableName3 + " c LEFT JOIN " + tableName2 + " s ON \"customer_id\" = \"supplier_id\" AND c.loc_id = s.loc_id AND substr(s.name, 2, 1) = substr(c.name, 2, 1) ORDER BY \"customer_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1460,8 +1503,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithDifferentNumericJoinKeyTypes() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, i.price, discount2, quantity FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o INNER JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, i.price, discount2, quantity FROM " + tableName4 + " o INNER JOIN " 
+            + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" AND o.price = (i.price * (100 - discount2)) / 100.0 WHERE quantity < 5000";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1482,8 +1527,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithDifferentDateJoinKeyTypes() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, o.date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o INNER JOIN " 
-            + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c ON o.\"customer_id\" = c.\"customer_id\" AND o.date = c.date ORDER BY \"order_id\"";
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, o.date FROM " + tableName4 + " o INNER JOIN " 
+            + tableName3 + " c ON o.\"customer_id\" = c.\"customer_id\" AND o.date = c.date ORDER BY \"order_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1514,8 +1561,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithIncomparableJoinKeyTypes() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, i.price, discount2, quantity FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o INNER JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" AND o.price / 100 = substr(i.name, 2, 1)";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, i.price, discount2, quantity FROM " + tableName4 + " o INNER JOIN " 
+            + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" AND o.price / 100 = substr(i.name, 2, 1)";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             statement.executeQuery();
@@ -1531,8 +1580,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinPlanWithIndex() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) AND (supp.name BETWEEN 'S1' AND 'S5') WHERE item.name BETWEEN 'T1' AND 'T5' ORDER BY \"item_id\"";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item INNER JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE (item.name = 'T1' OR item.name = 'T5') AND (supp.name = 'S1' OR supp.name = 'S5') ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item LEFT JOIN " + tableName2 + " supp ON substr(item.name, 2, 1) = substr(supp.name, 2, 1) AND (supp.name BETWEEN 'S1' AND 'S5') WHERE item.name BETWEEN 'T1' AND 'T5' ORDER BY \"item_id\"";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item INNER JOIN " + tableName2 + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" WHERE (item.name = 'T1' OR item.name = 'T5') AND (supp.name = 'S1' OR supp.name = 'S5') ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -1587,9 +1638,12 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithSkipMergeOptimization() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ s.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i JOIN " 
-            + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o ON o.\"item_id\" = i.\"item_id\" AND quantity < 5000 RIGHT JOIN "
-            + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ s.name FROM " + tableName1 + " i JOIN " 
+            + tableName4 + " o ON o.\"item_id\" = i.\"item_id\" AND quantity < 5000 RIGHT JOIN "
+            + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -1623,10 +1677,11 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testSelfJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i2.\"item_id\", i1.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i1 JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i2 ON i1.\"item_id\" = i2.\"item_id\" ORDER BY i1.\"item_id\"";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i1.name, i2.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i1 JOIN " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i2 ON i1.\"item_id\" = i2.\"supplier_id\" ORDER BY i1.name, i2.name";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i2.\"item_id\", i1.name FROM " + tableName1 + " i1 JOIN " 
+            + tableName1 + " i2 ON i1.\"item_id\" = i2.\"item_id\" ORDER BY i1.\"item_id\"";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i1.name, i2.name FROM " + tableName1 + " i1 JOIN " 
+            + tableName1 + " i2 ON i1.\"item_id\" = i2.\"supplier_id\" ORDER BY i1.name, i2.name";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -1690,6 +1745,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         try {
             conn.createStatement().execute("CREATE TABLE " + tempTable 
                     + "   (\"order_id\" varchar not null, " 
@@ -1701,14 +1759,14 @@ public class SortMergeJoinIT extends BaseJoinIT {
             conn.createStatement().execute("UPSERT /*+ USE_SORT_MERGE_JOIN*/ INTO " + tempTable 
                     + "(\"order_id\", item_name, supplier_name, quantity, date) " 
                     + "SELECT \"order_id\", i.name, s.name, quantity, date FROM " 
-                    + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                    + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
-                    + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\"");
+                    + tableName4 + " o LEFT JOIN " 
+                    + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
+                    + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\"");
             conn.createStatement().execute("UPSERT /*+ USE_SORT_MERGE_JOIN*/ INTO " + tempTable 
                     + "(\"order_id\", item_name, quantity) " 
                     + "SELECT 'ORDER_SUM', i.name, sum(quantity) FROM " 
-                    + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                    + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" " 
+                    + tableName4 + " o LEFT JOIN " 
+                    + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" " 
                     + "GROUP BY i.name ORDER BY i.name");
             
             String query = "SELECT * FROM " + tempTable;
@@ -1842,13 +1900,17 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testSubJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, count(c.name), min(s.name), max(quantity) FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
-                + "(" + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s RIGHT JOIN " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, count(c.name), min(s.name), max(quantity) FROM " + tableName4 + " o LEFT JOIN " 
+                + "(" + tableName2 + " s RIGHT JOIN " + tableName1 + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\" LEFT JOIN " 
-                + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c ON c.\"customer_id\" = o.\"customer_id\" GROUP BY i.name ORDER BY i.name";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM " + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c INNER JOIN " 
-                + "(" + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o INNER JOIN " 
-                + "(" + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s RIGHT JOIN " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
+                + tableName3 + " c ON c.\"customer_id\" = o.\"customer_id\" GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM " + tableName3 + " c INNER JOIN " 
+                + "(" + tableName4 + " o INNER JOIN " 
+                + "(" + tableName2 + " s RIGHT JOIN " + tableName1 + " i ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\") ON c.\"customer_id\" = o.\"customer_id\"" 
                 + " WHERE c.\"customer_id\" <= '0000000005' AND \"order_id\" != '000000000000003' AND i.name != 'T3' ORDER BY c.\"customer_id\", i.name";
         try {
@@ -1965,8 +2027,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.sid, supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\" sid, name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " WHERE name BETWEEN 'S1' AND 'S5') AS supp ON item.\"supplier_id\" = supp.sid ORDER BY \"item_id\"";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ") AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name = 'S1' OR supp.name = 'S5') ORDER BY \"item_id\"";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.sid, supp.name FROM " + tableName1 + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\" sid, name FROM " + tableName2 + " WHERE name BETWEEN 'S1' AND 'S5') AS supp ON item.\"supplier_id\" = supp.sid ORDER BY \"item_id\"";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM " + tableName2 + ") AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name = 'S1' OR supp.name = 'S5') ORDER BY \"item_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -2028,7 +2092,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " LIMIT 5) AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name != 'S1') ORDER BY \"item_id\"";
+            String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+            String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+            String query = "SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + tableName1 + " item INNER JOIN (SELECT reverse(loc_id), \"supplier_id\", name FROM " + tableName2 + " LIMIT 5) AS supp ON item.\"supplier_id\" = supp.\"supplier_id\" AND (supp.name != 'S1') ORDER BY \"item_id\"";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -2057,14 +2123,16 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithSubqueryAndAggregation() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, sum(quantity) FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN (SELECT name, \"item_id\" iid FROM " 
-            + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i ON o.\"item_id\" = i.iid GROUP BY i.name ORDER BY i.name";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ o.iid, sum(o.quantity) q FROM (SELECT \"item_id\" iid, quantity FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + ") AS o LEFT JOIN (SELECT \"item_id\" FROM " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i ON o.iid = i.\"item_id\" GROUP BY o.iid ORDER BY q DESC";
-        String query3 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid, o.q FROM (SELECT \"item_id\" iid FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i LEFT JOIN (SELECT \"item_id\" iid, sum(quantity) q FROM " 
-                + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " GROUP BY \"item_id\") AS o ON o.iid = i.iid ORDER BY o.q DESC NULLS LAST, i.iid";
-        String query4 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid, o.q FROM (SELECT \"item_id\" iid, sum(quantity) q FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " GROUP BY \"item_id\") AS o JOIN (SELECT \"item_id\" iid FROM " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i ON o.iid = i.iid ORDER BY o.q DESC, i.iid";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.name, sum(quantity) FROM " + tableName4 + " o LEFT JOIN (SELECT name, \"item_id\" iid FROM " 
+            + tableName1 + ") AS i ON o.\"item_id\" = i.iid GROUP BY i.name ORDER BY i.name";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ o.iid, sum(o.quantity) q FROM (SELECT \"item_id\" iid, quantity FROM " + tableName4 + ") AS o LEFT JOIN (SELECT \"item_id\" FROM " 
+                + tableName1 + ") AS i ON o.iid = i.\"item_id\" GROUP BY o.iid ORDER BY q DESC";
+        String query3 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid, o.q FROM (SELECT \"item_id\" iid FROM " + tableName1 + ") AS i LEFT JOIN (SELECT \"item_id\" iid, sum(quantity) q FROM " 
+                + tableName4 + " GROUP BY \"item_id\") AS o ON o.iid = i.iid ORDER BY o.q DESC NULLS LAST, i.iid";
+        String query4 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid, o.q FROM (SELECT \"item_id\" iid, sum(quantity) q FROM " + tableName4 + " GROUP BY \"item_id\") AS o JOIN (SELECT \"item_id\" iid FROM " 
+                + tableName1 + ") AS i ON o.iid = i.iid ORDER BY o.q DESC, i.iid";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -2151,13 +2219,17 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testNestedSubqueries() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ q.iname, count(c.name), min(q.sname), max(o.quantity) FROM (SELECT \"customer_id\" cid, \"item_id\" iid, quantity FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + ") AS o LEFT JOIN " 
-                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iid, s.name sname, i.name iname FROM (SELECT \"supplier_id\" sid, name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, \"supplier_id\" sid FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i ON i.sid = s.sid) AS q" 
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ q.iname, count(c.name), min(q.sname), max(o.quantity) FROM (SELECT \"customer_id\" cid, \"item_id\" iid, quantity FROM " + tableName4 + ") AS o LEFT JOIN " 
+                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iid, s.name sname, i.name iname FROM (SELECT \"supplier_id\" sid, name FROM " + tableName2 + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, \"supplier_id\" sid FROM " + tableName1 + ") AS i ON i.sid = s.sid) AS q" 
                 + " ON o.iid = q.iid LEFT JOIN (SELECT \"customer_id\" cid, name FROM " 
-                + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + ") AS c ON c.cid = o.cid GROUP BY q.iname ORDER BY q.iname";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, date FROM " + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + ") AS c INNER JOIN " 
-                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + ") AS o INNER JOIN " 
-                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i ON i.sid = s.sid) as qi" 
+                + tableName3 + ") AS c ON c.cid = o.cid GROUP BY q.iname ORDER BY q.iname";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, date FROM " + tableName3 + ") AS c INNER JOIN " 
+                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, date FROM " + tableName4 + ") AS o INNER JOIN " 
+                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + tableName2 + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + tableName1 + ") AS i ON i.sid = s.sid) as qi" 
                 + " ON o.iid = qi.iiid) as qo ON c.cid = qo.ocid" 
                 + " WHERE c.cid <= '0000000005' AND qo.ooid != '000000000000003' AND qo.iname != 'T3' ORDER BY c.cid, qo.iname";
         try {
@@ -2271,12 +2343,15 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithLimit() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s LEFT JOIN " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON i.\"supplier_id\" = s.\"supplier_id\" LEFT JOIN "
-                + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 4";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s JOIN " 
-                + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON i.\"supplier_id\" = s.\"supplier_id\" JOIN "
-                + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 3";
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM " + tableName2 + " s LEFT JOIN " 
+                + tableName1 + " i ON i.\"supplier_id\" = s.\"supplier_id\" LEFT JOIN "
+                + tableName4 + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 4";
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM " + tableName2 + " s JOIN " 
+                + tableName1 + " i ON i.\"supplier_id\" = s.\"supplier_id\" JOIN "
+                + tableName4 + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 3";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             ResultSet rs = statement.executeQuery();
@@ -2338,13 +2413,16 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithOffset() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM "
-                + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s LEFT JOIN " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME)
-                + " i ON i.\"supplier_id\" = s.\"supplier_id\" LEFT JOIN " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME)
+                + tableName2 + " s LEFT JOIN " + tableName1
+                + " i ON i.\"supplier_id\" = s.\"supplier_id\" LEFT JOIN " + tableName4
                 + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 2 OFFSET 1";
         String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, s.address, quantity FROM "
-                + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s JOIN " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME)
-                + " i ON i.\"supplier_id\" = s.\"supplier_id\" JOIN " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME)
+                + tableName2 + " s JOIN " + tableName1
+                + " i ON i.\"supplier_id\" = s.\"supplier_id\" JOIN " + tableName4
                 + " o ON o.\"item_id\" = i.\"item_id\" LIMIT 1 OFFSET 2";
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
@@ -2383,7 +2461,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.name, supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item, " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp WHERE item.\"supplier_id\" > supp.\"supplier_id\"";
+            String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+            String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+            String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.name, supp.name FROM " + tableName1 + " item, " + tableName2 + " supp WHERE item.\"supplier_id\" > supp.\"supplier_id\"";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue(rs.next());
@@ -2422,7 +2502,7 @@ public class SortMergeJoinIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.name, supp.name FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " item JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " supp ON item.\"supplier_id\" > supp.\"supplier_id\"";
+            query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ item.name, supp.name FROM " + tableName1 + " item JOIN " + tableName2 + " supp ON item.\"supplier_id\" > supp.\"supplier_id\"";
             statement = conn.prepareStatement(query);
             try {
                 statement.executeQuery();
@@ -2439,11 +2519,13 @@ public class SortMergeJoinIT extends BaseJoinIT {
     public void testJoinWithSetMaxRows() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         String [] queries = new String[2];
-        queries[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, quantity FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i JOIN "
-                + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o ON o.\"item_id\" = i.\"item_id\"";
-        queries[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ o.\"order_id\", i.name, o.quantity FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i JOIN " 
-                + "(SELECT \"order_id\", \"item_id\", quantity FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + ") o " 
+        queries[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, quantity FROM " + tableName1 + " i JOIN "
+                + tableName4 + " o ON o.\"item_id\" = i.\"item_id\"";
+        queries[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ o.\"order_id\", i.name, o.quantity FROM " + tableName1 + " i JOIN " 
+                + "(SELECT \"order_id\", \"item_id\", quantity FROM " + tableName4 + ") o " 
                 + "ON o.\"item_id\" = i.\"item_id\"";
         try {
             for (int i = 0; i < queries.length; i++) {
