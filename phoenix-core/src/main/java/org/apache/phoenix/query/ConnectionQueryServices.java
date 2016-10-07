@@ -33,7 +33,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.PFunction;
@@ -43,7 +42,8 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.tephra.TransactionSystemClient;
 
 
@@ -118,7 +118,14 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public String getUserName();
     public void clearTableFromCache(final byte[] tenantId, final byte[] schemaName, final byte[] tableName, long clientTS) throws SQLException;
 
-    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException;
+    public GuidePostsInfo getTableStats(GuidePostsKey key) throws SQLException;
+    /**
+     * Removes cache {@link GuidePostsInfo} for the table with the given name. If no cached guideposts are present, this does nothing.
+     *
+     * @param tableName The table to remove stats for
+     */
+    void invalidateStats(GuidePostsKey key);
+    
     
     public long clearCache() throws SQLException;
     public int getSequenceSaltBuckets();
@@ -133,13 +140,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public MetaDataMutationResult dropSchema(List<Mutation> schemaMetaData, String schemaName) throws SQLException;
 
-    /**
-     * Removes cache {@link PTableStats} for the table with the given name. If no cached stats are present, this does nothing.
-     *
-     * @param tableName The table to remove stats for
-     */
-    void invalidateStats(ImmutableBytesPtr tableName);
-    
     boolean isUpgradeRequired();
     void upgradeSystemTables(String url, Properties props) throws SQLException;
 }

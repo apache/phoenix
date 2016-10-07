@@ -24,7 +24,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.util.Map;
 import java.util.Properties;
-import java.util.SortedMap;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
@@ -32,7 +31,6 @@ import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -40,7 +38,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -653,29 +651,10 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
             gpWriter.addGuidePosts(gp, 1000);
         }
         GuidePostsInfo info = gpWriter.build();
-        final SortedMap<byte[], GuidePostsInfo> gpMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
-        gpMap.put(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, info);
-        PTableStats stats = new PTableStats() {
-
-            @Override
-            public SortedMap<byte[], GuidePostsInfo> getGuidePosts() {
-                return gpMap;
-            }
-
-            @Override
-            public int getEstimatedSize() {
-                return 10000;
-            }
-
-            @Override
-            public long getTimestamp() {
-                return table.getTimeStamp()+1;
-            }
-        };
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         pConn.addTable(table, System.currentTimeMillis());
         ((ConnectionlessQueryServicesImpl) pConn.getQueryServices())
-                .addTableStats(table.getName().getBytesPtr(), stats);
+                .addTableStats(new GuidePostsKey(table.getName().getBytes(), QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES), info);
 
         String query = "SELECT count(1) cnt,\n" + 
                 "       coalesce(SUM(impressions), 0.0) AS \"impressions\",\n" + 
