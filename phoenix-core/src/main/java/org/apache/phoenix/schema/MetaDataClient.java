@@ -189,7 +189,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
@@ -1085,9 +1085,20 @@ public class MetaDataClient {
          *  This supports scenarios in which a major compaction was manually initiated and the
          *  client wants the modified stats to be reflected immediately.
          */
-        connection.getQueryServices().clearTableFromCache(tenantIdBytes,
-                Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(physicalName.getString())),
-                Bytes.toBytes(SchemaUtil.getTableNameFromFullName(physicalName.getString())), clientTimeStamp);
+        if (cfs == null) {
+            List<PColumnFamily> families = logicalTable.getColumnFamilies();
+            if (families.isEmpty()) {
+                connection.getQueryServices().invalidateStats(new GuidePostsKey(physicalName.getBytes(), SchemaUtil.getEmptyColumnFamily(logicalTable)));
+            } else {
+                for (PColumnFamily family : families) {
+                    connection.getQueryServices().invalidateStats(new GuidePostsKey(physicalName.getBytes(), family.getName().getBytes()));
+                }
+            }
+        } else {
+            for (byte[] cf : cfs) {
+                connection.getQueryServices().invalidateStats(new GuidePostsKey(physicalName.getBytes(), cf));
+            }
+        }
         return rowCount;
     }
 
@@ -1760,7 +1771,7 @@ public class MetaDataClient {
                 updateCacheFrequency = updateCacheFrequencyProp;
             }
             String autoPartitionSeq = (String) TableProperty.AUTO_PARTITION_SEQ.getValue(tableProps);
-            Long guidePostWidth = (Long) TableProperty.GUIDE_POSTS_WIDTH.getValue(tableProps);
+            Long guidePostsWidth = (Long) TableProperty.GUIDE_POSTS_WIDTH.getValue(tableProps);
 
             Boolean storeNullsProp = (Boolean) TableProperty.STORE_NULLS.getValue(tableProps);
             if (storeNullsProp == null) {
@@ -2227,10 +2238,10 @@ public class MetaDataClient {
                 tableUpsert.setString(23, autoPartitionSeq);
             }
             tableUpsert.setBoolean(24, isAppendOnlySchema);
-            if (guidePostWidth == null) {
+            if (guidePostsWidth == null) {
                 tableUpsert.setNull(25, Types.BIGINT);                
             } else {
-                tableUpsert.setLong(25, guidePostWidth);
+                tableUpsert.setLong(25, guidePostsWidth);
             }
             tableUpsert.execute();
 
@@ -3108,7 +3119,7 @@ public class MetaDataClient {
                         connection.setAutoCommit(true);
                         // Delete everything in the column. You'll still be able to do queries at earlier timestamps
                         long ts = (scn == null ? result.getMutationTime() : scn);
-                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(new TableRef(null, table, ts, false)), emptyCF, Collections.singletonList(projectCF), null, ts);
+                        MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(new TableRef(null, table, ts, false)), emptyCF, projectCF == null ? null : Collections.singletonList(projectCF), null, ts);
                         return connection.getQueryServices().updateData(plan);
                     }
                     return new MutationState(0,connection);
@@ -3530,28 +3541,6 @@ public class MetaDataClient {
 
     private void addSchemaToCache(MetaDataMutationResult result) throws SQLException {
         connection.addSchema(result.getSchema());
-    }
-
-    public PTableStats getTableStats(PTable table) throws SQLException {
-        /*
-         *  The shared view index case is tricky, because we don't have
-         *  table meta data for it, only an HBase table. We do have stats,
-         *  though, so we'll query them directly here and cache them so
-         *  we don't keep querying for them.
-         */
-        boolean isSharedIndex = table.getViewIndexId() != null;
-        if (isSharedIndex) {
-            // we are assuming the stats table is not transactional
-            return connection.getQueryServices().getTableStats(table.getPhysicalName().getBytes(),
-                    getCurrentScn());
-        }
-        boolean isView = table.getType() == PTableType.VIEW;
-        String physicalName = table.getPhysicalName().toString().replace(QueryConstants.NAMESPACE_SEPARATOR,
-                QueryConstants.NAME_SEPARATOR);
-        if (isView && table.getViewType() != ViewType.MAPPED) {
-              return connection.getQueryServices().getTableStats(Bytes.toBytes(physicalName), getCurrentScn());
-        }
-        return connection.getQueryServices().getTableStats(table.getName().getBytes(), getCurrentScn());
     }
 
     private void throwIfLastPKOfParentIsFixedLength(PTable parent, String viewSchemaName, String viewName, ColumnDef col) throws SQLException {

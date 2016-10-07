@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -42,9 +43,9 @@ public interface StatisticsCollector extends Closeable {
     long getMaxTimeStamp();
 
     /**
-     * Write the collected statistics for the given region.
+     * Write the collected statistics for the given region over the scan provided.
      */
-    void updateStatistic(Region region);
+    void updateStatistic(Region region, Scan scan);
 
     /**
      * Collect statistics for the given list of cells. This method can be called multiple times

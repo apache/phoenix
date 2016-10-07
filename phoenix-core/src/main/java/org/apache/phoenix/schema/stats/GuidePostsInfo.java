@@ -22,51 +22,53 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.SizedUtil;
+
+import com.google.common.primitives.Longs;
 /**
  *  A class that holds the guidePosts of a region and also allows combining the 
  *  guidePosts of different regions when the GuidePostsInfo is formed for a table.
  */
 public class GuidePostsInfo {
+    public final static GuidePostsInfo EMPTY_GUIDEPOST = new GuidePostsInfo(new ArrayList<Long>(),
+            new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), new ArrayList<Long>(), 0, 0) {
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
+    };
+    public final static GuidePostsInfo NO_GUIDEPOST = new GuidePostsInfo(new ArrayList<Long>(),
+            new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), new ArrayList<Long>(), 0, 0) {
+        @Override
+        public int getEstimatedSize() {
+            return 0;
+        }
+    };
 
     /**
      * the total number of guidePosts for the table combining all the guidePosts per region per cf.
      */
-    private ImmutableBytesWritable guidePosts;
-
+    private final ImmutableBytesWritable guidePosts;
     /**
      * Maximum length of a guidePost collected
      */
-    private int maxLength;
-    
-    public final static GuidePostsInfo NO_GUIDEPOST = new GuidePostsInfo(new ArrayList<Long>(),
-            new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY), new ArrayList<Long>(), 0, 0);
-
-    public int getMaxLength() {
-        return maxLength;
-    }
-
+    private final int maxLength;
     /**
      * Number of guidePosts
      */
-    private int guidePostsCount;
-
+    private final int guidePostsCount;
     /**
      * The rowCounts of each guidePost traversed
      */
-    private List<Long> rowCounts;
-
+    private final long[] rowCounts;
     /**
      * The bytecounts of each guidePost traversed
      */
-    private List<Long> byteCounts;
-
-    public List<Long> getRowCounts() {
-        return rowCounts;
-    }
-
-    public List<Long> getByteCounts() {
-        return byteCounts;
-    }
+    private final long[] byteCounts;
+    /**
+     * Estimate of byte size of this instance
+     */
+    private final int estimatedSize;
 
     /**
      * Constructor that creates GuidePostsInfo per region
@@ -87,8 +89,16 @@ public class GuidePostsInfo {
         this.guidePosts = new ImmutableBytesWritable(guidePosts);
         this.maxLength = maxLength;
         this.guidePostsCount = guidePostsCount;
-        this.rowCounts = rowCounts;
-        this.byteCounts = byteCounts;
+        this.rowCounts = Longs.toArray(rowCounts);
+        this.byteCounts = Longs.toArray(byteCounts);
+        int estimatedSize = SizedUtil.OBJECT_SIZE 
+                + SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE + guidePosts.getLength() // guidePosts
+                + SizedUtil.INT_SIZE // maxLength
+                + SizedUtil.INT_SIZE // guidePostsCount
+                + SizedUtil.ARRAY_SIZE + this.rowCounts.length * SizedUtil.LONG_SIZE // rowCounts
+                + SizedUtil.ARRAY_SIZE + this.byteCounts.length * SizedUtil.LONG_SIZE // byteCounts
+                + SizedUtil.INT_SIZE; // estimatedSize
+        this.estimatedSize = estimatedSize;
     }
     
     public ImmutableBytesWritable getGuidePosts() {
@@ -98,5 +108,20 @@ public class GuidePostsInfo {
     public int getGuidePostsCount() {
         return guidePostsCount;
     }
+    
+    public int getMaxLength() {
+        return maxLength;
+    }
 
+    public long[] getRowCounts() {
+        return rowCounts;
+    }
+
+    public long[] getByteCounts() {
+        return byteCounts;
+    }
+
+    public int getEstimatedSize() {
+        return estimatedSize;
+    }
 }

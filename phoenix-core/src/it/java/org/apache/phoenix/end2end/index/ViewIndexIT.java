@@ -31,11 +31,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableType;
@@ -145,19 +148,19 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         stmt.setString(4, "x1");
         stmt.setInt(5, 100);
         stmt.execute();
-        stmt.setString(1, "20");
+        stmt.setString(1, "10");
         stmt.setString(2, "b");
         stmt.setInt(3, 2);
         stmt.setString(4, "x2");
         stmt.setInt(5, 200);
         stmt.execute();
-        stmt.setString(1, "30");
+        stmt.setString(1, "10");
         stmt.setString(2, "c");
         stmt.setInt(3, 3);
         stmt.setString(4, "x3");
         stmt.setInt(5, 300);
         stmt.execute();
-        stmt.setString(1, "40");
+        stmt.setString(1, "20");
         stmt.setString(2, "d");
         stmt.setInt(3, 4);
         stmt.setString(4, "x4");
@@ -185,24 +188,24 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertFalse(rs.next());
         
-//        TestUtil.analyzeTable(conn, fullTableName);
-//        List<KeyRange> guideposts = TestUtil.getAllSplits(conn, fullTableName);
-//        assertEquals(1, guideposts.size());
-//        assertEquals(KeyRange.EVERYTHING_RANGE, guideposts.get(0));
-//        
-//        conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET GUIDE_POST_WIDTH=20");
-//        
-//        TestUtil.analyzeTable(conn, fullTableName);
-//        guideposts = TestUtil.getAllSplits(conn, fullTableName);
-//        assertEquals(5, guideposts.size());
-//
-//        // Confirm that when view index used, the GUIDE_POST_WIDTH from the data physical table
-//        // was used
-//        sql = "SELECT * FROM " + viewName + " WHERE v2 > 100";
-//        stmt = conn1.prepareStatement(sql);
-//        stmt.executeQuery();
-//        QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
-//        assertEquals(5, plan.getSplits().size());
+        TestUtil.analyzeTable(conn, fullTableName);
+        List<KeyRange> guideposts = TestUtil.getAllSplits(conn, fullTableName);
+        assertEquals(1, guideposts.size());
+        assertEquals(KeyRange.EVERYTHING_RANGE, guideposts.get(0));
+        
+        conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=20");
+        
+        TestUtil.analyzeTable(conn, fullTableName);
+        guideposts = TestUtil.getAllSplits(conn, fullTableName);
+        assertEquals(5, guideposts.size());
+
+        // Confirm that when view index used, the GUIDE_POSTS_WIDTH from the data physical table
+        // was used
+        sql = "SELECT * FROM " + viewName + " WHERE v2 >= 100";
+        stmt = conn1.prepareStatement(sql);
+        stmt.executeQuery();
+        QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+        assertEquals(4, plan.getSplits().size());
     }
     
     
@@ -259,26 +262,26 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             assertEquals("KV1", rs.getString(1));
             assertFalse(rs.next());
             
-//            TestUtil.analyzeTable(conn, baseTable);
-//            List<KeyRange> guideposts = TestUtil.getAllSplits(conn, baseTable);
-//            assertEquals(1, guideposts.size());
-//            assertEquals(KeyRange.EVERYTHING_RANGE, guideposts.get(0));
-//            
-//            conn.createStatement().execute("ALTER TABLE " + baseTable + " SET GUIDE_POST_WIDTH=20");
-//            
-//            TestUtil.analyzeTable(conn, baseTable);
-//            guideposts = TestUtil.getAllSplits(conn, baseTable);
-//            assertEquals(6, guideposts.size());
-//
-//            // Confirm that when view index used, the GUIDE_POST_WIDTH from the data physical table
-//            // was used
-//            stmt = conn.prepareStatement("SELECT KV1 FROM  " + globalView + " WHERE PK3 = ? AND KV3 >= ?");
-//            stmt.setInt(1, 1);
-//            stmt.setString(2, "KV3");
-//            rs = stmt.executeQuery();
-//            plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
-//            assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
-//            assertEquals(6, plan.getSplits().size());
+            TestUtil.analyzeTable(conn, baseTable);
+            List<KeyRange> guideposts = TestUtil.getAllSplits(conn, baseTable);
+            assertEquals(1, guideposts.size());
+            assertEquals(KeyRange.EVERYTHING_RANGE, guideposts.get(0));
+            
+            conn.createStatement().execute("ALTER TABLE " + baseTable + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=20");
+            
+            TestUtil.analyzeTable(conn, baseTable);
+            guideposts = TestUtil.getAllSplits(conn, baseTable);
+            assertEquals(6, guideposts.size());
+
+            // Confirm that when view index used, the GUIDE_POSTS_WIDTH from the data physical table
+            // was used
+            stmt = conn.prepareStatement("SELECT KV1 FROM  " + globalView + " WHERE PK3 = ? AND KV3 >= ?");
+            stmt.setInt(1, 1);
+            stmt.setString(2, "KV3");
+            rs = stmt.executeQuery();
+            plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
+            assertEquals(6, plan.getSplits().size());
         }
     }
 }

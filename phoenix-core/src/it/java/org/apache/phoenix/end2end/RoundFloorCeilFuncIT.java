@@ -175,7 +175,6 @@ public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
         expectedDate = DateUtil.parseDate("2012-01-01 14:25:29");
         assertEquals(expectedDate, rs.getDate(4));
         expectedDate = DateUtil.parseDate("2012-01-02 00:00:00");
-        System.out.println(String.format(" the expected time is [%s] and the actual time is [%s]",expectedDate.getTime(),rs.getDate(5).getTime()));
         assertEquals(expectedDate, rs.getDate(5));
         expectedDate = DateUtil.parseDate("2012-02-01 00:00:00");
         assertEquals(expectedDate, rs.getDate(6));

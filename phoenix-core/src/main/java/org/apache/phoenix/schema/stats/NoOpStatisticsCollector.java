@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -44,7 +45,7 @@ public class NoOpStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public void updateStatistic(Region region) {
+    public void updateStatistic(Region region, Scan scan) {
         // No-op
     }
 

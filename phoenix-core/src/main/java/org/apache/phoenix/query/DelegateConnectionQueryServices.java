@@ -33,7 +33,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.PFunction;
@@ -45,7 +44,8 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.tephra.TransactionSystemClient;
 
 
@@ -250,8 +250,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) throws SQLException {
-        return getDelegate().getTableStats(physicalName, clientTimeStamp);
+    public GuidePostsInfo getTableStats(GuidePostsKey key) throws SQLException {
+        return getDelegate().getTableStats(key);
     }
 
 
@@ -342,8 +342,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
 
     @Override
-    public void invalidateStats(ImmutableBytesPtr tableName) {
-        getDelegate().invalidateStats(tableName);
+    public void invalidateStats(GuidePostsKey key) {
+        getDelegate().invalidateStats(key);
     }
 
     @Override

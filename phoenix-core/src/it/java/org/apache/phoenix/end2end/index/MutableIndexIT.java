@@ -703,7 +703,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
               while (true) {
                 rs = conn1.createStatement().executeQuery(query);
                 assertTrue(rs.next());
-                System.out.println("Number of rows returned:" + rs.getInt(1));
                 assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
                 try {
                   List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);

@@ -51,6 +51,10 @@ public class GuidePostsInfoBuilder {
     private List<Long> rowCounts = new ArrayList<Long>();
     private List<Long> byteCounts = new ArrayList<Long>();
 
+    public boolean isEmpty() {
+        return rowCounts.size() == 0;
+    }
+    
     public List<Long> getRowCounts() {
         return rowCounts;
     }

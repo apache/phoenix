@@ -51,7 +51,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -79,7 +78,8 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -113,7 +113,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
-    private final TableStatsCache tableStatsCache;
+    private final GuidePostsCache guidePostsCache;
     
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
@@ -140,7 +140,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
         TransactionManager txnManager = new TransactionManager(config);
         this.txSystemClient = new InMemoryTxSystemClient(txnManager);
-        this.tableStatsCache = new TableStatsCache(this, config);
+        this.guidePostsCache = new GuidePostsCache(this, config);
     }
 
     private PMetaData newEmptyMetaData() {
@@ -520,12 +520,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public PTableStats getTableStats(byte[] physicalName, long clientTimeStamp) {
-        PTableStats stats = tableStatsCache.getCache().getIfPresent(physicalName);
-        if (null == stats) {
-          return PTableStats.EMPTY_STATS;
+    public GuidePostsInfo getTableStats(GuidePostsKey key) {
+        GuidePostsInfo info = guidePostsCache.getCache().getIfPresent(key);
+        if (null == info) {
+          return GuidePostsInfo.NO_GUIDEPOST;
         }
-        return stats;
+        return info;
     }
 
     @Override
@@ -640,19 +640,19 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     /**
-     * Manually adds {@link PTableStats} for a table to the client-side cache. Not a
+     * Manually adds {@link GuidePostsInfo} for a table to the client-side cache. Not a
      * {@link ConnectionQueryServices} method. Exposed for testing purposes.
      *
      * @param tableName Table name
      * @param stats Stats instance
      */
-    public void addTableStats(ImmutableBytesPtr tableName, PTableStats stats) {
-        this.tableStatsCache.put(Objects.requireNonNull(tableName), stats);
+    public void addTableStats(GuidePostsKey key, GuidePostsInfo info) {
+        this.guidePostsCache.put(Objects.requireNonNull(key), info);
     }
 
     @Override
-    public void invalidateStats(ImmutableBytesPtr tableName) {
-        this.tableStatsCache.invalidate(Objects.requireNonNull(tableName));
+    public void invalidateStats(GuidePostsKey key) {
+        this.guidePostsCache.invalidate(Objects.requireNonNull(key));
     }
 
     @Override
