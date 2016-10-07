@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
@@ -231,15 +232,19 @@ public class PhoenixSchema implements Schema {
         CalciteSchema calciteSchema = CalciteSchema.from(schema);
         List<String> path = CalciteSchema.from(viewSqlSchema).path(null);
         try {
+            List<PhoenixTable> phoenixTables = Lists.newArrayList();
             for (Table table : tables.values()) {
                 if (table instanceof PhoenixTable) {
-                    TableRef tableRef = ((PhoenixTable) table).tableMapping.getTableRef();
-                    for (PTable index : tableRef.getTable().getIndexes()) {
-                        TableRef indexTableRef = new TableRef(null, index,
-                                tableRef.getTimeStamp(), tableRef.getLowerBoundTimeStamp(),
-                                false);
-                        addMaterialization(indexTableRef, path, calciteSchema);
-                    }
+                    phoenixTables.add((PhoenixTable) table);
+                }
+            }
+            for (PhoenixTable phoenixTable : phoenixTables) {
+                TableRef tableRef = phoenixTable.tableMapping.getTableRef();
+                for (PTable index : tableRef.getTable().getIndexes()) {
+                    TableRef indexTableRef = new TableRef(null, index,
+                            tableRef.getTimeStamp(), tableRef.getLowerBoundTimeStamp(),
+                            false);
+                    addMaterialization(indexTableRef, path, calciteSchema);
                 }
             }
             for (TableRef tableRef : viewTables) {
