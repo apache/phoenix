@@ -33,6 +33,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.types.PChar;
@@ -409,11 +410,11 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
-        initAvgGroupTable(conn, tableName, " GUIDE_POST_WIDTH=20 ");
+        initAvgGroupTable(conn, tableName, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=20 ");
         testAvgGroupByOrderPreserving(conn, tableName, 13);
-        conn.createStatement().execute("ALTER TABLE " + tableName + " SET GUIDE_POST_WIDTH=" + 100);
+        conn.createStatement().execute("ALTER TABLE " + tableName + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=100");
         testAvgGroupByOrderPreserving(conn, tableName, 6);
-        conn.createStatement().execute("ALTER TABLE " + tableName + " SET GUIDE_POST_WIDTH=null");
+        conn.createStatement().execute("ALTER TABLE " + tableName + " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=null");
         testAvgGroupByOrderPreserving(conn, tableName, 4);
     }
     

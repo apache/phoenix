@@ -639,4 +639,8 @@ public class MetaDataUtil {
         return cfPtr.getLength() >= QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES.length &&
                Bytes.compareTo(cfPtr.get(), cfPtr.getOffset(), QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES.length, QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES, 0, QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES.length) == 0;
     }
+    
+    public static boolean isLocalIndexFamily(byte[] cf) {
+        return Bytes.startsWith(cf, QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES);
+    }
 }

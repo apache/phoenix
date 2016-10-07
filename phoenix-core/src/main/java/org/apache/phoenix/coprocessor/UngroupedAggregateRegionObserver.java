@@ -62,7 +62,6 @@ import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
-import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -723,7 +722,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,
             final HRegion region, final Scan scan, Configuration config) throws IOException {
         StatsCollectionCallable callable =
-                new StatsCollectionCallable(stats, region, innerScanner, config);
+                new StatsCollectionCallable(stats, region, innerScanner, config, scan);
         byte[] asyncBytes = scan.getAttribute(BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB);
         boolean async = false;
         if (asyncBytes != null) {
@@ -790,13 +789,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         private final HRegion region;
         private final RegionScanner innerScanner;
         private final Configuration config;
+        private final Scan scan;
 
         StatsCollectionCallable(StatisticsCollector s, HRegion r, RegionScanner rs,
-                Configuration config) {
+                Configuration config, Scan scan) {
             this.stats = s;
             this.region = r;
             this.innerScanner = rs;
             this.config = config;
+            this.scan = scan;
         }
 
         @Override
@@ -837,7 +838,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             } finally {
                 try {
                     if (noErrors && !compactionRunning) {
-                        stats.updateStatistic(region);
+                        stats.updateStatistic(region, scan);
                         logger.info("UPDATE STATISTICS finished successfully for scanner: "
                                 + innerScanner + ". Number of rows scanned: " + rowCount
                                 + ". Time: " + (System.currentTimeMillis() - startTime));

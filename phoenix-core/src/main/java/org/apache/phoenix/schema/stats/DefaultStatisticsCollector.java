@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.HRegion;
@@ -64,7 +65,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     private final Pair<Long, GuidePostsInfoBuilder> cachedGuidePosts;
     private final byte[] guidePostWidthBytes;
     private final byte[] guidePostPerRegionBytes;
-    // Where to look for GUIDE_POST_WIDTH in SYSTEM.CATALOG
+    // Where to look for GUIDE_POSTS_WIDTH in SYSTEM.CATALOG
     private final byte[] ptableKey;
     private final RegionCoprocessorEnvironment env;
 
@@ -124,12 +125,12 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
             Get get = new Get(ptableKey);
             get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
             Result result = htable.get(get);
-            long guidepostWidth = 0;
+            long guidepostWidth = -1;
             if (!result.isEmpty()) {
                 Cell cell = result.listCells().get(0);
                 guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
             }
-            if (guidepostWidth > 0) {
+            if (guidepostWidth >= 0) {
                 this.guidePostDepth = guidepostWidth;
             } else {
                 // Last use global config value
@@ -157,10 +158,10 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     }
 
     @Override
-    public void updateStatistic(HRegion region) {
+    public void updateStatistic(HRegion region, Scan scan) {
         try {
             ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-            writeStatsToStatsTable(region, true, mutations, TimeKeeper.SYSTEM.getCurrentTime());
+            writeStatistics(region, true, mutations, TimeKeeper.SYSTEM.getCurrentTime(), scan);
             if (logger.isDebugEnabled()) {
                 logger.debug("Committing new stats for the region " + region.getRegionInfo());
             }
@@ -170,16 +171,20 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
         }
     }
 
-    private void writeStatsToStatsTable(final HRegion region, boolean delete, List<Mutation> mutations, long currentTime)
+    private void writeStatistics(final HRegion region, boolean delete, List<Mutation> mutations, long currentTime, Scan scan)
             throws IOException {
         try {
             Set<ImmutableBytesPtr> fams = guidePostsInfoWriterMap.keySet();
-            // update the statistics table
-            // Delete statistics for a region if no guidepost is collected for that region during UPDATE STATISTICS
-            // This will not impact a stats collection of single column family during compaction as
-            // guidePostsInfoWriterMap cannot be empty in this case.
+            // Update the statistics table.
+            // Delete statistics for a region if no guide posts are collected for that region during
+            // UPDATE STATISTICS. This will not impact a stats collection of single column family during
+            // compaction as guidePostsInfoWriterMap cannot be empty in this case.
             if (cachedGuidePosts == null) {
-                boolean collectingForLocalIndex = !fams.isEmpty() && MetaDataUtil.isLocalIndexFamily(fams.iterator().next());
+                // We're either collecting stats for the data table or the local index table, but not both
+                // We can determine this based on the column families in the scan being prefixed with the
+                // local index column family prefix. We always explicitly specify the local index column
+                // families when we're collecting stats for a local index.
+                boolean collectingForLocalIndex = scan != null && !scan.getFamilyMap().isEmpty() && MetaDataUtil.isLocalIndexFamily(scan.getFamilyMap().keySet().iterator().next());
                 for (byte[] fam : region.getStores().keySet()) {
                     ImmutableBytesPtr cfKey = new ImmutableBytesPtr(fam);
                     boolean isLocalIndexStore = MetaDataUtil.isLocalIndexFamily(cfKey);
@@ -202,7 +207,10 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Adding new stats for the region " + region.getRegionInfo());
                 }
-                statsWriter.addStats(this, fam, mutations);
+                // If we've disabled stats, don't write any, just delete them
+                if (this.guidePostDepth > 0) {
+                    statsWriter.addStats(this, fam, mutations);
+                }
             }
         } catch (IOException e) {
             logger.error("Failed to update statistics table!", e);
@@ -223,6 +231,10 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
      */
     @Override
     public void collectStatistics(final List<Cell> results) {
+        // A guide posts depth of zero disables the collection of stats
+        if (guidePostDepth == 0) {
+            return;
+        }
         Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
         boolean incrementRow = true;
         for (Cell cell : results) {
@@ -274,8 +286,12 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
     }
 
     private InternalScanner getInternalScanner(RegionCoprocessorEnvironment env, Store store,
-            InternalScanner internalScan, ImmutableBytesPtr family) {
-        return new StatisticsScanner(this, statsWriter, env, internalScan, family);
+            InternalScanner internalScan, ImmutableBytesPtr family) throws IOException {
+        StatisticsScanner scanner = new StatisticsScanner(this, statsWriter, env, internalScan, family);
+        // We need to initialize the scanner synchronously and potentially perform a cross region Get
+        // in order to use the correct guide posts width for the table being compacted.
+        init();
+        return scanner;
     }
 
     @Override

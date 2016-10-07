@@ -135,8 +135,8 @@ public class StatisticsWriter implements Closeable {
         }
         GuidePostsInfo gps = tracker.getGuidePosts(cfKey);
         if (gps != null) {
-            List<Long> byteCounts = gps.getByteCounts();
-            List<Long> rowCounts = gps.getRowCounts();
+            long[] byteCounts = gps.getByteCounts();
+            long[] rowCounts = gps.getRowCounts();
             ImmutableBytesWritable keys = gps.getGuidePosts();
             boolean hasGuidePosts = keys.getLength() > 0;
             if (hasGuidePosts) {
@@ -146,7 +146,7 @@ public class StatisticsWriter implements Closeable {
                     PrefixByteDecoder decoder = new PrefixByteDecoder(gps.getMaxLength());
                     do {
                         ImmutableBytesWritable ptr = decoder.decode(input);
-                        addGuidepost(cfKey, mutations, ptr, byteCounts.get(guidePostCount), rowCounts.get(guidePostCount), timeStamp);
+                        addGuidepost(cfKey, mutations, ptr, byteCounts[guidePostCount], rowCounts[guidePostCount], timeStamp);
                         guidePostCount++;
                     } while (decoder != null);
                 } catch (EOFException e) { // Ignore as this signifies we're done

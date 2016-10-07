@@ -377,9 +377,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterIT {
             conn.commit();
             fail();
         } catch (SQLException e) {
-            System.out.println();
         } catch (Exception e) {
-            System.out.println();
         }
 
     }

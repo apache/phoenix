@@ -93,10 +93,11 @@ public class IndexExtendedIT extends BaseOwnClusterIT {
     
     @BeforeClass
     public static void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
                 .iterator()));
     }
@@ -442,7 +443,7 @@ public class IndexExtendedIT extends BaseOwnClusterIT {
                 rs = conn1.createStatement().executeQuery(query);
                 Thread.sleep(1000);
                 for (int j = 0; j < 26; j++) {
-                    assertTrue(rs.next());
+                    assertTrue("No row found at " + j, rs.next());
                     tIdColumnValues[j] = rs.getString("t_id");
                     k1ColumnValue[j] = rs.getInt("k1");
                     v1ColumnValues[j] = rs.getString("V1");
