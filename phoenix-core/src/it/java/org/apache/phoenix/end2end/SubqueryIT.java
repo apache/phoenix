@@ -272,8 +272,11 @@ public class SubqueryIT extends BaseJoinIT {
     public void testNonCorrelatedSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String tableName5 = getTableName(conn, JOIN_COITEM_TABLE_FULL_NAME);
         try {            
-            String query = "SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" >= ALL (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ") ORDER BY name";
+            String query = "SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" >= ALL (SELECT \"item_id\" FROM " + tableName4 + ") ORDER BY name";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -285,7 +288,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" < ANY (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ")";
+            query = "SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" < ANY (SELECT \"item_id\" FROM " + tableName4 + ")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -306,7 +309,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" < (SELECT max(\"item_id\") FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ")";
+            query = "SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" < (SELECT max(\"item_id\") FROM " + tableName4 + ")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -327,7 +330,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT * FROM " + getTableName(conn, JOIN_COITEM_TABLE_FULL_NAME) + " WHERE (item_id, item_name) != ALL (SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + ")";
+            query = "SELECT * FROM " + tableName5 + " WHERE (item_id, item_name) != ALL (SELECT \"item_id\", name FROM " + tableName1 + ")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -338,7 +341,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT * FROM " + getTableName(conn, JOIN_COITEM_TABLE_FULL_NAME) + " WHERE EXISTS (SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + ")";
+            query = "SELECT * FROM " + tableName5 + " WHERE EXISTS (SELECT \"item_id\", name FROM " + tableName1 + ")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -364,7 +367,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" < (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ")";
+            query = "SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" < (SELECT \"item_id\" FROM " + tableName4 + ")";
             statement = conn.prepareStatement(query);
             try {
                 rs = statement.executeQuery();
@@ -380,8 +383,12 @@ public class SubqueryIT extends BaseJoinIT {
     public void testInSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String tableName5 = getTableName(conn, JOIN_COITEM_TABLE_FULL_NAME);
         try {
-            String query = "SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ") ORDER BY name";
+            String query = "SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + tableName4 + ") ORDER BY name";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -399,7 +406,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
 
-            query = "SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" NOT IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ") ORDER BY name";
+            query = "SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" NOT IN (SELECT \"item_id\" FROM " + tableName4 + ") ORDER BY name";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -414,7 +421,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT i.\"item_id\", s.name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" WHERE i.\"item_id\" IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " WHERE \"order_id\" > '000000000000001') ORDER BY i.name";
+            query = "SELECT i.\"item_id\", s.name FROM " + tableName1 + " i JOIN " + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" WHERE i.\"item_id\" IN (SELECT \"item_id\" FROM " + tableName4 + " WHERE \"order_id\" > '000000000000001') ORDER BY i.name";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -433,7 +440,7 @@ public class SubqueryIT extends BaseJoinIT {
             String plan = QueryUtil.getExplainPlan(rs);
             assertPlansMatch(plans[0], plan);
             
-            query = "SELECT i.\"item_id\", s.name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s LEFT JOIN " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i ON i.\"supplier_id\" = s.\"supplier_id\" WHERE i.\"item_id\" IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ") ORDER BY i.name";
+            query = "SELECT i.\"item_id\", s.name FROM " + tableName2 + " s LEFT JOIN " + tableName1 + " i ON i.\"supplier_id\" = s.\"supplier_id\" WHERE i.\"item_id\" IN (SELECT \"item_id\" FROM " + tableName4 + ") ORDER BY i.name";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -454,8 +461,8 @@ public class SubqueryIT extends BaseJoinIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertPlansEqual(plans[1], QueryUtil.getExplainPlan(rs));
            
-            query = "SELECT * FROM " + getTableName(conn, JOIN_COITEM_TABLE_FULL_NAME) + " WHERE (item_id, item_name) IN (SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" NOT IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + "))"
-                    + " OR (co_item_id, co_item_name) IN (SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + "))";
+            query = "SELECT * FROM " + tableName5 + " WHERE (item_id, item_name) IN (SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" NOT IN (SELECT \"item_id\" FROM " + tableName4 + "))"
+                    + " OR (co_item_id, co_item_name) IN (SELECT \"item_id\", name FROM " + tableName1 + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + tableName4 + "))";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -483,8 +490,11 @@ public class SubqueryIT extends BaseJoinIT {
     public void testExistsSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+        String tableName5 = getTableName(conn, JOIN_COITEM_TABLE_FULL_NAME);
         try {
-            String query = "SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i WHERE NOT EXISTS (SELECT 1 FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " o WHERE o.\"item_id\" = i.\"item_id\") ORDER BY name";
+            String query = "SELECT \"item_id\", name FROM " + tableName1 + " i WHERE NOT EXISTS (SELECT 1 FROM " + tableName4 + " o WHERE o.\"item_id\" = i.\"item_id\") ORDER BY name";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -502,8 +512,8 @@ public class SubqueryIT extends BaseJoinIT {
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             assertPlansEqual(plans[3], QueryUtil.getExplainPlan(rs));
             
-            query = "SELECT * FROM " + getTableName(conn, JOIN_COITEM_TABLE_FULL_NAME) + " co WHERE EXISTS (SELECT 1 FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i WHERE NOT EXISTS (SELECT 1 FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " WHERE \"item_id\" = i.\"item_id\") AND co.item_id = \"item_id\" AND name = co.item_name)"
-                    + " OR EXISTS (SELECT 1 FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ") AND co.co_item_id = \"item_id\" AND name = co.co_item_name)";
+            query = "SELECT * FROM " + tableName5 + " co WHERE EXISTS (SELECT 1 FROM " + tableName1 + " i WHERE NOT EXISTS (SELECT 1 FROM " + tableName4 + " WHERE \"item_id\" = i.\"item_id\") AND co.item_id = \"item_id\" AND name = co.item_name)"
+                    + " OR EXISTS (SELECT 1 FROM " + tableName1 + " WHERE \"item_id\" IN (SELECT \"item_id\" FROM " + tableName4 + ") AND co.co_item_id = \"item_id\" AND name = co.co_item_name)";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -531,11 +541,14 @@ public class SubqueryIT extends BaseJoinIT {
     public void testComparisonSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         final Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         try {
-            String query = "SELECT \"order_id\", name FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
-                    " o JOIN " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + 
+            String query = "SELECT \"order_id\", name FROM " + tableName4 + 
+                    " o JOIN " + tableName1 + 
                     " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity = (SELECT max(quantity) FROM " + 
-                    getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " q WHERE o.\"item_id\" = q.\"item_id\")";
+                    tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\")";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -553,10 +566,10 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
 
-            query = "SELECT \"order_id\", name FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
-                    " o JOIN " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + 
+            query = "SELECT \"order_id\", name FROM " + tableName4 + 
+                    " o JOIN " + tableName1 + 
                     " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity = (SELECT max(quantity) FROM " + 
-                    getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i2 JOIN " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
+                    tableName1 + " i2 JOIN " + tableName4 + 
                     " q ON i2.\"item_id\" = q.\"item_id\" WHERE o.\"item_id\" = i2.\"item_id\")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
@@ -575,11 +588,11 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
 
-            query = "SELECT name from " + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + 
+            query = "SELECT name from " + tableName3 + 
                     " WHERE \"customer_id\" IN (SELECT \"customer_id\" FROM " + 
-                    getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i JOIN " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
+                    tableName1 + " i JOIN " + tableName4 + 
                     " o ON o.\"item_id\" = i.\"item_id\" WHERE i.name = 'T2' OR quantity > (SELECT avg(quantity) FROM " + 
-                    getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " q WHERE o.\"item_id\" = q.\"item_id\"))";
+                    tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\"))";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -593,8 +606,8 @@ public class SubqueryIT extends BaseJoinIT {
             String plan = QueryUtil.getExplainPlan(rs);
             assertPlansMatch(plans[4], plan);
 
-            query = "SELECT \"order_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
-                    " o WHERE quantity = (SELECT quantity FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
+            query = "SELECT \"order_id\" FROM " + tableName4 + 
+                    " o WHERE quantity = (SELECT quantity FROM " + tableName4 + 
                     " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004')";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
@@ -609,8 +622,8 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
 
-            query = "SELECT \"order_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
-                    " o WHERE quantity = (SELECT quantity FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
+            query = "SELECT \"order_id\" FROM " + tableName4 + 
+                    " o WHERE quantity = (SELECT quantity FROM " + tableName4 + 
                     " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003')";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
@@ -620,8 +633,8 @@ public class SubqueryIT extends BaseJoinIT {
             } catch (SQLException e) {                
             }
 
-            query = "SELECT \"order_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
-                    " o WHERE quantity = (SELECT max(quantity) FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
+            query = "SELECT \"order_id\" FROM " + tableName4 + 
+                    " o WHERE quantity = (SELECT max(quantity) FROM " + tableName4 + 
                     " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000004' GROUP BY \"order_id\")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
@@ -636,8 +649,8 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
 
-            query = "SELECT \"order_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
-                    " o WHERE quantity = (SELECT max(quantity) FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + 
+            query = "SELECT \"order_id\" FROM " + tableName4 + 
+                    " o WHERE quantity = (SELECT max(quantity) FROM " + tableName4 + 
                     " WHERE o.\"item_id\" = \"item_id\" AND \"order_id\" != '000000000000003' GROUP BY \"order_id\")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
@@ -655,8 +668,10 @@ public class SubqueryIT extends BaseJoinIT {
     public void testAnyAllComparisonSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         try {
-            String query = "SELECT \"order_id\", name FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " o JOIN " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity = ALL(SELECT quantity FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " q WHERE o.\"item_id\" = q.\"item_id\")";
+            String query = "SELECT \"order_id\", name FROM " + tableName4 + " o JOIN " + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity = ALL(SELECT quantity FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\")";
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -671,7 +686,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT \"order_id\", name FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " o JOIN " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ALL(SELECT max(quantity) FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " q WHERE o.\"item_id\" = q.\"item_id\")";
+            query = "SELECT \"order_id\", name FROM " + tableName4 + " o JOIN " + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ALL(SELECT max(quantity) FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\")";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -680,7 +695,7 @@ public class SubqueryIT extends BaseJoinIT {
 
             assertFalse(rs.next());
             
-            query = "SELECT \"order_id\", name FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " o JOIN " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ANY(SELECT quantity FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity)";
+            query = "SELECT \"order_id\", name FROM " + tableName4 + " o JOIN " + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" WHERE quantity != ANY(SELECT quantity FROM " + tableName4 + " q WHERE o.\"item_id\" = q.\"item_id\" GROUP BY quantity)";
             statement = conn.prepareStatement(query);
             rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -702,13 +717,15 @@ public class SubqueryIT extends BaseJoinIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         try {            
             conn.createStatement().execute("CREATE TABLE " + tempTable 
                     + "   (item_id varchar not null primary key, " 
                     + "    name varchar)");
             conn.createStatement().execute("UPSERT INTO " + tempTable + "(item_id, name)"
-                    + "   SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME) 
-                    + "   WHERE \"item_id\" NOT IN (SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ")");
+                    + "   SELECT \"item_id\", name FROM " + tableName1 
+                    + "   WHERE \"item_id\" NOT IN (SELECT \"item_id\" FROM " + tableName4 + ")");
             
             String query = "SELECT name FROM " + tempTable + " ORDER BY item_id";
             PreparedStatement statement = conn.prepareStatement(query);
@@ -732,14 +749,16 @@ public class SubqueryIT extends BaseJoinIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
+        String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+        String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         try {            
             conn.createStatement().execute("CREATE TABLE " + tempTable 
                     + "   (item_id varchar not null primary key, " 
                     + "    name varchar)");
             conn.createStatement().execute("UPSERT INTO " + tempTable + "(item_id, name)"
-                    + "   SELECT \"item_id\", name FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME));
+                    + "   SELECT \"item_id\", name FROM " + tableName1);
 
-            String query = "SELECT count(*) FROM " + getTableName(conn,JOIN_ITEM_TABLE_FULL_NAME);
+            String query = "SELECT count(*) FROM " + tableName1;
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
             assertTrue (rs.next());
@@ -747,7 +766,7 @@ public class SubqueryIT extends BaseJoinIT {
             assertFalse(rs.next());
             
             conn.createStatement().execute("DELETE FROM " + tempTable + " WHERE item_id IN ("
-                    + "   SELECT \"item_id\" FROM " + getTableName(conn,JOIN_ORDER_TABLE_FULL_NAME) + ")");
+                    + "   SELECT \"item_id\" FROM " + tableName4 + ")");
             
             query = "SELECT name FROM " + tempTable + " ORDER BY item_id";
             statement = conn.prepareStatement(query);
