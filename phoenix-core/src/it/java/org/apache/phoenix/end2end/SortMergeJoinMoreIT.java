@@ -27,34 +27,18 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
     
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Forces server cache to be used
-        props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
     @Test
     public void testJoinOverSaltedTables() throws Exception {
-        String tempTableNoSalting = "TEMP_TABLE_NO_SALTING"  + generateRandomString();
-        String tempTableWithSalting = "TEMP_TABLE_WITH_SALTING" + generateRandomString();
+        String tempTableNoSalting = "TEMP_TABLE_NO_SALTING"  + generateUniqueName();
+        String tempTableWithSalting = "TEMP_TABLE_WITH_SALTING" + generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -191,8 +175,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testJoinOnDynamicColumns() throws Exception {
-        String tableA =  generateRandomString();
-        String tableB =  generateRandomString();
+        String tableA =  generateUniqueName();
+        String tableB =  generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -221,7 +205,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             }
             conn.commit();
             stmt.close();
-            String seqBName = generateRandomString();
+            String seqBName = generateUniqueName();
 
             // upsert select dynamic columns in tableB
             conn.createStatement().execute("CREATE SEQUENCE " + seqBName);
@@ -264,9 +248,9 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-        String gTableName = generateRandomString();
-        String lTableName = generateRandomString();
-        String slTableName = generateRandomString();
+        String gTableName = generateUniqueName();
+        String lTableName = generateUniqueName();
+        String slTableName = generateUniqueName();
 
 
         try {
@@ -323,7 +307,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        String eventCountTableName = generateRandomString();
+        String eventCountTableName = generateUniqueName();
         try {
             conn.createStatement().execute(
                     "CREATE TABLE IF NOT EXISTS " + eventCountTableName + " (\n" +
@@ -384,7 +368,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             // We'll test the original version of the user table as well as a slightly modified
             // version, in order to verify that sort-merge join works for columns both having
             // DESC sort order as well as one having ASC order and the other having DESC order.
-            String[] t = new String[] {"EVENT_LATENCY" + generateRandomString(), "EVENT_LATENCY_2" + generateRandomString()};
+            String[] t = new String[] {"EVENT_LATENCY" + generateUniqueName(), "EVENT_LATENCY_2" + generateUniqueName()};
             for (int i = 0; i < 2; i++) {
                 conn.createStatement().execute(
                         "CREATE TABLE IF NOT EXISTS " + t[i] + " (\n" +

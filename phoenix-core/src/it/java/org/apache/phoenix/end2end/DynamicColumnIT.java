@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -48,7 +47,6 @@ import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -63,14 +61,15 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
     private static final byte[] FAMILY_NAME_A = Bytes.toBytes(SchemaUtil.normalizeIdentifier("A"));
     private static final byte[] FAMILY_NAME_B = Bytes.toBytes(SchemaUtil.normalizeIdentifier("B"));
 
-    private static String tableName = "TESTTBL";
+    private String tableName;
 
-    @BeforeClass
-    public static void doBeforeTestSetup() throws Exception {
+    @Before
+    public void initTable() throws Exception {
+        tableName = generateUniqueName();
         try (PhoenixConnection pconn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices services = pconn.getQueryServices();
             try (HBaseAdmin admin = services.getAdmin()) {
-                HTableDescriptor htd = new HTableDescriptor(TableName.valueOf("TESTTBL"));
+                HTableDescriptor htd = new HTableDescriptor(TableName.valueOf(tableName));
                 htd.addFamily(new HColumnDescriptor(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES));
                 htd.addFamily(new HColumnDescriptor(FAMILY_NAME_A));
                 htd.addFamily(new HColumnDescriptor(FAMILY_NAME_B));
@@ -101,7 +100,13 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
 
                 // Create Phoenix table after HBase table was created through the native APIs
                 // The timestamp of the table creation must be later than the timestamp of the data
-                ensureTableCreated(getUrl(), tableName, HBASE_DYNAMIC_COLUMNS);
+                pconn.createStatement().execute("create table " + tableName + 
+                "   (entry varchar not null," +
+                "    F varchar," +
+                "    A.F1v1 varchar," +
+                "    A.F1v2 varchar," +
+                "    B.F2v1 varchar" +
+                "    CONSTRAINT pk PRIMARY KEY (entry))");
             }
 
         }

@@ -33,7 +33,7 @@ import org.junit.Test;
 public class IsNullIT extends ParallelStatsDisabledIT {
     @Test
     public void testIsNullInPk() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         ensureTableCreated(getUrl(), tableName, "IntIntKeyTest");
         Connection conn = DriverManager.getConnection(getUrl());
         String upsert = "UPSERT INTO " + tableName + " VALUES(4,2)";
@@ -62,7 +62,7 @@ public class IsNullIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testIsNullWithLastPKColDesc() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 VARCHAR NOT NULL, k2 VARCHAR, k3 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2, k3 DESC))");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a')");
@@ -89,7 +89,7 @@ public class IsNullIT extends ParallelStatsDisabledIT {
     @Test
     public void testIsNullInCompositeKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 VARCHAR, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1,k2))");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (null,'a')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('a','a')");

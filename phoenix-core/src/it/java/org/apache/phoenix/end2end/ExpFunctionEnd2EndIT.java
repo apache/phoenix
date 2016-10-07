@@ -45,8 +45,8 @@ public class ExpFunctionEnd2EndIT extends ParallelStatsDisabledIT {
     public void initTable() throws Exception {
         Connection conn = null;
         PreparedStatement stmt = null;
-        signedTableName = generateRandomString();
-        unsignedTableName = generateRandomString();
+        signedTableName = generateUniqueName();
+        unsignedTableName = generateUniqueName();
 
         try {
             conn = DriverManager.getConnection(getUrl());

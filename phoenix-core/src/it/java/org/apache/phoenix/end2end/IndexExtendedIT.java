@@ -64,7 +64,7 @@ import com.google.common.collect.Maps;
  * Tests for the {@link IndexTool}
  */
 @RunWith(Parameterized.class)
-public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class IndexExtendedIT extends BaseOwnClusterIT {
     private final boolean localIndex;
     private final boolean transactional;
     private final boolean directApi;
@@ -120,10 +120,10 @@ public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
         if (!mutable || transactional) {
             return;
         }
-        String schemaName = generateRandomString();
-        String dataTableName = generateRandomString();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateRandomString();
+        String indexTableName = generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -192,10 +192,10 @@ public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
 
     @Test
     public void testSecondaryIndex() throws Exception {
-        String schemaName = generateRandomString();
-        String dataTableName = generateRandomString();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateRandomString();
+        String indexTableName = generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -318,10 +318,10 @@ public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
         if (localIndex) { // TODO: remove this return once PHOENIX-3292 is fixed
             return;
         }
-        String schemaName = generateRandomString();
-        String dataTableName = generateRandomString();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String indexTableName = generateRandomString();
+        String indexTableName = generateUniqueName();
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -374,9 +374,9 @@ public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
         }
     }
 
-    private Connection getConnectionForLocalIndexTest() throws SQLException{
+    private static Connection getConnectionForLocalIndexTest() throws SQLException{
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         return DriverManager.getConnection(getUrl(),props);
     }
 
@@ -400,9 +400,9 @@ public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
         if (!localIndex || transactional || mutable || directApi) {
             return;
         }
-        String schemaName = generateRandomString();
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String schemaName = generateUniqueName();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), false);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -502,9 +502,9 @@ public class IndexExtendedIT extends BaseOwnClusterHBaseManagedTimeIT {
         if (!localIndex || transactional || mutable || directApi) {
             return;
         }
-        String schemaName = generateRandomString();
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String schemaName = generateUniqueName();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), false);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 

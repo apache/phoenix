@@ -28,16 +28,11 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -46,11 +41,10 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.google.common.collect.Lists;
 
 /**
  * Tests to demonstrate and verify the STORE_NULLS option on a table,
@@ -70,10 +64,10 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
 
     @Before
     public void setUp() throws SQLException {
-        WITH_NULLS = generateRandomString();
-        WITHOUT_NULLS = generateRandomString();
-        IMMUTABLE_WITH_NULLS = generateRandomString();
-        IMMUTABLE_WITHOUT_NULLS = generateRandomString();
+        WITH_NULLS = generateUniqueName();
+        WITHOUT_NULLS = generateUniqueName();
+        IMMUTABLE_WITH_NULLS = generateUniqueName();
+        IMMUTABLE_WITHOUT_NULLS = generateUniqueName();
         conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
 
@@ -132,7 +126,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testQueryingHistory() throws SQLException, InterruptedException, IOException {
+    public void testQueryingHistory() throws Exception {
         stmt.executeUpdate("UPSERT INTO " + WITH_NULLS + " VALUES (1, 'v1')");
         stmt.executeUpdate("UPSERT INTO " + WITHOUT_NULLS + " VALUES (1, 'v1')");
 
@@ -144,8 +138,8 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         stmt.executeUpdate("UPSERT INTO " + WITHOUT_NULLS + " VALUES (1, null)");
         Thread.sleep(10L);
 
-        doMajorCompaction(WITH_NULLS);
-        doMajorCompaction(WITHOUT_NULLS);
+        TestUtil.doMajorCompaction(conn, WITH_NULLS);
+        TestUtil.doMajorCompaction(conn, WITHOUT_NULLS);
 
         Properties historicalProps = new Properties();
         historicalProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -171,7 +165,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
 
     // Row deletes should work in the same way regardless of what STORE_NULLS is set to
     @Test
-    public void testDeletes() throws SQLException, InterruptedException, IOException {
+    public void testDeletes() throws Exception {
         stmt.executeUpdate("UPSERT INTO " + WITH_NULLS + " VALUES (1, 'v1')");
         stmt.executeUpdate("UPSERT INTO " + WITHOUT_NULLS + " VALUES (1, 'v1')");
 
@@ -183,8 +177,8 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         stmt.executeUpdate("DELETE FROM " + WITHOUT_NULLS + " WHERE id = 1");
         Thread.sleep(10L);
 
-        doMajorCompaction(WITH_NULLS);
-        doMajorCompaction(WITHOUT_NULLS);
+        TestUtil.doMajorCompaction(conn, WITH_NULLS);
+        TestUtil.doMajorCompaction(conn, WITHOUT_NULLS);
 
         Properties historicalProps = new Properties();
         historicalProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -219,54 +213,6 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
                 "WHERE table_name = 'WITH_NULLS_DEFAULT' AND store_nulls is not null");
         assertTrue(rs.next());
         assertTrue(rs.getBoolean(1));
-    }
-
-    /**
-     * Runs a major compaction, and then waits until the compaction is complete before returning.
-     *
-     * @param tableName name of the table to be compacted
-     */
-    private void doMajorCompaction(String tableName) throws IOException, InterruptedException {
-
-        tableName = SchemaUtil.normalizeIdentifier(tableName);
-
-        // We simply write a marker row, request a major compaction, and then wait until the marker
-        // row is gone
-        HTable htable = new HTable(getUtility().getConfiguration(), tableName);
-        byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
-
-
-        Put put = new Put(markerRowKey);
-        put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, HConstants.EMPTY_BYTE_ARRAY,
-                HConstants.EMPTY_BYTE_ARRAY);
-        htable.put(put);
-        htable.delete(new Delete(markerRowKey));
-        htable.close();
-
-        HBaseAdmin hbaseAdmin = new HBaseAdmin(getUtility().getConfiguration());
-        hbaseAdmin.flush(tableName);
-        hbaseAdmin.majorCompact(tableName);
-        hbaseAdmin.close();
-
-        boolean compactionDone = false;
-        while (!compactionDone) {
-            Thread.sleep(2000L);
-            htable = new HTable(getUtility().getConfiguration(), tableName);
-            Scan scan = new Scan();
-            scan.setStartRow(markerRowKey);
-            scan.setStopRow(Bytes.add(markerRowKey, new byte[] { 0 }));
-            scan.setRaw(true);
-
-            ResultScanner scanner = htable.getScanner(scan);
-            List<Result> results = Lists.newArrayList(scanner);
-            LOG.info("Results: " + results);
-            compactionDone = results.isEmpty();
-            scanner.close();
-
-            LOG.info("Compaction done: " + compactionDone);
-        }
-
-        htable.close();
     }
 
 

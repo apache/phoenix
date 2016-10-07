@@ -48,7 +48,7 @@ public class RTrimFunctionIT extends ParallelStatsDisabledIT {
     private void testWithFixedLengthPK(SortOrder sortOrder, List<Object> expectedResults) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + tableName + " ( k VARCHAR PRIMARY KEY " + (sortOrder == SortOrder.DESC ? "DESC" : "") + ")");
 

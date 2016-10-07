@@ -28,12 +28,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
@@ -42,7 +39,6 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -117,8 +113,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     }
 
     private void testMultiCFViewIndex(boolean localIndex, boolean isNamespaceEnabled) throws Exception {
-        String tableName = "XYZ." + generateRandomString();
-        String baseViewName = generateRandomString() ;
+        String tableName = "XYZ." + generateUniqueName();
+        String baseViewName = generateUniqueName() ;
         createTableAndValidate(tableName, isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "b", isNamespaceEnabled);
         createViewAndIndexesWithTenantId(tableName, baseViewName, localIndex, "a", isNamespaceEnabled);
@@ -126,8 +122,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         String sequenceNameA = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("a"), isNamespaceEnabled);
         String sequenceNameB = getViewIndexSequenceName(PNameFactory.newName(tableName), PNameFactory.newName("b"), isNamespaceEnabled);
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceEnabled);
-        verifySequence(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName, true);
-        verifySequence(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName, true);
+        verifySequenceValue(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName, -32767);
+        verifySequenceValue(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName, -32767);
 
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "a");
@@ -140,8 +136,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         }
         DriverManager.getConnection(getUrl()).createStatement().execute("DROP TABLE " + tableName + " CASCADE");
 
-        verifySequence(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName, false);
-        verifySequence(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName, false);
+        verifySequenceNotExists(isNamespaceEnabled? "a" : null, sequenceNameA, sequenceSchemaName);
+        verifySequenceNotExists(isNamespaceEnabled? "b" : null, sequenceNameB, sequenceSchemaName);
     }
 
     private void createViewAndIndexesWithTenantId(String tableName,String baseViewName, boolean localIndex, String tenantId,
@@ -248,8 +244,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
     public void testNonPaddedTenantId() throws Exception {
         String tenantId1 = "org1";
         String tenantId2 = "org2";
-        String tableName = generateRandomString();
-        String viewName = generateRandomString();
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (tenantId char(15) NOT NULL, pk1 varchar NOT NULL, pk2 INTEGER NOT NULL, val1 VARCHAR CONSTRAINT pk primary key (tenantId,pk1,pk2)) MULTI_TENANT = true";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);

@@ -48,7 +48,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
     
     protected void testUpdatableView(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         createBaseTable(tableName, saltBuckets, true);
         Connection conn = createTenantConnection(TENANT1_ID);
         try {
@@ -61,7 +61,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
 
     protected void testUpdatableViewNonString(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         createBaseTable(tableName, saltBuckets, false);
         Connection conn = createTenantConnection(NON_STRING_TENANT_ID);
         try {
@@ -78,7 +78,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
 
     protected void testUpdatableViewsWithSameNameDifferentTenants(Integer saltBuckets, boolean localIndex) throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         createBaseTable(tableName, saltBuckets, true);
         Connection conn1 = createTenantConnection(TENANT1_ID);
         Connection conn2 = createTenantConnection(TENANT2_ID);
@@ -115,7 +115,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
     
     private String createAndPopulateTenantView(Connection conn, String tenantId, String baseTable, String valuePrefix) throws SQLException {
-        String viewName = generateRandomString();
+        String viewName = generateUniqueName();
         String ddl = "CREATE VIEW " + viewName + "(v2 VARCHAR) AS SELECT * FROM " + baseTable + " WHERE k1 = 1";
         conn.createStatement().execute(ddl);
         tenantViewsToDelete.add(new Pair<String, String>(tenantId, viewName ));
@@ -127,7 +127,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
     
     private void createAndVerifyIndex(Connection conn, String viewName, String tableName, Integer saltBuckets, String tenantId, String valuePrefix, boolean localIndex) throws SQLException {
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         if(localIndex){
             conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + viewName + "(v2)");
         } else {
@@ -157,7 +157,7 @@ public class BaseTenantSpecificViewIndexIT extends ParallelStatsDisabledIT {
     }
 
     private void createAndVerifyIndexNonStringTenantId(Connection conn, String viewName, String tableName, String tenantId, String valuePrefix) throws SQLException {
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + viewName + "(v2)");
         conn.createStatement().execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity check that we can upsert after index is there
         conn.commit();

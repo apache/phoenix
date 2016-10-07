@@ -153,7 +153,7 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
         ResultSet rs;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement()
                 .execute("CREATE TABLE " + tableName + " ( k VARCHAR, c1.a bigint,c2.b bigint CONSTRAINT pk PRIMARY KEY (k)) ");
         conn.createStatement().execute("upsert into " + tableName + " values ('a',1,3)");
@@ -171,7 +171,7 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testReverseScanIndex() throws Exception {
-        String indexName = generateRandomString();
+        String indexName = generateUniqueName();
         String tenantId = getOrganizationId();
         String tableName = initATableValues(tenantId, getSplitsAtRowKeys(tenantId), getUrl());
         

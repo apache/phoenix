@@ -24,7 +24,6 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -36,28 +35,18 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
-
 public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        // Must update config before starting server
-        props.put(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, Boolean.FALSE.toString());
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
 
     @Test
     public void testDisabledLocalIndexes() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, Boolean.FALSE.toString());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        String baseName = generateRandomString();
+        String baseName = generateUniqueName();
         String tableName = baseName+ "_TABLE";
         String viewName = baseName + "_VIEW";
         String indexName1 = baseName + "_INDEX1";
@@ -78,9 +67,10 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
             admin.close();
         }
         
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
-        Connection tsconn = DriverManager.getConnection(getUrl(), props);
+        Properties tsconnProps = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        tsconnProps.setProperty(QueryServices.ALLOW_LOCAL_INDEX_ATTRIB, Boolean.FALSE.toString());
+        tsconnProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "t1");
+        Connection tsconn = DriverManager.getConnection(getUrl(), tsconnProps);
         
         tsconn.createStatement().execute("CREATE VIEW " + viewName + "(V1 VARCHAR) AS SELECT * FROM " + tableName);
         tsconn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + viewName + "(V1)");

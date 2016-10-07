@@ -17,26 +17,26 @@
  */
 package org.apache.phoenix.end2end;
 
-import java.util.Map;
+import org.apache.phoenix.query.BaseTest;
+import org.junit.runner.Result;
+import org.junit.runner.notification.RunListener;
 
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
+public class ParallelRunListener extends RunListener {
+    // This causes output to go to the console when run through maven
+    // private static final Log LOG = LogFactory.getLog(ParallelRunListener.class);
+    private static final int TEAR_DOWN_THRESHOLD = 100;
+    
+    private int testRuns = 0;
 
-import com.google.common.collect.Maps;
+    @Override
+    public void testRunFinished(Result result) throws Exception {
+        testRuns += result.getRunCount();
+        if (testRuns > TEAR_DOWN_THRESHOLD) {
+            // LOG.info("Tearing down mini cluster after " + testRuns + " test runs");
+            testRuns = 0;
+            BaseTest.tearDownMiniCluster();
+        }
 
-
-public class InMemoryOrderByIT extends OrderByIT {
-
-    public InMemoryOrderByIT() {
-    }
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(1024*1024));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        super.testRunFinished(result);
     }
 }

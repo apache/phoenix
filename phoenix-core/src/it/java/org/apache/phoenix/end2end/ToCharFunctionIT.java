@@ -67,7 +67,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
             value="DMI_BIGDECIMAL_CONSTRUCTED_FROM_DOUBLE", 
             justification="Test code.")
     public void initTable() throws Exception {
-        TO_CHAR_TABLE_NAME = generateRandomString();
+        TO_CHAR_TABLE_NAME = generateUniqueName();
         String ddl = "create table " + TO_CHAR_TABLE_NAME +
                 "(pk integer not null, \n" + 
                 "col_date date, \n" +
@@ -236,7 +236,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testToCharWithCloneMethod() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
     	String ddl = "create table " + tableName + " (k varchar primary key, v integer[])";
         conn.createStatement().execute(ddl);
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('x',ARRAY[1234])");
@@ -250,7 +250,7 @@ public class ToCharFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testIndexedNull() throws SQLException {
-        final String tableName = generateRandomString();
+        final String tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("create table " + tableName +
                 " (id integer primary key, ts1 timestamp, ts2 timestamp)");

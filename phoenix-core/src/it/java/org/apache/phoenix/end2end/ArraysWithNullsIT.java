@@ -31,7 +31,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertIntWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t1 = generateRandomString();
+        String t1 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t1 + " ( k VARCHAR PRIMARY KEY, a INTEGER[])");
 
@@ -54,7 +54,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertVarcharWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t2 = generateRandomString();
+        String t2 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t2 + " ( k VARCHAR PRIMARY KEY, a VARCHAR[])");
 
@@ -75,7 +75,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertBigIntWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t3 = generateRandomString();
+        String t3 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t3 + " ( k VARCHAR PRIMARY KEY, a BIGINT[])");
 
@@ -96,7 +96,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertFloatWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t4 = generateRandomString();
+        String t4 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t4 + " ( k VARCHAR PRIMARY KEY, a FLOAT[])");
 
@@ -117,7 +117,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertSmallIntWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t5 = generateRandomString();
+        String t5 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t5 + " ( k VARCHAR PRIMARY KEY, a SMALLINT[])");
 
@@ -138,7 +138,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertTinyIntWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t6 = generateRandomString();
+        String t6 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t6 + " ( k VARCHAR PRIMARY KEY, a TINYINT[])");
 
@@ -159,7 +159,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertBooleanWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t7 = generateRandomString();
+        String t7 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t7 + " ( k VARCHAR PRIMARY KEY, a BOOLEAN[])");
 
@@ -180,7 +180,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertDoubleWithNulls() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t8 = generateRandomString();
+        String t8 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t8 + " ( k VARCHAR PRIMARY KEY, a DOUBLE[])");
 
@@ -201,7 +201,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertDateWithNulls1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t9 = generateRandomString();
+        String t9 = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + t9 + " ( k VARCHAR PRIMARY KEY, a DATE[])");
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t9
             + " VALUES('a',ARRAY[TO_DATE('2015-05-20 06:12:14.184'),null,TO_DATE('2015-05-20 06:12:14.184'),null])");
@@ -219,7 +219,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertDateWithNulls2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t10 = generateRandomString();
+        String t10 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t10 + " ( k VARCHAR PRIMARY KEY, a DATE[])");
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t10
@@ -239,7 +239,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertTimeWithNulls1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t11 = generateRandomString();
+        String t11 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t11 + " ( k VARCHAR PRIMARY KEY, a TIME[])");
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t11
@@ -259,7 +259,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertTimeWithNulls2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t12 = generateRandomString();
+        String t12 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t12 + " ( k VARCHAR PRIMARY KEY, a TIME[])");
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t12
@@ -279,7 +279,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertTimeStampWithNulls1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t13 = generateRandomString();
+        String t13 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t13 + " ( k VARCHAR PRIMARY KEY, a TIMESTAMP[])");
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t13
@@ -298,7 +298,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertTimeStampWithNulls2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t14 = generateRandomString();
+        String t14 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t14 + " ( k VARCHAR PRIMARY KEY, a TIMESTAMP[])");
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + t14
@@ -317,7 +317,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertCharWithNulls1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t15 = generateRandomString();
+        String t15 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t15 + " ( k VARCHAR PRIMARY KEY, a CHAR(15)[])");
         PreparedStatement stmt = conn.prepareStatement(
@@ -336,7 +336,7 @@ public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
     @Test
     public void testArrayUpsertCharWithNulls2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String t16 = generateRandomString();
+        String t16 = generateUniqueName();
         conn.createStatement().execute(
             "CREATE TABLE " + t16 + " ( k VARCHAR PRIMARY KEY, a CHAR(15)[])");
         PreparedStatement stmt = conn.prepareStatement(

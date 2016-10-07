@@ -55,7 +55,7 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Properties props = new Properties(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         sink.initForTesting(conn, tableName);
 
         // create a simple metrics record
@@ -88,7 +88,7 @@ public class PhoenixTraceReaderIT extends BaseTracingTestIT {
         // hook up a phoenix sink
         PhoenixMetricsSink sink = new PhoenixMetricsSink();
         Connection conn = getConnectionWithoutTracing();
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         sink.initForTesting(conn, tableName);
 
         // create a simple metrics record

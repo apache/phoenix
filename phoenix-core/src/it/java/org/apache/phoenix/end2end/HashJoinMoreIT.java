@@ -28,17 +28,11 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 public class HashJoinMoreIT extends ParallelStatsDisabledIT {
     private final String[] plans = new String[] {
@@ -91,20 +85,10 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))",            
     };
     
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Forces server cache to be used
-        props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-    
     @Test
     public void testJoinOverSaltedTables() throws Exception {
-        String tempTableNoSalting = generateRandomString();
-        String tempTableWithSalting = generateRandomString();
+        String tempTableNoSalting = generateUniqueName();
+        String tempTableWithSalting = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
@@ -241,8 +225,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testJoinOnDynamicColumns() throws Exception {
-        String tableA = generateRandomString();
-        String tableB = generateRandomString();
+        String tableA = generateUniqueName();
+        String tableB = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -272,7 +256,7 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
             conn.commit();
             stmt.close();
 
-            String sequenceB = generateRandomString();
+            String sequenceB = generateUniqueName();
             // upsert select dynamic columns in tableB
             conn.createStatement().execute("CREATE SEQUENCE " + sequenceB );
             String upsertBSelectA = "UPSERT INTO " + tableB + " (pkB, pkA INTEGER)"
@@ -311,7 +295,7 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testJoinWithKeyRangeOptimization() throws Exception {
-        String tempTableWithCompositePK = generateRandomString();
+        String tempTableWithCompositePK = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {

@@ -18,7 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.apache.phoenix.util.TestUtil.*;
+import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE_SCHEMA_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -27,7 +27,6 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -40,7 +39,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -52,32 +50,37 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.BeforeClass;
+import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
-
 public class DropMetadataIT extends ParallelStatsDisabledIT {
+    private static final String PRINCIPAL = "dropMetaData";
     private static final byte[] FAMILY_NAME = Bytes.toBytes(SchemaUtil.normalizeIdentifier("1"));
     public static final String SCHEMA_NAME = "";
-    private final String TENANT_SPECIFIC_URL = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant1";
+    private final String TENANT_ID = "tenant1";
+
+    private Connection getConnection() throws Exception {
+        return getConnection(PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES));
+    }
     
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    @BeforeClass 
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        // Drop the HBase table metadata for this test
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    private Connection getConnection(Properties props) throws Exception {
+        props.setProperty(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
+        // Force real driver to be used as the test one doesn't handle creating
+        // more than one ConnectionQueryService
+        props.setProperty(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, StringUtil.EMPTY_STRING);
+        // Create new ConnectionQueryServices so that we can set DROP_METADATA_ATTRIB
+        String url = QueryUtil.getConnectionUrl(props, config, PRINCIPAL);
+        return DriverManager.getConnection(url, props);
     }
     
     @Test
     public void testDropViewKeepsHTable() throws Exception {
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
-        String hbaseNativeViewName = generateRandomString();
+        Connection conn = getConnection();
+        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+        String hbaseNativeViewName = generateUniqueName();
 
         byte[] hbaseNativeBytes = SchemaUtil.getTableNameAsBytes(HBASE_NATIVE_SCHEMA_NAME, hbaseNativeViewName);
         try {
@@ -91,8 +94,6 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
             admin.close();
         }
         
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute("create view " + hbaseNativeViewName+
                 "   (uint_key unsigned_int not null," +
                 "    ulong_key unsigned_long not null," +
@@ -102,17 +103,16 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
                 "    CONSTRAINT pk PRIMARY KEY (uint_key, ulong_key, string_key))\n" +
                      HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE + "'");
         conn.createStatement().execute("drop view " + hbaseNativeViewName);
-
+        conn.close();
     }
     
     @Test
     public void testDroppingIndexedColDropsIndex() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String indexTableName = generateRandomString();
-        String dataTableFullName = SchemaUtil.getTableName(SCHEMA_NAME, generateRandomString());
+        String indexTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(SCHEMA_NAME, generateUniqueName());
         String localIndexTableName1 = "LOCAL_" + indexTableName + "_1";
         String localIndexTableName2 = "LOCAL_" + indexTableName + "_2";
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = getConnection()) {
             conn.setAutoCommit(false);
             conn.createStatement().execute(
                 "CREATE TABLE " + dataTableFullName
@@ -200,12 +200,14 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
     }
     
     public void helpTestDroppingIndexedColDropsViewIndex(boolean isMultiTenant) throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL) : conn ) {
-            String tableWithView = generateRandomString();
-            String viewOfTable = generateRandomString();
-            String viewIndex1 = generateRandomString();
-            String viewIndex2 = generateRandomString();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(TENANT_ID_ATTRIB, TENANT_ID);
+        try (Connection conn = getConnection();
+                Connection viewConn = isMultiTenant ? getConnection(props) : conn ) {
+            String tableWithView = generateUniqueName();
+            String viewOfTable = generateUniqueName();
+            String viewIndex1 = generateUniqueName();
+            String viewIndex2 = generateUniqueName();
             
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);

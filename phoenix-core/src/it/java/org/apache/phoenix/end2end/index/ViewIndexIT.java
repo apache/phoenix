@@ -82,7 +82,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     
     private Connection getConnection() throws SQLException{
         Properties props = new Properties();
-        props.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         return DriverManager.getConnection(getUrl(),props);
     }
     
@@ -92,10 +92,10 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testDeleteViewIndexSequences() throws Exception {
-        String schemaName = generateRandomString();
-        String tableName = schemaName + "." + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
-        String VIEW_NAME = "VIEW_" + generateRandomString();
+        String schemaName = generateUniqueName();
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String VIEW_NAME = "VIEW_" + generateUniqueName();
         String viewName = schemaName + "." + VIEW_NAME;
 
         createBaseTable(schemaName, tableName, false, null, null);
@@ -108,22 +108,25 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         String sequenceSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), isNamespaceMapped);
         String seqName = getViewIndexSequenceName(PNameFactory.newName(tableName), null, !isNamespaceMapped);
         String seqSchemaName = getViewIndexSequenceSchemaName(PNameFactory.newName(tableName), !isNamespaceMapped);
-        verifySequence(null, sequenceName, sequenceSchemaName, true);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32767);
+        conn1.createStatement().execute("CREATE INDEX " + indexName + "_2 ON " + viewName + " (v1)");
+        verifySequenceValue(null, sequenceName, sequenceSchemaName, -32766);
         // Check other format of sequence is not there as Sequences format is different for views/indexes created on
         // table which are namespace mapped and which are not.
-        verifySequence(null, seqName, seqSchemaName, false);
+        verifySequenceNotExists(null, seqName, seqSchemaName);
         conn1.createStatement().execute("DROP VIEW " + viewName);
         conn1.createStatement().execute("DROP TABLE "+ tableName);
         
-        verifySequence(null, sequenceName, sequenceSchemaName, false);
+        verifySequenceNotExists(null, sequenceName, sequenceSchemaName);
     }
     
     @Test
     public void testMultiTenantViewLocalIndex() throws Exception {
-        String schemaName = generateRandomString();
-        String tableName =  generateRandomString();
-        String indexName = "IND_" + generateRandomString();
-        String VIEW_NAME = "VIEW_" + generateRandomString();
+        String schemaName = generateUniqueName();
+        String tableName =  generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String VIEW_NAME = "VIEW_" + generateUniqueName();
         createBaseTable(schemaName, tableName, true, null, null);
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
@@ -167,9 +170,9 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testCreatingIndexOnGlobalView() throws Exception {
-        String baseTable =  generateRandomString();
-        String globalView = generateRandomString();
-        String globalViewIdx =  generateRandomString();
+        String baseTable =  generateUniqueName();
+        String globalView = generateUniqueName();
+        String globalViewIdx =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + baseTable + " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2 ROW_TIMESTAMP, PK3)) MULTI_TENANT=true");
             conn.createStatement().execute("CREATE VIEW " + globalView + " AS SELECT * FROM " + baseTable);

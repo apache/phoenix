@@ -15,26 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.end2end;
+package org.apache.phoenix.exception;
 
-import java.util.Map;
+import java.sql.SQLException;
 
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
-
-import com.google.common.collect.Maps;
-
-
-public class SpooledOrderByIT extends OrderByIT {
-
-    @BeforeClass
-    @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, Integer.toString(100));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+/**
+ *
+ * Super class for upgrade related exceptions whose occurrence shouldn't prevent the
+ * client from retrying or reestablishing connection.
+ */
+public abstract class RetriableUpgradeException extends SQLException {
+    public RetriableUpgradeException(String message, String sqlState, int sqlExceptionCode) {
+        super(message, sqlState, sqlExceptionCode);
     }
-
 }

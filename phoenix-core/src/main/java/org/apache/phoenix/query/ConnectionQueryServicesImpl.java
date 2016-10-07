@@ -130,6 +130,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.exception.PhoenixIOException;
+import org.apache.phoenix.exception.RetriableUpgradeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeInProgressException;
@@ -1372,9 +1373,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public MetaDataMutationResult createTable(final List<Mutation> tableMetaData, byte[] physicalTableName,
+    public MetaDataMutationResult createTable(final List<Mutation> tableMetaData, final byte[] physicalTableName,
             PTableType tableType, Map<String, Object> tableProps,
-            final List<Pair<byte[], Map<String, Object>>> families, byte[][] splits, boolean isNamespaceMapped)
+            final List<Pair<byte[], Map<String, Object>>> families, byte[][] splits, boolean isNamespaceMapped, final boolean allocateIndexId)
                     throws SQLException {
         byte[][] rowKeyMetadata = new byte[3][];
         Mutation m = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetaData);
@@ -1445,6 +1446,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     builder.addTableMetadataMutations(mp.toByteString());
                 }
                 builder.setClientVersion(VersionUtil.encodeVersion(PHOENIX_MAJOR_VERSION, PHOENIX_MINOR_VERSION, PHOENIX_PATCH_NUMBER));
+                        if (allocateIndexId) {
+                            builder.setAllocateIndexId(allocateIndexId);
+                        }
                 CreateTableRequest build = builder.build();
                 instance.createTable(controller, build, rpcCallback);
                 if(controller.getFailedOn() != null) {
@@ -2316,8 +2320,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             return null;
                         }
                         checkClosed();
+                        boolean hConnectionEstablished = false;
+                        boolean success = false;
                         try {
                             openConnection();
+                            hConnectionEstablished = true;
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             try (HBaseAdmin admin = getAdmin()) {
                                 boolean mappedSystemCatalogExists = admin
@@ -2364,6 +2371,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
                             }
                             scheduleRenewLeaseTasks();
+                            success = true;
+                        } catch (RetriableUpgradeException e) {
+                            // Don't set it as initializationException because otherwise the clien't won't be able
+                            // to retry establishing connection.
+                            throw e;
                         } catch (Exception e) {
                             if (e instanceof SQLException) {
                                 initializationException = (SQLException)e;
@@ -2372,7 +2384,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 initializationException = new SQLException(e);
                             }
                         } finally {
-                            initialized = true;
+                            try {
+                                if (!success && hConnectionEstablished) {
+                                    connection.close();
+                                }
+                            } catch (IOException e) {
+                                SQLException ex = new SQLException(e);
+                                if (initializationException != null) {
+                                    initializationException.setNextException(ex);
+                                } else {
+                                    initializationException = ex;
+                                }
+                            } finally {
+                                initialized = true;
+                            }
                         }
                     } 
                     return null;
@@ -3073,6 +3098,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HTableInterface htable = this.getTable(SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
             try {
+                tableStatsCache.invalidateAll();
                 final Map<byte[], Long> results =
                         htable.coprocessorService(MetaDataService.class, HConstants.EMPTY_START_ROW,
                                 HConstants.EMPTY_END_ROW, new Batch.Call<MetaDataService, Long>() {

@@ -123,7 +123,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
 
         try {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String ddl = "CREATE TABLE " + tableName +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
@@ -190,7 +190,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
 
         try {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String ddl = "CREATE TABLE " + tableName +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer, col2 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
@@ -290,7 +290,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
 
         try {
-            String tableName1 = generateRandomString();
+            String tableName1 = generateUniqueName();
             String ddl = "CREATE TABLE " + tableName1 +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer " +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
@@ -320,7 +320,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-            String tableName2 = generateRandomString();
+            String tableName2 = generateUniqueName();
             ddl = "CREATE TABLE " + tableName2 +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
@@ -389,7 +389,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
 
         try {
-            String tableName1 = generateRandomString();
+            String tableName1 = generateUniqueName();
             String ddl = "CREATE TABLE  " + tableName1 +
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer " +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
@@ -419,7 +419,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-            String tableName2 = generateRandomString();
+            String tableName2 = generateUniqueName();
             ddl = "CREATE TABLE " + tableName2 +
                     "  (a_string varchar not null, col1 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
@@ -471,7 +471,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
 
         try {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String ddl = "CREATE TABLE " + tableName +
                     "  (a_string varchar not null, col1 integer, col2 integer, col3 timestamp, col4 varchar" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
@@ -519,7 +519,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
     public void testOrderByRVC() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "create table " + tableName + " (testpk varchar not null primary key, l_quantity decimal(15,2), l_discount decimal(15,2))";
         conn.createStatement().execute(ddl);
 

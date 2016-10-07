@@ -41,7 +41,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testConvertTimezoneEurope() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String timezone_offset_test = generateRandomString();
+        String timezone_offset_test = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
             + " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -61,7 +61,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testConvertTimezoneAmerica() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String timezone_offset_test = generateRandomString();
+        String timezone_offset_test = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
             + " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -81,7 +81,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void nullInDateParameter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String timezone_offset_test = generateRandomString();
+        String timezone_offset_test = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
             + " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -101,7 +101,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void nullInFirstTimezoneParameter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String timezone_offset_test = generateRandomString();
+        String timezone_offset_test = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
             + " (k1 INTEGER NOT NULL, dates DATE, tz VARCHAR, CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -121,7 +121,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void nullInSecondTimezoneParameter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String timezone_offset_test = generateRandomString();
+        String timezone_offset_test = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
             + " (k1 INTEGER NOT NULL, dates DATE, tz VARCHAR, CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -141,7 +141,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void unknownTimezone() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String timezone_offset_test = generateRandomString();
+        String timezone_offset_test = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
             + " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
         conn.createStatement().execute(ddl);
@@ -166,7 +166,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
 	@Test
 	public void testConvertMultipleRecords() throws Exception {
 		Connection conn = DriverManager.getConnection(getUrl());
-      String timezone_offset_test = generateRandomString();
+      String timezone_offset_test = generateUniqueName();
       String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
           + " (k1 INTEGER NOT NULL, dates DATE CONSTRAINT pk PRIMARY KEY (k1))";
 		Statement stmt = conn.createStatement();

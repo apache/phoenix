@@ -36,7 +36,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     @Before
     public void initTables() throws Exception {
         conn = DriverManager.getConnection(getUrl());
-        tableName = generateRandomString();
+        tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName
             + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,varchar1 VARCHAR,nullcheck INTEGER,chars2 CHAR(15)[])";
         conn.createStatement().execute(ddl);
@@ -256,7 +256,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayToStringFunctionWithUpsert1() throws Exception {
-        String table = generateRandomString();
+        String table = generateUniqueName();
         String ddl =
             "CREATE TABLE " + table + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
         conn.createStatement().execute(ddl);
@@ -279,7 +279,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayToStringFunctionWithUpsert2() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
             "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
         conn.createStatement().execute(ddl);
@@ -302,7 +302,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayToStringFunctionWithUpsert3() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
             "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
         conn.createStatement().execute(ddl);
@@ -325,7 +325,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayToStringFunctionWithUpsert4() throws Exception {
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl =
             "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
         conn.createStatement().execute(ddl);
@@ -348,12 +348,12 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayToStringFunctionWithUpsertSelect1() throws Exception {
-        String source = generateRandomString();
+        String source = generateUniqueName();
         String ddl =
             "CREATE TABLE " + source + " (region_name VARCHAR PRIMARY KEY,doubles DOUBLE[])";
         conn.createStatement().execute(ddl);
 
-        String target = generateRandomString();
+        String target = generateUniqueName();
         ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
         conn.createStatement().execute(ddl);
 
@@ -388,12 +388,12 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayToStringFunctionWithUpsertSelect2() throws Exception {
-        String source = generateRandomString();
+        String source = generateUniqueName();
         String ddl =
             "CREATE TABLE " + source + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[])";
         conn.createStatement().execute(ddl);
 
-        String target = generateRandomString();
+        String target = generateUniqueName();
         ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
         conn.createStatement().execute(ddl);
 
@@ -428,12 +428,12 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testArrayToStringFunctionWithUpsertSelect3() throws Exception {
-        String source = generateRandomString();
+        String source = generateUniqueName();
         String ddl =
             "CREATE TABLE " + source + " (region_name VARCHAR PRIMARY KEY,booleans BOOLEAN[])";
         conn.createStatement().execute(ddl);
 
-        String target = generateRandomString();
+        String target = generateUniqueName();
         ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
         conn.createStatement().execute(ddl);
 

@@ -44,12 +44,6 @@ import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.FUNKY_NAME;
 import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
-import static org.apache.phoenix.util.TestUtil.JOIN_COITEM_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
 import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
@@ -96,9 +90,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.sql.Types;
-import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
@@ -113,10 +105,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
-import org.apache.commons.lang.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -191,26 +183,6 @@ import com.google.inject.util.Providers;
  */
 
 public abstract class BaseTest {
-    protected static final String TEST_TABLE_SCHEMA = "(" +
-            "   varchar_pk VARCHAR NOT NULL, " +
-            "   char_pk CHAR(10) NOT NULL, " +
-            "   int_pk INTEGER NOT NULL, "+ 
-            "   long_pk BIGINT NOT NULL, " +
-            "   decimal_pk DECIMAL(31, 10) NOT NULL, " +
-            "   date_pk DATE NOT NULL, " +
-            "   a.varchar_col1 VARCHAR, " +
-            "   a.char_col1 CHAR(10), " +
-            "   a.int_col1 INTEGER, " +
-            "   a.long_col1 BIGINT, " +
-            "   a.decimal_col1 DECIMAL(31, 10), " +
-            "   a.date1 DATE, " +
-            "   b.varchar_col2 VARCHAR, " +
-            "   b.char_col2 CHAR(10), " +
-            "   b.int_col2 INTEGER, " +
-            "   b.long_col2 BIGINT, " +
-            "   b.decimal_col2 DECIMAL(31, 10), " +
-            "   b.date2 DATE " +
-            "   CONSTRAINT pk PRIMARY KEY (varchar_pk, char_pk, int_pk, long_pk DESC, decimal_pk, date_pk)) ";
     private static final Map<String,String> tableDDLMap;
     private static final Logger logger = LoggerFactory.getLogger(BaseTest.class);
     protected static final int DEFAULT_TXN_TIMEOUT_SECONDS = 30;
@@ -338,9 +310,6 @@ public abstract class BaseTest {
                 "    \"1\".\"value\" integer,\n" +
                 "    \"1\".\"_blah^\" varchar)"
                 );
-        builder.put(KEYONLY_NAME,"create table " + KEYONLY_NAME +
-                "   (i1 integer not null, i2 integer not null\n" +
-                "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
         builder.put(MDTEST_NAME,"create table " + MDTEST_NAME +
                 "   (id char(1) primary key,\n" +
                 "    a.col1 integer,\n" +
@@ -435,42 +404,6 @@ public abstract class BaseTest {
                 "    kv bigint)\n");
         builder.put(SUM_DOUBLE_NAME,"create table SumDoubleTest" +
                 "   (id varchar not null primary key, d DOUBLE, f FLOAT, ud UNSIGNED_DOUBLE, uf UNSIGNED_FLOAT, i integer, de decimal)");
-        builder.put(JOIN_ORDER_TABLE_FULL_NAME, "create table " + JOIN_ORDER_TABLE_FULL_NAME +
-                "   (\"order_id\" varchar(15) not null primary key, " +
-                "    \"customer_id\" varchar(10), " +
-                "    \"item_id\" varchar(10), " +
-                "    price integer, " +
-                "    quantity integer, " +
-                "    \"DATE\" timestamp, " +
-                "    the_year integer)");
-        builder.put(JOIN_CUSTOMER_TABLE_FULL_NAME, "create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
-                "   (\"customer_id\" varchar(10) not null primary key, " +
-                "    name varchar, " +
-                "    phone varchar(12), " +
-                "    address varchar, " +
-                "    loc_id varchar(5), " +
-                "    \"DATE\" date)");
-        builder.put(JOIN_ITEM_TABLE_FULL_NAME, "create table " + JOIN_ITEM_TABLE_FULL_NAME +
-                "   (\"item_id\" varchar(10) not null primary key, " +
-                "    name varchar, " +
-                "    price integer, " +
-                "    discount1 integer, " +
-                "    discount2 integer, " +
-                "    \"supplier_id\" varchar(10), " +
-                "    description varchar)");
-        builder.put(JOIN_SUPPLIER_TABLE_FULL_NAME, "create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
-                "   (\"supplier_id\" varchar(10) not null primary key, " +
-                "    name varchar, " +
-                "    phone varchar(12), " +
-                "    address varchar, " +
-                "    loc_id varchar(5))");
-        builder.put(JOIN_COITEM_TABLE_FULL_NAME, "create table " + JOIN_COITEM_TABLE_FULL_NAME +
-                "   (item_id varchar(10) NOT NULL, " +
-                "    item_name varchar NOT NULL, " +
-                "    co_item_id varchar(10), " +
-                "    co_item_name varchar " +
-                "   CONSTRAINT pk PRIMARY KEY (item_id, item_name)) " +
-                "   SALT_BUCKETS=4");
         builder.put(BINARY_NAME,"create table " + BINARY_NAME +
             "   (a_binary BINARY(16) not null, \n" +
             "    b_binary BINARY(16), \n" +
@@ -511,7 +444,7 @@ public abstract class BaseTest {
         return url;
     }
     
-    private static void teardownTxManager() throws SQLException {
+    private static void tearDownTxManager() throws SQLException {
         try {
             if (txService != null) txService.stopAndWait();
         } finally {
@@ -520,6 +453,7 @@ public abstract class BaseTest {
             } finally {
                 txService = null;
                 zkClient = null;
+                txManager = null;
             }
         }
         
@@ -533,7 +467,7 @@ public abstract class BaseTest {
         config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
         config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS);
 
-        ConnectionInfo connInfo = ConnectionInfo.create(getUrl());
+        ConnectionInfo connInfo = ConnectionInfo.create(getOldUrl());
         zkClient = ZKClientServices.delegate(
           ZKClients.reWatchOnExpire(
             ZKClients.retryOnFailure(
@@ -553,15 +487,28 @@ public abstract class BaseTest {
         txService.startAndWait();
     }
 
-    protected static String checkClusterInitialized(ReadOnlyProps overrideProps) throws Exception {
+    private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {
         if (!clusterInitialized) {
-            url = setUpTestCluster(config, overrideProps);
+            url = setUpTestCluster(config, serverProps);
             calciteUrl = url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL, PhoenixRuntime.JDBC_PROTOCOL_CALCITE);
             clusterInitialized = true;
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                @Override
+                public void run() {
+                    logger.info("SHUTDOWN: halting JVM now");
+                    Runtime.getRuntime().halt(0);
+                }
+            });
         }
         return url;
     }
     
+    private static void checkTxManagerInitialized(ReadOnlyProps clientProps) throws SQLException, IOException {
+        if (txService == null) {
+            setupTxManager();
+        }
+    }
+
     /**
      * Set up the test hbase cluster.
      * @return url to be used by clients to connect to the cluster.
@@ -583,7 +530,6 @@ public abstract class BaseTest {
                 driver = null;
             }
         }
-        teardownTxManager();
     }
     
     protected static void dropNonSystemTables() throws Exception {
@@ -594,21 +540,25 @@ public abstract class BaseTest {
         }
     }
 
-    protected static void tearDownMiniCluster() throws Exception {
+    public static void tearDownMiniCluster() throws Exception {
         try {
             destroyDriver();
         } finally {
             try {
-                if (utility != null) {
-                    try {
-                        utility.shutdownMiniMapReduceCluster();
-                    } finally {
-                        utility.shutdownMiniCluster();
-                    }
-                }
+                tearDownTxManager();
             } finally {
-                utility = null;
-                clusterInitialized = false;
+                try {
+                    if (utility != null) {
+                        try {
+                            utility.shutdownMiniMapReduceCluster();
+                        } finally {
+                            utility.shutdownMiniCluster();
+                        }
+                    }
+                } finally {
+                    utility = null;
+                    clusterInitialized = false;
+                }
             }
         }
     }
@@ -619,11 +569,9 @@ public abstract class BaseTest {
     
     protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
         String url = checkClusterInitialized(serverProps);
+        checkTxManagerInitialized(clientProps);
         if (driver == null) {
             driver = initAndRegisterTestDriver(url, clientProps);
-            if (clientProps.getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)) {
-                setupTxManager();
-            }
         }
     }
     
@@ -801,8 +749,16 @@ public abstract class BaseTest {
         createTestTable(url, ddl, splits, ts);
     }
 
-    public static String generateRandomString() {
-      return RandomStringUtils.randomAlphabetic(20).toUpperCase();
+    private static AtomicInteger NAME_SUFFIX = new AtomicInteger(0);
+    private static final int MAX_SUFFIX_VALUE = 1000000;
+    
+    public static String generateUniqueName() {
+        int nextName = NAME_SUFFIX.incrementAndGet();
+        if (nextName >= MAX_SUFFIX_VALUE) {
+            throw new IllegalStateException("Used up all unique names");
+        }
+        return "T" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+        //return RandomStringUtils.randomAlphabetic(20).toUpperCase();
     }
 
     protected static void createTestTable(String url, String ddl) throws SQLException {
@@ -1114,7 +1070,7 @@ public abstract class BaseTest {
     
     protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if(tableName == null) {
-            tableName = generateRandomString();
+            tableName = generateUniqueName();
         }
         String tableDDLType = ATABLE_NAME;
         if (ts == null) {
@@ -1547,272 +1503,6 @@ public abstract class BaseTest {
         }
     }
     
-    protected static void initJoinTableValues(String url, byte[][] splits, Long ts) throws Exception {
-        if (ts == null) {
-            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_ITEM_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_SUPPLIER_TABLE_FULL_NAME, splits);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_ORDER_TABLE_FULL_NAME, splits);
-        } else {
-            ensureTableCreated(url, JOIN_CUSTOMER_TABLE_FULL_NAME, JOIN_CUSTOMER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ITEM_TABLE_FULL_NAME, JOIN_ITEM_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_SUPPLIER_TABLE_FULL_NAME, JOIN_SUPPLIER_TABLE_FULL_NAME, splits, ts - 2);
-            ensureTableCreated(url, JOIN_ORDER_TABLE_FULL_NAME, JOIN_ORDER_TABLE_FULL_NAME, splits, ts - 2);
-        }
-        
-        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        if (ts != null) {
-            props.setProperty(CURRENT_SCN_ATTRIB, ts.toString());
-        }
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
-            //conn.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS my.seq");
-            // Insert into customer table
-            PreparedStatement stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_CUSTOMER_TABLE_FULL_NAME +
-                    "   (\"customer_id\", " +
-                    "    NAME, " +
-                    "    PHONE, " +
-                    "    ADDRESS, " +
-                    "    LOC_ID, " +
-                    "    \"DATE\") " +
-                    "values (?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "C1");
-            stmt.setString(3, "999-999-1111");
-            stmt.setString(4, "101 XXX Street");
-            stmt.setString(5, "10001");
-            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
-            stmt.execute();
-                
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "C2");
-            stmt.setString(3, "999-999-2222");
-            stmt.setString(4, "202 XXX Street");
-            stmt.setString(5, null);
-            stmt.setDate(6, new Date(format.parse("2013-11-25 16:45:07").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "C3");
-            stmt.setString(3, "999-999-3333");
-            stmt.setString(4, "303 XXX Street");
-            stmt.setString(5, null);
-            stmt.setDate(6, new Date(format.parse("2013-11-25 10:06:29").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "C4");
-            stmt.setString(3, "999-999-4444");
-            stmt.setString(4, "404 XXX Street");
-            stmt.setString(5, "10004");
-            stmt.setDate(6, new Date(format.parse("2013-11-22 14:22:56").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "C5");
-            stmt.setString(3, "999-999-5555");
-            stmt.setString(4, "505 XXX Street");
-            stmt.setString(5, "10005");
-            stmt.setDate(6, new Date(format.parse("2013-11-27 09:37:50").getTime()));
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "C6");
-            stmt.setString(3, "999-999-6666");
-            stmt.setString(4, "606 XXX Street");
-            stmt.setString(5, "10001");
-            stmt.setDate(6, new Date(format.parse("2013-11-01 10:20:36").getTime()));
-            stmt.execute();
-            
-            // Insert into item table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ITEM_TABLE_FULL_NAME +
-                    "   (\"item_id\", " +
-                    "    NAME, " +
-                    "    PRICE, " +
-                    "    DISCOUNT1, " +
-                    "    DISCOUNT2, " +
-                    "    \"supplier_id\", " +
-                    "    DESCRIPTION) " +
-                    "values (?, ?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "T1");
-            stmt.setInt(3, 100);
-            stmt.setInt(4, 5);
-            stmt.setInt(5, 10);
-            stmt.setString(6, "0000000001");
-            stmt.setString(7, "Item T1");
-            stmt.execute();
-
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "T2");
-            stmt.setInt(3, 200);
-            stmt.setInt(4, 5);
-            stmt.setInt(5, 8);
-            stmt.setString(6, "0000000001");
-            stmt.setString(7, "Item T2");
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "T3");
-            stmt.setInt(3, 300);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 12);
-            stmt.setString(6, "0000000002");
-            stmt.setString(7, "Item T3");
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "T4");
-            stmt.setInt(3, 400);
-            stmt.setInt(4, 6);
-            stmt.setInt(5, 10);
-            stmt.setString(6, "0000000002");
-            stmt.setString(7, "Item T4");
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "T5");
-            stmt.setInt(3, 500);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 15);
-            stmt.setString(6, "0000000005");
-            stmt.setString(7, "Item T5");
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "T6");
-            stmt.setInt(3, 600);
-            stmt.setInt(4, 8);
-            stmt.setInt(5, 15);
-            stmt.setString(6, "0000000006");
-            stmt.setString(7, "Item T6");
-            stmt.execute();
-            
-            stmt.setString(1, "invalid001");
-            stmt.setString(2, "INVALID-1");
-            stmt.setInt(3, 0);
-            stmt.setInt(4, 0);
-            stmt.setInt(5, 0);
-            stmt.setString(6, "0000000000");
-            stmt.setString(7, "Invalid item for join test");
-            stmt.execute();
-
-            // Insert into supplier table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_SUPPLIER_TABLE_FULL_NAME +
-                    "   (\"supplier_id\", " +
-                    "    NAME, " +
-                    "    PHONE, " +
-                    "    ADDRESS, " +
-                    "    LOC_ID) " +
-                    "values (?, ?, ?, ?, ?)");
-            stmt.setString(1, "0000000001");
-            stmt.setString(2, "S1");
-            stmt.setString(3, "888-888-1111");
-            stmt.setString(4, "101 YYY Street");
-            stmt.setString(5, "10001");
-            stmt.execute();
-                
-            stmt.setString(1, "0000000002");
-            stmt.setString(2, "S2");
-            stmt.setString(3, "888-888-2222");
-            stmt.setString(4, "202 YYY Street");
-            stmt.setString(5, "10002");
-            stmt.execute();
-
-            stmt.setString(1, "0000000003");
-            stmt.setString(2, "S3");
-            stmt.setString(3, "888-888-3333");
-            stmt.setString(4, "303 YYY Street");
-            stmt.setString(5, null);
-            stmt.execute();
-
-            stmt.setString(1, "0000000004");
-            stmt.setString(2, "S4");
-            stmt.setString(3, "888-888-4444");
-            stmt.setString(4, "404 YYY Street");
-            stmt.setString(5, null);
-            stmt.execute();
-
-            stmt.setString(1, "0000000005");
-            stmt.setString(2, "S5");
-            stmt.setString(3, "888-888-5555");
-            stmt.setString(4, "505 YYY Street");
-            stmt.setString(5, "10005");
-            stmt.execute();
-
-            stmt.setString(1, "0000000006");
-            stmt.setString(2, "S6");
-            stmt.setString(3, "888-888-6666");
-            stmt.setString(4, "606 YYY Street");
-            stmt.setString(5, "10006");
-            stmt.execute();
-
-            // Insert into order table
-            stmt = conn.prepareStatement(
-                    "upsert into " + JOIN_ORDER_TABLE_FULL_NAME +
-                    "   (\"order_id\", " +
-                    "    \"customer_id\", " +
-                    "    \"item_id\", " +
-                    "    PRICE, " +
-                    "    QUANTITY," +
-                    "    \"DATE\"," +
-                    "    THE_YEAR) " +
-                    "values (?, ?, ?, ?, ?, ?, ?)");
-            stmt.setString(1, "000000000000001");
-            stmt.setString(2, "0000000004");
-            stmt.setString(3, "0000000001");
-            stmt.setInt(4, 100);
-            stmt.setInt(5, 1000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
-            stmt.setShort(7, (short) 1997);
-            stmt.execute();
-
-            stmt.setString(1, "000000000000002");
-            stmt.setString(2, "0000000003");
-            stmt.setString(3, "0000000006");
-            stmt.setInt(4, 552);
-            stmt.setInt(5, 2000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
-            stmt.setShort(7, (short) 1997);
-            stmt.execute();
-
-            stmt.setString(1, "000000000000003");
-            stmt.setString(2, "0000000002");
-            stmt.setString(3, "0000000002");
-            stmt.setInt(4, 190);
-            stmt.setInt(5, 3000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-25 16:45:07").getTime()));
-            stmt.setShort(7, (short) 1997);
-            stmt.execute();
-
-            stmt.setString(1, "000000000000004");
-            stmt.setString(2, "0000000004");
-            stmt.setString(3, "0000000006");
-            stmt.setInt(4, 510);
-            stmt.setInt(5, 4000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
-            stmt.setShort(7, (short) 1998);
-            stmt.execute();
-
-            stmt.setString(1, "000000000000005");
-            stmt.setString(2, "0000000005");
-            stmt.setString(3, "0000000003");
-            stmt.setInt(4, 264);
-            stmt.setInt(5, 5000);
-            stmt.setTimestamp(6, new Timestamp(format.parse("2013-11-27 09:37:50").getTime()));
-            stmt.setShort(7, (short) 1998);
-            stmt.execute();
-
-            conn.commit();
-        } finally {
-            conn.close();
-        }
-    }
-    
     /**
      * Disable and drop all the tables except SYSTEM.CATALOG and SYSTEM.SEQUENCE
      */
@@ -2038,14 +1728,22 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-
-    protected static void verifySequence(String tenantID, String sequenceName, String sequenceSchemaName, boolean exists) throws SQLException {
+    protected static void verifySequenceNotExists(String tenantID, String sequenceName, String sequenceSchemaName) throws SQLException {
+        verifySequence(tenantID, sequenceName, sequenceSchemaName, false, 0);
+    }
+    
+    protected static void verifySequenceValue(String tenantID, String sequenceName, String sequenceSchemaName, long value) throws SQLException {
+        verifySequence(tenantID, sequenceName, sequenceSchemaName, true, value);
+    }
+    
+    private  static void verifySequence(String tenantID, String sequenceName, String sequenceSchemaName, boolean exists, long value) throws SQLException {
 
         PhoenixConnection phxConn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
         String ddl = "SELECT "
                 + PhoenixDatabaseMetaData.TENANT_ID + ","
                 + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA + ","
-                + PhoenixDatabaseMetaData.SEQUENCE_NAME
+                + PhoenixDatabaseMetaData.SEQUENCE_NAME + ","
+                + PhoenixDatabaseMetaData.CURRENT_VALUE
                 + " FROM " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
                 + " WHERE ";
 
@@ -2057,6 +1755,7 @@ public abstract class BaseTest {
 
         if(exists) {
             assertTrue(rs.next());
+            assertEquals(value, rs.getLong(4));
         } else {
             assertFalse(rs.next());
         }

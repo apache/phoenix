@@ -17,13 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.client.Consistency;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -31,9 +27,13 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  *
@@ -42,53 +42,48 @@ import static org.junit.Assert.assertTrue;
  */
 public class AlterSessionIT extends ParallelStatsDisabledIT {
 
-    private static final String TABLE_NAME = generateRandomString();
-    private static Connection testConn;
+    private String tableName;
 
-    @BeforeClass
-    public static void initTable() throws Exception {
+    @Before
+    public void initTable() throws Exception {
+        tableName = generateUniqueName();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        testConn = DriverManager.getConnection(getUrl(), props);
-        assertEquals(Consistency.STRONG, ((PhoenixConnection)testConn).getConsistency());
-        testConn.createStatement().execute(
-            "create table " + TABLE_NAME + " (col1 varchar primary key)");
-        testConn.commit();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(
+                    "create table " + tableName + " (col1 varchar primary key)");
+        }
     }
 
     @Test
     public void testUpdateConsistency() throws Exception {
-        try {
-            Statement st = testConn.createStatement();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            Statement st = conn.createStatement();
             st.execute("alter session set Consistency = 'timeline'");
-            ResultSet rs = st.executeQuery("explain select * from " + TABLE_NAME);
-            assertEquals(Consistency.TIMELINE, ((PhoenixConnection)testConn).getConsistency());
+            ResultSet rs = st.executeQuery("explain select * from " + tableName);
+            assertEquals(Consistency.TIMELINE, conn.unwrap(PhoenixConnection.class).getConsistency());
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertTrue(queryPlan.indexOf("TIMELINE") > 0);
 
             // turn off timeline read consistency
             st.execute("alter session set Consistency = 'strong'");
-            rs = st.executeQuery("explain select * from " + TABLE_NAME);
+            rs = st.executeQuery("explain select * from " + tableName);
             queryPlan = QueryUtil.getExplainPlan(rs);
             assertTrue(queryPlan.indexOf("TIMELINE") < 0);
-        } finally {
-            this.testConn.close();
         }
     }
 
     @Test
     public void testSetConsistencyInURL() throws Exception {
-        try {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            Connection conn = DriverManager.getConnection(getUrl() + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR +
-                    "Consistency=TIMELINE", props);
+        try (Connection conn = DriverManager.getConnection(getUrl() + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR +
+                    "Consistency=TIMELINE", props)) {
             assertEquals(Consistency.TIMELINE, ((PhoenixConnection)conn).getConsistency());
             Statement st = conn.createStatement();
-            ResultSet rs = st.executeQuery("explain select * from " + TABLE_NAME);
+            ResultSet rs = st.executeQuery("explain select * from " + tableName);
             String queryPlan = QueryUtil.getExplainPlan(rs);
             assertTrue(queryPlan.indexOf("TIMELINE") > 0);
             conn.close();
-        } finally {
-            this.testConn.close();
         }
     }
 }

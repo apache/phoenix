@@ -85,7 +85,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testAddDropColumnToBaseTablePropagatesToEntireViewHierarchy() throws Exception {
         String baseTable = "testViewHierarchy";
-        String baseViewName = generateRandomString();
+        String baseViewName = generateUniqueName();
         String view1 = baseViewName + "_VIEW1";
         String view2 = baseViewName + "_VIEW2";
         String view3 = baseViewName + "_VIEW3";
@@ -171,7 +171,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testChangingPKOfBaseTableChangesPKForAllViews() throws Exception {
         String baseTable = "testChangePKOfBaseTable";
-        String baseViewName = generateRandomString();
+        String baseViewName = generateUniqueName();
         String view1 = baseViewName + "_VIEW1";
         String view2 = baseViewName + "_VIEW2";
         String view3 = baseViewName + "_VIEW3";
@@ -269,7 +269,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testAddPKColumnToBaseTableWhoseViewsHaveIndices() throws Exception {
         String baseTable = "testAddPKColumnToBaseTableWhoseViewsHaveIndices";
-        String baseViewName = generateRandomString();
+        String baseViewName = generateUniqueName();
         String view1 = baseViewName + "_VIEW1";
         String view2 = baseViewName + "_VIEW2";
         String view3 = baseViewName + "_VIEW3";
@@ -410,8 +410,8 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testAddingPkAndKeyValueColumnsToBaseTableWithDivergedView() throws Exception {
         String baseTable = "testAlteringPkOfBaseTableWithDivergedView".toUpperCase();
-        String view1 = generateRandomString();
-        String divergedView = generateRandomString();
+        String view1 = generateUniqueName();
+        String divergedView = generateUniqueName();
         String divergedViewIndex = divergedView + "_IDX";
         /*                                     baseTable
                                  /                  |                
@@ -490,7 +490,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testAddColumnsToSaltedBaseTableWithViews() throws Exception {
         String baseTable = "testAddColumnsToSaltedBaseTableWithViews".toUpperCase();
-        String view1 = generateRandomString();
+        String view1 = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
@@ -520,7 +520,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testDropColumnsFromSaltedBaseTableWithViews() throws Exception {
         String baseTable = "testDropColumnsFromSaltedBaseTableWithViews".toUpperCase();
-        String view1 = generateRandomString();
+        String view1 = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
@@ -560,7 +560,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     @Test
     public void testAlteringViewConditionallyModifiesHTableMetadata() throws Exception {
         String baseTable = "testAlteringViewConditionallyModifiesBaseTable".toUpperCase();
-        String view1 = generateRandomString();
+        String view1 = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);

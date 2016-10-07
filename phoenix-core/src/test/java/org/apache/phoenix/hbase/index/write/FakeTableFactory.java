@@ -20,9 +20,9 @@ package org.apache.phoenix.hbase.index.write;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.hbase.client.HTableInterface;
-
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
@@ -41,11 +41,16 @@ class FakeTableFactory implements HTableFactory {
 
   @Override
   public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
-    return this.tables.get(tablename);
+    return getTable(tablename, null);
   }
 
   @Override
   public void shutdown() {
     shutdown = true;
   }
+
+    @Override
+    public HTableInterface getTable(ImmutableBytesPtr tablename, ExecutorService pool) throws IOException {
+        return this.tables.get(tablename);
+    }
 }

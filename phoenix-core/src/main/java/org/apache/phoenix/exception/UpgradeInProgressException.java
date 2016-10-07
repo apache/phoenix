@@ -17,9 +17,8 @@
  */
 package org.apache.phoenix.exception;
 
-import java.sql.SQLException;
 
-public class UpgradeInProgressException extends SQLException {
+public class UpgradeInProgressException extends RetriableUpgradeException {
     public UpgradeInProgressException(String upgradeFrom, String upgradeTo) {
         super("Cluster is being concurrently upgraded from " + upgradeFrom + " to " + upgradeTo
                 + ". Please retry establishing connection.", SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS

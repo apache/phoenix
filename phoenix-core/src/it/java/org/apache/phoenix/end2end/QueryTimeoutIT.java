@@ -48,7 +48,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class QueryTimeoutIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class QueryTimeoutIT extends BaseOwnClusterIT {
     private static final String TEST_TABLE_NAME = "T";
     
     @BeforeClass

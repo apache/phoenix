@@ -32,7 +32,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -41,19 +40,14 @@ import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
@@ -72,14 +66,6 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
         return Arrays.asList(false, true);
     }
 	
-	@BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
-	
     private String generateDDL(String format) {
         return String.format(format, isMultiTenant ? "TENANT_ID VARCHAR NOT NULL, " : "",
             isMultiTenant ? "TENANT_ID, " : "", isMultiTenant ? "MULTI_TENANT=true" : "");
@@ -89,7 +75,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     public void testAddNewColumnsToBaseTableWithViews() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String viewOfTable = tableName + "_VIEW";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
@@ -114,7 +100,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     public void testDropColumnsFromBaseTableWithView() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String viewOfTable = tableName + "_VIEW";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " (" + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL," + " COL2 bigint NOT NULL,"
@@ -146,7 +132,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String viewOfTable = tableName + "_VIEW";
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
@@ -253,7 +239,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {      
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String viewOfTable = tableName + "_VIEW";
 
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
@@ -364,7 +350,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     public void testAddExistingViewPkColumnToBaseTableWithMultipleViews() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String viewOfTable1 = tableName + "_VIEW1";
             String viewOfTable2 = tableName + "_VIEW2";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
@@ -428,7 +414,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             viewConn2.setAutoCommit(false);
-            String tableName = generateRandomString();
+            String tableName = generateUniqueName();
             String viewOfTable1 = tableName + "_VIEW1";
             String viewOfTable2 = tableName + "_VIEW2";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + "("
@@ -618,7 +604,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testDivergedViewsStayDiverged() throws Exception {
-        String baseTable = generateRandomString();
+        String baseTable = generateUniqueName();
         String view1 = baseTable + "_VIEW1";
         String view2 = baseTable + "_VIEW2";
         try (Connection conn = DriverManager.getConnection(getUrl());
@@ -661,7 +647,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     public void testMakeBaseTableTransactional() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
-            String baseTableName = "NONTXNTBL_" + generateRandomString() + (isMultiTenant ? "0":"1");
+            String baseTableName = "NONTXNTBL_" + generateUniqueName() + (isMultiTenant ? "0":"1");
             String viewOfTable = baseTableName + "_VIEW";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTableName + " ("
                             + " %s ID char(1) NOT NULL,"

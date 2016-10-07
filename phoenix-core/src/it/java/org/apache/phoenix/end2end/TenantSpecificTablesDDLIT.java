@@ -23,9 +23,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_UNDEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -40,10 +38,16 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -62,14 +66,17 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testCreateTenantSpecificTable() throws Exception {
         // ensure we didn't create a physical HBase table for the tenant-specific table
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).getAdmin();
+        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
         assertEquals(0, admin.listTables(TENANT_TABLE_NAME).length);
     }
     
     @Test
     public void testCreateTenantTableTwice() throws Exception {
         try {
-            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL, null, nextTimestamp(), false);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
+            conn.createStatement().execute(TENANT_TABLE_DDL);
         	fail();
         }
         catch (TableAlreadyExistsException expected) {}
@@ -77,11 +84,13 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testCreateTenantViewFromNonMultiTenant() throws Exception {
-        createTestTable(getUrl(), "CREATE TABLE NON_MULTI_TENANT_TABLE (K VARCHAR PRIMARY KEY)", null, nextTimestamp());
+        String tableName = generateUniqueName();
+        createTestTable(getUrl(), "CREATE TABLE " + tableName + " (K VARCHAR PRIMARY KEY)");
         try {
+            String viewName = generateUniqueName();
             // Only way to get this exception is to attempt to derive from a global, multi-type table, as we won't find
             // a tenant-specific table when we attempt to resolve the base table.
-            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW TENANT_TABLE2 (COL VARCHAR) AS SELECT * FROM NON_MULTI_TENANT_TABLE", null, nextTimestamp());
+            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + viewName + " (COL VARCHAR) AS SELECT * FROM " + tableName);
         }
         catch (TableNotFoundException expected) {
         }
@@ -89,10 +98,9 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
 
     @Test
     public void testAlteringMultiTenancyForTableWithViewsNotAllowed() throws Exception {
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-        String multiTenantTable = "BASE_MULTI_TENANT_SWITCH";
-        String globalTable = "GLOBAL_TABLE_SWITCH";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String multiTenantTable = "MT_" + generateUniqueName();
+        String globalTable = "G_" + generateUniqueName();
         // create the two base tables
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String ddl = "CREATE TABLE " + multiTenantTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true "; 
@@ -100,23 +108,21 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             ddl = "CREATE TABLE " + globalTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) ";
             conn.createStatement().execute(ddl);
         }
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "tenant1");
+        String t1 = generateUniqueName();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, t1);
         // create view on multi-tenant table
         try (Connection tenantConn = DriverManager.getConnection(getUrl(), props)) {
-            String viewName = "tenantview";
+            String viewName = "V_" + generateUniqueName();
             String viewDDL = "CREATE VIEW " + viewName + " AS SELECT * FROM " + multiTenantTable;
             tenantConn.createStatement().execute(viewDDL);
         }
-        props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // create view on global table
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String viewName = "globalView";
+            String viewName = "V_" + generateUniqueName();
             conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + globalTable);
         }
-        props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             try {
                 conn.createStatement().execute("ALTER TABLE " + globalTable + " SET MULTI_TENANT = " + true);
@@ -134,29 +140,21 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         }
     }
     
-    @Test
-    public void testCreateTenantTableWithSameWhereClause() throws Exception {
-        createTestTable(getUrl(), PARENT_TABLE_DDL.replace(PARENT_TABLE_NAME, PARENT_TABLE_NAME + "_II"), null, nextTimestamp());
-        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, TENANT_TABLE_NAME + "2"), null, nextTimestamp());
-    }
-    
     @Test(expected=TableNotFoundException.class)
     public void testDeletionOfParentTableFailsOnTenantSpecificConnection() throws Exception {
-        createTestTable(getUrl(), PARENT_TABLE_DDL.replace(PARENT_TABLE_NAME, "TEMP_PARENT"), null, nextTimestamp());
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, TENANT_ID); // connection is tenant-specific
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("DROP TABLE TEMP_PARENT");
+        conn.createStatement().execute("DROP TABLE " + PARENT_TABLE_NAME);
         conn.close();
     }
     
     public void testCreationOfParentTableFailsOnTenantSpecificConnection() throws Exception {
         try {
-            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE TABLE PARENT_TABLE ( \n" + 
+            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE TABLE " + generateUniqueName() + "( \n" + 
                     "                user VARCHAR ,\n" + 
                     "                id INTEGER not null primary key desc\n" + 
-                    "                ) ", null, nextTimestamp());
+                    "                ) ");
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CANNOT_CREATE_TENANT_SPECIFIC_TABLE.getErrorCode(), e.getErrorCode());
@@ -165,13 +163,14 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testTenantSpecificAndParentTablesMayBeInDifferentSchemas() throws SQLException {
-        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW DIFFSCHEMA.TENANT_TABLE ( \n" + 
+        String fullTableName = "DIFFSCHEMA." + generateUniqueName();
+        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + fullTableName + " ( \n" + 
                 "                tenant_col VARCHAR) AS SELECT * \n" + 
-                "                FROM " + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'aaa'", null, nextTimestamp());
+                "                FROM " + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'aaa'");
         try {
-            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW DIFFSCHEMA.TENANT_TABLE ( \n" + 
+            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + fullTableName + "( \n" + 
                     "                tenant_col VARCHAR) AS SELECT *\n"+
-                    "                FROM DIFFSCHEMA." + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'aaa'", null, nextTimestamp());
+                    "                FROM DIFFSCHEMA." + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'aaa'");
             fail();
         }
         catch (SQLException expected) {
@@ -184,31 +183,33 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         "                tenant_type_id VARCHAR(3) NOT NULL, \n" + 
         "                id INTEGER NOT NULL\n" + 
         "                CONSTRAINT pk PRIMARY KEY (tenant_id, tenant_type_id, id)) MULTI_TENANT=true";
-        createTestTable(getUrl(), newDDL, null, nextTimestamp());
-        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW DIFFSCHEMA.TENANT_TABLE ( \n" + 
+        createTestTable(getUrl(), newDDL);
+        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + fullTableName + "( \n" + 
                 "                tenant_col VARCHAR) AS SELECT *\n"+
-                "                FROM DIFFSCHEMA." + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'aaa'", null, nextTimestamp());
+                "                FROM DIFFSCHEMA." + PARENT_TABLE_NAME + " WHERE tenant_type_id = 'aaa'");
     }
     
     @Test
     public void testTenantSpecificTableCanDeclarePK() throws SQLException {
-            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW TENANT_TABLE2 ( \n" + 
+            createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateUniqueName() + "( \n" + 
                     "                tenant_col VARCHAR PRIMARY KEY) AS SELECT *\n" + 
-                    "                FROM PARENT_TABLE", null, nextTimestamp());
+                    "                FROM " + PARENT_TABLE_NAME);
     }
     
     @Test(expected=ColumnAlreadyExistsException.class)
     public void testTenantSpecificTableCannotOverrideParentCol() throws SQLException {
-        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW TENANT_TABLE2 ( \n" + 
+        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateUniqueName() + " ( \n" + 
                 "                user INTEGER) AS SELECT *\n" + 
-                "                FROM PARENT_TABLE", null, nextTimestamp());
+                "                FROM " + PARENT_TABLE_NAME);
     }
     
     @Test
     public void testBaseTableWrongFormatWithTenantTypeId() throws Exception {
         // only two PK columns for multi_tenant, multi_type
         try {
-            createTestTable(getUrl(), "CREATE TABLE BASE_TABLE2 (TENANT_ID VARCHAR NOT NULL PRIMARY KEY, ID VARCHAR, A INTEGER) MULTI_TENANT=true", null, nextTimestamp());
+            createTestTable(getUrl(), 
+                    "CREATE TABLE " + generateUniqueName() + 
+                    "(TENANT_ID VARCHAR NOT NULL PRIMARY KEY, ID VARCHAR, A INTEGER) MULTI_TENANT=true");
             fail();
         }
         catch (SQLException expected) {
@@ -218,25 +219,13 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testAddDropColumn() throws Exception {
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
         conn.setAutoCommit(true);
         try {
-            conn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " (id, tenant_col) values (1, 'Viva Las Vegas')");
-            
+            conn.createStatement().execute("upsert into " + TENANT_TABLE_NAME + " (id, tenant_col) values (1, 'Viva Las Vegas')");
             conn.createStatement().execute("alter view " + TENANT_TABLE_NAME + " add tenant_col2 char(1) null");
-            
-            conn.close();
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-            conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
-            conn.setAutoCommit(true);
-            
-            conn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " (id, tenant_col2) values (2, 'a')");
-            conn.close();
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-            conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
-            conn.setAutoCommit(true);
+            conn.createStatement().execute("upsert into " + TENANT_TABLE_NAME + " (id, tenant_col2) values (2, 'a')");
             
             ResultSet rs = conn.createStatement().executeQuery("select count(*) from " + TENANT_TABLE_NAME);
             rs.next();
@@ -246,24 +235,13 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             rs.next();
             assertEquals(1, rs.getInt(1));
             
-            conn.close();
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-            conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
-            conn.setAutoCommit(true);
-            
             conn.createStatement().execute("alter view " + TENANT_TABLE_NAME + " drop column tenant_col");
-            
-            conn.close();
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
-            conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
-            conn.setAutoCommit(true);
-            
             rs = conn.createStatement().executeQuery("select count(*) from " + TENANT_TABLE_NAME + "");
             rs.next();
             assertEquals(2, rs.getInt(1));
             
             try {
-                rs = conn.createStatement().executeQuery("select tenant_col from TENANT_TABLE");
+                rs = conn.createStatement().executeQuery("select tenant_col from " + TENANT_TABLE_NAME);
                 fail();
             }
             catch (ColumnNotFoundException expected) {}
@@ -275,8 +253,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testDropOfPKInTenantTablesNotAllowed() throws Exception {
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
         try {
             // try removing a PK col
@@ -295,8 +272,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testColumnMutationInParentTableWithExistingTenantTable() throws Exception {
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             try {
@@ -322,8 +298,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testDisallowDropParentTableWithExistingTenantTable() throws Exception {
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             conn.createStatement().executeUpdate("drop table " + PARENT_TABLE_NAME);
@@ -339,18 +314,13 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     
     @Test
     public void testAllowDropParentTableWithCascadeAndSingleTenantTable() throws Exception {
-	    long ts = nextTimestamp();
-	    Properties props = new Properties();
-	    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 	    Connection conn = DriverManager.getConnection(getUrl(), props);
 	    Connection connTenant = null;
     
 		try {
 			// Drop Parent Table 
 			conn.createStatement().executeUpdate("DROP TABLE " + PARENT_TABLE_NAME + " CASCADE");
-			conn.close();
-		      
-			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
 			connTenant = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
 			
 	        validateTenantViewIsDropped(conn);		
@@ -368,56 +338,58 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testAllDropParentTableWithCascadeWithMultipleTenantTablesAndIndexes() throws Exception {
         // Create a second tenant table
-    	createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, TENANT_TABLE_DDL, null, nextTimestamp());
+        String tenantTable2 = "V_" + generateUniqueName();
+        createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2));
     	//TODO Create some tenant specific table indexes
         
-	    long ts = nextTimestamp();
-	    Properties props = new Properties();
-	    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+	    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 	    Connection conn = null;
 	    Connection connTenant1 = null;
 	    Connection connTenant2 = null;
     
 		try {
+            List<String> sortedCatalogs = Arrays.asList(TENANT_ID, TENANT_ID2);
+            Collections.sort(sortedCatalogs);
 			conn = DriverManager.getConnection(getUrl(), props);
 	        DatabaseMetaData meta = conn.getMetaData();
-            ResultSet rs = meta.getSuperTables(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME) + "%");
+            ResultSet rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME), new String[] {PTableType.VIEW.getValue().getString()});
+            assertTrue(rs.next());
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertTableMetaData(rs, null, TENANT_TABLE_NAME, PTableType.VIEW);
+            assertFalse(rs.next());
+            
+            rs = meta.getTables(null, "", StringUtil.escapeLike(tenantTable2), new String[] {PTableType.VIEW.getValue().getString()});
             assertTrue(rs.next());
             assertEquals(TENANT_ID2, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
-            assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
-            assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertTableMetaData(rs, null, tenantTable2, PTableType.VIEW);
             assertFalse(rs.next());
-            rs.close();
-            conn.close();
+            
+            rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID), new String[] {PTableType.VIEW.getValue().getString()});
+            assertTrue(rs.next());
+            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            assertTableMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, PTableType.VIEW);
+            assertFalse(rs.next());
             
 			// Drop Parent Table 
 			conn.createStatement().executeUpdate("DROP TABLE " + PARENT_TABLE_NAME + " CASCADE");
 		  
 			// Validate Tenant Views are dropped
-			props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
 			connTenant1 = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
 	        validateTenantViewIsDropped(connTenant1);
 			connTenant2 = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL2, props);
 	        validateTenantViewIsDropped(connTenant2);
 	        
 	        // Validate Tenant Metadata is gone for the Tenant Table TENANT_TABLE_NAME
-			conn = DriverManager.getConnection(getUrl(), props);
-	        meta = conn.getMetaData();
-            rs = meta.getSuperTables(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME) + "%");
+            rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME), new String[] {PTableType.VIEW.getValue().getString()});
+            assertFalse(rs.next());
+            rs = meta.getTables(null, "", StringUtil.escapeLike(tenantTable2), new String[] {PTableType.VIEW.getValue().getString()});
+            assertFalse(rs.next());
+            
+            rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID), new String[] {PTableType.VIEW.getValue().getString()});
             assertTrue(rs.next());
             assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertTableMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, PTableType.VIEW);
             assertFalse(rs.next());
-            rs.close();
 	        
 	    } finally {
 	    	if (conn != null) {
@@ -446,29 +418,23 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test
     public void testTableMetadataScan() throws Exception {
         // create a tenant table with same name for a different tenant to make sure we are not picking it up in metadata scans for TENANT_ID
-        String tenantId2 = "tenant2";
+        String tenantId2 = "T_" + generateUniqueName();
         String secondTenatConnectionURL = PHOENIX_JDBC_TENANT_SPECIFIC_URL.replace(TENANT_ID,  tenantId2);
-        String tenantTable2 = TENANT_TABLE_NAME+"2";
-        createTestTable(secondTenatConnectionURL, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2), null, nextTimestamp(), false);
+        String tenantTable2 = "V_" + generateUniqueName();
+        createTestTable(secondTenatConnectionURL, TENANT_TABLE_DDL.replace(TENANT_TABLE_NAME, tenantTable2));
         
-        Properties props = new Properties();
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
             // empty string means global tenant id
             // make sure connections w/o tenant id only see non-tenant-specific tables, both SYSTEM and USER
             DatabaseMetaData meta = conn.getMetaData();
-            ResultSet rs = meta.getTables("", null, null, null);
-            assertTrue(rs.next());
-            assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, SYSTEM_CATALOG_TABLE, SYSTEM);
-            assertTrue(rs.next());
-            assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE, SYSTEM);
-            assertTrue(rs.next());
-            assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, TYPE_SEQUENCE, SYSTEM);
-            assertTrue(rs.next());
-            assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, SYSTEM);
+            ResultSet rs = meta.getTables("", "", StringUtil.escapeLike(PARENT_TABLE_NAME), new String[] {TABLE.getValue().getString()});
             assertTrue(rs.next());
             assertTableMetaData(rs, null, PARENT_TABLE_NAME, TABLE);
+            assertFalse(rs.next());
+
+            rs = meta.getTables("", "", StringUtil.escapeLike(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID), new String[] {TABLE.getValue().getString()});
             assertTrue(rs.next());
             assertTableMetaData(rs, null, PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, TABLE);
             assertFalse(rs.next());
@@ -480,16 +446,26 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
                 assertNotEquals(tenantTable2, rs.getString("TABLE_NAME"));
             }
             
-            // null catalog means across all tenant_ids
-            rs = meta.getSuperTables(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME) + "%");
+            List<String> sortedTableNames = Arrays.asList(TENANT_TABLE_NAME, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID);
+            Collections.sort(sortedTableNames);
+            List<String> sortedParentNames;
+            if (sortedTableNames.get(0).equals(TENANT_TABLE_NAME)) {
+                sortedParentNames = Arrays.asList(PARENT_TABLE_NAME, PARENT_TABLE_NAME_NO_TENANT_TYPE_ID);
+            } else {
+                sortedParentNames = Arrays.asList(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, PARENT_TABLE_NAME);
+            }
+            rs = meta.getSuperTables(TENANT_ID, null, null);
             assertTrue(rs.next());
             assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertEquals(sortedTableNames.get(0), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            assertEquals(sortedParentNames.get(0), rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
             assertTrue(rs.next());
             assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertEquals(sortedTableNames.get(1), rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+            assertEquals(sortedParentNames.get(1), rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
+            assertFalse(rs.next());
+            
+            rs = meta.getSuperTables(tenantId2, null, null);
             assertTrue(rs.next());
             assertEquals(tenantId2, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
             assertEquals(tenantTable2, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
@@ -497,36 +473,22 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertFalse(rs.next());
             conn.close();
             
-            // Global connection sees all tenant tables
-            conn = DriverManager.getConnection(getUrl(), props);
-            rs = conn.getMetaData().getSuperTables(TENANT_ID, null, null);
-            assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
-            assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertEquals(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            assertEquals(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, rs.getString(PhoenixDatabaseMetaData.SUPERTABLE_NAME));
-            assertFalse(rs.next());
-            
+            Set<String> sortedCatalogs = new HashSet<>(Arrays.asList(TENANT_ID, tenantId2));
             rs = conn.getMetaData().getCatalogs();
-            assertTrue(rs.next());
-            assertEquals(TENANT_ID, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertTrue(rs.next());
-            assertEquals(tenantId2, rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
-            assertFalse(rs.next());
+            while (rs.next()) {
+                sortedCatalogs.remove(rs.getString(PhoenixDatabaseMetaData.TABLE_CAT));
+            }
+            assertTrue("Should have found both tenant IDs", sortedCatalogs.isEmpty());
         } finally {
             props.clear();
             conn.close();
         }
         
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
         conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
         try {   
             // make sure tenant-specific connections only see their own tables and the global tables
             DatabaseMetaData meta = conn.getMetaData();
-            ResultSet rs = meta.getTables(null, null, null, null);
+            ResultSet rs = meta.getTables("", SYSTEM_CATALOG_SCHEMA, null, new String[] {PTableType.SYSTEM.getValue().getString()});
             assertTrue(rs.next());
             assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, PTableType.SYSTEM);
             assertTrue(rs.next());
@@ -535,18 +497,33 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.TYPE_SEQUENCE, PTableType.SYSTEM);
             assertTrue(rs.next());
             assertTableMetaData(rs, SYSTEM_CATALOG_SCHEMA, PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE, PTableType.SYSTEM);
+            assertFalse(rs.next());
+            
+            rs = meta.getTables(null, "", StringUtil.escapeLike(tenantTable2), new String[] {TABLE.getValue().getString()});
+            assertFalse(rs.next());
+
+            rs = meta.getTables(null, "", StringUtil.escapeLike(PARENT_TABLE_NAME), new String[] {TABLE.getValue().getString()});
             assertTrue(rs.next());
-            assertTableMetaData(rs, null, PARENT_TABLE_NAME, PTableType.TABLE);
+            assertTableMetaData(rs, null, PARENT_TABLE_NAME, TABLE);
+            assertFalse(rs.next());
+
+            rs = meta.getTables(null, "", StringUtil.escapeLike(PARENT_TABLE_NAME_NO_TENANT_TYPE_ID), new String[] {TABLE.getValue().getString()});
             assertTrue(rs.next());
-            assertTableMetaData(rs, null, PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, PTableType.TABLE);
+            assertTableMetaData(rs, null, PARENT_TABLE_NAME_NO_TENANT_TYPE_ID, TABLE);
+            assertFalse(rs.next());
+
+            rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME), new String[] {PTableType.VIEW.getValue().getString()});
             assertTrue(rs.next());
             assertTableMetaData(rs, null, TENANT_TABLE_NAME, PTableType.VIEW);
+            assertFalse(rs.next());
+            
+            rs = meta.getTables(null, "", StringUtil.escapeLike(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID), new String[] {PTableType.VIEW.getValue().getString()});
             assertTrue(rs.next());
             assertTableMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, PTableType.VIEW);
             assertFalse(rs.next());
             
             // make sure tenants see parent table's columns and their own
-            rs = meta.getColumns(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME) + "%", null);
+            rs = meta.getColumns(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME), null);
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "user", 1);
             assertTrue(rs.next());
@@ -557,6 +534,9 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "id", 3);
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_col", 4);
+            assertFalse(rs.next());
+            
+            rs = meta.getColumns(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID), null);
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "user", 1);
             assertTrue(rs.next());

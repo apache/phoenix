@@ -61,7 +61,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testSingleByteInstrAscending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "abcdefghijkl","fgh");
         String queryToExecute = "SELECT INSTR(name, 'fgh') FROM " + tableName;
         testInstr(conn, queryToExecute, 6);
@@ -70,7 +70,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testSingleByteInstrDescending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "abcdefghijkl","fgh");
         String queryToExecute = "SELECT INSTR(name, 'fgh') FROM " + tableName;
         testInstr(conn, queryToExecute, 6);
@@ -79,7 +79,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testSingleByteInstrAscendingNoString() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "abcde fghijkl","lmn");
         String queryToExecute = "SELECT INSTR(name, 'lmn') FROM " + tableName;
         testInstr(conn, queryToExecute, 0);
@@ -88,7 +88,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testSingleByteInstrDescendingNoString() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "abcde fghijkl","lmn");
         String queryToExecute = "SELECT INSTR(name, 'lmn') FROM " + tableName;
         testInstr(conn, queryToExecute, 0);
@@ -97,7 +97,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testMultiByteInstrAscending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "AɚɦFGH","ɚɦ");
         String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM " + tableName;
         testInstr(conn, queryToExecute, 2);
@@ -106,7 +106,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testMultiByteInstrDecending() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "AɚɦFGH","ɚɦ");
         String queryToExecute = "SELECT INSTR(name, 'ɚɦ') FROM " + tableName;
         testInstr(conn, queryToExecute, 2);
@@ -115,7 +115,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testByteInstrAscendingFilter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "ASC", "abcdefghijkl","fgh");
         String queryToExecute = "select NAME from " + tableName + " where instr(name, 'fgh') > 0";
         testInstrFilter(conn, queryToExecute,"abcdefghijkl");
@@ -125,7 +125,7 @@ public class InstrFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testByteInstrDecendingFilter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, tableName, "DESC", "abcdefghijkl","fgh");
         String queryToExecute = "select NAME from " + tableName + " where instr(name, 'fgh') > 0";
         testInstrFilter(conn, queryToExecute,"abcdefghijkl");

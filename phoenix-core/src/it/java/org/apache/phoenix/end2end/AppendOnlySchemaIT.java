@@ -75,9 +75,9 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
         try (Connection conn1 = connectionQueryServices.connect(getUrl(), props);
                 Connection conn2 = sameClient ? conn1 : connectionQueryServices.connect(getUrl(), props)) {
 
-            String metricTableName = generateRandomString();
-            String viewName = generateRandomString();
-            String metricIdSeqTableName = generateRandomString();
+            String metricTableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String metricIdSeqTableName = generateUniqueName();
             // create sequence for auto partition
             conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + " CACHE 1");
             // create base table
@@ -114,7 +114,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             // verify no create table rpcs
             verify(connectionQueryServices, never()).createTable(anyListOf(Mutation.class),
                 any(byte[].class), any(PTableType.class), anyMap(), anyList(), any(byte[][].class),
-                eq(false));
+                eq(false), eq(false));
             reset(connectionQueryServices);
             
             // execute alter table ddl that adds the same column
@@ -186,9 +186,9 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
         try (Connection conn1 = DriverManager.getConnection(getUrl(), props);
                 Connection conn2 = sameClient ? conn1 : DriverManager.getConnection(getUrl(), props)) {
 
-            String metricTableName = generateRandomString();
-            String viewName = generateRandomString();
-            String metricIdSeqTableName = generateRandomString();
+            String metricTableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String metricIdSeqTableName = generateUniqueName();
 
             // create sequence for auto partition
             conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + " CACHE 1");
@@ -289,8 +289,8 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
     public void testValidateAttributes() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String tableName = generateRandomString();
-            String viewName = generateRandomString();
+            String tableName = generateUniqueName();
+            String viewName = generateUniqueName();
             try {
                 conn.createStatement().execute(
                     "create table IF NOT EXISTS " + tableName + " ( id char(1) NOT NULL,"
@@ -326,9 +326,9 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn1 = DriverManager.getConnection(getUrl(), props);
                 Connection conn2 = DriverManager.getConnection(getUrl(), props)) {
-            String metricTableName = generateRandomString();
-            String viewName = generateRandomString();
-            String metricIdSeqTableName = generateRandomString();
+            String metricTableName = generateUniqueName();
+            String viewName = generateUniqueName();
+            String metricIdSeqTableName = generateUniqueName();
             // create sequence for auto partition
             conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + "  CACHE 1");
             // create base table

@@ -41,7 +41,7 @@ public class AutoCommitIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
 
-            String testTable = generateRandomString();
+            String testTable = generateUniqueName();
             String ddl = "CREATE TABLE " + testTable + " " +
                 "  (r varchar not null, col1 integer" +
                 "  CONSTRAINT pk PRIMARY KEY (r))\n";

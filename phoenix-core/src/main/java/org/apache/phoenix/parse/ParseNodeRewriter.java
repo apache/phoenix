@@ -25,6 +25,7 @@ import java.util.Map;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.ColumnRef;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -400,14 +401,23 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
             ParseNode aliasedNode = aliasMap.get(node.getName());
             // If we found something, then try to resolve it unless the two nodes are the same
             if (aliasedNode != null && !node.equals(aliasedNode)) {
+                ColumnRef ref;
                 try {
-                    // If we're able to resolve it, that means we have a conflict
-                    resolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
-                    throw new AmbiguousColumnException(node.getName());
+                    ref = resolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
                 } catch (ColumnNotFoundException e) {
                     // Not able to resolve alias as a column name as well, so we use the alias
                     return aliasedNode;
                 }
+                // We have resolved it to a column, so now check if the aliased node can be resolved as the same column
+                if (aliasedNode instanceof ColumnParseNode) {
+                    ColumnParseNode aliasedColumnNode = (ColumnParseNode) aliasedNode;
+                    ColumnRef aliasedRef = resolver.resolveColumn(aliasedColumnNode.getSchemaName(), aliasedColumnNode.getTableName(), aliasedColumnNode.getName());
+                    if (aliasedRef.equals(ref)) {
+                        return aliasedNode;
+                    }
+                }
+                // Otherwise it means we have a conflict
+                throw new AmbiguousColumnException(node.getName());
             }
         }
         return node;

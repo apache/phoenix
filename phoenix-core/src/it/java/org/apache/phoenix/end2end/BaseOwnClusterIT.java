@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.query.BaseTest;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.experimental.categories.Category;
 
@@ -26,5 +28,10 @@ public class BaseOwnClusterIT extends BaseTest {
     @AfterClass
     public static void doTeardown() throws Exception {
         tearDownMiniCluster();
+    }
+
+    @After
+    public void cleanUpAfterTest() throws Exception {
+        deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getOldUrl());
     }
 }

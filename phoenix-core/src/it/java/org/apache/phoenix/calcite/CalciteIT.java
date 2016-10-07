@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.calcite;
 
-import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_ORDER_TABLE_FULL_NAME;
-import static org.apache.phoenix.util.TestUtil.JOIN_SUPPLIER_TABLE_FULL_NAME;
+import static org.apache.phoenix.end2end.BaseJoinIT.JOIN_CUSTOMER_TABLE_FULL_NAME;
+import static org.apache.phoenix.end2end.BaseJoinIT.JOIN_ITEM_TABLE_FULL_NAME;
+import static org.apache.phoenix.end2end.BaseJoinIT.JOIN_ORDER_TABLE_FULL_NAME;
+import static org.apache.phoenix.end2end.BaseJoinIT.JOIN_SUPPLIER_TABLE_FULL_NAME;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -44,7 +44,7 @@ public class CalciteIT extends BaseCalciteIT {
     public void initTable() throws Exception {
         final String url = getOldUrl();
         initATableValues(TestUtil.ATABLE_NAME, getOrganizationId(), null, null, null, url);
-        initJoinTableValues(url, null, null);
+        initJoinTableValues(url);
         initArrayTable(url);
         initSaltedTables(url, null);
         initKeyOrderingTable(url);
@@ -157,7 +157,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "    PhoenixServerJoin(condition=[AND(=($6, $0), =($8, $4))], joinType=[inner])\n" +
                            "      PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4], $f7=[/(*($2, -(100, $4)), 100.0)])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                           "      PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], PRICE7=[CAST($3):DECIMAL(17, 6)])\n" +
+                           "      PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], PRICE6=[CAST($3):DECIMAL(17, 6)])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[<($4, 5000)])\n")
                 .resultIs(0, new Object[][] {
                           {"000000000000004", "T6", 600, 15, 4000}})

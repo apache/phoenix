@@ -45,8 +45,8 @@ public class SqrtFunctionEnd2EndIT extends ParallelStatsDisabledIT {
     public void initTable() throws Exception {
         Connection conn = null;
         PreparedStatement stmt = null;
-        testUnsignedTable = generateRandomString();
-        testSignedTable = generateRandomString();
+        testUnsignedTable = generateUniqueName();
+        testSignedTable = generateUniqueName();
         try {
             conn = DriverManager.getConnection(getUrl());
             String ddl;

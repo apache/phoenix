@@ -1073,9 +1073,9 @@ public class PTableImpl implements PTable {
       boolean isImmutableRows = table.getIsImmutableRows();
       PName parentSchemaName = null;
       PName parentTableName = null;
-      if (table.hasDataTableNameBytes()) {
-        parentSchemaName = PNameFactory.newName(SchemaUtil.getSchemaNameFromFullName((table.getDataTableNameBytes().toByteArray())));
-        parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(table.getDataTableNameBytes().toByteArray()));
+      if (table.hasParentNameBytes()) {
+        parentSchemaName = PNameFactory.newName(SchemaUtil.getSchemaNameFromFullName((table.getParentNameBytes().toByteArray())));
+        parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(table.getParentNameBytes().toByteArray()));
       }
       PName defaultFamilyName = null;
       if (table.hasDefaultFamilyName()) {
@@ -1185,9 +1185,12 @@ public class PTableImpl implements PTable {
         builder.addIndexes(toProto(curIndex));
       }
       builder.setIsImmutableRows(table.isImmutableRows());
-
+      // TODO remove this field in 5.0 release
       if (table.getParentName() != null) {
-        builder.setDataTableNameBytes(ByteStringer.wrap(table.getParentName().getBytes()));
+          builder.setDataTableNameBytes(ByteStringer.wrap(table.getParentTableName().getBytes()));
+      }
+      if (table.getParentName() !=null) {
+          builder.setParentNameBytes(ByteStringer.wrap(table.getParentName().getBytes()));
       }
       if (table.getDefaultFamilyName()!= null) {
         builder.setDefaultFamilyName(ByteStringer.wrap(table.getDefaultFamilyName().getBytes()));

@@ -26,39 +26,33 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Map;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.*;
-import org.junit.BeforeClass;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-
-import com.google.common.collect.Maps;
 
 
 public class SaltedIndexIT extends ParallelStatsDisabledIT {
     private static final int TABLE_SPLITS = 3;
     private static final int INDEX_SPLITS = 4;
     
-    @BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Forces server cache to be used
-        props.put(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(2));
-        // Drop the HBase table metadata for this test
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    private static Connection getConnection() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(1));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
     }
     
     private static void makeImmutableAndDeleteData(String tableName, String fullTableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+        Connection conn = getConnection();
         try {
             conn.setAutoCommit(true);
             conn.createStatement().execute("DELETE FROM " + fullTableName);
@@ -73,8 +67,8 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testMutableTableIndexMaintanenceSaltedSalted() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, TABLE_SPLITS, INDEX_SPLITS);
@@ -84,8 +78,8 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMutableTableIndexMaintanenceSalted() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, INDEX_SPLITS);
@@ -95,8 +89,8 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testMutableTableIndexMaintanenceUnsalted() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IND_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         testMutableTableIndexMaintanence(tableName, fullTableName, indexName, fullIndexName, null, null);
@@ -108,8 +102,7 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
         String query;
         ResultSet rs;
         
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         conn.setAutoCommit(false);
         conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR)  " +  (tableSaltBuckets == null ? "" : " SALT_BUCKETS=" + tableSaltBuckets));
         query = "SELECT * FROM " + dataTableFullName;

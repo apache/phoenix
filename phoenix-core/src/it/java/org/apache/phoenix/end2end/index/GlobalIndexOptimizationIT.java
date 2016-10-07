@@ -25,29 +25,15 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.*;
-import org.junit.BeforeClass;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
-import com.google.common.collect.Maps;
-
 public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
-
-    @BeforeClass 
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-        // Drop the HBase table metadata for this test
-        props.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.toString(true));
-        // Must update config before starting server
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
-    }
 
     private void createBaseTable(String tableName, Integer saltBuckets, String splits, boolean multiTenant) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
@@ -73,16 +59,16 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testGlobalIndexOptimization() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
         testOptimization(dataTableName, dataTableFullName, indexTableName, 4);
     }
     
     @Test
     public void testGlobalIndexOptimizationWithSalting() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
         testOptimization(dataTableName, dataTableFullName, indexTableName, 4);
 
@@ -90,15 +76,15 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testGlobalIndexOptimizationTenantSpecific() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         testOptimizationTenantSpecific(dataTableName, indexTableName, null);
     }
     
     @Test
     public void testGlobalIndexOptimizationWithSaltingTenantSpecific() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         testOptimizationTenantSpecific(dataTableName, indexTableName, 4);
     }
 
@@ -330,11 +316,11 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testGlobalIndexOptimizationOnSharedIndex() throws Exception {
-        String dataTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
         createBaseTable(dataTableName, null, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());
-        String viewName = generateRandomString();
-        String indexOnDataTable = generateRandomString();
+        String viewName = generateUniqueName();
+        String indexOnDataTable = generateUniqueName();
         try{
             conn1.createStatement().execute("CREATE INDEX " + indexOnDataTable + " ON " + dataTableName + "(k2,k1) INCLUDE (v1)");
             conn1.createStatement().execute("CREATE VIEW " + viewName  + " AS SELECT * FROM " + dataTableName + " WHERE v1 = 'a'");
@@ -347,7 +333,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
             assertFalse(rs.next());
-            String viewIndex = generateRandomString();
+            String viewIndex = generateUniqueName();
             conn1.createStatement().execute("CREATE INDEX " + viewIndex + " ON " + viewName + " (k1)");
             
             String query = "SELECT /*+ INDEX(" + viewName + " " + viewIndex + ")*/ t_id,k1,k2,k3,v1 FROM " + viewName + " where k1 IN (1,2) and k2 IN (3,4)";
@@ -378,8 +364,8 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNoGlobalIndexOptimization() throws Exception {
-        String dataTableName = generateRandomString();
-        String indexTableName = generateRandomString();
+        String dataTableName = generateUniqueName();
+        String indexTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName("", dataTableName);
         createBaseTable(dataTableName, null, "('e','i','o')", false);
         Connection conn1 = DriverManager.getConnection(getUrl());

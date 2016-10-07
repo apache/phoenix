@@ -53,7 +53,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     
     private void testDividend(long dividend) throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, dividend, tableName);
 
         for(long divisor : DIVISORS) {
@@ -105,7 +105,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testZeroDivisor() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, 0, tableName);
         
         for(long dividend : DIVIDENDS) {
@@ -132,7 +132,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testNullDividend() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, SMALL_VALUE, tableName);
         
         for(long divisor : DIVISORS) {
@@ -148,7 +148,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testNullDivisor() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, SMALL_VALUE, tableName);
         
         for(long dividend : DIVIDENDS) {
@@ -170,7 +170,7 @@ public class ModulusExpressionIT extends ParallelStatsDisabledIT {
     @Test
     public void testNullEverything() throws SQLException {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         initTable(conn, SMALL_VALUE, tableName);
         
         String sql = "SELECT null % kv FROM " + tableName;

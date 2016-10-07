@@ -44,6 +44,7 @@ import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
+import org.apache.phoenix.end2end.BaseJoinIT;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -440,6 +441,26 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
     }
     
     protected static final String SCORES_TABLE_NAME = "scores";
+    
+    protected void initJoinTableValues(String url) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            for (String tableName : new String[] {
+                    BaseJoinIT.JOIN_CUSTOMER_TABLE_FULL_NAME,
+                    BaseJoinIT.JOIN_ITEM_TABLE_FULL_NAME,
+                    BaseJoinIT.JOIN_ORDER_TABLE_FULL_NAME,
+                    BaseJoinIT.JOIN_SUPPLIER_TABLE_FULL_NAME}) {
+                try {
+                    BaseJoinIT.createTable(conn, tableName, tableName);
+                } catch (TableAlreadyExistsException e) {
+                }
+                BaseJoinIT.initValues(conn, tableName, tableName);
+            }
+        } finally {
+            conn.close();
+        }
+    }
     
     protected void initArrayTable(String url) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

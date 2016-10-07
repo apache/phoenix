@@ -66,7 +66,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void coalesceWithSumExplicitLong() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT BIGINT "
@@ -90,7 +90,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void coalesceWithSumImplicitLong() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT BIGINT "
@@ -114,7 +114,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void coalesceWithSecondParamAsExpression() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT BIGINT "
@@ -138,7 +138,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void nonTypedSecondParameterLong() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
@@ -163,7 +163,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void nonTypedSecondParameterUnsignedDataTypes() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
                 + "    COUNT UNSIGNED_INT " //first parameter to coalesce
@@ -188,7 +188,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testWithNthValueAggregationFunction() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
@@ -220,7 +220,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void wrongDataTypeOfSecondParameter() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID UNSIGNED_INT NOT NULL, "
@@ -247,7 +247,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testImplicitSecondArgCastingException() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID INTEGER NOT NULL, "
@@ -276,7 +276,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testImplicitSecondArgCasting() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
 
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID DOUBLE NOT NULL, "
@@ -302,7 +302,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
     public void testCoalesceInRowKeyColumn() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateRandomString();
+        String tableName = generateUniqueName();
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 decimal, k2 decimal, constraint pk primary key (k1,k2))");
         conn.createStatement().execute("UPSERT INTO " + tableName + "(k2) VALUES (1)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (2,2)");

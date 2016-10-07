@@ -36,7 +36,7 @@ import org.junit.Test;
 
 public class SaltedTableVarLengthRowKeyIT extends ParallelStatsDisabledIT {
 
-    private static final String TEST_TABLE = generateRandomString();
+    private static final String TEST_TABLE = generateUniqueName();
 
     private static void initTableValues() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

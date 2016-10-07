@@ -30,25 +30,19 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.tephra.Transaction.VisibilityLevel;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
 public class TxCheckpointIT extends ParallelStatsDisabledIT {
@@ -62,13 +56,14 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 
 	}
 	
-	@BeforeClass
-    @Shadower(classBeingShadowed = ParallelStatsDisabledIT.class)
-    public static void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(2);
-        props.put(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
-        props.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.toString(true));
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    private static Connection getConnection() throws SQLException {
+        return getConnection(PropertiesUtil.deepCopy(TEST_PROPERTIES));
+    }
+    
+    private static Connection getConnection(Properties props) throws SQLException {
+        props.setProperty(QueryServices.DEFAULT_TABLE_ISTRANSACTIONAL_ATTRIB, Boolean.toString(true));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        return conn;
     }
 	
 	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1}") // name is used by failsafe as file name in reports
@@ -80,15 +75,15 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testUpsertSelectDoesntSeeUpsertedData() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
-        String seqName = "SEQ_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        String seqName = "SEQ_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(3));
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, Integer.toString(3));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection(props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("CREATE SEQUENCE "+seqName);
         conn.createStatement().execute("CREATE TABLE " + fullTableName + "(pk INTEGER PRIMARY KEY, val INTEGER)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
@@ -105,8 +100,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testRollbackOfUncommittedDeleteSingleCol() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)";
         testRollbackOfUncommittedDelete(indexDDL, fullTableName);
@@ -114,8 +109,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testRollbackOfUncommittedDeleteMultiCol() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
         String indexDDL = "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + " (v1, v2)";
         testRollbackOfUncommittedDelete(indexDDL, fullTableName);
@@ -123,7 +118,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     
     private void testRollbackOfUncommittedDelete(String indexDDL, String fullTableName) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
@@ -208,11 +203,11 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     
 	@Test
 	public void testCheckpointForUpsertSelect() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+		try (Connection conn = getConnection()) {
 			conn.setAutoCommit(false);
 			Statement stmt = conn.createStatement();
 
@@ -298,12 +293,12 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	
 	@Test
     public void testCheckpointForDeleteAndUpsert() throws Exception {
-        String tableName = "TBL_" + generateRandomString();
-        String indexName = "IDX_" + generateRandomString();
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
 		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		ResultSet rs;
-		try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+		try (Connection conn = getConnection()) {
 			conn.setAutoCommit(false);
 			Statement stmt = conn.createStatement();
 			stmt.execute("CREATE TABLE " + fullTableName + "1(ID1 BIGINT NOT NULL PRIMARY KEY, FK1A INTEGER, FK1B INTEGER)"
