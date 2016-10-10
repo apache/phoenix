@@ -420,6 +420,115 @@ SqlNode SqlUpdateStatistics() :
     }
 }
 
+/**
+ * Parses statement
+ *   CREATE FUNCTION
+ */
+SqlNode SqlCreateFunction() :
+{
+    SqlParserPos pos;
+    SqlIdentifier functionName;
+    boolean replace = false;
+    boolean tempFunction = false;
+    SqlNodeList functionArguements = SqlNodeList.EMPTY;
+    SqlIdentifier returnType;
+    SqlNode className;
+    SqlNode jarPath = null;
+}
+{
+    <CREATE> { pos = getPos(); }
+    [
+    	<OR> <REPLACE> { replace = true; }
+    ]
+    [
+        <TEMPORARY> { tempFunction = true; }
+    ]   
+    <FUNCTION>
+    functionName = SimpleIdentifier()
+    <LPAREN>
+    [
+        functionArguements = FunctionArguementsList()
+    ]
+    <RPAREN>
+    <RETURNS> 
+    returnType = TypeName()
+    <AS>
+    className = StringLiteral()
+    [
+    	<USING> <JAR>
+    	jarPath = StringLiteral()
+    ] 
+    {
+        return new SqlCreateFunction(pos.plus(getPos()), functionName,
+            SqlLiteral.createBoolean(replace, SqlParserPos.ZERO),SqlLiteral.createBoolean(tempFunction, SqlParserPos.ZERO),
+            functionArguements, returnType, className,jarPath);
+    }
+}
+
+/**
+ * Parses statement
+ *   DROP FUNCTION
+ */
+SqlNode SqlDropFunction() :
+{
+    SqlParserPos pos;
+    SqlIdentifier functionName;
+    boolean ifExists;
+}
+{
+    <DROP> { pos = getPos(); } <FUNCTION>
+    (
+        <IF> <EXISTS> { ifExists = true; }
+        |
+        {
+            ifExists = false;
+        }
+    )
+    functionName = SimpleIdentifier()
+    {
+        return new  SqlDropFunction(pos.plus(getPos()), functionName,
+            SqlLiteral.createBoolean(ifExists, SqlParserPos.ZERO));
+    }
+}
+
+/**
+ * Parses statement
+ *   UPLOAD JARS
+ */
+SqlNode SqlUploadJarsNode() :
+{
+    SqlParserPos pos;
+    SqlNode jarPath;
+    List<SqlNode> jarPathsList;
+}
+{
+    <UPLOAD>  { pos = getPos(); } <JARS> 
+    jarPath = StringLiteral() { jarPathsList = startList(jarPath); }
+    (
+        <COMMA> jarPath = StringLiteral() { jarPathsList.add(jarPath); }
+    ) *
+    {
+        return new  SqlUploadJarsNode(pos.plus(getPos()), jarPathsList);
+    }
+}
+
+/**
+ * Parses statement
+ *   DELETE JAR
+ */
+SqlNode SqlDeleteJarNode() :
+{
+    SqlParserPos pos;
+    SqlNode jarPath;
+}
+{
+    <DELETE> { pos = getPos(); } <JAR>
+    jarPath = StringLiteral()
+    {
+        return new  SqlDeleteJarNode(pos.plus(getPos()), jarPath);
+    }
+}
+
 SqlNodeList ColumnDefList() :
 {
     SqlParserPos pos;
@@ -717,5 +826,54 @@ SqlIdentifier DualIdentifier() :
     {
         SqlParserPos pos = SqlParserPos.sum(posList);
         return new SqlIdentifier(list, null, pos, posList);
+    }
+}
+
+SqlFunctionArguementNode FunctionArguement() :
+{
+	SqlDataTypeNode typeNode;
+	boolean isConstant = false;
+	SqlNode defaultValue = null;
+	SqlNode minValue = null;
+	SqlNode maxValue = null;
+	SqlParserPos pos;
+} 
+{
+	typeNode = PhoenixDataType()
+	[
+		<CONSTANT> { isConstant = true; }
+	]
+	[
+		<DEFAULTVALUE> <EQ> 
+			defaultValue = Expression(ExprContext.ACCEPT_NONQUERY)
+	]
+	[
+		<MINVALUE> <EQ> 
+			minValue = Expression(ExprContext.ACCEPT_NONQUERY)
+	]
+	[
+		<MAXVALUE> <EQ> 
+			maxValue = Expression(ExprContext.ACCEPT_NONQUERY)
+	]
+	{
+		pos = typeNode.getParserPosition().plus(getPos());
+		return new SqlFunctionArguementNode(pos, typeNode, isConstant, defaultValue, minValue, maxValue);
+	}
+}
+
+SqlNodeList FunctionArguementsList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> functionArguements;
+}
+{
+    { pos = getPos(); }
+    e = FunctionArguement() { functionArguements = startList(e); }
+    (
+        <COMMA> e = FunctionArguement() { functionArguements.add(e); }
+    ) *
+    {
+        return new SqlNodeList(functionArguements, pos.plus(getPos()));
     }
 }

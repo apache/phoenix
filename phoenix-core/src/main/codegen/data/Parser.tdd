@@ -29,6 +29,7 @@
     "org.apache.phoenix.parse.ColumnDefInPkConstraint",
     "org.apache.calcite.sql.SqlColumnDefNode"
     "org.apache.calcite.sql.SqlColumnDefInPkConstraintNode"
+    "org.apache.calcite.sql.SqlFunctionArguementNode"
     "org.apache.calcite.sql.SqlIndexExpressionNode"
     "org.apache.calcite.sql.SqlDataTypeNode"
     "org.apache.calcite.sql.SqlOptionNode"
@@ -46,6 +47,12 @@
     "ROW_TIMESTAMP"
     "SPLIT"
     "STATISTICS"
+    "REPLACE"
+    "JAR"
+    "CONSTANT"
+    "DEFAULTVALUE"
+    "JARS"
+    "UPLOAD"
   ]
 
   # List of keywords from "keywords" section that are not reserved.
@@ -64,6 +71,10 @@
     "SqlDropIndex()",
     "SqlDropSequence()",
     "SqlUpdateStatistics()",
+    "SqlCreateFunction()"
+    "SqlDropFunction()"
+    "SqlUploadJarsNode()"
+    "SqlDeleteJarNode()"
   ]
 
   # List of methods for parsing custom literals.

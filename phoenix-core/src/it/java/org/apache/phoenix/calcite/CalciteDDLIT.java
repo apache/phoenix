@@ -1,7 +1,16 @@
 package org.apache.phoenix.calcite;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.io.File;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.Properties;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.query.QueryServices;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -50,6 +59,31 @@ public class CalciteDDLIT extends BaseCalciteIT {
         start(PROPS).sql("create table t5(a varchar not null primary key, b varchar)").execute().close();
         start(PROPS).sql("drop table t5").execute().close();
         start(PROPS).sql("create table t5(a bigint not null primary key, b varchar)").execute().close();
+    }
+
+    @Test public void testCreateAndDropFunction() throws Exception {
+        start(PROPS).sql("create function myreverse(VARCHAR) returns VARCHAR as 'org.apache.phoenix.end2end.MyReverse' using jar 'hdfs://localhost:51573/hbase/tmpjars/myjar1.jar'").execute().close();
+        start(PROPS).sql("create or replace function myfunction(INTEGER, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15) returns INTEGER as 'org.apache.phoenix.end2end.MyReverse' using jar 'hdfs://localhost:51573/hbase/tmpjars/myjar1.jar'").execute().close();
+        start(PROPS).sql("drop function if exists myfunction").execute().close();
+        start(PROPS).sql("create or replace function myfunction(VARCHAR ARRAY, INTEGER CONSTANT defaultValue=10 minvalue=1 maxvalue=15) returns INTEGER as 'org.apache.phoenix.end2end.MyReverse' using jar 'hdfs://localhost:51573/hbase/tmpjars/myjar1.jar'").execute().close();
+    }
+
+    @Test public void testUploadAndDeleteJars() throws Exception {
+        String jarName = "myjar.jar";
+        String jarPath = "." + File.separator + jarName;
+        File jarFile = new File(jarPath);
+        jarFile.createNewFile();
+        start(PROPS).sql("upload jars '"+jarFile.getAbsolutePath()+"'").execute().close();
+        Start start = start(PROPS);
+        Statement statement = start.getConnection().createStatement();
+        final String sql = "select jar_location\n"
+              + "from table(\"ListJars\"())";
+        ResultSet rs = statement.executeQuery(sql);
+        assertTrue(rs.next());
+        Configuration conf = HBaseConfiguration.create();
+        start(PROPS).sql("delete jar '"+ conf.get(QueryServices.DYNAMIC_JARS_DIR_KEY)+"/"+jarName+"'").execute().close();
+        rs = statement.executeQuery(sql);
+        assertFalse(rs.next());
     }
     
     @Ignore

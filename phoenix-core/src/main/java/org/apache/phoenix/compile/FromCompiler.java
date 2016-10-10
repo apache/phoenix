@@ -226,6 +226,10 @@ public class FromCompiler {
         return new SchemaResolver(connection, SchemaUtil.normalizeIdentifier(schema), true);
     }
 
+    public static ColumnResolver getResolverForFunction(PhoenixConnection connection, List<String> functionNames) throws SQLException {
+        return new FunctionResolver(connection, functionNames);
+    }
+
     public static ColumnResolver getResolver(NamedTableNode tableNode, PhoenixConnection connection) throws SQLException {
         SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
         return visitor;
@@ -463,6 +467,39 @@ public class FromCompiler {
         }
     }
 
+    private static class FunctionResolver extends BaseColumnResolver {
+        
+        public FunctionResolver(PhoenixConnection connection, List<String> functionNames) throws SQLException {
+            super(connection, 0, true, functionNames);
+        }
+        
+        @Override
+        public List<TableRef> getTables() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public TableRef resolveTable(String schemaName, String tableName) throws SQLException {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ColumnRef resolveColumn(String schemaName, String tableName, String colName)
+                throws SQLException {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public PSchema resolveSchema(String schemaName) throws SQLException {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<PSchema> getSchemas() {
+            throw new UnsupportedOperationException();
+        }
+    }
+
     private static abstract class BaseColumnResolver implements ColumnResolver {
         protected final PhoenixConnection connection;
         protected final MetaDataClient client;
@@ -481,15 +518,23 @@ public class FromCompiler {
             this.functions = Collections.<PFunction>emptyList();
         }
 
-        private BaseColumnResolver(PhoenixConnection connection, int tsAddition, boolean updateCacheImmediately, Map<String, UDFParseNode> udfParseNodes) throws SQLException {
-        	this.connection = connection;
+        private BaseColumnResolver(PhoenixConnection connection, int tsAddition,
+                boolean updateCacheImmediately, Map<String, UDFParseNode> udfParseNodes)
+                throws SQLException {
+            this(connection, tsAddition, updateCacheImmediately,
+                    udfParseNodes.isEmpty() ? Collections.<String> emptyList()
+                            : new ArrayList<String>(udfParseNodes.keySet()));
+        }
+
+        private BaseColumnResolver(PhoenixConnection connection, int tsAddition, boolean updateCacheImmediately, List<String> functionNames) throws SQLException {
+            this.connection = connection;
             this.client = connection == null ? null : new MetaDataClient(connection);
             this.tsAddition = tsAddition;
             functionMap = new HashMap<String, PFunction>(1);
-            if (udfParseNodes.isEmpty()) {
+            if (functionNames.isEmpty()) {
                 functions = Collections.<PFunction> emptyList();
             } else {
-                functions = createFunctionRef(new ArrayList<String>(udfParseNodes.keySet()), updateCacheImmediately);
+                functions = createFunctionRef(functionNames, updateCacheImmediately);
                 for (PFunction function : functions) {
                     functionMap.put(function.getFunctionName(), function);
                 }

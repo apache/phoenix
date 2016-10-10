@@ -30,6 +30,7 @@ import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexVisitorImpl;
+import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.sql.SqlAggFunction;
@@ -45,6 +46,7 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
 import org.apache.calcite.tools.FrameworkConfig;
 import org.apache.calcite.tools.Frameworks;
 import org.apache.calcite.tools.Planner;
@@ -103,6 +105,7 @@ import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SqrtFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
+import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.SequenceValueParseNode;
@@ -123,6 +126,7 @@ import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+
 import org.apache.phoenix.util.ExpressionUtil;
 
 /**
@@ -738,7 +742,14 @@ public class CalciteUtils {
                 List<Expression> children = convertChildren(call, implementor);
                 SqlOperator op = call.getOperator();
                 try {
-                    if (op == SqlStdOperatorTable.SQRT) {
+                    if (op instanceof SqlUserDefinedFunction) {
+                        SqlUserDefinedFunction udf = (SqlUserDefinedFunction) op;
+                        Function func = udf.getFunction();
+                        if (func instanceof PhoenixScalarFunction) {
+                            PhoenixScalarFunction scalarFunc = (PhoenixScalarFunction) func;
+                            return new UDFExpression(children, scalarFunc.getFunctionInfo());
+                        }
+                    } else if (op == SqlStdOperatorTable.SQRT) {
                         return new SqrtFunction(children);
                     } else if (op == SqlStdOperatorTable.POWER) {
                         return new PowerFunction(children);

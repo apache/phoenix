@@ -710,7 +710,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
     
-    private static class ExecutableAddJarsStatement extends AddJarsStatement implements CompilableStatement {
+    public static class ExecutableAddJarsStatement extends AddJarsStatement implements CompilableStatement {
 
         public ExecutableAddJarsStatement(List<LiteralParseNode> jarPaths) {
             super(jarPaths);
@@ -768,7 +768,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
     }
 
-    private static class ExecutableDeleteJarStatement extends DeleteJarStatement implements CompilableStatement {
+    public static class ExecutableDeleteJarStatement extends DeleteJarStatement implements CompilableStatement {
 
         public ExecutableDeleteJarStatement(LiteralParseNode jarPath) {
             super(jarPath);

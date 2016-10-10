@@ -2,6 +2,7 @@ package org.apache.phoenix.calcite;
 
 import java.lang.reflect.Type;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,7 @@ import org.apache.calcite.runtime.Hook.Closeable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
+import org.apache.calcite.sql.SqlFunctionArguementNode;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlIndexExpressionNode;
 import org.apache.calcite.sql.SqlKind;
@@ -42,13 +44,17 @@ import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.calcite.parse.SqlCreateFunction;
 import org.apache.phoenix.calcite.parse.SqlCreateIndex;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
+import org.apache.phoenix.calcite.parse.SqlDeleteJarNode;
+import org.apache.phoenix.calcite.parse.SqlDropFunction;
 import org.apache.phoenix.calcite.parse.SqlDropIndex;
 import org.apache.phoenix.calcite.parse.SqlDropSequence;
 import org.apache.phoenix.calcite.parse.SqlDropTable;
 import org.apache.phoenix.calcite.parse.SqlUpdateStatistics;
+import org.apache.phoenix.calcite.parse.SqlUploadJarsNode;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
@@ -61,25 +67,32 @@ import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
 import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
 import org.apache.phoenix.calcite.rules.PhoenixTableScanColumnRefRule;
+import org.apache.phoenix.compile.BaseMutationPlan;
 import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.IndexKeyConstraint;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
@@ -90,6 +103,7 @@ import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
 
 import com.google.common.base.Function;
@@ -426,6 +440,86 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     final UpdateStatisticsStatement updateStatsStmt = nodeFactory.updateStatistics(table, updateStatsNode.scope, props);
                     MetaDataClient client = new MetaDataClient(connection);
                     client.updateStatistics(updateStatsStmt);                    
+                } else if (node instanceof SqlCreateFunction) {
+                    SqlCreateFunction createFunctionNode = (SqlCreateFunction) node;
+                    short i = 0;
+                    List<FunctionArgument> functionArguements =
+                            new ArrayList<FunctionArgument>(
+                                    createFunctionNode.functionArguements.size());
+                    for (SqlNode functionArguement : createFunctionNode.functionArguements) {
+                        LiteralExpression dvExpression = null;
+                        LiteralExpression minValueExpression = null;
+                        LiteralExpression maxValueExpression = null;
+                        SqlFunctionArguementNode funArgNode =
+                                (SqlFunctionArguementNode) functionArguement;
+                        if (funArgNode.defaultValue != null) {
+                            LiteralParseNode dv =
+                                    (LiteralParseNode) convertSqlNodeToParseNode(funArgNode.defaultValue);
+                            dvExpression = LiteralExpression.newConstant(dv.getValue());
+                        }
+                        if (funArgNode.minValue != null) {
+                            LiteralParseNode minValue =
+                                    (LiteralParseNode) convertSqlNodeToParseNode(funArgNode.minValue);
+                            minValueExpression = LiteralExpression.newConstant(minValue.getValue());
+                        }
+                        if (funArgNode.maxValue != null) {
+                            LiteralParseNode maxValue =
+                                    (LiteralParseNode) convertSqlNodeToParseNode(funArgNode.maxValue);
+                            maxValueExpression = LiteralExpression.newConstant(maxValue.getValue());
+                        }
+                        functionArguements.add(new PFunction.FunctionArgument(
+                                funArgNode.typeNode.typeName, funArgNode.typeNode.isArray,
+                                funArgNode.isConstant, dvExpression, minValueExpression,
+                                maxValueExpression, i));
+                        i++;
+                    }
+
+                    final SqlLiteral className = (SqlLiteral) createFunctionNode.className;
+                    String quotedClassNameStr = ((NlsString) className.getValue()).toString();
+                    String classNameStr = quotedClassNameStr.substring(1, quotedClassNameStr.length() - 1);
+                    String jarPathStr = null;
+                    if (createFunctionNode.jarPath != null) {
+                        final SqlLiteral jarPath = (SqlLiteral) createFunctionNode.jarPath;
+                        String quotedJarPathStr = ((NlsString) jarPath.getValue()).toString();
+                        jarPathStr = quotedJarPathStr.substring(1, quotedJarPathStr.length() - 1);
+                    }
+                    PFunction function =
+                            new PFunction(createFunctionNode.functionName.getSimple(),
+                                    functionArguements, createFunctionNode.returnType.getSimple(),
+                                    classNameStr, jarPathStr);
+                    CreateFunctionStatement createFunction =
+                            nodeFactory.createFunction(function,
+                                createFunctionNode.tempFunction.booleanValue(),
+                                createFunctionNode.replace.booleanValue());
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.createFunction(createFunction);
+                } else if (node instanceof SqlDropFunction) {
+                    SqlDropFunction dropFunctionNode = (SqlDropFunction) node;
+                    DropFunctionStatement dropFunctionStmt =
+                            new DropFunctionStatement(dropFunctionNode.functionName.getSimple(),
+                                    dropFunctionNode.ifExists.booleanValue());
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.dropFunction(dropFunctionStmt);
+                } else if (node instanceof SqlUploadJarsNode) {
+                    PhoenixStatement phoenixStatement = new PhoenixStatement(connection);
+                    List<SqlNode> operandList = ((SqlUploadJarsNode) node).getOperandList();
+                    List<LiteralParseNode> jarsPaths = new ArrayList<LiteralParseNode>();
+                    for (SqlNode jarPath : operandList) {
+                        jarsPaths.add((LiteralParseNode) convertSqlNodeToParseNode(jarPath));
+                    }
+                    MutationPlan compilePlan =
+                            new PhoenixStatement.ExecutableAddJarsStatement(jarsPaths).compilePlan(phoenixStatement,
+                                Sequence.ValueOp.VALIDATE_SEQUENCE);
+                    ((BaseMutationPlan) compilePlan).execute();
+                } else if (node instanceof SqlDeleteJarNode) {
+                    PhoenixStatement phoenixStatement = new PhoenixStatement(connection);
+                    List<SqlNode> operandList = ((SqlDeleteJarNode) node).getOperandList();
+                    LiteralParseNode jarPath =
+                            (LiteralParseNode) convertSqlNodeToParseNode(operandList.get(0));
+                    MutationPlan compilePlan =
+                            new PhoenixStatement.ExecutableDeleteJarStatement(jarPath).compilePlan(phoenixStatement,
+                                Sequence.ValueOp.VALIDATE_SEQUENCE);
+                    ((BaseMutationPlan) compilePlan).execute();
                 } else {
                     throw new AssertionError("unknown DDL node " + node.getClass());                    
                 }
@@ -482,7 +576,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         return splits;
     }
     
-    private static PhoenixConnection getPhoenixConnection(SchemaPlus rootSchema) {
+    public static PhoenixConnection getPhoenixConnection(SchemaPlus rootSchema) {
         for (String subSchemaName : rootSchema.getSubSchemaNames()) {               
             try {
                 PhoenixSchema phoenixSchema = rootSchema

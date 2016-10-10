@@ -9,13 +9,17 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.schema.*;
+import org.apache.calcite.schema.impl.TableFunctionImpl;
 import org.apache.calcite.schema.impl.ViewTable;
+import org.apache.calcite.sql.ListJarsTable;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
@@ -32,6 +36,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -62,6 +67,9 @@ public class PhoenixSchema implements Schema {
     protected final Map<String, Table> tables;
     protected final Map<String, Function> views;
     protected final Set<TableRef> viewTables;
+    protected final UDFExpression exp = new UDFExpression();
+    private final static Function listJarsFunction = TableFunctionImpl
+            .create(ListJarsTable.LIST_JARS_TABLE_METHOD);
     
     protected PhoenixSchema(String name, String schemaName,
             SchemaPlus parentSchema, PhoenixConnection pc) {
@@ -73,7 +81,9 @@ public class PhoenixSchema implements Schema {
         this.subSchemas = Maps.newHashMap();
         this.tables = Maps.newHashMap();
         this.views = Maps.newHashMap();
+        this.views.put("ListJars", listJarsFunction);
         this.viewTables = Sets.newHashSet();
+
     }
 
     private static Schema create(SchemaPlus parentSchema,
@@ -143,7 +153,19 @@ public class PhoenixSchema implements Schema {
         if (func != null) {
             return ImmutableList.of(func);
         }
-        
+        try {
+            List<String> functionNames = new ArrayList<String>(1);
+            functionNames.add(name);
+            ColumnResolver resolver = FromCompiler.getResolverForFunction(pc, functionNames);
+            List<PFunction> pFunctions = resolver.getFunctions();
+            assert !pFunctions.isEmpty();
+            List<Function> funcs = new ArrayList<Function>(pFunctions.size());
+            for (PFunction pFunction : pFunctions) {
+                funcs.add(new PhoenixScalarFunction(pFunction));
+            }
+            return ImmutableList.copyOf(funcs);
+        } catch (SQLException e) {
+        }
         try {
             ColumnResolver x = FromCompiler.getResolver(
                     NamedTableNode.create(
@@ -222,6 +244,7 @@ public class PhoenixSchema implements Schema {
     public void clear() {
         tables.clear();
         views.clear();
+        this.views.put("ListJars", listJarsFunction);
         viewTables.clear();
     }
     
