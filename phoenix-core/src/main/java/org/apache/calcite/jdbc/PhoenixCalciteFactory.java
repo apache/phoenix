@@ -44,6 +44,7 @@ import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
+import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -166,10 +167,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             try {
                 return super.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability);
             } catch (SQLException e) {
-                if (e.getCause().getCause() instanceof SQLException) {
-                    throw (SQLException) e.getCause().getCause();
-                }
-                throw e;
+                throw CalciteUtils.unwrapSqlException(e);
             }
         }
 
@@ -178,10 +176,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             try {
                 return super.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
             } catch (SQLException e) {
-                if (e.getCause().getCause() instanceof SQLException) {
-                    throw (SQLException) e.getCause().getCause();
-                }
-                throw e;
+                throw CalciteUtils.unwrapSqlException(e);
             }
         }
 
@@ -352,10 +347,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             try {
                 return super.execute(sql);
             } catch (SQLException e) {
-                if (e.getCause().getCause() instanceof SQLException) {
-                    throw (SQLException) e.getCause().getCause();
-                }
-                throw e;
+                throw CalciteUtils.unwrapSqlException(e);
             }
         }
 
@@ -364,10 +356,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             try {
                 return super.executeQuery(sql);
             } catch (SQLException e) {
-                if (e.getCause().getCause() instanceof SQLException) {
-                    throw (SQLException) e.getCause().getCause();
-                }
-                throw e;
+                throw CalciteUtils.unwrapSqlException(e);
             }
         }
     }
@@ -387,10 +376,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             try {
                 return super.execute(sql);
             } catch (SQLException e) {
-                if (e.getCause().getCause() instanceof SQLException) {
-                    throw (SQLException) e.getCause().getCause();
-                }
-                throw e;
+                throw CalciteUtils.unwrapSqlException(e);
             }
         }
 
@@ -399,10 +385,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             try {
                 return super.executeQuery(sql);
             } catch (SQLException e) {
-                if (e.getCause().getCause() instanceof SQLException) {
-                    throw (SQLException) e.getCause().getCause();
-                }
-                throw e;
+                throw CalciteUtils.unwrapSqlException(e);
             }
         }
 
