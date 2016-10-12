@@ -1120,8 +1120,11 @@ public class CalciteUtils {
         Exception e = root;
         while(e.getCause() != null){
             e = (Exception) e.getCause();
+            if(e instanceof RuntimeException && e.getCause() instanceof SQLException) {
+                return (SQLException) e.getCause();
+            }
             if(e instanceof SQLException){
-                root = (SQLException) e;
+                return (SQLException) e;
             }
         }
         return root;
