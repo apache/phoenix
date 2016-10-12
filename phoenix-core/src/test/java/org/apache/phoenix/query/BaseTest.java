@@ -353,7 +353,7 @@ public abstract class BaseTest {
                 "    io_time bigint,\n" +
                 "    region varchar,\n" +
                 "    unset_column decimal(31,10)\n" +
-                "    CONSTRAINT pk PRIMARY KEY (organization_id, DATe, feature, UNIQUE_USERS))");
+                "    CONSTRAINT pk PRIMARY KEY (organization_id, \"DATE\", feature, UNIQUE_USERS))");
         builder.put(CUSTOM_ENTITY_DATA_FULL_NAME,"create table " + CUSTOM_ENTITY_DATA_FULL_NAME +
                 "   (organization_id char(15) not null, \n" +
                 "    key_prefix char(3) not null,\n" +

@@ -444,12 +444,12 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("create table "
                     + "XYZ.ABC"
                     + "   (organization_id char(15) not null, \n"
-                    + "    dec DECIMAL(10,2) not null,\n"
+                    + "    \"DEC\" DECIMAL(10,2) not null,\n"
                     + "    a_string_array varchar(100) array[] not null,\n"
                     + "    b_string varchar(100),\n"
                     + "    CF.a_integer integer,\n"
                     + "    a_date date,\n"
-                    + "    CONSTRAINT pk PRIMARY KEY (organization_id, dec, a_string_array)\n"
+                    + "    CONSTRAINT pk PRIMARY KEY (organization_id, \"DEC\", a_string_array)\n"
                     + ")" + (salted ? "SALT_BUCKETS=4" : "") + (multitenant == true ? (salted ? ",MULTI_TENANT=true" : "MULTI_TENANT=true") : ""));
 
             
@@ -470,10 +470,10 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             String expectedColumnNameDataTypes = multitenant ? "\"DEC\" DECIMAL(10,2),\"A_STRING_ARRAY\" VARCHAR(100) ARRAY" : "\"ORGANIZATION_ID\" CHAR(15),\"DEC\" DECIMAL(10,2),\"A_STRING_ARRAY\" VARCHAR(100) ARRAY";
             String tableName = multitenant ? "ABC_VIEW" : "XYZ.ABC";
             String tenantFilter = multitenant ? "" : "organization_id = ? AND ";
-            String orderByRowKeyClause = multitenant ? "dec" : "organization_id";
+            String orderByRowKeyClause = multitenant ? "DEC" : "organization_id";
             
             // Filter on row key columns of data table. No order by. No limit.
-            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " dec = ? and a_string_array = ?";
+            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " \"DEC\" = ? and a_string_array = ?";
             stmt = conn.prepareStatement(sql);
             int counter = 1;
             if (!multitenant) {
@@ -489,7 +489,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             
             counter = 1;
             // Filter on row key columns of data table. Order by row key columns. Limit specified.
-            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " dec = ? and a_string_array = ? ORDER BY " + orderByRowKeyClause + " LIMIT 100";
+            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " \"DEC\" = ? and a_string_array = ? ORDER BY " + orderByRowKeyClause + " LIMIT 100";
             stmt = conn.prepareStatement(sql);
             if (!multitenant) {
                 stmt.setString(counter++, "ORGID");
@@ -501,7 +501,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             
             counter = 1;
             // Filter on row key columns of data table. Order by non-row key columns. Limit specified.
-            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " dec = ? and a_string_array = ? ORDER BY a_date LIMIT 100";
+            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " \"DEC\" = ? and a_string_array = ? ORDER BY a_date LIMIT 100";
             stmt = conn.prepareStatement(sql);
             if (!multitenant) {
                 stmt.setString(counter++, "ORGID");
