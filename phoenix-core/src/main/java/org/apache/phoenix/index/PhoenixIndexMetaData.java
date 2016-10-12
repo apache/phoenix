@@ -74,9 +74,10 @@ public class PhoenixIndexMetaData implements IndexMetaData {
             TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
             IndexMetaDataCache indexCache = (IndexMetaDataCache)cache.getServerCache(new ImmutableBytesPtr(uuid));
             if (indexCache == null) {
-                String msg = "key=" + ServerCacheClient.idToString(uuid) + " region=" + env.getRegion();
-                SQLException e = new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_METADATA_NOT_FOUND)
-                        .setMessage(msg).build().buildException();
+                String msg = "key=" + ServerCacheClient.idToString(uuid) + " region=" + env.getRegion() + "host="
+                        + env.getRegionServerServices().getServerName();
+                SQLException e = new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_METADATA_NOT_FOUND).setMessage(msg)
+                        .build().buildException();
                 ServerUtil.throwIOException("Index update failed", e); // will not return
             }
             return indexCache;

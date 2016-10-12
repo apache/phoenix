@@ -177,8 +177,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         this.kvBuilder = GenericKeyValueBuilder.INSTANCE;
     }
 
-    private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID,
-            long blockingMemstoreSize) throws IOException {
+    private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID, long blockingMemstoreSize,
+            byte[] indexMaintainersPtr, byte[] txState) throws IOException {
+        if (indexMaintainersPtr != null) {
+            mutations.get(0).setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+        }
+
+        if (txState != null) {
+            mutations.get(0).setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+        }
       if (indexUUID != null) {
           for (Mutation m : mutations) {
               m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
@@ -291,6 +298,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         RegionScanner theScanner = s;
         
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
+        byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
         List<Expression> selectExpressions = null;
         byte[] upsertSelectTable = scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_TABLE);
         boolean isUpsert = false;
@@ -373,6 +381,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         long rowCount = 0;
         final RegionScanner innerScanner = theScanner;
+        byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         boolean acquiredLock = false;
         try {
             if(needToWrite) {
@@ -596,13 +605,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!mutations.isEmpty() && batchSize > 0 &&
                                     mutations.size() % batchSize == 0) {
-                                commitBatch(region, mutations, indexUUID, blockingMemStoreSize);
+                                commitBatch(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
+                                        txState);
                                 mutations.clear();
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!indexMutations.isEmpty() && batchSize > 0 &&
                                     indexMutations.size() % batchSize == 0) {
-                                commitBatch(region, indexMutations, null, blockingMemStoreSize);
+                                commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState);
                                 indexMutations.clear();
                             }
                         } catch (ConstraintViolationException e) {
@@ -618,11 +628,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     }
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    commitBatch(region,mutations, indexUUID, blockingMemStoreSize);
+                    commitBatch(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState);
                 }
 
                 if (!indexMutations.isEmpty()) {
-                    commitBatch(region,indexMutations, null, blockingMemStoreSize);
+                    commitBatch(region, indexMutations, null, blockingMemStoreSize, indexMaintainersPtr, txState);
                     indexMutations.clear();
                 }
             }
