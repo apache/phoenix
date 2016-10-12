@@ -36,23 +36,23 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
-                + " date BIGINT, \"value\" BIGINT)";
+                + " \"DATE\" BIGINT, \"value\" BIGINT)";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (1, 8, 1, 3)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, 1, 3)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, 2, 7)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (3, 8, 3, 9)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (5, 8, 5, 158)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (5, 8, 5, 158)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (4, 8, 4, 5)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (4, 8, 4, 5)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY \"DATE\" ASC) FROM " + tableName
                 + " GROUP BY page_id");
 
         assertTrue(rs.next());
@@ -129,23 +129,23 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
-                + "date DOUBLE, \"value\" DOUBLE)";
+                + "\"DATE\" DOUBLE, \"value\" DOUBLE)";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (1, 8, 1, 300)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, 1, 300)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, 2, 7)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (3, 8, 3, 9)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (5, 8, 4, 2)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (4, 8, 5, 400)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (4, 8, 5, 400)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY \"DATE\" ASC) FROM " + tableName
                 + " GROUP BY page_id");
 
         assertTrue(rs.next());
@@ -160,23 +160,23 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
         String table_name = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + table_name + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG, "
-                + "date VARCHAR(3), \"value\" VARCHAR(3))";
+                + "\"DATE\" VARCHAR(3), \"value\" VARCHAR(3))";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute(
-            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (1, 8, '1', '3')");
+            "UPSERT INTO " + table_name + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, '1', '3')");
         conn.createStatement().execute(
-            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (2, 8, '2', '7')");
+            "UPSERT INTO " + table_name + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, '2', '7')");
         conn.createStatement().execute(
-            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (3, 8, '3', '9')");
+            "UPSERT INTO " + table_name + " (id, page_id, \"DATE\", \"value\") VALUES (3, 8, '3', '9')");
         conn.createStatement().execute(
-            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (5, 8, '4', '2')");
+            "UPSERT INTO " + table_name + " (id, page_id, \"DATE\", \"value\") VALUES (5, 8, '4', '2')");
         conn.createStatement().execute(
-            "UPSERT INTO " + table_name + " (id, page_id, date, \"value\") VALUES (4, 8, '5', '4')");
+            "UPSERT INTO " + table_name + " (id, page_id, \"DATE\", \"value\") VALUES (4, 8, '5', '4')");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + table_name
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY \"DATE\" ASC) FROM " + table_name
                 + " GROUP BY page_id");
 
         assertTrue(rs.next());
@@ -191,23 +191,23 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
-                + " date FLOAT, \"value\" FLOAT)";
+                + " \"DATE\" FLOAT, \"value\" FLOAT)";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (1, 8, 1, 300)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, 1, 300)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (2, 8, 2, 7)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, 2, 7)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (3, 8, 3, 9)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (3, 8, 3, 9)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (5, 8, 4, 2)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (5, 8, 4, 2)");
         conn.createStatement().execute(
-            "UPSERT INTO " + tableName + " (id, page_id, date, \"value\") VALUES (4, 8, 5, 400)");
+            "UPSERT INTO " + tableName + " (id, page_id, \"DATE\", \"value\") VALUES (4, 8, 5, 400)");
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY \"DATE\" ASC) FROM " + tableName
                 + " GROUP BY page_id");
 
         assertTrue(rs.next());
@@ -223,7 +223,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + tableName + " "
                 + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
-                + " date FLOAT, \"value\" FLOAT)";
+                + " \"DATE\" FLOAT, \"value\" FLOAT)";
         conn.createStatement().execute(ddl);
 
         conn.createStatement().execute("UPSERT INTO " + tableName + " (id, page_id) VALUES (1, 8)");
@@ -234,7 +234,7 @@ public class FirstValueFunctionIT extends ParallelStatsDisabledIT {
         conn.commit();
 
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY date ASC) FROM " + tableName
+            "SELECT FIRST_VALUE(\"value\") WITHIN GROUP (ORDER BY \"DATE\" ASC) FROM " + tableName
                 + " GROUP BY page_id");
 
         assertTrue(rs.next());
