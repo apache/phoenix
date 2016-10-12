@@ -118,7 +118,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
             "upsert into " +
             "PRODUCT_METRICS(" +
             "    ORGANIZATION_ID, " +
-            "    DATE, " +
+            "    \"DATE\", " +
             "    FEATURE, " +
             "    UNIQUE_USERS, " +
             "    TRANSACTIONS, " +
@@ -218,7 +218,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
             "upsert into " +
             "PRODUCT_METRICS(" +
             "    ORGANIZATION_ID, " +
-            "    DATE, " +
+            "    \"DATE\", " +
             "    FEATURE, " +
             "    UNIQUE_USERS, " +
             "    TRANSACTIONS, " +
@@ -303,7 +303,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testDateRangeAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT count(1), feature f FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND date <= to_date(?) GROUP BY f";
+        String query = "SELECT count(1), feature f FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND \"DATE\" <= to_date(?) GROUP BY f";
         //String query = "SELECT count(1), feature FROM PRODUCT_METRICS GROUP BY feature";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -351,7 +351,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testPartiallyEvaluableAnd() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT date FROM PRODUCT_METRICS WHERE organization_id=? AND unique_users >= 30 AND transactions >= 300 AND cpu_utilization > 2 AND db_utilization > 0.5 AND io_time = 4000";
+        String query = "SELECT \"DATE\" FROM PRODUCT_METRICS WHERE organization_id=? AND unique_users >= 30 AND transactions >= 300 AND cpu_utilization > 2 AND db_utilization > 0.5 AND io_time = 4000";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -372,7 +372,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testPartiallyEvaluableOr() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT date FROM PRODUCT_METRICS WHERE organization_id=? AND (transactions = 10000 OR unset_column = 5 OR io_time = 4000)";
+        String query = "SELECT \"DATE\" FROM PRODUCT_METRICS WHERE organization_id=? AND (transactions = 10000 OR unset_column = 5 OR io_time = 4000)";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -393,7 +393,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testConstantTrueHaving() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND date <= to_date(?) GROUP BY feature HAVING 1=1";
+        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND \"DATE\" <= to_date(?) GROUP BY feature HAVING 1=1";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -420,7 +420,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testConstantFalseHaving() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND date <= to_date(?) GROUP BY feature HAVING 1=1 and 0=1";
+        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND \"DATE\" <= to_date(?) GROUP BY feature HAVING 1=1 and 0=1";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -441,7 +441,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testDateRangeHavingAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND date <= to_date(?) GROUP BY feature HAVING count(1) >= 2";
+        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND \"DATE\" <= to_date(?) GROUP BY feature HAVING count(1) >= 2";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -465,7 +465,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testDateRangeSumLongAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT sum(transactions), feature FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND date <= to_date(?) GROUP BY feature";
+        String query = "SELECT sum(transactions), feature FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND \"DATE\" <= to_date(?) GROUP BY feature";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -492,7 +492,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testRoundAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT round(date,'hour',1) r,count(1) FROM PRODUCT_METRICS WHERE organization_id=? GROUP BY r";
+        String query = "SELECT round(\"DATE\",'hour',1) r,count(1) FROM PRODUCT_METRICS WHERE organization_id=? GROUP BY r";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -532,7 +532,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testRoundScan() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT round(date,'hour') FROM PRODUCT_METRICS WHERE organization_id=?";
+        String query = "SELECT round(\"DATE\",'hour') FROM PRODUCT_METRICS WHERE organization_id=?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -575,7 +575,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testTruncAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT trunc(date,'hour'),count(1) FROM PRODUCT_METRICS WHERE organization_id=? GROUP BY trunc(date,'hour')";
+        String query = "SELECT trunc(\"DATE\",'hour'),count(1) FROM PRODUCT_METRICS WHERE organization_id=? GROUP BY trunc(\"DATE\",'hour')";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -729,7 +729,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testMultiDimRoundAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT round(date,'hour',1),feature,sum(unique_users) FROM PRODUCT_METRICS WHERE organization_id=? GROUP BY round(date,'hour',1),feature";
+        String query = "SELECT round(\"DATE\",'hour',1),feature,sum(unique_users) FROM PRODUCT_METRICS WHERE organization_id=? GROUP BY round(\"DATE\",'hour',1),feature";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -780,7 +780,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testDateRangeSumNumberUngroupedAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT sum(cpu_utilization) FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND date <= to_date(?)";
+        String query = "SELECT sum(cpu_utilization) FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND \"DATE\" <= to_date(?)";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -842,7 +842,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
                     "upsert into " +
                     "PRODUCT_METRICS(" +
                     "    ORGANIZATION_ID, " +
-                    "    DATE, " +
+                    "    \"DATE\", " +
                     "    FEATURE, " +
                     "    UNIQUE_USERS," +
                     "    TRANSACTIONS) " +
@@ -1208,7 +1208,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testDegenerateAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND date <= to_date(?) GROUP BY feature";
+        String query = "SELECT count(1), feature FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND \"DATE\" <= to_date(?) GROUP BY feature";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1234,7 +1234,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testFeatureDateRangeAggregation() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature,unique_users FROM PRODUCT_METRICS WHERE organization_id=? AND date >= to_date(?) AND feature > ?";
+        String query = "SELECT feature,unique_users FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" >= to_date(?) AND feature > ?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1402,7 +1402,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
         initTableValues(tenantId, getSplits(tenantId), ts);
-        String query = "SELECT date, transactions t FROM PRODUCT_METRICS WHERE organization_id=? AND unique_users <= 30 ORDER BY t DESC LIMIT 2";
+        String query = "SELECT \"DATE\", transactions t FROM PRODUCT_METRICS WHERE organization_id=? AND unique_users <= 30 ORDER BY t DESC LIMIT 2";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
@@ -1451,7 +1451,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testOrderByGroupedAggregation() throws Exception {        
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature,sum(unique_users) s,count(feature),round(date,'hour',1) r " +
+        String query = "SELECT feature,sum(unique_users) s,count(feature),round(\"DATE\",'hour',1) r " +
                        "FROM PRODUCT_METRICS " + 
                        "WHERE organization_id=? " +
                        "GROUP BY feature, r " +
@@ -1593,7 +1593,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testFilterOnTrailingKeyColumn2() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT organization_id, date, feature FROM PRODUCT_METRICS WHERE substr(organization_id,1,3)=? AND date > to_date(?)";
+        String query = "SELECT organization_id, \"DATE\", feature FROM PRODUCT_METRICS WHERE substr(organization_id,1,3)=? AND \"DATE\" > to_date(?)";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1621,7 +1621,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testSubstringNotEqual() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT organization_id, date, feature FROM PRODUCT_METRICS WHERE organization_id=? AND date > to_date(?)";
+        String query = "SELECT organization_id, \"DATE\", feature FROM PRODUCT_METRICS WHERE organization_id=? AND \"DATE\" > to_date(?)";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1641,7 +1641,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testKeyOrderedAggregation1() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT date, sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE date > to_date(?) GROUP BY organization_id, date";
+        String query = "SELECT \"DATE\", sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE \"DATE\" > to_date(?) GROUP BY organization_id, \"DATE\"";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1666,7 +1666,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testKeyOrderedAggregation2() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT date, sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE date < to_date(?) GROUP BY organization_id, date";
+        String query = "SELECT \"DATE\", sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE \"DATE\" < to_date(?) GROUP BY organization_id, \"DATE\"";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1694,7 +1694,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testKeyOrderedRoundAggregation1() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT round(date,'HOUR'), sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE date < to_date(?) GROUP BY organization_id, round(date,'HOUR')";
+        String query = "SELECT round(\"DATE\",'HOUR'), sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE \"DATE\" < to_date(?) GROUP BY organization_id, round(\"DATE\",'HOUR')";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1719,7 +1719,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testKeyOrderedRoundAggregation2() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT round(date,'HOUR'), sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE date <= to_date(?) GROUP BY organization_id, round(date,'HOUR')";
+        String query = "SELECT round(\"DATE\",'HOUR'), sum(UNIQUE_USERS) FROM PRODUCT_METRICS WHERE \"DATE\" <= to_date(?) GROUP BY organization_id, round(\"DATE\",'HOUR')";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1744,7 +1744,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testEqualsRound() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and trunc(date,'DAY')=?"; 
+        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and trunc(\"DATE\",'DAY')=?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1768,7 +1768,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testDateSubtractionCompareNumber() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and ? - date > 3"; 
+        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and ? - \"DATE\" > 3";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1794,7 +1794,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testDateSubtractionLongToDecimalCompareNumber() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and ? - date - 1.5 > 3"; 
+        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and ? - \"DATE\" - 1.5 > 3";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1872,7 +1872,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testCurrentDate() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and date - current_date() > 8"; 
+        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and \"DATE\" - current_date() > 8";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1894,7 +1894,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testCurrentTime() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and date - current_time() > 8"; 
+        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and \"DATE\" - current_time() > 8";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1916,7 +1916,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
     public void testTruncateNotTraversableToFormScanKey() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and TRUNC(date,'DAY') <= ?"; 
+        String query = "SELECT feature FROM PRODUCT_METRICS WHERE organization_id = ? and TRUNC(\"DATE\",'DAY') <= ?";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1959,7 +1959,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         String ddl = "create table " + PRODUCT_METRICS_NAME +
         "   (organization_id char(15) not null," +
-        "    date date not null," +
+        "    \"DATE\" date not null," +
         "    feature char(1) not null," +
         "    unique_users integer not null,\n" +
         "    db_utilization decimal(31,10),\n" +
@@ -1969,7 +1969,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
         "    io_time bigint,\n" +
         "    region varchar,\n" +
         "    unset_column decimal(31,10)\n" +
-        "    CONSTRAINT pk PRIMARY KEY (organization_id, date, feature, unique_users)) salt_buckets=3";
+        "    CONSTRAINT pk PRIMARY KEY (organization_id, \"DATE\", feature, unique_users)) salt_buckets=3";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts-1); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1998,7 +1998,7 @@ public class ProductMetricsIT extends BaseClientManagedTimeIT {
             assertTrue(rs.next());
             assertEquals(18, rs.getLong(1));
             
-            statement = conn.prepareStatement("SELECT date FROM PRODUCT_METRICS WHERE organization_id = ?  order by date desc limit 10");
+            statement = conn.prepareStatement("SELECT \"DATE\" FROM PRODUCT_METRICS WHERE organization_id = ?  order by \"DATE\" desc limit 10");
             statement.setString(1, tenantId);
             rs = statement.executeQuery();
             Date date = null;

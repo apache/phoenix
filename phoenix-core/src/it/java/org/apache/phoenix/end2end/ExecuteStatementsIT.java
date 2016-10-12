@@ -65,17 +65,17 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
             "create table " + ptsdbTableName +
             "   (inst varchar null,\n" + 
             "    host varchar null,\n" + 
-            "    date date not null,\n" + 
+            "    \"DATE\" date not null,\n" +
             "    val decimal\n" +
-            "    CONSTRAINT pk PRIMARY KEY (inst,host,date))\n" +
+            "    CONSTRAINT pk PRIMARY KEY (inst,host,\"DATE\"))\n" +
             "    split on (?,?,?);\n" +
             "alter table " + ptsdbTableName + " add if not exists val decimal;\n" +  // Shouldn't error out b/c of if not exists clause
             "alter table " + ptsdbTableName + " drop column if exists blah;\n" +  // Shouldn't error out b/c of if exists clause
             "drop table if exists FOO.BAR;\n" + // Shouldn't error out b/c of if exists clause
-            "UPSERT INTO " + ptsdbTableName + "(date, val, host) " +
+            "UPSERT INTO " + ptsdbTableName + "(\"DATE\", val, host) " +
             "    SELECT current_date(), x_integer+2, entity_id FROM " + tableName + " WHERE a_integer >= ?;" +
-            "UPSERT INTO " + ptsdbTableName + "(date, val, inst)\n" +
-            "    SELECT date+1, val*10, host FROM " + ptsdbTableName + ";";
+            "UPSERT INTO " + ptsdbTableName + "(\"DATE\", val, inst)\n" +
+            "    SELECT \"DATE\"+1, val*10, host FROM " + ptsdbTableName + ";";
         
         Date now = new Date(System.currentTimeMillis());
         Connection conn = DriverManager.getConnection(getUrl());
@@ -85,7 +85,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
         assertEquals(7, nStatements);
 
         Date then = new Date(System.currentTimeMillis() + QueryConstants.MILLIS_IN_DAY);
-        String query = "SELECT host,inst, date,val FROM " + ptsdbTableName + " where inst is not null";
+        String query = "SELECT host,inst,\"DATE\",val FROM " + ptsdbTableName + " where inst is not null";
         PreparedStatement statement = conn.prepareStatement(query);
         
         ResultSet rs = statement.executeQuery();

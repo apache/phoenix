@@ -240,7 +240,7 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
                 }});
         return testCases;
     }    
-    
+
     @Test
     public void testInSubquery() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
