@@ -457,6 +457,29 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         return plan.getContext().getScan();
     }
     
+    private QueryPlan getQueryPlan(String query) throws SQLException {
+        return getQueryPlan(query, Collections.emptyList());
+    }
+
+    private QueryPlan getOptimizedQueryPlan(String query) throws SQLException {
+        return getOptimizedQueryPlan(query, Collections.emptyList());
+    }
+
+    private QueryPlan getOptimizedQueryPlan(String query, List<Object> binds) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            PhoenixPreparedStatement statement = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+            for (Object bind : binds) {
+                statement.setObject(1, bind);
+            }
+            QueryPlan plan = statement.optimizeQuery(query);
+            return plan;
+        } finally {
+            conn.close();
+        }
+    }
+    
     private QueryPlan getQueryPlan(String query, List<Object> binds) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -2263,7 +2286,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             try {
                 conn.createStatement().execute(
-                                "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) GUIDE_POST_WIDTH = -1");
+                        "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) GUIDE_POSTS_WIDTH = -1");
                 fail();
             } catch (SQLException e) {
                 assertEquals("Unexpected Exception",
@@ -2441,6 +2464,45 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         } finally {
             conn.close();
+        }
+    }
+    
+    @Test
+    public void testIndexOnViewWithChildView() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE PLATFORM_ENTITY.GLOBAL_TABLE (\n" + 
+                    "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
+                    "    KEY_PREFIX CHAR(3) NOT NULL,\n" + 
+                    "    CREATED_DATE DATE,\n" + 
+                    "    CREATED_BY CHAR(15),\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        ORGANIZATION_ID,\n" + 
+                    "        KEY_PREFIX\n" + 
+                    "    )\n" + 
+                    ") VERSIONS=1, IMMUTABLE_ROWS=true, MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW PLATFORM_ENTITY.GLOBAL_VIEW  (\n" + 
+                    "    INT1 BIGINT NOT NULL,\n" + 
+                    "    DOUBLE1 DECIMAL(12, 3),\n" + 
+                    "    IS_BOOLEAN BOOLEAN,\n" + 
+                    "    TEXT1 VARCHAR,\n" + 
+                    "    CONSTRAINT PKVIEW PRIMARY KEY\n" + 
+                    "    (\n" + 
+                    "        INT1\n" + 
+                    "    )\n" + 
+                    ")\n" + 
+                    "AS SELECT * FROM PLATFORM_ENTITY.GLOBAL_TABLE WHERE KEY_PREFIX = '123'");
+            conn.createStatement().execute("CREATE INDEX GLOBAL_INDEX\n" + 
+                    "ON PLATFORM_ENTITY.GLOBAL_VIEW (TEXT1 DESC, INT1)\n" + 
+                    "INCLUDE (CREATED_BY, DOUBLE1, IS_BOOLEAN, CREATED_DATE)");
+            String query = "SELECT DOUBLE1 FROM PLATFORM_ENTITY.GLOBAL_VIEW\n"
+                    + "WHERE ORGANIZATION_ID = '00Dxx0000002Col' AND TEXT1='Test' AND INT1=1";
+            QueryPlan plan = getOptimizedQueryPlan(query);
+            assertEquals("PLATFORM_ENTITY.GLOBAL_VIEW", plan.getContext().getCurrentTable().getTable().getName()
+                    .getString());
+            query = "SELECT DOUBLE1 FROM PLATFORM_ENTITY.GLOBAL_VIEW\n"
+                    + "WHERE ORGANIZATION_ID = '00Dxx0000002Col' AND TEXT1='Test'";
+            plan = getOptimizedQueryPlan(query);
+            assertEquals("PLATFORM_ENTITY.GLOBAL_INDEX", plan.getContext().getCurrentTable().getTable().getName().getString());
         }
     }
 }
