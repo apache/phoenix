@@ -36,7 +36,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
+import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -52,7 +52,6 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -726,32 +725,27 @@ public class UpsertCompiler {
                             table.getIndexMaintainers(ptr, context.getConnection());
                             byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
-                            ServerCache cache = null;
-                            try {
-                                if (ptr.getLength() > 0) {
-                                    IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                                    cache = client.addIndexMetadataCache(context.getScanRanges(), ptr, txState);
-                                    byte[] uuidValue = cache.getId();
-                                    scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                }
-                                ResultIterator iterator = aggPlan.iterator();
-                                try {
-                                    Tuple row = iterator.next();
-                                    final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
-                                    return new MutationState(maxSize, connection) {
-                                        @Override
-                                        public long getUpdateCount() {
-                                            return mutationCount;
-                                        }
-                                    };
-                                } finally {
-                                    iterator.close();
-                                }
-                            } finally {
-                                if (cache != null) {
-                                    cache.close();
-                                }
+                            if (ptr.getLength() > 0) {
+                                byte[] uuidValue = ServerCacheClient.generateId();
+                                scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+                                scan.setAttribute(PhoenixIndexCodec.INDEX_MD, ptr.get());
+                                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                             }
+                            ResultIterator iterator = aggPlan.iterator();
+                            try {
+                                Tuple row = iterator.next();
+                                final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row,
+                                        PLong.INSTANCE, ptr);
+                                return new MutationState(maxSize, connection) {
+                                    @Override
+                                    public long getUpdateCount() {
+                                        return mutationCount;
+                                    }
+                                };
+                            } finally {
+                                iterator.close();
+                            }
+                            
                         }
     
                         @Override

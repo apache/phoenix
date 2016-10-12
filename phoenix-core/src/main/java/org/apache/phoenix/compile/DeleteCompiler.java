@@ -32,6 +32,7 @@ import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -45,7 +46,6 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.index.IndexMetaDataCacheClient;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -583,10 +583,10 @@ public class DeleteCompiler {
                         ServerCache cache = null;
                         try {
                             if (ptr.getLength() > 0) {
-                                IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, tableRef);
-                                cache = client.addIndexMetadataCache(context.getScanRanges(), ptr, txState);
-                                byte[] uuidValue = cache.getId();
+                                byte[] uuidValue = ServerCacheClient.generateId();
                                 context.getScan().setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+                                context.getScan().setAttribute(PhoenixIndexCodec.INDEX_MD, ptr.get());
+                                context.getScan().setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                             }
                             ResultIterator iterator = aggPlan.iterator();
                             try {
