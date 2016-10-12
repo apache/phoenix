@@ -1563,19 +1563,19 @@ public class HashJoinIT extends BaseJoinIT {
         String tableName2 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
         String tableName3 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String[] query = new String[5];
-        query[0] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName1 + " o JOIN " 
+        query[0] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName1 + " o JOIN "
             + tableName2 + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
             + tableName3 + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
-        query[1] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName1 + " o, " 
+        query[1] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName1 + " o, "
                 + tableName2 + " c, " 
                 + tableName3 + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
-        query[2] = "SELECT /*+ NO_STAR_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName1 + " o JOIN " 
+        query[2] = "SELECT /*+ NO_STAR_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName1 + " o JOIN "
                 + tableName2 + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
                 + tableName3 + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
-        query[3] = "SELECT /*+ NO_STAR_JOIN*/  \"order_id\", c.name, i.name iname, quantity, o.date FROM (" + tableName1 + " o, " 
+        query[3] = "SELECT /*+ NO_STAR_JOIN*/  \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM (" + tableName1 + " o, "
                 + tableName2 + " c), " 
                 + tableName3 + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
-        query[4] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.date FROM " + tableName1 + " o, (" 
+        query[4] = "SELECT \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName1 + " o, ("
                 + tableName2 + " c, " 
                 + tableName3 + " i) WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
         try {
@@ -1795,10 +1795,10 @@ public class HashJoinIT extends BaseJoinIT {
         String tableName1 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         String tableName2 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String tableName3 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-        String query1 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + tableName1 + " o LEFT JOIN " 
+        String query1 = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName1 + " o LEFT JOIN "
                 + tableName2 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
                 + tableName3 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
-        String query2 = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + tableName1 + " o LEFT JOIN " 
+        String query2 = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName1 + " o LEFT JOIN "
                 + "(" + tableName2 + " i RIGHT JOIN " + tableName3 + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
@@ -1899,10 +1899,10 @@ public class HashJoinIT extends BaseJoinIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String[] queries = {
-                "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
+                "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN "
                         + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
                         + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\"",
-                "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
+                "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN "
                         + "(" + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i LEFT JOIN " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\") " 
                         + "ON o.\"item_id\" = i.\"item_id\""};
         try {
@@ -1951,7 +1951,7 @@ public class HashJoinIT extends BaseJoinIT {
     public void testMultiRightJoin() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN " 
+        String query = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN "
             + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
             + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
 
@@ -2026,7 +2026,7 @@ public class HashJoinIT extends BaseJoinIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.SCAN_RESULT_CHUNK_SIZE, "1");
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT \"order_id\", i.name, s.name, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN "
+        String query = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o RIGHT JOIN "
                 + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
                 + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
 
@@ -2408,8 +2408,8 @@ public class HashJoinIT extends BaseJoinIT {
     public void testJoinWithDifferentDateJoinKeyTypes() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String query = "SELECT \"order_id\", c.name, o.date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o INNER JOIN " 
-            + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c ON o.\"customer_id\" = c.\"customer_id\" AND o.date = c.date";
+        String query = "SELECT \"order_id\", c.name, o.\"DATE\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o INNER JOIN "
+            + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + " c ON o.\"customer_id\" = c.\"customer_id\" AND o.\"DATE\" = c.\"DATE\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
             ResultSet rs = statement.executeQuery();
@@ -2624,11 +2624,11 @@ public class HashJoinIT extends BaseJoinIT {
                     + "    item_name varchar not null, " 
                     + "    supplier_name varchar, "
                     + "    quantity integer, "
-                    + "    date timestamp " 
+                    + "    \"DATE\" timestamp "
                     + "    CONSTRAINT pk PRIMARY KEY (\"order_id\", item_name))");
             conn.createStatement().execute("UPSERT INTO " + tempTable 
-                    + "(\"order_id\", item_name, supplier_name, quantity, date) " 
-                    + "SELECT \"order_id\", i.name, s.name, quantity, date FROM " 
+                    + "(\"order_id\", item_name, supplier_name, quantity, \"DATE\") "
+                    + "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM "
                     + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + " o LEFT JOIN " 
                     + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
                     + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + " s ON i.\"supplier_id\" = s.\"supplier_id\"");
@@ -2813,13 +2813,13 @@ public class HashJoinIT extends BaseJoinIT {
             assertEquals(rs.getString("c.phone"), "999-999-3333");
             assertEquals(rs.getString("c.address"), "303 XXX Street");
             assertNull(rs.getString("c.loc_id"));
-            assertEquals(rs.getDate("c.\"DATE\""), new Date(format.parse("2013-11-25 10:06:29").getTime()));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-25 10:06:29").getTime()));
             assertEquals(rs.getString("O.order_id"), "000000000000002");
             assertEquals(rs.getString("O.customer_id"), "0000000003");
             assertEquals(rs.getString("O.item_id"), "0000000006");
             assertEquals(rs.getInt("o.price"), 552);
             assertEquals(rs.getInt("o.quantity"), 2000);
-            assertEquals(rs.getTimestamp("o.\"DATE\""), new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
+            assertEquals(rs.getTimestamp("o.date"), new Timestamp(format.parse("2013-11-25 10:06:29").getTime()));
             assertEquals(rs.getString("I.item_id"), "0000000006");
             assertEquals(rs.getString("i.name"), "T6");
             assertEquals(rs.getInt("i.price"), 600);
@@ -2838,13 +2838,13 @@ public class HashJoinIT extends BaseJoinIT {
             assertEquals(rs.getString("c.phone"), "999-999-4444");
             assertEquals(rs.getString("c.address"), "404 XXX Street");
             assertEquals(rs.getString("c.loc_id"), "10004");
-            assertEquals(rs.getDate("c.\"DATE\""), new Date(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("O.order_id"), "000000000000001");
             assertEquals(rs.getString("O.customer_id"), "0000000004");
             assertEquals(rs.getString("O.item_id"), "0000000001");
             assertEquals(rs.getInt("o.price"), 100);
             assertEquals(rs.getInt("o.quantity"), 1000);
-            assertEquals(rs.getTimestamp("o.\"DATE\""), new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getTimestamp("o.date"), new Timestamp(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("I.item_id"), "0000000001");
             assertEquals(rs.getString("i.name"), "T1");
             assertEquals(rs.getInt("i.price"), 100);
@@ -2863,13 +2863,13 @@ public class HashJoinIT extends BaseJoinIT {
             assertEquals(rs.getString("c.phone"), "999-999-4444");
             assertEquals(rs.getString("c.address"), "404 XXX Street");
             assertEquals(rs.getString("c.loc_id"), "10004");
-            assertEquals(rs.getDate("c.\"DATE\""), new Date(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("O.order_id"), "000000000000004");
             assertEquals(rs.getString("O.customer_id"), "0000000004");
             assertEquals(rs.getString("O.item_id"), "0000000006");
             assertEquals(rs.getInt("o.price"), 510);
             assertEquals(rs.getInt("o.quantity"), 4000);
-            assertEquals(rs.getTimestamp("o.\"DATE\""), new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
+            assertEquals(rs.getTimestamp("o.date"), new Timestamp(format.parse("2013-11-26 13:26:04").getTime()));
             assertEquals(rs.getString("I.item_id"), "0000000006");
             assertEquals(rs.getString("i.name"), "T6");
             assertEquals(rs.getInt("i.price"), 600);
@@ -3118,8 +3118,8 @@ public class HashJoinIT extends BaseJoinIT {
                 + "(SELECT i.iid iid, s.name sname, i.name iname FROM (SELECT \"supplier_id\" sid, name FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, \"supplier_id\" sid FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i ON i.sid = s.sid) AS q" 
                 + " ON o.iid = q.iid LEFT JOIN (SELECT \"customer_id\" cid, name FROM " 
                 + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + ") AS c ON c.cid = o.cid GROUP BY q.iname ORDER BY q.iname";
-        String query2 = "SELECT * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, date FROM " + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + ") AS c INNER JOIN " 
-                + "(SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, date FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + ") AS o INNER JOIN " 
+        String query2 = "SELECT * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, \"DATE\" FROM " + getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME) + ") AS c INNER JOIN "
+                + "(SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.\"DATE\" odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, \"DATE\" FROM " + getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME) + ") AS o INNER JOIN "
                 + "(SELECT i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME) + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME) + ") AS i ON i.sid = s.sid) as qi" 
                 + " ON o.iid = qi.iiid) as qo ON c.cid = qo.ocid" 
                 + " WHERE c.cid <= '0000000005' AND qo.ooid != '000000000000003' AND qo.iname != 'T3' ORDER BY c.cid, qo.iname";
@@ -3157,7 +3157,7 @@ public class HashJoinIT extends BaseJoinIT {
             assertEquals(rs.getString("c.phone"), "999-999-3333");
             assertEquals(rs.getString("c.address"), "303 XXX Street");
             assertNull(rs.getString("c.loc_id"));
-            assertEquals(rs.getDate("c.\"DATE\""), new Date(format.parse("2013-11-25 10:06:29").getTime()));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-25 10:06:29").getTime()));
             assertEquals(rs.getString("qo.ooid"), "000000000000002");
             assertEquals(rs.getString("qo.ocid"), "0000000003");
             assertEquals(rs.getString("qo.oiid"), "0000000006");
@@ -3181,7 +3181,7 @@ public class HashJoinIT extends BaseJoinIT {
             assertEquals(rs.getString("c.phone"), "999-999-4444");
             assertEquals(rs.getString("c.address"), "404 XXX Street");
             assertEquals(rs.getString("c.loc_id"), "10004");
-            assertEquals(rs.getDate("c.\"DATE\""), new Date(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("qo.ooid"), "000000000000001");
             assertEquals(rs.getString("qo.ocid"), "0000000004");
             assertEquals(rs.getString("qo.oiid"), "0000000001");
@@ -3205,7 +3205,7 @@ public class HashJoinIT extends BaseJoinIT {
             assertEquals(rs.getString("c.phone"), "999-999-4444");
             assertEquals(rs.getString("c.address"), "404 XXX Street");
             assertEquals(rs.getString("c.loc_id"), "10004");
-            assertEquals(rs.getDate("c.\"DATE\""), new Date(format.parse("2013-11-22 14:22:56").getTime()));
+            assertEquals(rs.getDate("c.date"), new Date(format.parse("2013-11-22 14:22:56").getTime()));
             assertEquals(rs.getString("qo.ooid"), "000000000000004");
             assertEquals(rs.getString("qo.ocid"), "0000000004");
             assertEquals(rs.getString("qo.oiid"), "0000000006");
