@@ -2484,17 +2484,14 @@ public class MetaDataClient {
             default:
                 connection.removeTable(tenantId, SchemaUtil.getTableName(schemaName, tableName), parentTableName, result.getMutationTime());
 
-                if (result.getTable() != null) {
+                if (table != null) {
                     boolean dropMetaData = false;
                     long ts = (scn == null ? result.getMutationTime() : scn);
                     List<TableRef> tableRefs = Lists.newArrayListWithExpectedSize(2 + table.getIndexes().size());
                     connection.setAutoCommit(true);
                     if (tableType == PTableType.VIEW) {
                         for (PTable index : table.getIndexes()) {
-                            // Don't drop index data from indexes on physical table
-                            if (index.getViewStatement() == null) {
-                                tableRefs.add(new TableRef(null, index, ts, false));
-                            }
+                            tableRefs.add(new TableRef(null, index, ts, false));
                         }
                     } else {
                         dropMetaData = result.getTable().getViewIndexId() == null &&
