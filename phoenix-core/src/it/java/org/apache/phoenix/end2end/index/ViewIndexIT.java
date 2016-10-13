@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -34,6 +35,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -42,6 +44,8 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -282,6 +286,99 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
             assertEquals(6, plan.getSplits().size());
+        }
+    }
+
+    private void assertRowCount(Connection conn, String fullTableName, String fullBaseName, int expectedCount) throws SQLException {
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+        assertTrue(rs.next());
+        assertEquals(expectedCount, rs.getInt(1));
+        // Ensure that index is being used
+        rs = stmt.executeQuery("EXPLAIN SELECT COUNT(*) FROM " + fullTableName);
+        // Uses index and finds correct number of rows
+        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(fullBaseName))) + " [-32768,'123451234512345']\n" + 
+                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
+                "    SERVER AGGREGATE INTO SINGLE ROW",
+                QueryUtil.getExplainPlan(rs));
+        
+        // Force it not to use index and still finds correct number of rows
+        rs = stmt.executeQuery("SELECT /*+ NO_INDEX */ * FROM " + fullTableName);
+        int count = 0;
+        while (rs.next()) {
+            count++;
+        }
+        
+        assertEquals(expectedCount, count);
+        // Ensure that the table, not index is being used
+        assertEquals(fullTableName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+    }
+
+    @Test
+    public void testUpdateOnTenantViewWithGlobalView() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String baseSchemaName = "PLATFORM_ENTITY";
+        String baseTableName = generateUniqueName();
+        String baseFullName = SchemaUtil.getTableName(baseSchemaName, baseTableName);
+        String viewTableName = "V_" + generateUniqueName();
+        String viewFullName = SchemaUtil.getTableName(baseSchemaName, viewTableName);
+        String indexName = "I_" + generateUniqueName();
+        String tsViewTableName = "TSV_" + generateUniqueName();
+        String tsViewFullName = SchemaUtil.getTableName(baseSchemaName, tsViewTableName);
+        try {
+            conn.createStatement().execute(
+                    "CREATE TABLE " + baseFullName + "(\n" + "    ORGANIZATION_ID CHAR(15) NOT NULL,\n"
+                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_DATE DATE,\n"
+                            + "    CREATED_BY CHAR(15),\n" + "    CONSTRAINT PK PRIMARY KEY (\n"
+                            + "        ORGANIZATION_ID,\n" + "        KEY_PREFIX\n" + "    )\n"
+                            + ") VERSIONS=1, IMMUTABLE_ROWS=true, MULTI_TENANT=true");
+            conn.createStatement().execute(
+                    "CREATE VIEW " + viewFullName + " (\n" + 
+                            "INT1 BIGINT NOT NULL,\n" + 
+                            "DOUBLE1 DECIMAL(12, 3),\n" +
+                            "IS_BOOLEAN BOOLEAN,\n" + 
+                            "TEXT1 VARCHAR,\n" + "CONSTRAINT PKVIEW PRIMARY KEY\n" + "(\n" +
+                            "INT1\n" + ")) AS SELECT * FROM " + baseFullName + " WHERE KEY_PREFIX = '123'");
+            conn.createStatement().execute(
+                    "CREATE INDEX " + indexName + " \n" + "ON " + viewFullName + " (TEXT1 DESC, INT1)\n"
+                            + "INCLUDE (CREATED_BY, DOUBLE1, IS_BOOLEAN, CREATED_DATE)");
+            Properties tsProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            tsProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "123451234512345");
+            Connection tsConn = DriverManager.getConnection(getUrl(), tsProps);
+            tsConn.createStatement().execute("CREATE VIEW " + tsViewFullName + " AS SELECT * FROM " + viewFullName);
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (1,1.0, true, 'a')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (2,2.0, true, 'b')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (3,3.0, true, 'c')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (4,4.0, true, 'd')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (5,5.0, true, 'e')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (6,6.0, true, 'f')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (7,7.0, true, 'g')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (8,8.0, true, 'h')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (9,9.0, true, 'i')");
+            tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (10,10.0, true, 'j')");
+            tsConn.commit();
+            
+            assertRowCount(tsConn, tsViewFullName, baseFullName, 10);
+            
+            tsConn.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE TEXT1='d'");
+            tsConn.commit();
+            assertRowCount(tsConn, tsViewFullName, baseFullName, 9);
+
+            tsConn.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE INT1=2");
+            tsConn.commit();
+            assertRowCount(tsConn, tsViewFullName, baseFullName, 8);
+            
+            Connection tsConn2 = DriverManager.getConnection(getUrl(), tsProps);
+            tsConn2.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE DOUBLE1 > 7.5 AND DOUBLE1 < 9.5");
+            tsConn2.commit();
+            assertRowCount(tsConn2, tsViewFullName, baseFullName, 6);
+            
+            tsConn.close();
+            tsConn2.close();
+            
+        } finally {
+            conn.close();
         }
     }
 }
