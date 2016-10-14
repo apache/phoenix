@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
+import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 
@@ -36,9 +37,10 @@ import org.apache.phoenix.schema.tuple.Tuple;
 public class OrderedAggregatingResultIterator extends OrderedResultIterator implements AggregatingResultIterator {
 
     public OrderedAggregatingResultIterator(AggregatingResultIterator delegate,
-            List<OrderByExpression> orderByExpressions, int thresholdBytes, Integer limit, Integer offset)
+                                            List<OrderByExpression> orderByExpressions, int thresholdBytes,
+                                            MemoryManager memoryManager, String spoolDirectory, Integer limit, Integer offset)
                     throws SQLException {
-        super(delegate, orderByExpressions, thresholdBytes, limit, offset);
+        super(delegate, orderByExpressions, thresholdBytes, memoryManager, spoolDirectory, limit, offset);
     }
 
     @Override

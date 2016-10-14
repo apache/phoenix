@@ -53,6 +53,7 @@ import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.iterate.RegionScannerResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.join.HashJoinInfo;
+import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.KeyValueSchema;
@@ -84,12 +85,14 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
     private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     private KeyValueSchema kvSchema = null;
     private ValueBitSet kvSchemaBitSet;
-    public static void serializeIntoScan(Scan scan, int thresholdBytes, int limit, List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
+    public static void serializeIntoScan(Scan scan, int thresholdBytes, int limit, String spoolDirectory,
+                                         List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream(); // TODO: size?
         try {
             DataOutputStream output = new DataOutputStream(stream);
             WritableUtils.writeVInt(output, thresholdBytes);
             WritableUtils.writeVInt(output, limit);
+            WritableUtils.writeString(output, spoolDirectory);
             WritableUtils.writeVInt(output, estimatedRowSize);
             WritableUtils.writeVInt(output, orderByExpressions.size());
             for (OrderByExpression orderingCol : orderByExpressions) {
@@ -107,7 +110,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         }
     }
 
-    public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s) {
+    public static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s, MemoryManager memoryManager) {
         byte[] topN = scan.getAttribute(BaseScannerRegionObserver.TOPN);
         if (topN == null) {
             return null;
@@ -117,6 +120,7 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             DataInputStream input = new DataInputStream(stream);
             int thresholdBytes = WritableUtils.readVInt(input);
             int limit = WritableUtils.readVInt(input);
+            String spoolDirectory = WritableUtils.readString(input);
             int estimatedRowSize = WritableUtils.readVInt(input);
             int size = WritableUtils.readVInt(input);
             List<OrderByExpression> orderByExpressions = Lists.newArrayListWithExpectedSize(size);
@@ -126,8 +130,8 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                 orderByExpressions.add(orderByExpression);
             }
             ResultIterator inner = new RegionScannerResultIterator(s);
-            return new OrderedResultIterator(inner, orderByExpressions, thresholdBytes, limit >= 0 ? limit : null, null,
-                    estimatedRowSize);
+            return new OrderedResultIterator(inner, orderByExpressions, thresholdBytes, memoryManager,
+                    spoolDirectory,limit >= 0 ? limit : null,  null, estimatedRowSize);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -233,10 +237,12 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
                     new OffsetResultIterator(new RegionScannerResultIterator(innerScanner), scanOffset),
                     scan.getAttribute(QueryConstants.LAST_SCAN) != null);
         }
-        final OrderedResultIterator iterator = deserializeFromScan(scan,innerScanner);
+        MemoryManager memoryManager = GlobalCache.getTenantCache(c.getEnvironment(), tenantId).getMemoryManager();
+        final OrderedResultIterator iterator = deserializeFromScan(scan, innerScanner, memoryManager);
         if (iterator == null) {
             return innerScanner;
         }
+
         // TODO:the above wrapped scanner should be used here also
         return getTopNScanner(c, innerScanner, iterator, tenantId);
     }
