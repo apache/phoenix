@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.util.TestUtil.BINARY_NAME;
+import static org.apache.phoenix.util.TestUtil.BTABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.apache.phoenix.util.TestUtil.assertEmptyScanKey;
@@ -28,6 +29,7 @@ import static org.apache.phoenix.util.TestUtil.rowKeyFilter;
 import static org.apache.phoenix.util.TestUtil.substr;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -38,6 +40,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
@@ -70,6 +73,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -1215,6 +1219,55 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                         StringUtil.padChar(PChar.INSTANCE.toBytes("foo"),15), true,
                         StringUtil.padChar(ByteUtil.nextKey(PChar.INSTANCE.toBytes("foo")),15), false)));
         assertEquals(expectedRanges, ranges);
+    }
+
+    @Test
+    public void testOrPKRanges() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        ensureTableCreated(getUrl(), TestUtil.BTABLE_NAME);
+        Statement stmt = conn.createStatement();
+        // BTABLE has 5 PK columns
+        String query = "select * from " + BTABLE_NAME +
+                       " where (a_string > '1' and a_string < '5') or (a_string > '6' and a_string < '9')";
+        StatementContext context = compileStatement(query);
+        Filter filter = context.getScan().getFilter();
+
+        assertNotNull(filter);
+        assertTrue(filter instanceof SkipScanFilter);
+        ScanRanges scanRanges = context.getScanRanges();
+        assertNotNull(scanRanges);
+        List<List<KeyRange>> ranges = scanRanges.getRanges();
+        assertEquals(1, ranges.size());
+        List<List<KeyRange>> expectedRanges = Collections.singletonList(Arrays.asList(
+                KeyRange.getKeyRange(Bytes.toBytes("1"), false, Bytes.toBytes("5"), false),
+                KeyRange.getKeyRange(Bytes.toBytes("6"), false, Bytes.toBytes("9"), false)));
+        assertEquals(expectedRanges, ranges);
+
+        stmt.close();
+        conn.close();
+    }
+    
+    @Test
+    public void testOrPKRangesNotOptimized() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        ensureTableCreated(getUrl(), TestUtil.BTABLE_NAME);
+        Statement stmt = conn.createStatement();
+        // BTABLE has 5 PK columns
+        String[] queries = {
+                "select * from " + BTABLE_NAME + " where (a_string > '1' and a_string < '5') or (a_string > '6' and a_string < '9' and a_id = 'foo')",
+                "select * from " + BTABLE_NAME + " where (a_id > 'aaa' and a_id < 'ccc') or (a_id > 'jjj' and a_id < 'mmm')",
+                };
+        for (String query : queries) {
+            StatementContext context = compileStatement(query);
+            Iterator<Filter> it = ScanUtil.getFilterIterator(context.getScan());
+            while (it.hasNext()) {
+                assertFalse(it.next() instanceof SkipScanFilter);
+            }
+            TestUtil.assertNotDegenerate(context.getScan());
+        }
+
+        stmt.close();
+        conn.close();
     }
     
     @Test
