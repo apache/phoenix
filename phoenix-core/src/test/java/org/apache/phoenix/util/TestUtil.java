@@ -28,6 +28,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -395,6 +396,12 @@ public class TestUtil {
         assertArrayEquals(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStartRow());
         assertArrayEquals(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStopRow());
         assertEquals(null,scan.getFilter());
+    }
+
+    public static void assertNotDegenerate(Scan scan) {
+        assertFalse(
+                Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStartRow()) == 0 &&
+                Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStopRow()) == 0);
     }
 
     public static void assertEmptyScanKey(Scan scan) {
