@@ -96,7 +96,9 @@ public class ScanPlan extends BaseQueryPlan {
         if (isOrdered) { // TopN
             int thresholdBytes = context.getConnection().getQueryServices().getProps().getInt(
                     QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
-            ScanRegionObserver.serializeIntoScan(context.getScan(), thresholdBytes, limit == null ? -1 : limit, orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
+            String spoolDirectory = context.getConnection().getQueryServices().getProps().get(QueryServices.SPOOL_DIRECTORY, QueryServicesOptions.DEFAULT_SPOOL_DIRECTORY);
+            ScanRegionObserver.serializeIntoScan(context.getScan(), thresholdBytes, limit == null ? -1 : limit, spoolDirectory,
+                    orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
         }
         Integer perScanLimit = !allowPageFilter || isOrdered ? null : limit;
         perScanLimit = QueryUtil.getOffsetLimit(perScanLimit, offset);
