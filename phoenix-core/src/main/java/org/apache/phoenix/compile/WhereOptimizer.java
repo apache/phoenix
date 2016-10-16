@@ -487,6 +487,10 @@ public class WhereOptimizer {
                 int initPosition = (table.getBucketNum() ==null ? 0 : 1) + (this.context.getConnection().getTenantId() != null && table.isMultiTenant() ? 1 : 0) + (table.getViewIndexId() == null ? 0 : 1);
                 if (initPosition == slot.getPKPosition()) {
                     minMaxRange = keyRange;
+                } else {
+                    // If we cannot set the minMaxRange, then we must not extract the expression since
+                    // we wouldn't be constraining the range at all based on it.
+                    extractNode = null;
                 }
             }
             return newKeyParts(slot, extractNode, keyRanges, minMaxRange);
