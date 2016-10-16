@@ -65,6 +65,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PUnsignedLong;
@@ -2085,4 +2086,64 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         context = compileStatement("select avg(pk1) from test order by count(distinct pk2)");
         assertEquals(2, context.getAggregationManager().getAggregators().getAggregatorCount());
     }
+    
+    @Test
+    public void testRVCWithLeadingPKEq() throws SQLException {
+        String tenantId = "o1";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE COMMUNITIES.TEST (\n" + 
+                "    ORGANIZATION_ID CHAR(2) NOT NULL,\n" + 
+                "    SCORE DOUBLE NOT NULL,\n" + 
+                "    ENTITY_ID CHAR(2) NOT NULL\n" + 
+                "    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n" + 
+                "        ORGANIZATION_ID,\n" + 
+                "        SCORE,\n" + 
+                "        ENTITY_ID\n" + 
+                "    )\n" + 
+                ") VERSIONS=1, MULTI_TENANT=TRUE");
+        String query = "SELECT entity_id, score\n" + 
+                "FROM communities.test\n" + 
+                "WHERE organization_id = '" + tenantId + "'\n" + 
+                "AND (score, entity_id) > (2.0, '04')\n" + 
+                "ORDER BY score, entity_id";
+        Scan scan = compileStatement(query).getScan();
+        assertNotNull(scan.getFilter());
+
+        // See PHOENIX-3384: Optimize RVC expressions for non leading row key columns.
+        // FIXME: We should be able to optimize this better, taking into account the
+        // (score, entity_id) > (2.0, '04') to form more of the start/stop row.
+        assertArrayEquals(PVarchar.INSTANCE.toBytes(tenantId), scan.getStartRow());
+        assertArrayEquals(ByteUtil.nextKey(PVarchar.INSTANCE.toBytes(tenantId)), scan.getStopRow());
+    }
+
+    @Test
+    public void testRVCWithCompDescRowKey() throws SQLException {
+        String tenantId = "o1";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE COMMUNITIES.TEST (\n" + 
+                "    ORGANIZATION_ID CHAR(2) NOT NULL,\n" + 
+                "    SCORE DOUBLE NOT NULL,\n" + 
+                "    ENTITY_ID CHAR(2) NOT NULL\n" + 
+                "    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n" + 
+                "        ORGANIZATION_ID,\n" + 
+                "        SCORE DESC,\n" + 
+                "        ENTITY_ID DESC\n" + 
+                "    )\n" + 
+                ") VERSIONS=1, MULTI_TENANT=TRUE");
+        String query = "SELECT entity_id, score\n" + 
+                "FROM communities.test\n" + 
+                "WHERE organization_id = '" + tenantId + "'\n" + 
+                "AND (organization_id, score, entity_id) < ('" + tenantId + "',2.0, '04')\n" + 
+                "ORDER BY score DESC, entity_id DESC";
+        Scan scan = compileStatement(query).getScan();
+        assertNull(scan.getFilter());
+
+        // FIXME See PHOENIX-3383: Comparison between descending row keys used in RVC is reverse
+        // This should set the startRow, but instead it's setting the stopRow
+        byte[] startRow = PChar.INSTANCE.toBytes(tenantId);
+        assertArrayEquals(startRow, scan.getStartRow());
+        byte[] stopRow = ByteUtil.concat(PChar.INSTANCE.toBytes(tenantId), PDouble.INSTANCE.toBytes(2.0, SortOrder.DESC), PChar.INSTANCE.toBytes("04", SortOrder.DESC));
+        assertArrayEquals(stopRow, scan.getStopRow());
+    }
+
 }
