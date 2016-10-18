@@ -1483,7 +1483,8 @@ public class MetaDataClient {
     public MutationState dropSequence(DropSequenceStatement statement) throws SQLException {
         Long scn = connection.getSCN();
         long timestamp = scn == null ? HConstants.LATEST_TIMESTAMP : scn;
-        String schemaName = statement.getSequenceName().getSchemaName();
+        String schemaName = connection.getSchema() != null && statement.getSequenceName().getSchemaName() == null
+                ? connection.getSchema() : statement.getSequenceName().getSchemaName();
         String sequenceName = statement.getSequenceName().getTableName();
         String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
         try {
@@ -2412,7 +2413,8 @@ public class MetaDataClient {
     }
 
     public MutationState dropTable(DropTableStatement statement) throws SQLException {
-        String schemaName = statement.getTableName().getSchemaName();
+        String schemaName = connection.getSchema() != null && statement.getTableName().getSchemaName() == null
+                ? connection.getSchema() : statement.getTableName().getSchemaName();
         String tableName = statement.getTableName().getTableName();
         return dropTable(schemaName, tableName, null, statement.getTableType(), statement.ifExists(), statement.cascade());
     }

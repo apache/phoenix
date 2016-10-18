@@ -111,6 +111,45 @@ public class UseSchemaIT extends BaseHBaseManagedTimeIT {
         rs = conn.createStatement().executeQuery("select schema_name from test");
         assertTrue(rs.next());
         assertEquals(schema, rs.getString(1));
+        conn.createStatement().execute("DROP TABLE test");
+        conn.close();
+    }
+    
+    @Test
+    public void testSequences() throws Exception {
+        Properties props = new Properties();
+        String schema = "TEST_SCHEMA_1";
+        props.setProperty(QueryServices.SCHEMA_ATTRIB, schema);
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(true));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        String ddl = "CREATE SCHEMA IF NOT EXISTS " + schema;
+        conn.createStatement().execute(ddl);
+        String sequenceName = "TEST_SEQ_1";
+        ddl = "create SEQUENCE "+schema + "." + sequenceName + " START WITH 100 INCREMENT BY 2 CACHE 10";
+        conn.createStatement().execute(ddl);
+        String query = "SELECT NEXT VALUE FOR "+schema + "." + sequenceName;
+        ResultSet rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("100", rs.getString(1));
+        conn.createStatement().execute("DROP Sequence " + schema + "." + sequenceName);
+        
+        schema = "TEST_SCHEMA_2";
+        sequenceName = "TEST_SEQ_2";
+        ddl = "CREATE SCHEMA " + schema;
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("use " + schema);
+        ddl = "create SEQUENCE "+ sequenceName + " START WITH 100 INCREMENT BY 2 CACHE 10";
+        conn.createStatement().execute(ddl);
+        query = "SELECT NEXT VALUE FOR "+sequenceName;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("100", rs.getString(1));
+        query = "SELECT CURRENT VALUE FOR "+sequenceName;
+        rs = conn.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals("100", rs.getString(1));
+        conn.createStatement().execute("DROP Sequence " + sequenceName);
         conn.close();
     }
 
