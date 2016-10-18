@@ -124,6 +124,9 @@ public class SequenceManager {
         PName tenantName = statement.getConnection().getTenantId();
         String tenantId = tenantName == null ? null : tenantName.getString();
         TableName tableName = node.getTableName();
+        if (tableName.getSchemaName() == null && statement.getConnection().getSchema() != null) {
+            tableName = TableName.create(statement.getConnection().getSchema(), tableName.getTableName());
+        }
         int nSaltBuckets = statement.getConnection().getQueryServices().getSequenceSaltBuckets();
         ParseNode numToAllocateNode = node.getNumToAllocateNode();
         
