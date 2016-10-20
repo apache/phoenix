@@ -303,6 +303,7 @@ public class FunctionParseNode extends CompoundParseNode {
     @Immutable
     public static final class BuiltInFunctionInfo {
         private final String name;
+        private final Class<? extends FunctionExpression> func;
         private final Constructor<? extends FunctionExpression> funcCtor;
         private final Constructor<? extends FunctionParseNode> nodeCtor;
         private final BuiltInFunctionArgInfo[] args;
@@ -311,6 +312,7 @@ public class FunctionParseNode extends CompoundParseNode {
 
         public BuiltInFunctionInfo(Class<? extends FunctionExpression> f, BuiltInFunction d) {
             this.name = SchemaUtil.normalizeIdentifier(d.name());
+            this.func = f;
             this.funcCtor = d.nodeClass() == FunctionParseNode.class ? getExpressionCtor(f, null) : null;
             this.nodeCtor = d.nodeClass() == FunctionParseNode.class ? null : getParseNodeCtor(d.nodeClass());
             this.args = new BuiltInFunctionArgInfo[d.args().length];
@@ -327,6 +329,7 @@ public class FunctionParseNode extends CompoundParseNode {
 
         public BuiltInFunctionInfo(PFunction function) {
             this.name = SchemaUtil.normalizeIdentifier(function.getFunctionName());
+            this.func = null;
             this.funcCtor = getExpressionCtor(UDFExpression.class, function);
             this.nodeCtor = getParseNodeCtor(UDFParseNode.class);
             this.args = new BuiltInFunctionArgInfo[function.getFunctionArguments().size()];
@@ -347,6 +350,10 @@ public class FunctionParseNode extends CompoundParseNode {
 
         public String getName() {
             return name;
+        }
+
+        public Class<? extends FunctionExpression> getFunc() {
+            return func;
         }
 
         public Constructor<? extends FunctionExpression> getFuncCtor() {

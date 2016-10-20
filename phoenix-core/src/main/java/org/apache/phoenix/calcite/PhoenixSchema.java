@@ -22,6 +22,8 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -73,6 +75,7 @@ public class PhoenixSchema implements Schema {
     protected final UDFExpression exp = new UDFExpression();
     private final static Function listJarsFunction = TableFunctionImpl
             .create(ListJarsTable.LIST_JARS_TABLE_METHOD);
+    private final static Map<String, PhoenixScalarFunction> builtinFunctions = Maps.newHashMap();
     
     protected PhoenixSchema(String name, String schemaName,
             SchemaPlus parentSchema, PhoenixConnection pc) {
@@ -89,9 +92,10 @@ public class PhoenixSchema implements Schema {
         try {
             PhoenixStatement stmt = (PhoenixStatement) pc.createStatement();
             this.sequenceManager = new SequenceManager(stmt);
-        } catch (SQLException e){
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        registerBuiltinFunctions();
 
     }
 
@@ -114,6 +118,25 @@ public class PhoenixSchema implements Schema {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static void registerBuiltinFunctions(){
+        if(!builtinFunctions.isEmpty()) {
+            return;
+        }
+        Collection<FunctionParseNode.BuiltInFunctionInfo>  infoCollection = ParseNodeFactory.getAll();
+        for (FunctionParseNode.BuiltInFunctionInfo info : infoCollection) {
+            try {
+                if(!CalciteUtils.TRANSLATED_BUILT_IN_FUNCTIONS.contains(info.getName())) {
+                    builtinFunctions.put(info.getName(),
+                            PhoenixScalarFunction.createBuiltinFunction(info));
+                }
+            }
+            catch(RuntimeException e){
+                System.out.println("Function not registered: " + info.getName()); // Function couldn't be registered
+            }
+        }
+
     }
 
     @Override
@@ -158,6 +181,10 @@ public class PhoenixSchema implements Schema {
 
     @Override
     public Collection<Function> getFunctions(String name) {
+        assert(!builtinFunctions.isEmpty());
+        if(builtinFunctions.get(name) != null){
+            return ImmutableList.of((Function) builtinFunctions.get(name));
+        }
         Function func = views.get(name);
         if (func != null) {
             return ImmutableList.of(func);

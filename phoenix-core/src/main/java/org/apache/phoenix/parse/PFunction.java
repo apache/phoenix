@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -25,7 +26,10 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.PFunctionProtos;
 import org.apache.phoenix.coprocessor.generated.PFunctionProtos.PFunctionArg;
+import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.function.ScalarFunction;
+import org.apache.phoenix.expression.function.ToDateFunction;
 import org.apache.phoenix.schema.PMetaDataEntity;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;

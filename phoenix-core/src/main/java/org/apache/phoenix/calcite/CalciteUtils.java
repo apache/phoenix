@@ -146,7 +146,20 @@ public class CalciteUtils {
             .parserConfig(SqlParser.Config.DEFAULT)
             .defaultSchema(rootSchema).build();
     }
-    
+
+    //TODO: Add aggregate functions
+    protected static final List<String> TRANSLATED_BUILT_IN_FUNCTIONS = Lists.newArrayList(
+            SqrtFunction.NAME,
+            PowerFunction.NAME,
+            LnFunction.NAME,
+            ExpFunction.NAME,
+            AbsFunction.NAME,
+            CurrentDateFunction.NAME,
+            CurrentTimeFunction.NAME,
+            LowerFunction.NAME,
+            UpperFunction.NAME,
+            CoalesceFunction.NAME);
+
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();
     }

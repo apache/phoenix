@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -73,6 +74,7 @@ public class ParseNodeFactory {
         AvgAggregateFunction.class
         );
     private static final Map<BuiltInFunctionKey, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MAP = Maps.newHashMap();
+    private static final Map<String, BuiltInFunctionInfo> SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP = Maps.newHashMap();
     private static final BigDecimal MAX_LONG = BigDecimal.valueOf(Long.MAX_VALUE);
 
 
@@ -127,6 +129,7 @@ public class ParseNodeFactory {
         }
         int nArgs = d.args().length;
         BuiltInFunctionInfo value = new BuiltInFunctionInfo(f, d);
+        SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP.put(value.getName(), value);
         do {
             // Add function to function map, throwing if conflicts found
             // Add entry for each possible version of function based on arguments that are not required to be present (i.e. arg with default value)
@@ -179,6 +182,11 @@ public class ParseNodeFactory {
         initBuiltInFunctionMap();
         BuiltInFunctionInfo info = BUILT_IN_FUNCTION_MAP.get(new BuiltInFunctionKey(normalizedName,children.size()));
         return info;
+    }
+
+    public static Collection<BuiltInFunctionInfo> getAll(){
+        initBuiltInFunctionMap();
+        return SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP.values();
     }
 
     public ParseNodeFactory() {
