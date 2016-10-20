@@ -9,6 +9,7 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 import java.sql.Savepoint;
+import java.sql.ResultSet;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +37,7 @@ import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -116,6 +118,23 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                 Properties info, final CalciteSchema rootSchema,
                 JavaTypeFactory typeFactory) {
             super(driver, factory, url, info, rootSchema, typeFactory);
+        }
+
+        public CalciteStatement createStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
+            try {
+                return super.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability);
+            } catch (SQLException e) {
+                throw CalciteUtils.unwrapSqlException(e);
+            }
+        }
+
+        @Override
+        public CalcitePreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
+            try {
+                return super.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
+            } catch (SQLException e) {
+                throw CalciteUtils.unwrapSqlException(e);
+            }
         }
 
         public <T> Enumerable<T> enumerable(Meta.StatementHandle handle,
@@ -276,6 +295,24 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             super(connection, h, resultSetType, resultSetConcurrency,
                     resultSetHoldability);
         }
+
+        @Override
+        public boolean execute(String sql) throws SQLException {
+            try {
+                return super.execute(sql);
+            } catch (SQLException e) {
+                throw CalciteUtils.unwrapSqlException(e);
+            }
+        }
+
+        @Override
+        public ResultSet executeQuery(String sql) throws SQLException{
+            try {
+                return super.executeQuery(sql);
+            } catch (SQLException e) {
+                throw CalciteUtils.unwrapSqlException(e);
+            }
+        }
     }
 
     private static class PhoenixCalcitePreparedStatement extends CalcitePreparedStatement {
@@ -286,6 +323,24 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                         throws SQLException {
             super(connection, h, signature, resultSetType, resultSetConcurrency,
                     resultSetHoldability);
+        }
+
+        @Override
+        public boolean execute(String sql) throws SQLException {
+            try {
+                return super.execute(sql);
+            } catch (SQLException e) {
+                throw CalciteUtils.unwrapSqlException(e);
+            }
+        }
+
+        @Override
+        public ResultSet executeQuery(String sql) throws SQLException{
+            try {
+                return super.executeQuery(sql);
+            } catch (SQLException e) {
+                throw CalciteUtils.unwrapSqlException(e);
+            }
         }
 
         public void setRowId(

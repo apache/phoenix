@@ -1126,4 +1126,18 @@ public class CalciteUtils {
                     + " to its object type.", ex);
         }
     }
+
+    public static SQLException unwrapSqlException(SQLException root){
+        Exception e = root;
+        while(e.getCause() != null){
+            e = (Exception) e.getCause();
+            if(e instanceof RuntimeException && e.getCause() instanceof SQLException) {
+                return (SQLException) e.getCause();
+            }
+            if(e instanceof SQLException){
+                return (SQLException) e;
+            }
+        }
+        return root;
+    }
 }
