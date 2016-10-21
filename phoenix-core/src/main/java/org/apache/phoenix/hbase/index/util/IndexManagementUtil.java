@@ -148,7 +148,14 @@ public class IndexManagementUtil {
     }
 
     public static Scan newLocalStateScan(List<? extends Iterable<? extends ColumnReference>> refsArray) {
-        Scan s = new Scan();
+        return newLocalStateScan(null, refsArray);
+    }
+
+    public static Scan newLocalStateScan(Scan scan, List<? extends Iterable<? extends ColumnReference>> refsArray) {
+        Scan s = scan;
+        if (scan == null) {
+            s = new Scan();
+        }
         s.setRaw(true);
         // add the necessary columns to the scan
         for (Iterable<? extends ColumnReference> refs : refsArray) {

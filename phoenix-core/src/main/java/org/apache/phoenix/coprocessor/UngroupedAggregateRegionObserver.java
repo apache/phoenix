@@ -43,6 +43,7 @@ import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
@@ -66,6 +67,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.execute.TupleProjector;
@@ -262,7 +264,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     env, region.getRegionInfo().getTable().getNameAsString(), ts,
                     gp_width_bytes, gp_per_region_bytes);
             return collectStats(s, statsCollector, region, scan, env.getConfiguration());
-        }
+        } else if (ScanUtil.isIndexRebuild(scan)) { return rebuildIndices(s, region, scan, env.getConfiguration()); }
         int offsetToBe = 0;
         if (localIndexScan) {
             /*
@@ -727,6 +729,102 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+    
+    private RegionScanner rebuildIndices(final RegionScanner innerScanner, final HRegion region, final Scan scan,
+            Configuration config) throws IOException {
+        byte[] indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
+        boolean hasMore;
+        long rowCount = 0;
+        try {
+            int batchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+            List<Mutation> mutations = Lists.newArrayListWithExpectedSize(batchSize);
+            region.startRegionOperation();
+            byte[] uuidValue = ServerCacheClient.generateId();
+            synchronized (innerScanner) {
+                do {
+                    List<Cell> results = new ArrayList<Cell>();
+                    hasMore = innerScanner.nextRaw(results);
+                    if (!results.isEmpty()) {
+                        Put put = null;
+                        Delete del = null;
+                        for (Cell cell : results) {
+
+                            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
+                                if (put == null) {
+                                    put = new Put(CellUtil.cloneRow(cell));
+                                    put.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMetaData);
+                                    put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+                                    put.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
+                                            PDataType.TRUE_BYTES);
+                                    mutations.add(put);
+                                }
+                                put.add(cell);
+                            } else {
+                                if (del == null) {
+                                    del = new Delete(CellUtil.cloneRow(cell));
+                                    del.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMetaData);
+                                    del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
+                                    del.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
+                                            PDataType.TRUE_BYTES);
+                                    mutations.add(del);
+                                }
+                                del.addDeleteMarker(cell);
+                            }
+                        }
+                        if (mutations.size() >= batchSize) {
+                            region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
+                                    HConstants.NO_NONCE);
+                            uuidValue = ServerCacheClient.generateId();
+                            mutations.clear();
+                        }
+                        rowCount++;
+                    }
+                    
+                } while (hasMore);
+                if (!mutations.isEmpty()) {
+                    region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
+                            HConstants.NO_NONCE);
+                }
+            }
+        } catch (IOException e) {
+            logger.error("IOException during rebuilding: " + Throwables.getStackTraceAsString(e));
+            throw e;
+        } finally {
+            region.closeRegionOperation();
+        }
+        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+        final KeyValue aggKeyValue = KeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
+
+        RegionScanner scanner = new BaseRegionScanner(innerScanner) {
+            @Override
+            public HRegionInfo getRegionInfo() {
+                return region.getRegionInfo();
+            }
+
+            @Override
+            public boolean isFilterDone() {
+                return true;
+            }
+
+            @Override
+            public void close() throws IOException {
+                // no-op because we want to manage closing of the inner scanner ourselves.
+            }
+
+            @Override
+            public boolean next(List<Cell> results) throws IOException {
+                results.add(aggKeyValue);
+                return false;
+            }
+
+            @Override
+            public long getMaxResultSize() {
+                return scan.getMaxResultSize();
+            }
+        };
+        return scanner;
     }
     
     private RegionScanner collectStats(final RegionScanner innerScanner, StatisticsCollector stats,
