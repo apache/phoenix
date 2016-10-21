@@ -103,9 +103,6 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
         if (offset > 0) {
             planSteps.add("CLIENT OFFSET " + offset);
         }
-        if (limit > 0) {
-            planSteps.add("CLIENT LIMIT " + limit);
-        }
     }
 
 	@Override

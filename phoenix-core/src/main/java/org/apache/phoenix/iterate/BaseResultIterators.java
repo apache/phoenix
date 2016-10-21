@@ -93,7 +93,6 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -348,7 +347,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(),
-                plan.getStatement().getHint(), QueryUtil.getOffsetLimit(plan.getLimit(), plan.getOffset()), offset);
+                plan.getStatement().getHint(), plan.getLimit(), offset);
         this.plan = plan;
         this.scan = scan;
         this.scanGrouper = scanGrouper;
