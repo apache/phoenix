@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -103,6 +104,13 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(STRINGS[i - 1], rs.getString(1));
         }
+        limit =1;
+        offset=1;
+        rs = conn.createStatement()
+                .executeQuery("SELECT k2 from " + tableName + " order by k2 desc limit " + limit + " offset " + offset);
+        assertTrue(rs.next());
+        assertEquals(25, rs.getInt(1));
+        assertFalse(rs.next());
         conn.close();
     }
 
