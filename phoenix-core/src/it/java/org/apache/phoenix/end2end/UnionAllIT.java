@@ -612,11 +612,13 @@ public class UnionAllIT extends BaseOwnClusterHBaseManagedTimeIT {
                     "UNION ALL OVER 2 QUERIES\n" +
                     "    CLIENT PARALLEL 1-WAY FULL SCAN OVER TEST_TABLE\n" + 
                     "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
-                    "    CLIENT MERGE SORT\n" + 
+                    "    CLIENT MERGE SORT\n" +
+                    "    CLIENT LIMIT 1\n" +
                     "    CLIENT PARALLEL 1-WAY FULL SCAN OVER B_TABLE\n" + 
                     "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
-                    "    CLIENT MERGE SORT\n" + 
-                    "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs)); 
+                    "    CLIENT MERGE SORT\n" +
+                    "    CLIENT LIMIT 1\n" +
+                    "CLIENT MERGE SORT\nCLIENT LIMIT 1", QueryUtil.getExplainPlan(rs)); 
             
             String limitPlan = 
                     "UNION ALL OVER 2 QUERIES\n" + 
