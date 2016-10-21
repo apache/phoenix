@@ -37,6 +37,11 @@ public class PhoenixByteObjectInspector extends AbstractPhoenixObjectInspector<B
     }
 
     @Override
+    public ByteWritable getPrimitiveWritableObject(Object o) {
+        return new ByteWritable(get(o));
+    }
+
+    @Override
     public byte get(Object o) {
         Byte value = null;
 

@@ -34,6 +34,11 @@ public class PhoenixLongObjectInspector extends AbstractPhoenixObjectInspector<L
     }
 
     @Override
+    public LongWritable getPrimitiveWritableObject(Object o) {
+        return new LongWritable(get(o));
+    }
+
+    @Override
     public long get(Object o) {
         Long value = null;
 

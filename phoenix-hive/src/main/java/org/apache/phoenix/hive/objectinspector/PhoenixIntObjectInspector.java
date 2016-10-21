@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hive.objectinspector;
 
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.IntObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.IntWritable;
@@ -31,6 +32,16 @@ public class PhoenixIntObjectInspector extends AbstractPhoenixObjectInspector<In
     @Override
     public Object copyObject(Object o) {
         return o == null ? null : new Integer((Integer) o);
+    }
+
+    @Override
+    public Category getCategory() {
+        return Category.PRIMITIVE;
+    }
+
+    @Override
+    public IntWritable getPrimitiveWritableObject(Object o) {
+        return new IntWritable(get(o));
     }
 
     @Override
