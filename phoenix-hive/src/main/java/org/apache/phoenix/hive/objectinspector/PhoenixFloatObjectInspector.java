@@ -38,6 +38,11 @@ public class PhoenixFloatObjectInspector extends AbstractPhoenixObjectInspector<
     }
 
     @Override
+    public FloatWritable getPrimitiveWritableObject(Object o) {
+        return new FloatWritable(get(o));
+    }
+
+    @Override
     public float get(Object o) {
         Float value = null;
 
