@@ -101,7 +101,7 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER EH ['111111111111111','foo            ','2012-11-01 00:00:00.000'] - ['111111111111111','fop            ','2012-11-30 00:00:00.000']\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY AND (CREATED_DATE >= DATE '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')\n" + 
                 "    SERVER TOP 100 ROWS SORTED BY [ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]\n" + 
-                "CLIENT MERGE SORT",QueryUtil.getExplainPlan(rs));
+                "CLIENT MERGE SORT\nCLIENT LIMIT 100",QueryUtil.getExplainPlan(rs));
     }
 
     @Test

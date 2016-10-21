@@ -112,7 +112,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT a_string FROM atable ORDER BY a_string DESC LIMIT 3",
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE\n" + 
                 "    SERVER TOP 3 ROWS SORTED BY [A_STRING DESC]\n" + 
-                "CLIENT MERGE SORT",
+                "CLIENT MERGE SORT\n" +
+                "CLIENT LIMIT 3" ,
 
                 "SELECT count(1) FROM atable GROUP BY a_string,b_string HAVING max(a_string) = 'a'",
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE\n" +
@@ -144,7 +145,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' ORDER BY a_string ASC NULLS FIRST LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
                 "    SERVER TOP 10 ROWS SORTED BY [A_STRING]\n" + 
-                "CLIENT MERGE SORT",
+                "CLIENT MERGE SORT\n" +
+                "CLIENT LIMIT 10",
 
                 "SELECT max(a_integer) FROM atable WHERE organization_id = '000000000000001' GROUP BY organization_id,entity_id,ROUND(a_date,'HOUR') ORDER BY entity_id NULLS LAST LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
@@ -155,7 +157,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' ORDER BY a_string DESC NULLS LAST LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
                 "    SERVER TOP 10 ROWS SORTED BY [A_STRING DESC NULLS LAST]\n" + 
-                "CLIENT MERGE SORT",
+                "CLIENT MERGE SORT\n" +
+                "CLIENT LIMIT 10",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id IN ('000000000000001', '000000000000005')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER ATABLE ['000000000000001'] - ['000000000000005']",
