@@ -210,7 +210,7 @@ public class PostDDLCompiler {
                         if (ts!=HConstants.LATEST_TIMESTAMP && tableRef.getTable().isTransactional()) {
                             ts = TransactionUtil.convertToNanoseconds(ts);
                         }
-                        ScanUtil.setTimeRange(scan, ts);
+                        ScanUtil.setTimeRange(scan, scan.getTimeRange().getMin(), ts);
                         if (emptyCF != null) {
                             scan.setAttribute(BaseScannerRegionObserver.EMPTY_CF, emptyCF);
                         }

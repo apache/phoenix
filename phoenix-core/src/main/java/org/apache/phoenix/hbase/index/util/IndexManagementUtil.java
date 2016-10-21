@@ -20,18 +20,14 @@ package org.apache.phoenix.hbase.index.util;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
-
-import com.google.common.collect.Maps;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.builder.IndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
@@ -150,7 +146,14 @@ public class IndexManagementUtil {
     }
 
     public static Scan newLocalStateScan(List<? extends Iterable<? extends ColumnReference>> refsArray) {
-        Scan s = new Scan();
+        return newLocalStateScan(null, refsArray);
+    }
+
+    public static Scan newLocalStateScan(Scan scan, List<? extends Iterable<? extends ColumnReference>> refsArray) {
+        Scan s = scan;
+        if (scan == null) {
+            s = new Scan();
+        }
         s.setRaw(true);
         // add the necessary columns to the scan
         for (Iterable<? extends ColumnReference> refs : refsArray) {
