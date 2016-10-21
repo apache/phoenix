@@ -88,6 +88,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String EXPECTED_UPPER_REGION_KEY = "_ExpectedUpperRegionKey";
     public static final String REVERSE_SCAN = "_ReverseScan";
     public static final String ANALYZE_TABLE = "_ANALYZETABLE";
+    public static final String REBUILD_INDEXES = "_RebuildIndexes";
     public static final String TX_STATE = "_TxState";
     public static final String GUIDEPOST_WIDTH_BYTES = "_GUIDEPOST_WIDTH_BYTES";
     public static final String GUIDEPOST_PER_REGION = "_GUIDEPOST_PER_REGION";
