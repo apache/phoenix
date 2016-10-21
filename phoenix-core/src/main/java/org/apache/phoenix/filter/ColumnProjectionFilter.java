@@ -20,7 +20,6 @@ package org.apache.phoenix.filter;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -29,6 +28,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -136,20 +137,22 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
     public void filterRowCells(List<Cell> kvs) throws IOException {
         if (kvs.isEmpty()) return;
         Cell firstKV = kvs.get(0);
-        Iterator<Cell> itr = kvs.iterator();
-        while (itr.hasNext()) {
-            Cell kv = itr.next();
-            ptr.set(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength());
-            if (this.columnsTracker.containsKey(ptr)) {
-                Set<ImmutableBytesPtr> cols = this.columnsTracker.get(ptr);
-                ptr.set(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength());
-                if (cols != null && !(cols.contains(ptr))) {
-                    itr.remove();
+        Iterables.removeIf(kvs, new Predicate<Cell>() {
+            @Override
+            public boolean apply(Cell kv) {
+                ptr.set(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength());
+                if (columnsTracker.containsKey(ptr)) {
+                    Set<ImmutableBytesPtr> cols = columnsTracker.get(ptr);
+                    ptr.set(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength());
+                    if (cols != null && !(cols.contains(ptr))) {
+                        return true;
+                    }
+                } else {
+                    return true;
                 }
-            } else {
-                itr.remove();
+                return false;
             }
-        }
+        });
         // make sure we're not holding to any of the byte[]'s
         ptr.set(HConstants.EMPTY_BYTE_ARRAY);
         if (kvs.isEmpty()) {
