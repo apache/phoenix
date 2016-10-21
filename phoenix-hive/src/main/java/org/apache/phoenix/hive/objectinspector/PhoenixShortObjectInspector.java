@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.hive.objectinspector;
 
+import org.apache.hadoop.hive.serde2.io.ShortWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.ShortObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
-import org.apache.hadoop.io.ShortWritable;
 
 public class PhoenixShortObjectInspector extends AbstractPhoenixObjectInspector<ShortWritable>
         implements ShortObjectInspector {
@@ -31,6 +31,11 @@ public class PhoenixShortObjectInspector extends AbstractPhoenixObjectInspector<
     @Override
     public Object copyObject(Object o) {
         return o == null ? null : new Short((Short) o);
+    }
+
+    @Override
+    public ShortWritable getPrimitiveWritableObject(Object o) {
+        return new ShortWritable(get(o));
     }
 
     @Override

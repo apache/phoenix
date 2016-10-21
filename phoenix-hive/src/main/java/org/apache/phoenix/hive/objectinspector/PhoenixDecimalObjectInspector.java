@@ -35,7 +35,7 @@ public class PhoenixDecimalObjectInspector extends
 
     @Override
     public Object copyObject(Object o) {
-        return o == null ? null : new Decimal((Decimal) o);
+        return o == null ? null : new BigDecimal(((BigDecimal)o).byteValue());
     }
 
     @Override
@@ -49,7 +49,7 @@ public class PhoenixDecimalObjectInspector extends
 
         if (o != null) {
             try {
-                value = new HiveDecimalWritable((HiveDecimalWritable) o);
+                value = new HiveDecimalWritable(getPrimitiveJavaObject(o));
             } catch (Exception e) {
                 logExceptionMessage(o, "DECIMAL");
             }

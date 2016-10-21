@@ -37,6 +37,11 @@ public class PhoenixDoubleObjectInspector extends AbstractPhoenixObjectInspector
     }
 
     @Override
+    public DoubleWritable getPrimitiveWritableObject(Object o) {
+        return new DoubleWritable(get(o));
+    }
+
+    @Override
     public double get(Object o) {
         Double value = null;
 

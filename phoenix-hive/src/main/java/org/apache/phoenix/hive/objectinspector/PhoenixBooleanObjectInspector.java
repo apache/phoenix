@@ -34,6 +34,11 @@ public class PhoenixBooleanObjectInspector extends AbstractPhoenixObjectInspecto
     }
 
     @Override
+    public BooleanWritable getPrimitiveWritableObject(Object o) {
+        return new BooleanWritable(get(o));
+    }
+
+    @Override
     public boolean get(Object o) {
         Boolean value = null;
 
