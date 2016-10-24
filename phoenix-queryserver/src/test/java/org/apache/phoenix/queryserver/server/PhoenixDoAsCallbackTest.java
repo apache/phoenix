@@ -25,7 +25,7 @@ import java.util.concurrent.Callable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.ProxyUsers;
-import org.apache.phoenix.queryserver.server.Main.PhoenixDoAsCallback;
+import org.apache.phoenix.queryserver.server.QueryServer.PhoenixDoAsCallback;
 import org.junit.Test;
 
 /**
