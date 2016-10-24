@@ -66,8 +66,8 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
             QueryServerBasicsIT.class.getName());
     AVATICA_SERVER.start();
-    AVATICA_SERVER.getMain().awaitRunning();
-    final int port = AVATICA_SERVER.getMain().getPort();
+    AVATICA_SERVER.getQueryServer().awaitRunning();
+    final int port = AVATICA_SERVER.getQueryServer().getPort();
     LOG.info("Avatica server started on port " + port);
     CONN_STRING = ThinClientUtil.getConnectionUrl("localhost", port);
     LOG.info("JDBC connection string is " + CONN_STRING);
@@ -77,11 +77,12 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   public static void afterClass() throws Exception {
     if (AVATICA_SERVER != null) {
       AVATICA_SERVER.join(TimeUnit.MINUTES.toMillis(1));
-      Throwable t = AVATICA_SERVER.getMain().getThrowable();
+      Throwable t = AVATICA_SERVER.getQueryServer().getThrowable();
       if (t != null) {
         fail("query server threw. " + t.getMessage());
       }
-      assertEquals("query server didn't exit cleanly", 0, AVATICA_SERVER.getMain().getRetCode());
+      assertEquals("query server didn't exit cleanly", 0, AVATICA_SERVER.getQueryServer()
+        .getRetCode());
     }
   }
 
