@@ -128,7 +128,7 @@ java_cmd = '%(java)s -cp ' + hbase_config_path + os.pathsep + hadoop_config_path
     " -Dpsql.log.dir=%(log_dir)s" + \
     " -Dpsql.log.file=%(log_file)s" + \
     " " + opts + \
-    " org.apache.phoenix.queryserver.server.Main " + args
+    " org.apache.phoenix.queryserver.server.QueryServer " + args
 
 if command == 'makeWinServiceDesc':
     cmd = java_cmd % {'java': java, 'root_logger': 'INFO,DRFA,console', 'log_dir': log_dir, 'log_file': phoenix_log_file}
