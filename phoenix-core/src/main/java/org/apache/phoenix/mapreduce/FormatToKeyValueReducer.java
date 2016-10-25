@@ -144,6 +144,7 @@ public class FormatToKeyValueReducer
             DataInputStream input = new DataInputStream(new ByteArrayInputStream(aggregatedArray.get()));
             while (input.available() != 0) {
                 byte type = input.readByte();
+                long timestamp = WritableUtils.readVLong(input);
                 int index = WritableUtils.readVInt(input);
                 ImmutableBytesWritable family;
                 ImmutableBytesWritable cq;
@@ -161,10 +162,10 @@ public class FormatToKeyValueReducer
                 KeyValue.Type kvType = KeyValue.Type.codeToType(type);
                 switch (kvType) {
                     case Put: // not null value
-                        kv = builder.buildPut(key.getRowkey(), family, cq, value);
+                        kv = builder.buildPut(key.getRowkey(), family, cq, timestamp, value);
                         break;
                     case DeleteColumn: // null value
-                        kv = builder.buildDeleteColumns(key.getRowkey(), family, cq);
+                        kv = builder.buildDeleteColumns(key.getRowkey(), family, cq, timestamp);
                         break;
                     default:
                         throw new IOException("Unsupported KeyValue type " + kvType);
