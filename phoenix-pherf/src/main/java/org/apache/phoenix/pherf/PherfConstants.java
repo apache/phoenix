@@ -38,6 +38,7 @@ public class PherfConstants {
     private static PherfConstants instance = null;
     private static Properties instanceProperties = null;
 
+    public static final String DEFAULT_PRIMARY_KEY = "TENANT_ID";
     public static final int DEFAULT_THREAD_POOL_SIZE = 10;
     public static final int DEFAULT_BATCH_SIZE = 1000;
     public static final String DEFAULT_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS";

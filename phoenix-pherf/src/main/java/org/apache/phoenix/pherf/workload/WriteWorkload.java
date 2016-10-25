@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -242,6 +243,7 @@ public class WriteWorkload implements Workload {
                 SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
                 Connection connection = null;
                 PreparedStatement stmt = null;
+
                 try {
                     connection = pUtil.getConnection(scenario.getTenantId());
                     long logStartTime = System.currentTimeMillis();
@@ -253,13 +255,22 @@ public class WriteWorkload implements Workload {
 
                     last = start = System.currentTimeMillis();
                     String sql = buildSql(columns, tableName);
+                    //System.out.print("going to create statement");
+                    
+                    //System.out.print("statement created");
                     stmt = connection.prepareStatement(sql);
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
-                        stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
-                        rowsCreated += stmt.executeUpdate();
+                        
+                    	stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
+                    	//System.out.print(stmt);
+                    	stmt.addBatch();
+                        //rowsCreated += stmt.executeUpdate();
                         if ((i % getBatchSize()) == 0) {
+                        	//System.out.print("Executing batch");
+                        	stmt.executeBatch();
                             connection.commit();
+                            //stmt.clearBatch();
                             duration = System.currentTimeMillis() - last;
                             logger.info("Writer (" + Thread.currentThread().getName()
                                     + ") committed Batch. Total " + getBatchSize()
@@ -281,6 +292,8 @@ public class WriteWorkload implements Workload {
                     }
                 } finally {
                     if (stmt != null) {
+                    	System.out.print("Executing batch");
+                    	stmt.executeBatch();
                       stmt.close();
                     }
                     if (connection != null) {
@@ -307,7 +320,7 @@ public class WriteWorkload implements Workload {
             PreparedStatement statement, SimpleDateFormat simpleDateFormat) throws Exception {
         int count = 1;
         for (Column column : columns) {
-
+        	//System.out.print("Column is " + column.getName());
             DataValue dataValue = getRulesApplier().getDataForRule(scenario, column);
             switch (column.getType()) {
             case VARCHAR:
@@ -318,6 +331,7 @@ public class WriteWorkload implements Workload {
                 }
                 break;
             case CHAR:
+            	//System.out.print("Data value "+ dataValue.getValue());
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.CHAR);
                 } else {
@@ -354,6 +368,7 @@ public class WriteWorkload implements Workload {
             }
             count++;
         }
+        //System.out.print("Returning statement " + statement.toString());
         return statement;
     }
 

@@ -254,6 +254,7 @@ public class Pherf {
             // Schema and Data Load
             if (preLoadData) {
                 logger.info("\nStarting Data Load...");
+                System.out.print("Starting Data Load ...");
                 Workload workload = new WriteWorkload(parser, generateStatistics);
                 try {
                     workloadExecutor.add(workload);

@@ -139,6 +139,7 @@ public class RulesApplier {
         }
 
         switch (column.getType()) {
+					
             case VARCHAR:
                 // Use the specified data values from configs if they exist
                 if ((column.getDataValues() != null) && (column.getDataValues().size() > 0)) {
@@ -157,7 +158,11 @@ public class RulesApplier {
                     data = pickDataValueFromList(dataValues);
                 } else {
                     Preconditions.checkArgument(length > 0, "length needs to be > 0");
-                    if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
+					
+					if(column.getDataSequence() == DataSequence.SUPERSEQUENTIAL) {
+						data = getSuperSequentialDataValue(column);
+					}
+                    else if (column.getDataSequence() == DataSequence.SEQUENTIAL) {
                         data = getSequentialDataValue(column);
                     } else {
                         data = getRandomDataValue(column);
@@ -432,4 +437,14 @@ public class RulesApplier {
         varchar = StringUtils.left(varchar, column.getLength());
         return new DataValue(column.getType(), varchar);
     }
+	
+	private DataValue getSuperSequentialDataValue(Column column) {
+		DataValue data = null;
+		long inc = COUNTER.getAndIncrement();
+		String strInc = String.valueOf(inc);
+		String varchar = "user";
+		varchar = varchar + strInc;
+		data = new DataValue(column.getType(), varchar);
+		return data;
+	}
 }

@@ -32,6 +32,7 @@ public class QuerySetResult extends QuerySet {
         this.setNumberOfExecutions(querySet.getNumberOfExecutions());
         this.setExecutionDurationInMs(querySet.getExecutionDurationInMs());
         this.setExecutionType(querySet.getExecutionType());
+        this.setRandomPointRead(querySet.isRandomPointRead());
     }
 
     public QuerySetResult() {

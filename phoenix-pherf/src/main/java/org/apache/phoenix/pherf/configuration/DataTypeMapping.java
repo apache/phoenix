@@ -25,7 +25,8 @@ public enum DataTypeMapping {
     CHAR("CHAR", Types.CHAR),
     DECIMAL("DECIMAL", Types.DECIMAL),
     INTEGER("INTEGER", Types.INTEGER),
-    DATE("DATE", Types.DATE);
+    DATE("DATE", Types.DATE),
+	YCSBKEY("YCSBKEY", Types.VARCHAR);
 
     private final String sType;
 
