@@ -33,6 +33,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.DNS;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
 import javax.naming.NamingException;
 import java.io.ByteArrayInputStream;
@@ -182,10 +183,8 @@ public class PhoenixStorageHandlerUtil {
     }
 
     public static String getTableKeyOfSession(JobConf jobConf, String tableName) {
-        SessionState sessionState = SessionState.get();
 
-        String sessionId = sessionState.getSessionId();
-
+        String sessionId = jobConf.get(PhoenixConfigurationUtil.SESSION_ID);
         return new StringBuilder("[").append(sessionId).append("]-").append(tableName).toString();
     }
 
