@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveStoragePredicateHandler;
 import org.apache.hadoop.hive.ql.metadata.InputEstimator;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
+import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.SerDe;
 import org.apache.hadoop.mapred.InputFormat;
@@ -142,7 +143,10 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
             tableProperties.setProperty(PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME,
                     tableName);
         }
+        SessionState sessionState = SessionState.get();
 
+        String sessionId = sessionState.getSessionId();
+        jobProperties.put(PhoenixConfigurationUtil.SESSION_ID, sessionId);
         jobProperties.put(PhoenixConfigurationUtil.INPUT_TABLE_NAME, tableName);
         jobProperties.put(PhoenixStorageHandlerConstants.ZOOKEEPER_QUORUM, tableProperties
                 .getProperty(PhoenixStorageHandlerConstants.ZOOKEEPER_QUORUM,
