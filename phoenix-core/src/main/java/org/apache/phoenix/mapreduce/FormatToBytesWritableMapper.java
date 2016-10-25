@@ -314,6 +314,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
                     continue;
                 }
                 outputStream.writeByte(cell.getTypeByte());
+                WritableUtils.writeVLong(outputStream,cell.getTimestamp());
                 WritableUtils.writeVInt(outputStream, i);
                 WritableUtils.writeVInt(outputStream, cell.getValueLength());
                 outputStream.write(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());

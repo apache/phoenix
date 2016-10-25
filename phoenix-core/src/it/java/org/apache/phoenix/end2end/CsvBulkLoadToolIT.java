@@ -92,6 +92,44 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         rs.close();
         stmt.close();
     }
+    @Test
+    public void testImportWithRowTimestamp() throws Exception {
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE S.TABLE9 (ID INTEGER NOT NULL , NAME VARCHAR, T DATE NOT NULL," +
+                " " +
+                "CONSTRAINT PK PRIMARY KEY (ID, T ROW_TIMESTAMP))");
+
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,Name 1,1970/01/01");
+        printWriter.println("2,Name 2,1971/01/01");
+        printWriter.println("3,Name 2,1972/01/01");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input1.csv",
+                "--table", "table9",
+                "--schema", "s",
+                "--zookeeper", zkQuorum});
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM s.table9 WHERE T < to_date" +
+                "('1972-01-01') AND T > to_date('1970-01-01') ORDER BY id");
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("Name 2", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1971-01-01"), rs.getDate(3));
+        assertFalse(rs.next());
+
+        rs.close();
+        stmt.close();
+    }
+
 
     @Test
     public void testImportWithTabs() throws Exception {
