@@ -68,6 +68,7 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -2467,6 +2468,83 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
     
+    @Test
+    public void testStatefulDefault() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY, " +
+                "datecol DATE DEFAULT CURRENT_DATE())";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_CREATE_DEFAULT.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testDefaultTypeMismatch() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY, " +
+                "v VARCHAR DEFAULT 1)";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testDefaultRowTimestamp() throws Exception {
+        String ddl = "CREATE TABLE IF NOT EXISTS table_with_defaults ("
+                + "pk1 INTEGER NOT NULL,"
+                + "pk2 BIGINT NOT NULL DEFAULT 5,"
+                + "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2 ROW_TIMESTAMP))";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(
+                    SQLExceptionCode.CANNOT_CREATE_DEFAULT_ROWTIMESTAMP.getErrorCode(),
+                    e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testDefaultSizeMismatch() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY, " +
+                "v CHAR(3) DEFAULT 'foobar')";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
+    public void testNullDefaultRemoved() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY, " +
+                "v VARCHAR DEFAULT null)";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache()
+                .getTableRef(new PTableKey(null,"TABLE_WITH_DEFAULT")).getTable();
+        assertNull(table.getColumn("V").getExpressionStr());
+    }
+
     @Test
     public void testIndexOnViewWithChildView() throws SQLException {
         try (Connection conn = DriverManager.getConnection(getUrl())) {

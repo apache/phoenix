@@ -40,6 +40,19 @@ public class CreateTableStatement extends MutableStatement {
     private final TableName baseTableName;
     private final ParseNode whereClause;
     
+    public CreateTableStatement(CreateTableStatement createTable, List<ColumnDef> columns) {
+        this.tableName = createTable.tableName;
+        this.tableType = createTable.tableType;
+        this.columns = ImmutableList.copyOf(columns);
+        this.pkConstraint = createTable.pkConstraint;
+        this.splitNodes = createTable.splitNodes;
+        this.bindCount = createTable.bindCount;
+        this.props = createTable.props;
+        this.ifNotExists = createTable.ifNotExists;
+        this.baseTableName = createTable.baseTableName;
+        this.whereClause = createTable.whereClause;
+    }
+    
     protected CreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
             List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists, 
             TableName baseTableName, ParseNode whereClause, int bindCount) {

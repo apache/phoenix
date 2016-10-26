@@ -17,11 +17,13 @@
  */
 package org.apache.phoenix.parse;
 
+import org.apache.phoenix.util.StringUtil;
+
 public class UseSchemaStatement extends MutableStatement {
     private final String schemaName;
 
     public UseSchemaStatement(String schemaName) {
-        this.schemaName = schemaName;
+        this.schemaName = schemaName == null ? StringUtil.EMPTY_STRING : schemaName;
     }
 
     @Override
