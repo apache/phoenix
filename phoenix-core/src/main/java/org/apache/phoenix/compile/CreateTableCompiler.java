@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.Iterator;
@@ -46,12 +47,15 @@ import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.DelegateConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.ConstraintViolationException;
+import org.apache.phoenix.schema.DelegateSQLException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
@@ -62,6 +66,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.QueryUtil;
 
 import com.google.common.collect.Iterators;
@@ -77,7 +82,7 @@ public class CreateTableCompiler {
         this.operation = operation;
     }
 
-    public MutationPlan compile(final CreateTableStatement create) throws SQLException {
+    public MutationPlan compile(CreateTableStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
         ColumnResolver resolver = FromCompiler.getResolverForCreation(create, connection);
         PTableType type = create.getTableType();
@@ -93,13 +98,76 @@ public class CreateTableCompiler {
         BitSet isViewColumnReferencedToBe = null;
         // Check whether column families having local index column family suffix or not if present
         // don't allow creating table.
-        for(ColumnDef columnDef: create.getColumnDefs()) {
+        // Also validate the default values expressions.
+        List<ColumnDef> columnDefs = create.getColumnDefs();
+        List<ColumnDef> overideColumnDefs = null;
+        PrimaryKeyConstraint pkConstraint = create.getPrimaryKeyConstraint();
+        for (int i = 0; i < columnDefs.size(); i++) {
+            ColumnDef columnDef = columnDefs.get(i);
             if(columnDef.getColumnDefName().getFamilyName()!=null && columnDef.getColumnDefName().getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY)
-                .build().buildException();
+                        .build().buildException();
+            }
+            if (columnDef.getExpression() != null) {
+                ExpressionCompiler compiler = new ExpressionCompiler(context);
+                ParseNode defaultParseNode =
+                        new SQLParser(columnDef.getExpression()).parseExpression();
+                Expression defaultExpression = defaultParseNode.accept(compiler);
+                if (!defaultParseNode.isStateless()
+                        || defaultExpression.getDeterminism() != Determinism.ALWAYS) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_DEFAULT)
+                            .setColumnName(columnDef.getColumnDefName().getColumnName()).build()
+                            .buildException();
+                }
+                if (columnDef.isRowTimestamp() || ( pkConstraint != null && pkConstraint.isColumnRowTimestamp(columnDef.getColumnDefName()))) {
+                    throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.CANNOT_CREATE_DEFAULT_ROWTIMESTAMP)
+                            .setColumnName(columnDef.getColumnDefName().getColumnName())
+                            .build().buildException();
+                }
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                // Evaluate the expression to confirm it's validity
+                LiteralExpression defaultValue = ExpressionUtil.getConstantExpression(defaultExpression, ptr);
+                // A DEFAULT that evaluates to null should be ignored as it adds nothing
+                if (defaultValue.getValue() == null) {
+                    if (overideColumnDefs == null) {
+                        overideColumnDefs = new ArrayList<>(columnDefs);
+                    }
+                    overideColumnDefs.set(i, new ColumnDef(columnDef, null));
+                    continue;
+                }
+                PDataType sourceType = defaultExpression.getDataType();
+                PDataType targetType = columnDef.getDataType();
+                // Ensure that coercion works (will throw if not)
+                context.getTempPtr().set(ptr.get(), ptr.getOffset(), ptr.getLength());
+                try {
+                    targetType.coerceBytes(context.getTempPtr(), defaultValue.getValue(), sourceType,
+                            defaultValue.getMaxLength(), defaultValue.getScale(),
+                            defaultValue.getSortOrder(),
+                            columnDef.getMaxLength(), columnDef.getScale(),
+                            columnDef.getSortOrder());
+                } catch (ConstraintViolationException e) {
+                    if (e.getCause() instanceof SQLException) {
+                        SQLException sqlE = (SQLException) e.getCause();
+                        throw new DelegateSQLException(sqlE, ". DEFAULT " + SQLExceptionInfo.COLUMN_NAME + "=" + columnDef.getColumnDefName().getColumnName());
+                    }
+                    throw e;
+                }
+                if (!targetType.isSizeCompatible(ptr, defaultValue.getValue(), sourceType, 
+                        defaultValue.getMaxLength(), defaultValue.getScale(), 
+                        columnDef.getMaxLength(), columnDef.getScale())) {
+                    throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(columnDef.getColumnDefName().getColumnName())
+                            .setMessage("DEFAULT " + columnDef.getExpression()).build()
+                            .buildException();            
+                }
             }
         }
-
+        if (overideColumnDefs != null) {
+            create = new CreateTableStatement (create,overideColumnDefs);
+        }
+        final CreateTableStatement finalCreate = create;
+        
         if (type == PTableType.VIEW) {
             TableRef tableRef = resolver.getTables().get(0);
             int nColumns = tableRef.getTable().getColumns().size();
@@ -190,7 +258,7 @@ public class CreateTableCompiler {
             @Override
             public MutationState execute() throws SQLException {
                 try {
-                    return client.createTable(create, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced);
+                    return client.createTable(finalCreate, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced);
                 } finally {
                     if (client.getConnection() != connection) {
                         client.getConnection().close();

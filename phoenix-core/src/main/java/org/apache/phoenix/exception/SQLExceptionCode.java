@@ -245,7 +245,8 @@ public enum SQLExceptionCode {
     INVALID_MUTABLE_INDEX_CONFIG(1029, "42Y88", "Mutable secondary indexes must have the "
             + IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY + " property set to "
             +  IndexManagementUtil.INDEX_WAL_EDIT_CODEC_CLASS_NAME + " in the hbase-sites.xml of every region server."),
-
+    CANNOT_CREATE_DEFAULT(1031, "42Y90", "Cannot create column with a stateful default value."),
+    CANNOT_CREATE_DEFAULT_ROWTIMESTAMP(1032, "42Y90", "Cannot create ROW_TIMESTAMP column with a default value."),
 
     CANNOT_CREATE_TENANT_SPECIFIC_TABLE(1030, "42Y89", "Cannot create table for tenant-specific connection."),
     DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE(1034, "42Y93", "Default column family may only be specified when creating a table."),

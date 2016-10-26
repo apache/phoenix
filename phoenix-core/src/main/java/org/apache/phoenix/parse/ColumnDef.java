@@ -50,6 +50,20 @@ public class ColumnDef {
     private final String expressionStr;
     private final boolean isRowTimestamp;
 
+    public ColumnDef(ColumnDef def, String expressionStr) {
+        this.columnDefName = def.columnDefName;
+        this.dataType = def.dataType;
+        this.isNull = def.isNull;
+        this.maxLength = def.maxLength;
+        this.scale = def.scale;
+        this.isPK = def.isPK;
+        this.sortOrder = def.sortOrder;
+        this.isArray = def.isArray;
+        this.arrSize = def.arrSize;
+        this.isRowTimestamp = def.isRowTimestamp;
+        this.expressionStr = expressionStr;
+    }
+
     ColumnDef(ColumnName columnDefName, String sqlTypeName, boolean isArray, Integer arrSize, Boolean isNull, Integer maxLength,
             Integer scale, boolean isPK, SortOrder sortOrder, String expressionStr, boolean isRowTimestamp) {
         try {

@@ -134,6 +134,7 @@ tokens
     ONLY = 'only';
     EXECUTE = 'execute';
     UPGRADE = 'upgrade';
+    DEFAULT = 'default';
 }
 
 
@@ -439,7 +440,7 @@ create_table_node returns [CreateTableStatement ret]
    
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
-    :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
+    :   CREATE SCHEMA (IF NOT ex=EXISTS)? (DEFAULT | s=identifier)
         {ret = factory.createSchema(s, ex!=null); }
     ;
 
@@ -634,12 +635,13 @@ column_defs returns [List<ColumnDef> ret]
 ;
 
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)?
+    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? (pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)?
         { $ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null, 
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             pk != null, 
             order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
+            df == null ? null : df.toString(),
             rr != null); }
     ;
 
@@ -895,7 +897,7 @@ multiply_divide_modulo_expression returns [ParseNode ret]
     ;
 
 use_schema_node returns [UseSchemaStatement ret]
-	:   USE s=identifier
+	:   USE (DEFAULT | s=identifier)
         {ret = factory.useSchema(s); }
     ;
 

@@ -22,6 +22,7 @@ import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 
 import java.io.IOException;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -39,12 +40,18 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -55,6 +62,7 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -583,9 +591,15 @@ public class PTableImpl implements PTable {
 
     @Override
     public int newKey(ImmutableBytesWritable key, byte[][] values) {
+        List<PColumn> columns = getPKColumns();
         int nValues = values.length;
         while (nValues > 0 && (values[nValues-1] == null || values[nValues-1].length == 0)) {
             nValues--;
+        }
+        for (PColumn column : columns) {
+            if (column.getExpressionStr() != null) {
+                nValues++;
+            }
         }
         int i = 0;
         TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(SchemaUtil.estimateKeyLength(this));
@@ -596,11 +610,11 @@ public class PTableImpl implements PTable {
                 i++;
                 os.write(QueryConstants.SEPARATOR_BYTE_ARRAY);
             }
-            List<PColumn> columns = getPKColumns();
             int nColumns = columns.size();
             PDataType type = null;
             SortOrder sortOrder = null;
             boolean wasNull = false;
+
             while (i < nValues && i < nColumns) {
                 // Separate variable length column values in key with zero byte
                 if (type != null && !type.isFixedWidth()) {
@@ -612,7 +626,38 @@ public class PTableImpl implements PTable {
                 // This will throw if the value is null and the type doesn't allow null
                 byte[] byteValue = values[i++];
                 if (byteValue == null) {
-                    byteValue = ByteUtil.EMPTY_BYTE_ARRAY;
+                    if (column.getExpressionStr() != null) {
+                        try {
+                            String url = PhoenixRuntime.JDBC_PROTOCOL
+                                    + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                                    + PhoenixRuntime.CONNECTIONLESS;
+                            PhoenixConnection conn = DriverManager.getConnection(url)
+                                    .unwrap(PhoenixConnection.class);
+                            StatementContext context =
+                                    new StatementContext(new PhoenixStatement(conn));
+
+                            ExpressionCompiler compiler = new ExpressionCompiler(context);
+                            ParseNode defaultParseNode =
+                                    new SQLParser(column.getExpressionStr()).parseExpression();
+                            Expression defaultExpression = defaultParseNode.accept(compiler);
+                            defaultExpression.evaluate(null, key);
+                            column.getDataType().coerceBytes(key, null,
+                                    defaultExpression.getDataType(),
+                                    defaultExpression.getMaxLength(), defaultExpression.getScale(),
+                                    defaultExpression.getSortOrder(),
+                                    column.getMaxLength(), column.getScale(),
+                                    column.getSortOrder());
+                            byteValue = ByteUtil.copyKeyBytesIfNecessary(key);
+                        } catch (SQLException e) { // should not be possible
+                            throw new ConstraintViolationException(name.getString() + "."
+                                    + column.getName().getString()
+                                    + " failed to compile default value expression of "
+                                    + column.getExpressionStr());
+                        }
+                    }
+                    else {
+                        byteValue = ByteUtil.EMPTY_BYTE_ARRAY;
+                    }
                 }
                 wasNull = byteValue.length == 0;
                 // An empty byte array return value means null. Do this,
@@ -814,10 +859,12 @@ public class PTableImpl implements PTable {
             boolean isNull = type.isNull(byteValue);
             if (isNull && !column.isNullable()) {
                 throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
-            } else if (isNull && PTableImpl.this.isImmutableRows()) {
+            } else if (isNull && PTableImpl.this.isImmutableRows()
+                    && column.getExpressionStr() == null) {
+                // Store nulls for immutable tables otherwise default value would be used
                 removeIfPresent(setValues, family, qualifier);
                 removeIfPresent(unsetValues, family, qualifier);
-            } else if (isNull && !getStoreNulls()) {
+            } else if (isNull && !getStoreNulls() && column.getExpressionStr() == null) {
                 removeIfPresent(setValues, family, qualifier);
                 deleteQuietly(unsetValues, kvBuilder, kvBuilder.buildDeleteColumns(keyPtr, column
                             .getFamilyName().getBytesPtr(), column.getName().getBytesPtr(), ts));
