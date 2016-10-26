@@ -1370,6 +1370,9 @@ public class MetaDataClient {
                         String columnFamilyName = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
                         colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(columnFamilyName, column.getName().getString()));
                         isRowTimestamp = column.isRowTimestamp();
+                        if (colRef.getColumn().getExpressionStr() != null) {
+                            expressionStr = colRef.getColumn().getExpressionStr();
+                        }
                     }
                     else {
                         // if this is an expression
@@ -1411,7 +1414,7 @@ public class MetaDataClient {
                     if (!SchemaUtil.isPKColumn(col) && col.getViewConstant() == null) {
                         // Need to re-create ColumnName, since the above one won't have the column family name
                         colName = ColumnName.caseSensitiveColumnName(isLocalIndex?IndexUtil.getLocalIndexColumnFamily(col.getFamilyName().getString()):col.getFamilyName().getString(), IndexUtil.getIndexColumnName(col));
-                        columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(), null, col.isRowTimestamp()));
+                        columnDefs.add(FACTORY.columnDef(colName, col.getDataType().getSqlTypeName(), col.isNullable(), col.getMaxLength(), col.getScale(), false, col.getSortOrder(), col.getExpressionStr(), col.isRowTimestamp()));
                     }
                 }
 
@@ -3651,8 +3654,7 @@ public class MetaDataClient {
 
     public MutationState useSchema(UseSchemaStatement useSchemaStatement) throws SQLException {
         // As we allow default namespace mapped to empty schema, so this is to reset schema in connection
-        if (useSchemaStatement.getSchemaName().equals(StringUtil.EMPTY_STRING)
-                || useSchemaStatement.getSchemaName().toUpperCase().equals(SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE)) {
+        if (useSchemaStatement.getSchemaName().equals(StringUtil.EMPTY_STRING)) {
             connection.setSchema(null);
         } else {
             FromCompiler.getResolverForSchema(useSchemaStatement, connection)

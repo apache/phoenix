@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
@@ -84,7 +85,7 @@ public class TupleProjector {
         valueSet = ValueBitSet.newInstance(schema);
     }
     
-    public TupleProjector(PTable projectedTable) {
+    public TupleProjector(PTable projectedTable) throws SQLException {
         Preconditions.checkArgument(projectedTable.getType() == PTableType.PROJECTED);
     	List<PColumn> columns = projectedTable.getColumns();
     	this.expressions = new Expression[columns.size() - projectedTable.getPKColumns().size()];
