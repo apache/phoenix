@@ -375,7 +375,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testRVCOnDescWithLeadingPKEquality() throws Exception {
         final Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = generateUniqueName();
+        String fullTableName = generateRandomString();
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + fullTableName + "(\n" + 
                     "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
@@ -435,7 +435,7 @@ public class QueryMoreIT extends BaseHBaseManagedTimeTableReuseIT {
     @Test
     public void testSingleDescPKColumnComparison() throws Exception {
         final Connection conn = DriverManager.getConnection(getUrl());
-        String fullTableName = generateUniqueName();
+        String fullTableName = generateRandomString();
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE " + fullTableName + "(\n" + 
                     "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
