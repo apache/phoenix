@@ -23,6 +23,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -44,6 +45,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -296,11 +298,10 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         assertEquals(expectedCount, rs.getInt(1));
         // Ensure that index is being used
         rs = stmt.executeQuery("EXPLAIN SELECT COUNT(*) FROM " + fullTableName);
-        // Uses index and finds correct number of rows
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(fullBaseName))) + " [-32768,'123451234512345']\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY\n" + 
-                "    SERVER AGGREGATE INTO SINGLE ROW",
-                QueryUtil.getExplainPlan(rs));
+        if (fullBaseName != null) {
+            // Uses index and finds correct number of rows
+            assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(fullBaseName))))); 
+        }
         
         // Force it not to use index and still finds correct number of rows
         rs = stmt.executeQuery("SELECT /*+ NO_INDEX */ * FROM " + fullTableName);
@@ -369,13 +370,41 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             tsConn.commit();
             assertRowCount(tsConn, tsViewFullName, baseFullName, 8);
             
+            // Use different connection for delete
             Connection tsConn2 = DriverManager.getConnection(getUrl(), tsProps);
             tsConn2.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE DOUBLE1 > 7.5 AND DOUBLE1 < 9.5");
             tsConn2.commit();
             assertRowCount(tsConn2, tsViewFullName, baseFullName, 6);
             
+            tsConn2.createStatement().execute("DROP VIEW " + tsViewFullName);
+            // Should drop view and index and remove index data
+            conn.createStatement().execute("DROP VIEW " + viewFullName);
+            // Deletes table data (but wouldn't update index)
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("DELETE FROM " + baseFullName);
+            Connection tsConn3 = DriverManager.getConnection(getUrl(), tsProps);
+            try {
+                tsConn3.createStatement().execute("SELECT * FROM " + tsViewFullName + " LIMIT 1");
+                fail("Expected table not to be found");
+            } catch (TableNotFoundException e) {
+                
+            }
+            conn.createStatement().execute(
+                    "CREATE VIEW " + viewFullName + " (\n" + 
+                            "INT1 BIGINT NOT NULL,\n" + 
+                            "DOUBLE1 DECIMAL(12, 3),\n" +
+                            "IS_BOOLEAN BOOLEAN,\n" + 
+                            "TEXT1 VARCHAR,\n" + "CONSTRAINT PKVIEW PRIMARY KEY\n" + "(\n" +
+                            "INT1\n" + ")) AS SELECT * FROM " + baseFullName + " WHERE KEY_PREFIX = '123'");
+            tsConn3.createStatement().execute("CREATE VIEW " + tsViewFullName + " AS SELECT * FROM " + viewFullName);
+            conn.createStatement().execute(
+                    "CREATE INDEX " + indexName + " \n" + "ON " + viewFullName + " (TEXT1 DESC, INT1)\n"
+                            + "INCLUDE (CREATED_BY, DOUBLE1, IS_BOOLEAN, CREATED_DATE)");
+            assertRowCount(tsConn3, tsViewFullName, baseFullName, 0);
+            
             tsConn.close();
             tsConn2.close();
+            tsConn3.close();
             
         } finally {
             conn.close();
