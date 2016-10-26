@@ -111,7 +111,7 @@ public class PhoenixObjectInspectorFactory {
                         oi = new PhoenixTimestampObjectInspector();
                         break;
                     case DECIMAL:
-                        oi = new PhoenixDecimalObjectInspector();
+                        oi = new PhoenixDecimalObjectInspector((PrimitiveTypeInfo) type);
                         break;
                     case BINARY:
                         oi = new PhoenixBinaryObjectInspector();
