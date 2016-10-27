@@ -681,7 +681,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("upsert into phoenix_test (id, ts) select id, null from phoenix_test where id <= 'bbb' limit 1");
+        conn.createStatement().execute("upsert into phoenix_test (id, ts) select id, CAST(null AS timestamp) from phoenix_test where id <= 'bbb' limit 1");
         conn.commit();
         conn.close();
 

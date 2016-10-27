@@ -152,7 +152,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
-                    + "(varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2) SELECT varchar_pk, char_pk, int_pk, long_pk , decimal_pk, null FROM "
+                    + "(varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2) SELECT varchar_pk, char_pk, int_pk, long_pk , decimal_pk, CAST(null AS BIGINT) FROM "
                     + fullTableName + " WHERE long_col2=?");
             stmt.setLong(1,3L);
             assertEquals(1,stmt.executeUpdate());
