@@ -2484,6 +2484,23 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testAlterTableStatefulDefault() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY)";
+        String ddl2 = "ALTER TABLE table_with_default " +
+                "ADD datecol DATE DEFAULT CURRENT_DATE()";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        try {
+            conn.createStatement().execute(ddl2);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_CREATE_DEFAULT.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
     public void testDefaultTypeMismatch() throws Exception {
         String ddl = "CREATE TABLE table_with_default (" +
                 "pk INTEGER PRIMARY KEY, " +
@@ -2499,11 +2516,62 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
-    public void testDefaultRowTimestamp() throws Exception {
+    public void testAlterTableDefaultTypeMismatch() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY)";
+        String ddl2 = "ALTER TABLE table_with_default " +
+                "ADD v CHAR(3) DEFAULT 1";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        try {
+            conn.createStatement().execute(ddl2);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
+    public void testDefaultTypeMismatchInView() throws Exception {
+        String ddl1 = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY, " +
+                "v VARCHAR DEFAULT 'foo')";
+        String ddl2 = "CREATE VIEW my_view(v2 VARCHAR DEFAULT 1) AS SELECT * FROM table_with_default";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl1);
+        try {
+            conn.createStatement().execute(ddl2);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testDefaultRowTimestamp1() throws Exception {
         String ddl = "CREATE TABLE IF NOT EXISTS table_with_defaults ("
                 + "pk1 INTEGER NOT NULL,"
                 + "pk2 BIGINT NOT NULL DEFAULT 5,"
                 + "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2 ROW_TIMESTAMP))";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        try {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(
+                    SQLExceptionCode.CANNOT_CREATE_DEFAULT_ROWTIMESTAMP.getErrorCode(),
+                    e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testDefaultRowTimestamp2() throws Exception {
+        String ddl = "CREATE TABLE table_with_defaults ("
+                + "k BIGINT DEFAULT 5 PRIMARY KEY ROW_TIMESTAMP)";
 
         Connection conn = DriverManager.getConnection(getUrl());
 
@@ -2533,6 +2601,23 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    public void testAlterTableDefaultSizeMismatch() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY)";
+        String ddl2 = "ALTER TABLE table_with_default " +
+                "ADD v CHAR(3) DEFAULT 'foobar'";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        try {
+            conn.createStatement().execute(ddl2);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
+    @Test
     public void testNullDefaultRemoved() throws Exception {
         String ddl = "CREATE TABLE table_with_default (" +
                 "pk INTEGER PRIMARY KEY, " +
@@ -2540,6 +2625,21 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
+        PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache()
+                .getTableRef(new PTableKey(null,"TABLE_WITH_DEFAULT")).getTable();
+        assertNull(table.getColumn("V").getExpressionStr());
+    }
+
+    @Test
+    public void testNullAlterTableDefaultRemoved() throws Exception {
+        String ddl = "CREATE TABLE table_with_default (" +
+                "pk INTEGER PRIMARY KEY)";
+        String ddl2 = "ALTER TABLE table_with_default " +
+                "ADD v CHAR(3) DEFAULT null";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute(ddl2);
         PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache()
                 .getTableRef(new PTableKey(null,"TABLE_WITH_DEFAULT")).getTable();
         assertNull(table.getColumn("V").getExpressionStr());
