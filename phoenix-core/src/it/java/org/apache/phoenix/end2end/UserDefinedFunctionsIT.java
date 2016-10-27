@@ -619,7 +619,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     public void testDropFunction() throws Exception {
         Connection conn = driver.connect(calciteUrl, UDF_PROPS);
         Statement stmt = conn.createStatement();
-        String query = "select count(*) from "+ SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_FUNCTION_TABLE + "\"";
+        String query = "select count(*) from "+"\""+ SYSTEM_CATALOG_SCHEMA + "\".\"" + SYSTEM_FUNCTION_TABLE + "\"";
         ResultSet rs = stmt.executeQuery(query);
         rs.next();
         int numRowsBefore = rs.getInt(1);
@@ -665,7 +665,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         Connection conn = DriverManager.getConnection(calciteUrl, props);
         Statement stmt = conn.createStatement();
-        String query = "select count(*) from "+ SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_FUNCTION_TABLE + "\"";
+        String query = "select count(*) from \""+ SYSTEM_CATALOG_SCHEMA + "\".\"" + SYSTEM_FUNCTION_TABLE + "\"";
         ResultSet rs = stmt.executeQuery(query);
         rs.next();
         int numRowsBefore = rs.getInt(1);
@@ -673,6 +673,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
                 + "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar2.jar"+"'");
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(calciteUrl, props);
+        stmt = conn.createStatement();
         rs = stmt.executeQuery(query);
         rs.next();
         int numRowsAfter= rs.getInt(1);
