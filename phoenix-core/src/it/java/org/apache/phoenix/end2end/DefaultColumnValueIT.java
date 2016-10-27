@@ -57,12 +57,12 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
                 "pk2 INTEGER NOT NULL, " +
                 "pk3 INTEGER NOT NULL DEFAULT 10, " +
                 "test1 INTEGER, " +
-                "test2 INTEGER DEFAULT 5, " +
-                "test3 INTEGER, " +
                 "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
 
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
+        conn.createStatement().execute("ALTER TABLE " + sharedTable1 + 
+                " ADD test2 INTEGER DEFAULT 5, est3 INTEGER");
 
         String dml = "UPSERT INTO " + sharedTable1 + " VALUES (1, 2)";
         conn.createStatement().execute(dml);
@@ -96,6 +96,39 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
         assertEquals(0, rs.getInt(5));
         assertTrue(rs.wasNull());
         assertEquals(16, rs.getInt(6));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testDefaultColumnValueOnView() throws Exception {
+        String ddl = "CREATE TABLE IF NOT EXISTS " + sharedTable1 + " (" +
+                "pk1 INTEGER NOT NULL, " +
+                "pk2 INTEGER NOT NULL, " +
+                "pk3 INTEGER NOT NULL DEFAULT 10, " +
+                "test1 INTEGER, " +
+                "test2 INTEGER DEFAULT 5, " +
+                "test3 INTEGER, " +
+                "CONSTRAINT NAME_PK PRIMARY KEY (pk1, pk2, pk3))";
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        conn.createStatement().execute("CREATE VIEW " + sharedTable2 + 
+                "(pk4 INTEGER NOT NULL DEFAULT 20 PRIMARY KEY, test4 VARCHAR DEFAULT 'foo') " +
+                "AS SELECT * FROM " + sharedTable1 + " WHERE pk1 = 1");
+
+        String dml = "UPSERT INTO " + sharedTable2 + "(pk2) VALUES (2)";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement()
+                .executeQuery("SELECT pk1,pk2,pk3,pk4,test2,test4 FROM " + sharedTable2);
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+        assertEquals(10, rs.getInt(3));
+        assertEquals(20, rs.getInt(4));
+        assertEquals(5, rs.getInt(5));
+        assertEquals("foo", rs.getString(6));
         assertFalse(rs.next());
     }
 
