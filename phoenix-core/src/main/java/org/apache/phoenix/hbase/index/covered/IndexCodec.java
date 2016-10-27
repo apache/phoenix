@@ -23,7 +23,6 @@ import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
  * added to the codec, as well as potentially not haivng to implement some methods.
  */
 public interface IndexCodec {
-
     /**
      * Do any code initialization necessary
      * 

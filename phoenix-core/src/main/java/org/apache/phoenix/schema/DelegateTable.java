@@ -106,13 +106,13 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public PRow newRow(KeyValueBuilder builder, long ts, ImmutableBytesWritable key, byte[]... values) {
-        return delegate.newRow(builder, ts, key, values);
+    public PRow newRow(KeyValueBuilder builder, long ts, ImmutableBytesWritable key, boolean hasOnDupKey, byte[]... values) {
+        return delegate.newRow(builder, ts, key, hasOnDupKey, values);
     }
 
     @Override
-    public PRow newRow(KeyValueBuilder builder, ImmutableBytesWritable key, byte[]... values) {
-        return delegate.newRow(builder, key, values);
+    public PRow newRow(KeyValueBuilder builder, ImmutableBytesWritable key, boolean hasOnDupKey, byte[]... values) {
+        return delegate.newRow(builder, key, hasOnDupKey, values);
     }
 
     @Override
@@ -279,5 +279,15 @@ public class DelegateTable implements PTable {
     @Override
     public boolean isAppendOnlySchema() {
         return delegate.isAppendOnlySchema();
+    }
+    
+    @Override
+    public int hashCode() {
+        return delegate.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return delegate.equals(obj);
     }
 }

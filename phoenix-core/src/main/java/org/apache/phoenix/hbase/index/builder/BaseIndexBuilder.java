@@ -12,17 +12,19 @@ package org.apache.phoenix.hbase.index.builder;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.util.Collection;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
 
 /**
@@ -91,6 +93,16 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
         return this.codec.isEnabled(m);
     }
 
+    @Override
+    public boolean isAtomicOp(Mutation m) throws IOException {
+        return false;
+    }
+
+    @Override
+    public List<Mutation> executeAtomicOp(Increment inc) throws IOException {
+        return null;
+    }
+    
     /**
      * Exposed for testing!
      * 
