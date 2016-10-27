@@ -77,7 +77,7 @@ public class AggregateQueryIT extends BaseQueryIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 70));
         conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        conn.createStatement().execute("UPSERT INTO atable(organization_id,entity_id,a_integer) SELECT organization_id, entity_id, null FROM atable");
+        conn.createStatement().execute("UPSERT INTO atable(organization_id,entity_id,a_integer) SELECT organization_id, entity_id, CAST(null AS integer) FROM atable");
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 90));
         conn = DriverManager.getConnection(getUrl(), props);
