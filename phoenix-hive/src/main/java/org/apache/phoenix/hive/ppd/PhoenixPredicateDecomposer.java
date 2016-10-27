@@ -42,11 +42,19 @@ public class PhoenixPredicateDecomposer {
 
     private List<IndexSearchCondition> searchConditionList;
 
-    public PhoenixPredicateDecomposer(List<String> columnNameList) {
+    public static PhoenixPredicateDecomposer create(List<String> columnNameList) {
+        return new PhoenixPredicateDecomposer(columnNameList);
+    }
+
+    private PhoenixPredicateDecomposer(List<String> columnNameList) {
         this.columnNameList = columnNameList;
     }
 
     public DecomposedPredicate decomposePredicate(ExprNodeDesc predicate) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("predicate - " + predicate.toString());
+        }
+
         IndexPredicateAnalyzer analyzer = PredicateAnalyzerFactory.createPredicateAnalyzer
                 (columnNameList, getFieldValidator());
         DecomposedPredicate decomposed = new DecomposedPredicate();
@@ -63,6 +71,11 @@ public class PhoenixPredicateDecomposer {
                 LOG.warn("Failed to decompose predicates", e);
                 return null;
             }
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("decomposed predicate - residualPredicate: " + decomposed.residualPredicate +
+            ", pushedPredicate: " + decomposed.pushedPredicate);
         }
 
         return decomposed;

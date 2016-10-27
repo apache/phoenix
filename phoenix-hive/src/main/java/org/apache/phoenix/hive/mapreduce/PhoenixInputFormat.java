@@ -32,15 +32,14 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.RegionSizeCalculator;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.mapred.InputFormat;
-import org.apache.hadoop.mapred.InputSplit;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RecordReader;
-import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.*;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -48,7 +47,6 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ppd.PhoenixPredicateDecomposer;
-import org.apache.phoenix.hive.ppd.PhoenixPredicateDecomposerManager;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
 import org.apache.phoenix.hive.query.PhoenixQueryBuilder;
 import org.apache.phoenix.hive.util.PhoenixConnectionUtil;
@@ -62,6 +60,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -83,8 +82,8 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
 
     @Override
     public InputSplit[] getSplits(JobConf jobConf, int numSplits) throws IOException {
-        String tableName = jobConf.get(PhoenixConfigurationUtil.INPUT_TABLE_NAME);
-        List<IndexSearchCondition> conditionList = null;
+        String tableName = jobConf.get(PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME);
+
         String query;
         String executionEngine = jobConf.get(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname,
                 HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.getDefaultValue());
@@ -97,17 +96,17 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         }
 
         if (PhoenixStorageHandlerConstants.MR.equals(executionEngine)) {
-            String predicateKey = PhoenixStorageHandlerUtil.getTableKeyOfSession(jobConf,
-                    tableName);
-
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("PredicateKey for MR job : " + predicateKey);
-            }
-
-            PhoenixPredicateDecomposer predicateDecomposer =
-                    PhoenixPredicateDecomposerManager.getPredicateDecomposer(predicateKey);
-            if (predicateDecomposer != null && predicateDecomposer.isCalledPPD()) {
-                conditionList = predicateDecomposer.getSearchConditionList();
+            List<IndexSearchCondition> conditionList = null;
+            String filterExprSerialized = jobConf.get(TableScanDesc.FILTER_EXPR_CONF_STR);
+            if (filterExprSerialized != null) {
+                ExprNodeGenericFuncDesc filterExpr =
+                        Utilities.deserializeExpression(filterExprSerialized);
+                PhoenixPredicateDecomposer predicateDecomposer =
+                        PhoenixPredicateDecomposer.create(Arrays.asList(jobConf.get(serdeConstants.LIST_COLUMNS).split(",")));
+                predicateDecomposer.decomposePredicate(filterExpr);
+                if (predicateDecomposer.isCalledPPD()) {
+                    conditionList = predicateDecomposer.getSearchConditionList();
+                }
             }
 
             query = PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName,

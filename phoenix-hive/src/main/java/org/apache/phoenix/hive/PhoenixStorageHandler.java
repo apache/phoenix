@@ -40,8 +40,6 @@ import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.hive.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.hive.ppd.PhoenixPredicateDecomposer;
-import org.apache.phoenix.hive.ppd.PhoenixPredicateDecomposerManager;
-import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
 import java.util.List;
@@ -176,19 +174,9 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
     public DecomposedPredicate decomposePredicate(JobConf jobConf, Deserializer deserializer,
                                                   ExprNodeDesc predicate) {
         PhoenixSerDe phoenixSerDe = (PhoenixSerDe) deserializer;
-        String tableName = phoenixSerDe.getTableProperties().getProperty
-                (PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME);
-        String predicateKey = PhoenixStorageHandlerUtil.getTableKeyOfSession(jobConf, tableName);
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Decomposing predicate with predicateKey : " + predicateKey);
-        }
-
         List<String> columnNameList = phoenixSerDe.getSerdeParams().getColumnNames();
-        PhoenixPredicateDecomposer predicateDecomposer = PhoenixPredicateDecomposerManager
-                .createPredicateDecomposer(predicateKey, columnNameList);
 
-        return predicateDecomposer.decomposePredicate(predicate);
+        return PhoenixPredicateDecomposer.create(columnNameList).decomposePredicate(predicate);
     }
 
     @Override
