@@ -2930,6 +2930,7 @@ public class MetaDataClient {
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
                 Set<String> families = new LinkedHashSet<>();
                 if (columnDefs.size() > 0 ) {
+                    StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
                     try (PreparedStatement colUpsert = connection.prepareStatement(INSERT_COLUMN_ALTER_TABLE)) {
                         short nextKeySeq = SchemaUtil.getMaxKeySeq(table);
                         for( ColumnDef colDef : columnDefs) {
@@ -2948,6 +2949,9 @@ public class MetaDataClient {
                             if (colDef != null && colDef.isRowTimestamp()) {
                                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.ROWTIMESTAMP_CREATE_ONLY)
                                 .setColumnName(colDef.getColumnDefName().getColumnName()).build().buildException();
+                            }
+                            if (!colDef.validateDefault(context, null)) {
+                                colDef = new ColumnDef(colDef, null); // Remove DEFAULT as it's not necessary
                             }
                             PColumn column = newColumn(position++, colDef, PrimaryKeyConstraint.EMPTY, table.getDefaultFamilyName() == null ? null : table.getDefaultFamilyName().getString(), true);
                             columns.add(column);

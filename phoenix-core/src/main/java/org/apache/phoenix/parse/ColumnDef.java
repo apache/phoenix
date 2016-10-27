@@ -19,12 +19,21 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.Determinism;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.schema.ConstraintViolationException;
+import org.apache.phoenix.schema.DelegateSQLException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Preconditions;
@@ -224,5 +233,61 @@ public class ColumnDef {
             buf.append(' ');
         }
         return buf.toString();
+    }
+    
+    public boolean validateDefault(StatementContext context, PrimaryKeyConstraint pkConstraint) throws SQLException {
+        String defaultStr = this.getExpression();
+        if (defaultStr == null) {
+            return true;
+        }
+        ExpressionCompiler compiler = new ExpressionCompiler(context);
+        ParseNode defaultParseNode =
+                new SQLParser(this.getExpression()).parseExpression();
+        Expression defaultExpression = defaultParseNode.accept(compiler);
+        if (!defaultParseNode.isStateless()
+                || defaultExpression.getDeterminism() != Determinism.ALWAYS) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_CREATE_DEFAULT)
+                    .setColumnName(this.getColumnDefName().getColumnName()).build()
+                    .buildException();
+        }
+        if (this.isRowTimestamp() || ( pkConstraint != null && pkConstraint.isColumnRowTimestamp(this.getColumnDefName()))) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.CANNOT_CREATE_DEFAULT_ROWTIMESTAMP)
+                    .setColumnName(this.getColumnDefName().getColumnName())
+                    .build().buildException();
+        }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        // Evaluate the expression to confirm it's validity
+        LiteralExpression defaultValue = ExpressionUtil.getConstantExpression(defaultExpression, ptr);
+        // A DEFAULT that evaluates to null should be ignored as it adds nothing
+        if (defaultValue.getValue() == null) {
+            return false;
+        }
+        PDataType sourceType = defaultExpression.getDataType();
+        PDataType targetType = this.getDataType();
+        // Ensure that coercion works (will throw if not)
+        context.getTempPtr().set(ptr.get(), ptr.getOffset(), ptr.getLength());
+        try {
+            targetType.coerceBytes(context.getTempPtr(), defaultValue.getValue(), sourceType,
+                    defaultValue.getMaxLength(), defaultValue.getScale(),
+                    defaultValue.getSortOrder(),
+                    this.getMaxLength(), this.getScale(),
+                    this.getSortOrder());
+        } catch (ConstraintViolationException e) {
+            if (e.getCause() instanceof SQLException) {
+                SQLException sqlE = (SQLException) e.getCause();
+                throw new DelegateSQLException(sqlE, ". DEFAULT " + SQLExceptionInfo.COLUMN_NAME + "=" + this.getColumnDefName().getColumnName());
+            }
+            throw e;
+        }
+        if (!targetType.isSizeCompatible(ptr, defaultValue.getValue(), sourceType, 
+                defaultValue.getMaxLength(), defaultValue.getScale(), 
+                this.getMaxLength(), this.getScale())) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(this.getColumnDefName().getColumnName())
+                    .setMessage("DEFAULT " + this.getExpression()).build()
+                    .buildException();            
+        }
+        return true;
     }
 }
