@@ -40,21 +40,12 @@ public interface PRow {
     /**
      * Get the list of {@link org.apache.hadoop.hbase.client.Mutation} used to
      * update an HTable after all mutations through calls to
-     * {@link #setValue(PColumn, Object)} or {@link #delete()}.
+     * {@link #setValue(PColumn, byte[])} or {@link #delete()}.
      * @return the list of mutations representing all changes made to a row
      * @throws ConstraintViolationException if row data violates schema
      * constraint
      */
     public List<Mutation> toRowMutations();
-    
-    /**
-     * Set a column value in the row
-     * @param col the column for which the value is being set
-     * @param value the value
-     * @throws ConstraintViolationException if row data violates schema
-     * constraint
-     */
-    public void setValue(PColumn col, Object value);
     
     /**
      * Set a column value in the row

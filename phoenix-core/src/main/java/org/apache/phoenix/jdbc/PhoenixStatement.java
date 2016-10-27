@@ -595,8 +595,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
 
     private static class ExecutableUpsertStatement extends UpsertStatement implements CompilableStatement {
-        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-            super(table, hintNode, columns, values, select, bindCount, udfParseNodes);
+        private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode, List<ColumnName> columns,
+                List<ParseNode> values, SelectStatement select, int bindCount, Map<String, UDFParseNode> udfParseNodes,
+                List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
+            super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
         }
 
         @SuppressWarnings("unchecked")
@@ -1203,8 +1205,9 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         }
 
         @Override
-        public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-            return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount, udfParseNodes);
+        public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode, List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount, 
+                Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
+            return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
         }
         
         @Override

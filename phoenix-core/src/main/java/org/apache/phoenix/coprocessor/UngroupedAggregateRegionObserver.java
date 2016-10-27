@@ -536,7 +536,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     }
                                 }
                                 projectedTable.newKey(ptr, values);
-                                PRow row = projectedTable.newRow(kvBuilder, ts, ptr);
+                                PRow row = projectedTable.newRow(kvBuilder, ts, ptr, false);
                                 for (; i < projectedColumns.size(); i++) {
                                     Expression expression = selectExpressions.get(i);
                                     if (expression.evaluate(result, ptr)) {

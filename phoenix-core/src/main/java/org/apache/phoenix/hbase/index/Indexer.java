@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,18 +34,23 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.OperationStatus;
+import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.ScanType;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.wal.HLogKey;
@@ -69,6 +75,7 @@ import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.util.ServerUtil;
 
 import com.google.common.collect.Multimap;
 
@@ -189,6 +196,45 @@ public class Indexer extends BaseRegionObserver {
     this.recoveryWriter.stop(msg);
   }
 
+  /**
+   * We use an Increment to serialize the ON DUPLICATE KEY clause so that the HBase plumbing
+   * sets up the necessary locks and mvcc to allow an atomic update. The Increment is not a
+   * real increment, though, it's really more of a Put. We translate the Increment into a
+   * list of mutations, at most a single Put and Delete that are the changes upon executing
+   * the list of ON DUPLICATE KEY clauses for this row.
+   */
+  @Override
+  public Result preIncrementAfterRowLock(final ObserverContext<RegionCoprocessorEnvironment> e,
+          final Increment inc) throws IOException {
+      try {
+          List<Mutation> mutations = this.builder.executeAtomicOp(inc);
+          if (mutations == null) {
+              return null;
+          }
+
+          // Causes the Increment to be ignored as we're committing the mutations
+          // ourselves below.
+          e.bypass();
+          e.complete();
+          // ON DUPLICATE KEY IGNORE will return empty list if row already exists
+          // as no action is required in that case.
+          if (!mutations.isEmpty()) {
+              Region region = e.getEnvironment().getRegion();
+              // Otherwise, submit the mutations directly here
+              region.mutateRowsWithLocks(
+                      mutations,
+                      Collections.<byte[]>emptyList(), // Rows are already locked
+                      HConstants.NO_NONCE, HConstants.NO_NONCE);
+          }
+          return Result.EMPTY_RESULT;
+      } catch (Throwable t) {
+          throw ServerUtil.createIOException(
+                  "Unable to process ON DUPLICATE IGNORE for " + 
+                  e.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString() + 
+                  "(" + Bytes.toStringBinary(inc.getRow()) + ")", t);
+      }
+  }
+
   @Override
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
@@ -206,13 +252,15 @@ public class Indexer extends BaseRegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
+  private static final OperationStatus SUCCESS = new OperationStatus(OperationStatusCode.SUCCESS);
+  
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
           MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
 
       // first group all the updates for a single row into a single update to be processed
       Map<ImmutableBytesPtr, MultiMutation> mutations =
               new HashMap<ImmutableBytesPtr, MultiMutation>();
-
+          
       Durability defaultDurability = Durability.SYNC_WAL;
       if(c.getEnvironment().getRegion() != null) {
           defaultDurability = c.getEnvironment().getRegion().getTableDesc().getDurability();
@@ -222,33 +270,35 @@ public class Indexer extends BaseRegionObserver {
       Durability durability = Durability.SKIP_WAL;
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
+          if (this.builder.isAtomicOp(m)) {
+              miniBatchOp.setOperationStatus(i, SUCCESS);
+              continue;
+          }
           // skip this mutation if we aren't enabling indexing
           // unfortunately, we really should ask if the raw mutation (rather than the combined mutation)
           // should be indexed, which means we need to expose another method on the builder. Such is the
           // way optimization go though.
-          if (!this.builder.isEnabled(m)) {
-              continue;
+          if (this.builder.isEnabled(m)) {
+              Durability effectiveDurablity = (m.getDurability() == Durability.USE_DEFAULT) ? 
+                      defaultDurability : m.getDurability();
+              if (effectiveDurablity.ordinal() > durability.ordinal()) {
+                  durability = effectiveDurablity;
+              }
+    
+              // add the mutation to the batch set
+              ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
+              MultiMutation stored = mutations.get(row);
+              // we haven't seen this row before, so add it
+              if (stored == null) {
+                  stored = new MultiMutation(row);
+                  mutations.put(row, stored);
+              }
+              stored.addAll(m);
           }
-
-          Durability effectiveDurablity = (m.getDurability() == Durability.USE_DEFAULT) ? 
-                  defaultDurability : m.getDurability();
-          if (effectiveDurablity.ordinal() > durability.ordinal()) {
-              durability = effectiveDurablity;
-          }
-
-          // add the mutation to the batch set
-          ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
-          MultiMutation stored = mutations.get(row);
-          // we haven't seen this row before, so add it
-          if (stored == null) {
-              stored = new MultiMutation(row);
-              mutations.put(row, stored);
-          }
-          stored.addAll(m);
       }
 
       // early exit if it turns out we don't have any edits
-      if (mutations.entrySet().size() == 0) {
+      if (mutations.isEmpty()) {
           return;
       }
 
@@ -360,7 +410,7 @@ public class Indexer extends BaseRegionObserver {
   private void doPostWithExceptions(WALEdit edit, Mutation m, final Durability durability, boolean allowLocalUpdates)
           throws Exception {
       //short circuit, if we don't need to do any work
-      if (durability == Durability.SKIP_WAL || !this.builder.isEnabled(m)) {
+      if (durability == Durability.SKIP_WAL || !this.builder.isEnabled(m) || edit == null) {
           // already did the index update in prePut, so we are done
           return;
       }
