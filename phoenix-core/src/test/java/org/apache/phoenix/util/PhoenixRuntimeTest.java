@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.util;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -26,6 +27,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -39,6 +41,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
@@ -99,6 +102,47 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         assertEquals(ImmutableList.of("one", "two", "three"), execCmd.getColumns());
         assertTrue(execCmd.isStrict());
         assertEquals("!", execCmd.getArrayElementSeparator());
+    }
+    
+    @Test
+    public void testGetPkColsEncodeDecode() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE t (\n" + 
+                "TENANT_ID VARCHAR NOT NULL,\n" +
+                "PARENT_ID CHAR(15) NOT NULL,\n" + 
+                "CREATED_DATE DATE NOT NULL,\n" + 
+                "ENTITY_HISTORY_ID CHAR(15) NOT NULL,\n" + 
+                "DATA_TYPE VARCHAR,\n" + 
+                "OLDVAL_STRING VARCHAR,\n" + 
+                "NEWVAL_STRING VARCHAR\n" + 
+                "CONSTRAINT PK PRIMARY KEY(TENANT_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID))"
+                + " MULTI_TENANT = true, IMMUTABLE_ROWS = true";
+        conn.createStatement().execute(ddl);
+        String indexDDL = "CREATE INDEX i ON t (CREATED_DATE, PARENT_ID) INCLUDE (DATA_TYPE, OLDVAL_STRING, NEWVAL_STRING)";
+        conn.createStatement().execute(indexDDL);
+        
+        String tenantId = "111111111111111";
+        String parentId = "222222222222222";
+        Date createdDate = new Date(System.currentTimeMillis());
+        String ehId = "333333333333333";
+        
+        Object[] values = new Object[] {tenantId, createdDate, parentId, ehId};
+        QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).optimizeQuery("SELECT PARENT_ID FROM T WHERE CREATED_DATE > CURRENT_DATE()-1 AND TENANT_ID = '111111111111111'");
+        List<Pair<String,String>> pkColumns = PhoenixRuntime.getPkColsForSql(conn, plan);
+        String fullTableName = plan.getTableRef().getTable().getName().getString();
+        assertEquals("I", fullTableName);
+        byte[] encodedValues = PhoenixRuntime.encodeValues(conn, fullTableName, values, pkColumns);
+        Object[] decodedValues = PhoenixRuntime.decodeValues(conn, fullTableName, encodedValues, pkColumns);
+        assertArrayEquals(values, decodedValues);
+        
+        plan = conn.createStatement().unwrap(PhoenixStatement.class).optimizeQuery("SELECT /*+ NO_INDEX */ ENTITY_HISTORY_ID FROM T");
+        pkColumns = PhoenixRuntime.getPkColsForSql(conn, plan);
+        values = new Object[] {tenantId, parentId, createdDate, ehId};
+        fullTableName = plan.getTableRef().getTable().getName().getString();
+        assertEquals("T", fullTableName);
+        encodedValues = PhoenixRuntime.encodeValues(conn, fullTableName, values, pkColumns);
+        decodedValues = PhoenixRuntime.decodeValues(conn, fullTableName, encodedValues, pkColumns);
+        assertArrayEquals(values, decodedValues);
     }
     
     @Test
