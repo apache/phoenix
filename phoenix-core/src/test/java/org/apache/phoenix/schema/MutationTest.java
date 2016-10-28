@@ -83,7 +83,7 @@ public class MutationTest extends BaseConnectionlessQueryTest {
             conn.setAutoCommit(false);
             String bvalue = "01234567890123456789";
             assertEquals(20,PVarchar.INSTANCE.toBytes(bvalue).length);
-            String value = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉";
+            String value = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉";
             assertTrue(value.length() <= maxLength2 && value.getBytes().length > maxLength2);
             conn.createStatement().execute("CREATE TABLE t1 (k1 char(" + maxLength1 + ") not null, k2 varchar(" + maxLength2 + "), "
                     + "v1 varchar(" + maxLength2 + "), v2 varbinary(" + maxLength2 + "), v3 binary(" + maxLength2 + "), constraint pk primary key (k1, k2))");
