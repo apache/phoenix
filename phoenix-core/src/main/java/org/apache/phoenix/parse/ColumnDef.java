@@ -281,8 +281,8 @@ public class ColumnDef {
             throw e;
         }
         if (!targetType.isSizeCompatible(ptr, defaultValue.getValue(), sourceType, 
-                defaultValue.getMaxLength(), defaultValue.getScale(), 
-                this.getMaxLength(), this.getScale())) {
+                sortOrder, defaultValue.getMaxLength(), 
+                defaultValue.getScale(), this.getMaxLength(), this.getScale())) {
             throw new SQLExceptionInfo.Builder(
                     SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(this.getColumnDefName().getColumnName())
                     .setMessage("DEFAULT " + this.getExpression()).build()

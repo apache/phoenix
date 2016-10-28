@@ -120,9 +120,14 @@ public class SQLExceptionInfo {
 
     @Override
     public String toString() {
-        StringBuilder builder = new StringBuilder(code.toString());
+        String baseMessage = code.toString();
+        StringBuilder builder = new StringBuilder(baseMessage);
         if (message != null) {
-            builder.append(" ").append(message);
+            if (message.startsWith(baseMessage)) {
+                builder.append(message.substring(baseMessage.length()));
+            } else {
+                builder.append(" ").append(message);
+            }
         }
         if (functionName != null) {
             builder.append(" ").append(FUNCTION_NAME).append("=").append(functionName);

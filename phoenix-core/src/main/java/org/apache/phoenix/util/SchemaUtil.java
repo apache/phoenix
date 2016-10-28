@@ -44,6 +44,7 @@ import javax.annotation.Nullable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -419,8 +420,16 @@ public class SchemaUtil {
     }
 
     public static String toString(PDataType type, byte[] value) {
+        return toString(type, value, 0, value.length);
+    }
+
+    public static String toString(PDataType type, ImmutableBytesWritable value) {
+        return toString(type, value.get(), value.getOffset(), value.getLength());
+    }
+
+    public static String toString(PDataType type, byte[] value, int offset, int length) {
         boolean isString = type.isCoercibleTo(PVarchar.INSTANCE);
-        return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value).toString();
+        return isString ? ("'" + type.toObject(value).toString() + "'") : type.toObject(value, offset, length).toString();
     }
 
     public static byte[] getEmptyColumnFamily(PName defaultColumnFamily, List<PColumnFamily> families) {

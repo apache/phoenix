@@ -747,14 +747,15 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
      * @param ptr bytes pointer for the value
      * @param value object representation of the value. May be null in which case ptr will be used
      * @param srcType the type of the value
+     * @param sortOrder the sort order of the value
      * @param maxLength the max length of the source value or null if not applicable
      * @param scale the scale of the source value or null if not applicable
      * @param desiredMaxLength the desired max length for the value to be coerced
      * @param desiredScale the desired scale for the value to be coerced 
      * @return true if the value may be coerced without losing precision and false otherwise.
      */
-    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, Integer maxLength,
-            Integer scale, Integer desiredMaxLength, Integer desiredScale) {
+    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, SortOrder sortOrder,
+            Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
         return true;
     }
 

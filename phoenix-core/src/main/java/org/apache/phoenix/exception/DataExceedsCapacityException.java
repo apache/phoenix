@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.exception;
 
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.SchemaUtil;
 
 
 public class DataExceedsCapacityException extends IllegalDataException {
@@ -29,12 +31,16 @@ public class DataExceedsCapacityException extends IllegalDataException {
                 SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setMessage(message).build().buildException());
     }
     
+    public DataExceedsCapacityException(PDataType type, Integer precision, Integer scale, String columnName, ImmutableBytesWritable value) {
+        super(new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY)
+            .setMessage((columnName == null ? "" : columnName + " ") + getTypeDisplayString(type, precision, scale, value))
+            .build().buildException());
+    }
     public DataExceedsCapacityException(PDataType type, Integer precision, Integer scale) {
-        super(new SQLExceptionInfo.Builder(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setMessage(getTypeDisplayString(type, precision, scale))
-                .build().buildException());
+        this(type, precision, scale, null, null);
     }
 
-    private static String getTypeDisplayString(PDataType type, Integer precision, Integer scale) {
-        return type.toString() + "(" + precision + (scale == null ? "" : ("," + scale + ")"));
+    private static String getTypeDisplayString(PDataType type, Integer precision, Integer scale, ImmutableBytesWritable value) {
+        return type.toString() + "(" + precision + (scale == null ? "" : ("," + scale)) + ")" + (value == null || value.getLength() == 0 ? "" : (" value="+SchemaUtil.toString(type, value)));
     }
 }
