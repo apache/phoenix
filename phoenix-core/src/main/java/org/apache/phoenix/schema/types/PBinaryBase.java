@@ -95,4 +95,21 @@ public abstract class PBinaryBase extends PDataType<byte[]> {
         PInteger.INSTANCE.getCodec().encodeInt(length, bytes, 0);
         outPtr.set(bytes);
     }
+
+    @Override
+    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
+        SortOrder sortOrder, Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
+        if (ptr.getLength() != 0 && desiredMaxLength != null) {
+            if (maxLength == null) { // If not specified, compute
+                if (value != null && srcType instanceof PBinaryBase) { // Use value if provided
+                    maxLength = ((byte[])value).length;
+                } else { // Else use ptr, coercing (which is likely a noop)
+                    this.coerceBytes(ptr, value, srcType, maxLength, scale, sortOrder, desiredMaxLength, desiredScale, sortOrder, true);
+                    maxLength = ptr.getLength();
+                }
+            }
+            return maxLength <= desiredMaxLength;
+        }
+        return true;
+    }
 }
