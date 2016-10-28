@@ -77,6 +77,27 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         PTable localIndex = conn1.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, indexTableName));
         assertEquals(IndexType.LOCAL, localIndex.getIndexType());
         assertNotNull(localIndex.getViewIndexId());
+        String tableName2 = "test_table" + generateUniqueName();
+        String indexName2 = "idx_test_table" + generateUniqueName();
+        String createTable =
+                "CREATE TABLE IF NOT EXISTS "
+                        + tableName2
+                        + " (user_time UNSIGNED_TIMESTAMP NOT NULL,user_id varchar NOT NULL,col1 varchar,col2 double,"
+                        + "CONSTRAINT pk PRIMARY KEY(user_time,user_id)) SALT_BUCKETS = 20";
+        conn1.createStatement().execute(createTable);
+        conn1.createStatement().execute(
+            "CREATE local INDEX IF NOT EXISTS " + indexName2 + " on " + tableName2
+                    + "(HOUR(user_time))");
+        conn1.createStatement().execute(
+            "upsert into " + tableName2 + " values(TO_TIME('2005-10-01 14:03:22.559'), 'foo')");
+        conn1.commit();
+        ResultSet rs =
+                conn1.createStatement()
+                        .executeQuery(
+                            "select substr(to_char(user_time), 0, 10) as ddate, hour(user_time) as hhour, user_id, col1,col2 from "
+                                    + tableName2
+                                    + " where hour(user_time)=14 group by user_id, col1, col2, ddate, hhour limit 1");
+        assertTrue(rs.next());
     }
 
     @Test
