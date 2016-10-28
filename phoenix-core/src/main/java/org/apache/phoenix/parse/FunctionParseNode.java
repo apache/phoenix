@@ -186,44 +186,51 @@ public class FunctionParseNode extends CompoundParseNode {
                     }
                 }
             } else {
-                if (allowedTypes.length > 0) {
-                    boolean isCoercible = false;
-                    for (Class<? extends PDataType> type : allowedTypes) {
-                        if (child.getDataType().isCoercibleTo(
-                            PDataTypeFactory.getInstance().instanceFromClass(type))) {
-                            isCoercible = true;
-                            break;
-                        }
-                    }
-                    if (!isCoercible) {
-                        throw new ArgumentTypeMismatchException(args[i].getAllowedTypes(),
-                            child.getDataType(), info.getName() + " argument " + (i + 1));
-                    }
-                    if (child instanceof LiteralExpression) {
-                        LiteralExpression valueExp = (LiteralExpression) child;
-                        LiteralExpression minValue = args[i].getMinValue();
-                        LiteralExpression maxValue = args[i].getMaxValue();
-                        if (minValue != null && minValue.getDataType().compareTo(minValue.getValue(), valueExp.getValue(), valueExp.getDataType()) > 0) {
-                            throw new ValueRangeExcpetion(minValue, maxValue == null ? "" : maxValue, valueExp.getValue(), info.getName() + " argument " + (i + 1));
-                        }
-                        if (maxValue != null && maxValue.getDataType().compareTo(maxValue.getValue(), valueExp.getValue(), valueExp.getDataType()) < 0) {
-                            throw new ValueRangeExcpetion(minValue == null ? "" : minValue, maxValue, valueExp.getValue(), info.getName() + " argument " + (i + 1));
-                        }
-                    }
-                }
-                if (args[i].isConstant() && ! (child instanceof LiteralExpression) ) {
-                    throw new ArgumentTypeMismatchException("constant", child.toString(), info.getName() + " argument " + (i + 1));
-                }
-                if (!args[i].getAllowedValues().isEmpty()) {
-                    Object value = ((LiteralExpression)child).getValue();
-                    if (!args[i].getAllowedValues().contains(value.toString().toUpperCase())) {
-                        throw new ArgumentTypeMismatchException(Arrays.toString(args[i].getAllowedValues().toArray(new String[0])),
-                                value.toString(), info.getName() + " argument " + (i + 1));
-                    }
-                }
+                validateFunctionArguement(info, i, child);
             }
         }
         return children;
+    }
+
+    public static void validateFunctionArguement(BuiltInFunctionInfo info,
+            int childIndex, Expression child)
+            throws ArgumentTypeMismatchException, ValueRangeExcpetion {
+        BuiltInFunctionArgInfo arg = info.getArgs()[childIndex];
+        if (arg.getAllowedTypes().length > 0) {
+            boolean isCoercible = false;
+            for (Class<? extends PDataType> type :arg.getAllowedTypes()) {
+                if (child.getDataType().isCoercibleTo(
+                    PDataTypeFactory.getInstance().instanceFromClass(type))) {
+                    isCoercible = true;
+                    break;
+                }
+            }
+            if (!isCoercible) {
+                throw new ArgumentTypeMismatchException(arg.getAllowedTypes(),
+                    child.getDataType(), info.getName() + " argument " + (childIndex + 1));
+            }
+            if (child instanceof LiteralExpression) {
+                LiteralExpression valueExp = (LiteralExpression) child;
+                LiteralExpression minValue = arg.getMinValue();
+                LiteralExpression maxValue = arg.getMaxValue();
+                if (minValue != null && minValue.getDataType().compareTo(minValue.getValue(), valueExp.getValue(), valueExp.getDataType()) > 0) {
+                    throw new ValueRangeExcpetion(minValue, maxValue == null ? "" : maxValue, valueExp.getValue(), info.getName() + " argument " + (childIndex + 1));
+                }
+                if (maxValue != null && maxValue.getDataType().compareTo(maxValue.getValue(), valueExp.getValue(), valueExp.getDataType()) < 0) {
+                    throw new ValueRangeExcpetion(minValue == null ? "" : minValue, maxValue, valueExp.getValue(), info.getName() + " argument " + (childIndex + 1));
+                }
+            }
+        }
+        if (arg.isConstant() && ! (child instanceof LiteralExpression) ) {
+            throw new ArgumentTypeMismatchException("constant", child.toString(), info.getName() + " argument " + (childIndex + 1));
+        }
+        if (!arg.getAllowedValues().isEmpty()) {
+            Object value = ((LiteralExpression)child).getValue();
+            if (!arg.getAllowedValues().contains(value.toString().toUpperCase())) {
+                throw new ArgumentTypeMismatchException(Arrays.toString(arg.getAllowedValues().toArray(new String[0])),
+                        value.toString(), info.getName() + " argument " + (childIndex + 1));
+            }
+        }
     }
 
     /**
