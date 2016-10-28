@@ -76,7 +76,9 @@ public class PhoenixStorageHandlerUtil {
         DateFormat df = null;
 
         for (int i = 0, limit = values.length; i < limit; i++) {
-            if (serdeConstants.STRING_TYPE_NAME.equals(typeName)) {
+            if (serdeConstants.STRING_TYPE_NAME.equals(typeName) ||
+                    typeName.startsWith(serdeConstants.CHAR_TYPE_NAME) ||
+                    typeName.startsWith(serdeConstants.VARCHAR_TYPE_NAME)) {
                 results[i] = values[i];
             } else if (serdeConstants.INT_TYPE_NAME.equals(typeName)) {
                 results[i] = new Integer(values[i]);
