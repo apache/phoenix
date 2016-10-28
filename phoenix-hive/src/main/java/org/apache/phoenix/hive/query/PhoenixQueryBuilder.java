@@ -19,7 +19,9 @@ package org.apache.phoenix.hive.query;
 
 import com.google.common.base.CharMatcher;
 import com.google.common.base.Joiner;
+import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
@@ -31,12 +33,9 @@ import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
 import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.hive.util.PhoenixUtil;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -662,17 +661,17 @@ public class PhoenixQueryBuilder {
                     comparisonOp);
 
             if (comparisonOp.endsWith("UDFOPEqual")) {        // column = 1
-                appendCondition(sql, " = ", typeName, constantValues[0]);
+                sql.append(" = ").append(createConstantString(typeName, constantValues[0]));
             } else if (comparisonOp.endsWith("UDFOPEqualOrGreaterThan")) {    // column >= 1
-                appendCondition(sql, " >= ", typeName, constantValues[0]);
+                sql.append(" >= ").append(createConstantString(typeName, constantValues[0]));
             } else if (comparisonOp.endsWith("UDFOPGreaterThan")) {        // column > 1
-                appendCondition(sql, " > ", typeName, constantValues[0]);
+                sql.append(" > ").append(createConstantString(typeName, constantValues[0]));
             } else if (comparisonOp.endsWith("UDFOPEqualOrLessThan")) {    // column <= 1
-                appendCondition(sql, " <= ", typeName, constantValues[0]);
+                sql.append(" <= ").append(createConstantString(typeName, constantValues[0]));
             } else if (comparisonOp.endsWith("UDFOPLessThan")) {    // column < 1
-                appendCondition(sql, " < ", typeName, constantValues[0]);
+                sql.append(" < ").append(createConstantString(typeName, constantValues[0]));
             } else if (comparisonOp.endsWith("UDFOPNotEqual")) {    // column != 1
-                appendCondition(sql, " != ", typeName, constantValues[0]);
+                sql.append(" != ").append(createConstantString(typeName, constantValues[0]));
             } else if (comparisonOp.endsWith("GenericUDFBetween")) {
                 appendBetweenCondition(jobConf, sql, condition.isNot(), typeName, constantValues);
             } else if (comparisonOp.endsWith("GenericUDFIn")) {
@@ -687,44 +686,16 @@ public class PhoenixQueryBuilder {
         return conditionColumnList;
     }
 
-    protected void appendCondition(StringBuilder sql, String comparisonOp, String typeName,
-                                   String conditionValue) {
-        if (serdeConstants.STRING_TYPE_NAME.equals(typeName)) {
-            sql.append(comparisonOp).append("'").append(conditionValue).append("'");
-        } else if (serdeConstants.DATE_TYPE_NAME.equals(typeName)) {
-            sql.append(comparisonOp).append("to_date('").append(conditionValue).append("')");
-        } else if (serdeConstants.TIMESTAMP_TYPE_NAME.equals(typeName)) {
-            sql.append(comparisonOp).append("to_timestamp('").append(conditionValue).append("')");
-        } else {
-            sql.append(comparisonOp).append(conditionValue);
-        }
-    }
-
     protected void appendBetweenCondition(JobConf jobConf, StringBuilder sql, boolean isNot,
                                           String typeName, String[] conditionValues) throws
             IOException {
-        if (isNot) {
-            sql.append(" not between ");
-        } else {
-            sql.append(" between ");
-        }
-
         try {
-            Arrays.sort(PhoenixStorageHandlerUtil.toTypedValues(jobConf, typeName,
-                    conditionValues));
+            Object[] typedValues = PhoenixStorageHandlerUtil.toTypedValues(jobConf, typeName, conditionValues);
+            Arrays.sort(typedValues);
 
-            if (serdeConstants.STRING_TYPE_NAME.equals(typeName)) {
-                sql.append("'").append(conditionValues[0]).append("'").append(" and ").append
-                        ("'").append(conditionValues[1]).append("'");
-            } else if (serdeConstants.DATE_TYPE_NAME.equals(typeName)) {
-                sql.append("to_date('").append(conditionValues[0]).append("')").append(" and ")
-                        .append("to_date('").append(conditionValues[1]).append("')");
-            } else if (serdeConstants.TIMESTAMP_TYPE_NAME.equals(typeName)) {
-                sql.append("to_timestamp('").append(conditionValues[0]).append("')").append(" and" +
-                        " ").append("to_timestamp('").append(conditionValues[1]).append("')");
-            } else {
-                sql.append(conditionValues[0]).append(" and ").append(conditionValues[1]);
-            }
+            appendIfNot(isNot, sql).append(" between ")
+                    .append(Joiner.on(" and ").join(createConstantString(typeName, typedValues[0]),
+                    createConstantString(typeName, typedValues[1])));
         } catch (Exception e) {
             throw new IOException(e);
         }
@@ -732,29 +703,63 @@ public class PhoenixQueryBuilder {
 
     protected void appendInCondition(StringBuilder sql, boolean isNot, String typeName, String[]
             conditionValues) {
-        if (isNot) {
-            sql.append(" not in (");
-        } else {
-            sql.append(" in (");
-        }
-
+        List<Object> wrappedConstants = Lists.newArrayListWithCapacity(conditionValues.length);
         for (String conditionValue : conditionValues) {
-            if (serdeConstants.STRING_TYPE_NAME.equals(typeName)) {
-                sql.append("'").append(conditionValue).append("'");
-            } else if (serdeConstants.DATE_TYPE_NAME.equals(typeName)) {
-                sql.append("to_date('").append(conditionValue).append("')");
-            } else if (serdeConstants.TIMESTAMP_TYPE_NAME.equals(typeName)) {
-                sql.append("to_timestamp('").append(conditionValue).append("')");
-            } else {
-                sql.append(conditionValue);
-            }
-
-            sql.append(", ");
+            wrappedConstants.add(createConstantString(typeName, conditionValue));
         }
 
-        sql.delete(sql.length() - 2, sql.length());
-
-        sql.append(")");
+        appendIfNot(isNot, sql)
+                .append(" in (")
+                .append(Joiner.on(", ").join(wrappedConstants))
+                .append(")");
     }
 
+    private StringBuilder appendIfNot(boolean isNot, StringBuilder sb) {
+        return isNot ? sb.append(" not") : sb;
+    }
+
+    private static class ConstantStringWrapper {
+        private List<String> types;
+        private String prefix;
+        private String postfix;
+
+        ConstantStringWrapper(String type, String prefix, String postfix) {
+            this(Lists.newArrayList(type), prefix, postfix);
+        }
+
+        ConstantStringWrapper(List<String> types, String prefix, String postfix) {
+            this.types = types;
+            this.prefix = prefix;
+            this.postfix = postfix;
+        }
+
+        public Object apply(final String typeName, Object value) {
+            return Iterables.any(types, new Predicate<String>() {
+
+                @Override
+                public boolean apply(@Nullable String type) {
+                    return typeName.startsWith(type);
+                }
+            }) ? prefix + value + postfix : value;
+        }
+    }
+
+    private static final String SINGLE_QUOTATION = "'";
+    private static List<ConstantStringWrapper> WRAPPERS = Lists.newArrayList(
+            new ConstantStringWrapper(Lists.newArrayList(
+                    serdeConstants.STRING_TYPE_NAME, serdeConstants.CHAR_TYPE_NAME,
+                    serdeConstants.VARCHAR_TYPE_NAME, serdeConstants.DATE_TYPE_NAME,
+                    serdeConstants.TIMESTAMP_TYPE_NAME
+            ), SINGLE_QUOTATION, SINGLE_QUOTATION),
+            new ConstantStringWrapper(serdeConstants.DATE_TYPE_NAME, "to_date(", ")"),
+            new ConstantStringWrapper(serdeConstants.TIMESTAMP_TYPE_NAME, "to_timestamp(", ")")
+    );
+
+    private Object createConstantString(String typeName, Object value) {
+        for (ConstantStringWrapper wrapper : WRAPPERS) {
+            value = wrapper.apply(typeName, value);
+        }
+
+        return value;
+    }
 }
