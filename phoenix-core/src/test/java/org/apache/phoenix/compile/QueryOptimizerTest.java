@@ -641,8 +641,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = stmt.getConnection();
         QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
         
-        List<Pair<String, String>> columns = new ArrayList<Pair<String, String>>();
-        PhoenixRuntime.getPkColsForSql(columns, plan, conn, true);
+        List<Pair<String, String>> columns = PhoenixRuntime.getPkColsForSql(conn, plan);
         assertEquals(expectedPkCols, Joiner.on(",").join(getColumnNames(columns)));
         List<String> dataTypes = new ArrayList<String>();
         columns = new ArrayList<Pair<String,String>>();
