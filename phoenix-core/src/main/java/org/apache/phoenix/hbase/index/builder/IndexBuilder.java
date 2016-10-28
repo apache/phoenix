@@ -19,11 +19,13 @@ package org.apache.phoenix.hbase.index.builder;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -65,19 +67,10 @@ public interface IndexBuilder extends Stoppable {
    * Implementers must ensure that this method is thread-safe - it could (and probably will) be
    * called concurrently for different mutations, which may or may not be part of the same batch.
    * @param mutation update to the primary table to be indexed.
- * @param context TODO
+   * @param context index meta data for the mutation
    * @return a Map of the mutations to make -> target index table name
    * @throws IOException on failure
    */
-  /* TODO:
-  Create BaseIndexBuilder with everything except getIndexUpdate(). 
-  Derive two concrete classes: NonTxIndexBuilder and TxIndexBuilder.
-  NonTxIndexBuilder will be current impl of this method.
-  TxIndexBuilder will use a scan with skipScan over TxAwareHBase to find the latest values.
-  Conditionally don't do WALEdit stuff for txnal table (ensure Phoenix/HBase tolerates index WAl edit info not being there)
-  Noop Failure mode
-  */
-  
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(Mutation mutation, IndexMetaData context) throws IOException;
 
     /**
@@ -139,4 +132,20 @@ public interface IndexBuilder extends Stoppable {
  * @throws IOException 
    */
   public boolean isEnabled(Mutation m) throws IOException;
+  
+  /**
+   * True if mutation has an ON DUPLICATE KEY clause
+   * @param m mutation
+   * @return true if mutation has ON DUPLICATE KEY expression and false otherwise.
+   * @throws IOException
+   */
+  public boolean isAtomicOp(Mutation m) throws IOException;
+
+  /**
+   * Calculate the mutations based on the ON DUPLICATE KEY clause
+   * @param inc increment to run against
+   * @return list of mutations as a result of executing the ON DUPLICATE KEY clause
+   * or null if Increment does not represent an ON DUPLICATE KEY clause.
+   */
+  public List<Mutation> executeAtomicOp(Increment inc) throws IOException;
 }

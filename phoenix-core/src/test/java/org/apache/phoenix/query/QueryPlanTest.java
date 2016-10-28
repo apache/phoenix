@@ -36,9 +36,9 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
     public void testExplainPlan() throws Exception {
         String[] queryPlans = new String[] {
 
-                "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND date >= to_date('2013-01-01')",
+                "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND \"DATE\" >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND DATE >= DATE '2013-01-01 00:00:00.000'",
+                "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000001','000000000000005') ",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000005'] - ['000000000000001','000000000000008']",
@@ -51,14 +51,14 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "CLIENT PARALLEL 1-WAY SMALL SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
 
-                "SELECT inst,date FROM PTSDB2 WHERE inst = 'na1' ORDER BY inst DESC, date DESC",
+                "SELECT inst,\"DATE\" FROM PTSDB2 WHERE inst = 'na1' ORDER BY inst DESC, \"DATE\" DESC",
                 "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER PTSDB2 ['na1']\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY",
 
                 // Since inst IS NOT NULL is unbounded, we won't continue optimizing
-                "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL AND date >= to_date('2013-01-01')",
+                "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL AND \"DATE\" >= to_date('2013-01-01')",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [not null]\n" + 
-                "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND DATE >= DATE '2013-01-01 00:00:00.000')",
+                "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id = '000000000000002' AND x_integer = 2 AND a_integer < 5 ",
                 "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER ATABLE\n" + 
@@ -77,11 +77,11 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT * FROM atable",
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE",
 
-                "SELECT inst,host FROM PTSDB WHERE inst IN ('na1', 'na2','na3') AND host IN ('a','b') AND date >= to_date('2013-01-01') AND date < to_date('2013-01-02')",
+                "SELECT inst,host FROM PTSDB WHERE inst IN ('na1', 'na2','na3') AND host IN ('a','b') AND \"DATE\" >= to_date('2013-01-01') AND \"DATE\" < to_date('2013-01-02')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 6 RANGES OVER PTSDB ['na1','a','2013-01-01'] - ['na3','b','2013-01-02']\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
 
-                "SELECT inst,host FROM PTSDB WHERE inst LIKE 'na%' AND host IN ('a','b') AND date >= to_date('2013-01-01') AND date < to_date('2013-01-02')",
+                "SELECT inst,host FROM PTSDB WHERE inst LIKE 'na%' AND host IN ('a','b') AND \"DATE\" >= to_date('2013-01-01') AND \"DATE\" < to_date('2013-01-02')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 RANGES OVER PTSDB ['na','a','2013-01-01'] - ['nb','b','2013-01-02']\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
 
@@ -112,7 +112,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT a_string FROM atable ORDER BY a_string DESC LIMIT 3",
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE\n" + 
                 "    SERVER TOP 3 ROWS SORTED BY [A_STRING DESC]\n" + 
-                "CLIENT MERGE SORT",
+                "CLIENT MERGE SORT\n" +
+                "CLIENT LIMIT 3" ,
 
                 "SELECT count(1) FROM atable GROUP BY a_string,b_string HAVING max(a_string) = 'a'",
                 "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE\n" +
@@ -144,7 +145,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' ORDER BY a_string ASC NULLS FIRST LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
                 "    SERVER TOP 10 ROWS SORTED BY [A_STRING]\n" + 
-                "CLIENT MERGE SORT",
+                "CLIENT MERGE SORT\n" +
+                "CLIENT LIMIT 10",
 
                 "SELECT max(a_integer) FROM atable WHERE organization_id = '000000000000001' GROUP BY organization_id,entity_id,ROUND(a_date,'HOUR') ORDER BY entity_id NULLS LAST LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
@@ -155,7 +157,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
                 "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' ORDER BY a_string DESC NULLS LAST LIMIT 10",
                 "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001']\n" + 
                 "    SERVER TOP 10 ROWS SORTED BY [A_STRING DESC NULLS LAST]\n" + 
-                "CLIENT MERGE SORT",
+                "CLIENT MERGE SORT\n" +
+                "CLIENT LIMIT 10",
 
                 "SELECT a_string,b_string FROM atable WHERE organization_id IN ('000000000000001', '000000000000005')",
                 "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 KEYS OVER ATABLE ['000000000000001'] - ['000000000000005']",

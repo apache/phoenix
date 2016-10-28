@@ -111,11 +111,15 @@ public class TableMapping {
         return extendedTableRef != null;
     }
     
-    public ColumnExpression newColumnExpression(int index) {
+    public Expression newColumnExpression(int index) {
         ColumnRef colRef = new ColumnRef(
                 index < extendedColumnsOffset ? tableRef : extendedTableRef,
                 this.mappedColumns.get(index).getPosition());
-        return colRef.newColumnExpression();
+        try {
+            return colRef.newColumnExpression();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
     
     public ImmutableBitSet getDefaultExtendedColumnRef() {

@@ -348,7 +348,7 @@ public class UpgradeUtil {
                     HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
                     String localIndexSplitter = LocalIndexSplitter.class.getName();
                     for (HTableDescriptor table : localIndexTables) {
-                        HTableDescriptor dataTableDesc = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getUserTableName(table.getNameAsString())));
+                        HTableDescriptor dataTableDesc = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getNameAsString())));
                         HColumnDescriptor[] columnFamilies = dataTableDesc.getColumnFamilies();
                         boolean modifyTable = false;
                         for(HColumnDescriptor cf : columnFamilies) {

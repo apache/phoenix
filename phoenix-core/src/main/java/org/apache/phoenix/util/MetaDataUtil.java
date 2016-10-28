@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -214,7 +215,7 @@ public class MetaDataUtil {
     }
 
     public static long getSequenceNumber(List<Mutation> tableMetaData) {
-        return getSequenceNumber(getTableHeaderRow(tableMetaData));
+        return getSequenceNumber(getPutOnlyTableHeaderRow(tableMetaData));
     }
     
     public static PTableType getTableType(List<Mutation> tableMetaData, KeyValueBuilder builder,
@@ -366,7 +367,7 @@ public class MetaDataUtil {
         return schemaName;
     }  
 
-    public static String getUserTableName(String localIndexTableName) {
+    public static String getLocalIndexUserTableName(String localIndexTableName) {
         if (localIndexTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(localIndexTableName,
                     QueryConstants.NAMESPACE_SEPARATOR);
@@ -380,6 +381,24 @@ public class MetaDataUtil {
             String tableName = localIndexTableName.substring(
                     (schemaName.isEmpty() ? 0 : (schemaName.length() + QueryConstants.NAME_SEPARATOR.length()))
                             + LOCAL_INDEX_TABLE_PREFIX.length());
+            return SchemaUtil.getTableName(schemaName, tableName);
+        }
+    }
+
+    public static String getViewIndexUserTableName(String viewIndexTableName) {
+        if (viewIndexTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(viewIndexTableName,
+                    QueryConstants.NAMESPACE_SEPARATOR);
+            String tableName = SchemaUtil.getTableNameFromFullName(viewIndexTableName,
+                    QueryConstants.NAMESPACE_SEPARATOR);
+            String userTableName = tableName.substring(VIEW_INDEX_TABLE_PREFIX.length());
+            return (schemaName + QueryConstants.NAMESPACE_SEPARATOR + userTableName);
+        } else {
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(viewIndexTableName);
+            if (!schemaName.isEmpty()) schemaName = schemaName.substring(VIEW_INDEX_TABLE_PREFIX.length());
+            String tableName = viewIndexTableName.substring(
+                    (schemaName.isEmpty() ? 0 : (schemaName.length() + QueryConstants.NAME_SEPARATOR.length()))
+                            + VIEW_INDEX_TABLE_PREFIX.length());
             return SchemaUtil.getTableName(schemaName, tableName);
         }
     }
@@ -459,6 +478,18 @@ public class MetaDataUtil {
             }
         }
     	return families;
+    }
+
+    public static List<byte[]> getLocalIndexColumnFamilies(PhoenixConnection conn, byte[] physicalTableName) throws SQLException {
+        HTableDescriptor desc = conn.getQueryServices().getTableDescriptor(physicalTableName);
+        if(desc == null ) return Collections.emptyList();
+        List<byte[]> families = new ArrayList<byte[]>(desc.getColumnFamilies().length / 2);
+        for (HColumnDescriptor cf : desc.getColumnFamilies()) {
+            if (cf.getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+                families.add(cf.getName());
+            }
+        }
+        return families;
     }
 
     public static void deleteViewIndexSequences(PhoenixConnection connection, PName name, boolean isNamespaceMapped)
@@ -602,5 +633,14 @@ public class MetaDataUtil {
 
     public static boolean isHTableProperty(String propName) {
         return !isHColumnProperty(propName) && !TableProperty.isPhoenixTableProperty(propName);
+    }
+
+    public static boolean isLocalIndexFamily(ImmutableBytesPtr cfPtr) {
+        return cfPtr.getLength() >= QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES.length &&
+               Bytes.compareTo(cfPtr.get(), cfPtr.getOffset(), QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES.length, QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES, 0, QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES.length) == 0;
+    }
+    
+    public static boolean isLocalIndexFamily(byte[] cf) {
+        return Bytes.startsWith(cf, QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES);
     }
 }

@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.Iterator;
@@ -46,6 +47,7 @@ import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
@@ -77,7 +79,7 @@ public class CreateTableCompiler {
         this.operation = operation;
     }
 
-    public MutationPlan compile(final CreateTableStatement create) throws SQLException {
+    public MutationPlan compile(CreateTableStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
         ColumnResolver resolver = FromCompiler.getResolverForCreation(create, connection);
         PTableType type = create.getTableType();
@@ -93,13 +95,29 @@ public class CreateTableCompiler {
         BitSet isViewColumnReferencedToBe = null;
         // Check whether column families having local index column family suffix or not if present
         // don't allow creating table.
-        for(ColumnDef columnDef: create.getColumnDefs()) {
+        // Also validate the default values expressions.
+        List<ColumnDef> columnDefs = create.getColumnDefs();
+        List<ColumnDef> overideColumnDefs = null;
+        PrimaryKeyConstraint pkConstraint = create.getPrimaryKeyConstraint();
+        for (int i = 0; i < columnDefs.size(); i++) {
+            ColumnDef columnDef = columnDefs.get(i);
             if(columnDef.getColumnDefName().getFamilyName()!=null && columnDef.getColumnDefName().getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY)
-                .build().buildException();
+                        .build().buildException();
+            }
+            // False means we do not need the default (because it evaluated to null)
+            if (!columnDef.validateDefault(context, pkConstraint)) {
+                if (overideColumnDefs == null) {
+                    overideColumnDefs = new ArrayList<>(columnDefs);
+                }
+                overideColumnDefs.set(i, new ColumnDef(columnDef, null));
             }
         }
-
+        if (overideColumnDefs != null) {
+            create = new CreateTableStatement (create,overideColumnDefs);
+        }
+        final CreateTableStatement finalCreate = create;
+        
         if (type == PTableType.VIEW) {
             TableRef tableRef = resolver.getTables().get(0);
             int nColumns = tableRef.getTable().getColumns().size();
@@ -190,7 +208,7 @@ public class CreateTableCompiler {
             @Override
             public MutationState execute() throws SQLException {
                 try {
-                    return client.createTable(create, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced);
+                    return client.createTable(finalCreate, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced);
                 } finally {
                     if (client.getConnection() != connection) {
                         client.getConnection().close();

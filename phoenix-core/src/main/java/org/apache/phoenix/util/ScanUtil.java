@@ -895,4 +895,8 @@ public class ScanUtil {
         return true;
     }
 
+    public static boolean isIndexRebuild(Scan scan) {
+        return scan.getAttribute((BaseScannerRegionObserver.REBUILD_INDEXES)) != null;
+    }
+
 }

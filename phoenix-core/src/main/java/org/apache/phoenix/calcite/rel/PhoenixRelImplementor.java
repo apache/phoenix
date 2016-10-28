@@ -10,7 +10,6 @@ import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.schema.types.PDataType;
@@ -19,7 +18,7 @@ import org.apache.phoenix.schema.types.PDataType;
  * to convert it to an executable plan. */
 public interface PhoenixRelImplementor {
     QueryPlan visitInput(int i, PhoenixQueryRel input);
-    ColumnExpression newColumnExpression(int index);
+    Expression newColumnExpression(int index);
     @SuppressWarnings("rawtypes")
     Expression newBindParameterExpression(int index, PDataType type, Integer maxLength);
     @SuppressWarnings("rawtypes")

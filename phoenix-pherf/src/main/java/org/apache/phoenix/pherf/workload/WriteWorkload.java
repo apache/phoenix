@@ -52,6 +52,9 @@ import org.slf4j.LoggerFactory;
 
 public class WriteWorkload implements Workload {
     private static final Logger logger = LoggerFactory.getLogger(WriteWorkload.class);
+
+    public static final String USE_BATCH_API_PROPERTY = "pherf.default.dataloader.batchApi";
+
     private final PhoenixUtil pUtil;
     private final XMLConfigParser parser;
     private final RulesApplier rulesApplier;
@@ -64,6 +67,7 @@ public class WriteWorkload implements Workload {
     private final int threadPoolSize;
     private final int batchSize;
     private final GeneratePhoenixStats generateStatistics;
+    private final boolean useBatchApi;
 
     public WriteWorkload(XMLConfigParser parser) throws Exception {
         this(PhoenixUtil.create(), parser, GeneratePhoenixStats.NO);
@@ -118,6 +122,9 @@ public class WriteWorkload implements Workload {
         }
 
         int size = Integer.parseInt(properties.getProperty("pherf.default.dataloader.threadpool"));
+
+        // Should addBatch/executeBatch be used? Default: false
+        this.useBatchApi = Boolean.getBoolean(USE_BATCH_API_PROPERTY);
 
         this.threadPoolSize = (size == 0) ? Runtime.getRuntime().availableProcessors() : size;
 
@@ -201,7 +208,7 @@ public class WriteWorkload implements Workload {
             Future<Info>
                     write =
                     upsertData(scenario, phxMetaCols, scenario.getTableName(), threadRowCount,
-                            dataLoadThreadTime);
+                            dataLoadThreadTime, this.useBatchApi);
             writeBatches.add(write);
         }
         if (writeBatches.isEmpty()) {
@@ -234,7 +241,7 @@ public class WriteWorkload implements Workload {
 
     public Future<Info> upsertData(final Scenario scenario, final List<Column> columns,
             final String tableName, final int rowCount,
-            final DataLoadThreadTime dataLoadThreadTime) {
+            final DataLoadThreadTime dataLoadThreadTime, final boolean useBatchApi) {
         Future<Info> future = pool.submit(new Callable<Info>() {
             @Override public Info call() throws Exception {
                 int rowsCreated = 0;
@@ -257,8 +264,25 @@ public class WriteWorkload implements Workload {
                     for (long i = rowCount; (i > 0) && ((System.currentTimeMillis() - logStartTime)
                             < maxDuration); i--) {
                         stmt = buildStatement(scenario, columns, stmt, simpleDateFormat);
-                        rowsCreated += stmt.executeUpdate();
+                        if (useBatchApi) {
+                            stmt.addBatch();
+                        } else {
+                            rowsCreated += stmt.executeUpdate();
+                        }
                         if ((i % getBatchSize()) == 0) {
+                            if (useBatchApi) {
+                                int[] results = stmt.executeBatch();
+                                for (int x = 0; x < results.length; x++) {
+                                    int result = results[x];
+                                    if (result < 1) {
+                                        final String msg =
+                                            "Failed to write update in batch (update count="
+                                                + result + ")";
+                                        throw new RuntimeException(msg);
+                                    }
+                                    rowsCreated += result;
+                                }
+                            }
                             connection.commit();
                             duration = System.currentTimeMillis() - last;
                             logger.info("Writer (" + Thread.currentThread().getName()
@@ -280,10 +304,27 @@ public class WriteWorkload implements Workload {
                         }
                     }
                 } finally {
-                    if (stmt != null) {
+                    // Need to keep the statement open to send the remaining batch of updates
+                    if (!useBatchApi && stmt != null) {
                       stmt.close();
                     }
                     if (connection != null) {
+                        if (useBatchApi && stmt != null) {
+                            int[] results = stmt.executeBatch();
+                            for (int x = 0; x < results.length; x++) {
+                                int result = results[x];
+                                if (result < 1) {
+                                    final String msg =
+                                        "Failed to write update in batch (update count="
+                                            + result + ")";
+                                    throw new RuntimeException(msg);
+                                }
+                                rowsCreated += result;
+                            }
+                            // Close the statement after our last batch execution.
+                            stmt.close();
+                        }
+
                         try {
                             connection.commit();
                             duration = System.currentTimeMillis() - start;

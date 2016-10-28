@@ -29,6 +29,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -53,6 +54,7 @@ import java.util.Properties;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -106,11 +108,12 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
@@ -397,6 +400,12 @@ public class TestUtil {
         assertEquals(null,scan.getFilter());
     }
 
+    public static void assertNotDegenerate(Scan scan) {
+        assertFalse(
+                Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStartRow()) == 0 &&
+                Bytes.compareTo(KeyRange.EMPTY_RANGE.getLowerRange(), scan.getStopRow()) == 0);
+    }
+
     public static void assertEmptyScanKey(Scan scan) {
         assertNull(scan.getFilter());
         assertArrayEquals(ByteUtil.EMPTY_BYTE_ARRAY, scan.getStartRow());
@@ -597,9 +606,9 @@ public class TestUtil {
         pstmt.execute();
         TableRef tableRef = pstmt.getQueryPlan().getTableRef();
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        long scn = null == pconn.getSCN() ? Long.MAX_VALUE : pconn.getSCN();
-        PTableStats tableStats = pconn.getQueryServices().getTableStats(tableRef.getTable().getName().getBytes(), scn);
-        return tableStats.getGuidePosts().values();
+        PTable table = tableRef.getTable();
+        GuidePostsInfo info = pconn.getQueryServices().getTableStats(new GuidePostsKey(table.getName().getBytes(), SchemaUtil.getEmptyColumnFamily(table)));
+        return Collections.singletonList(info);
     }
 
     public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
@@ -795,5 +804,23 @@ public class TestUtil {
     public static void createTransactionalTable(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("create table " + tableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true");
     }
+
+    public static void dumpTable(HTableInterface table) throws IOException {
+        System.out.println("************ dumping " + table + " **************");
+        Scan s = new Scan();
+        try (ResultScanner scanner = table.getScanner(s)) {
+            Result result = null;
+            while ((result = scanner.next()) != null) {
+                CellScanner cellScanner = result.cellScanner();
+                Cell current = null;
+                while (cellScanner.advance()) {
+                    current = cellScanner.current();
+                    System.out.println(current);
+                }
+            }
+        }
+        System.out.println("-----------------------------------------------");
+    }
+
 }
 

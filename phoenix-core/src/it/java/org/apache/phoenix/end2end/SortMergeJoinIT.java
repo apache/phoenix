@@ -582,19 +582,19 @@ public class SortMergeJoinIT extends BaseJoinIT {
         String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
         String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         String[] query = new String[5];
-        query[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o JOIN " 
+        query[0] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o JOIN "
             + tableName3 + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
             + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
-        query[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o, " 
+        query[1] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o, "
                 + tableName3 + " c, " 
                 + tableName1 + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
-        query[2] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o JOIN " 
+        query[2] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o JOIN "
                 + tableName3 + " c ON o.\"customer_id\" = c.\"customer_id\" JOIN " 
                 + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\"";
-        query[3] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM (" + tableName4 + " o, " 
+        query[3] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM (" + tableName4 + " o, "
                 + tableName3 + " c), " 
                 + tableName1 + " i WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
-        query[4] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o, (" 
+        query[4] = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, i.name iname, quantity, o.\"DATE\" FROM " + tableName4 + " o, ("
                 + tableName3 + " c, " 
                 + tableName1 + " i) WHERE o.\"item_id\" = i.\"item_id\" AND o.\"customer_id\" = c.\"customer_id\" ORDER BY \"order_id\"";
         try {
@@ -794,10 +794,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
         String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
         String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
-        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN " 
+        String query1 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN "
                 + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
                 + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN " 
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN "
                 + "(" + tableName1 + " i RIGHT JOIN " + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
@@ -900,10 +900,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
         String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
         String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
-        String query1 = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName1 + " i RIGHT JOIN " 
+        String query1 = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName1 + " i RIGHT JOIN "
                 + tableName4 + " o ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
                 + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\"";
-        String query2 = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o RIGHT JOIN " 
+        String query2 = "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o RIGHT JOIN "
                 + "(" + tableName1 + " i LEFT JOIN " + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\")" 
                 + " ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
@@ -1007,10 +1007,10 @@ public class SortMergeJoinIT extends BaseJoinIT {
         String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
         String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
         String[] queries = {
-                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN " 
+                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN "
                         + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
                         + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\"",
-                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN " 
+                "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o LEFT JOIN "
                         + "(" + tableName1 + " i LEFT JOIN " + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\") " 
                         + "ON o.\"item_id\" = i.\"item_id\" ORDER BY \"order_id\""};
         try {
@@ -1062,7 +1062,7 @@ public class SortMergeJoinIT extends BaseJoinIT {
         String tableName1 = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
         String tableName2 = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
         String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o RIGHT JOIN " 
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " + tableName4 + " o RIGHT JOIN "
             + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
             + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\" ORDER BY \"order_id\", s.\"supplier_id\" DESC";
         try {
@@ -1529,7 +1529,7 @@ public class SortMergeJoinIT extends BaseJoinIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName3 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
         String tableName4 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
-        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, o.\"DATE\" FROM " + tableName4 + " o INNER JOIN " 
+        String query = "SELECT /*+ USE_SORT_MERGE_JOIN*/ \"order_id\", c.name, o.\"DATE\" FROM " + tableName4 + " o INNER JOIN "
             + tableName3 + " c ON o.\"customer_id\" = c.\"customer_id\" AND o.\"DATE\" = c.\"DATE\" ORDER BY \"order_id\"";
         try {
             PreparedStatement statement = conn.prepareStatement(query);
@@ -1754,11 +1754,11 @@ public class SortMergeJoinIT extends BaseJoinIT {
                     + "    item_name varchar not null, " 
                     + "    supplier_name varchar, "
                     + "    quantity integer, "
-                    + "    \"DATE\" timestamp " 
+                    + "    \"DATE\" timestamp "
                     + "    CONSTRAINT pk PRIMARY KEY (\"order_id\", item_name))");
-            conn.createStatement().execute("UPSERT /*+ USE_SORT_MERGE_JOIN*/ INTO " + tempTable 
-                    + "(\"order_id\", item_name, supplier_name, quantity, \"DATE\") " 
-                    + "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM " 
+            conn.createStatement().execute("UPSERT /*+ USE_SORT_MERGE_JOIN*/ INTO " + tempTable
+                    + "(\"order_id\", item_name, supplier_name, quantity, \"DATE\") "
+                    + "SELECT \"order_id\", i.name, s.name, quantity, \"DATE\" FROM "
                     + tableName4 + " o LEFT JOIN " 
                     + tableName1 + " i ON o.\"item_id\" = i.\"item_id\" LEFT JOIN "
                     + tableName2 + " s ON i.\"supplier_id\" = s.\"supplier_id\"");
@@ -2227,9 +2227,9 @@ public class SortMergeJoinIT extends BaseJoinIT {
                 + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iid, s.name sname, i.name iname FROM (SELECT \"supplier_id\" sid, name FROM " + tableName2 + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, \"supplier_id\" sid FROM " + tableName1 + ") AS i ON i.sid = s.sid) AS q" 
                 + " ON o.iid = q.iid LEFT JOIN (SELECT \"customer_id\" cid, name FROM " 
                 + tableName3 + ") AS c ON c.cid = o.cid GROUP BY q.iname ORDER BY q.iname";
-        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, \"DATE\" FROM " + tableName3 + ") AS c INNER JOIN " 
-                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.\"DATE\" odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, \"DATE\" FROM " + tableName4 + ") AS o INNER JOIN " 
-                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + tableName2 + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + tableName1 + ") AS i ON i.sid = s.sid) as qi" 
+        String query2 = "SELECT /*+ USE_SORT_MERGE_JOIN*/ * FROM (SELECT \"customer_id\" cid, name, phone, address, loc_id, \"DATE\" FROM " + tableName3 + ") AS c INNER JOIN "
+                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.\"DATE\" odate, qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1, qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription, qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress, qi.sloc_id sloc_id FROM (SELECT \"item_id\" iid, \"customer_id\" cid, \"order_id\" oid, price, quantity, \"DATE\" FROM " + tableName4 + ") AS o INNER JOIN "
+                + "(SELECT /*+ USE_SORT_MERGE_JOIN*/ i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1, i.discount2 idiscount2, i.sid isid, i.description idescription, s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id FROM (SELECT \"supplier_id\" sid, name, phone, address, loc_id FROM " + tableName2 + ") AS s RIGHT JOIN (SELECT \"item_id\" iid, name, price, discount1, discount2, \"supplier_id\" sid, description FROM " + tableName1 + ") AS i ON i.sid = s.sid) as qi"
                 + " ON o.iid = qi.iiid) as qo ON c.cid = qo.ocid" 
                 + " WHERE c.cid <= '0000000005' AND qo.ooid != '000000000000003' AND qo.iname != 'T3' ORDER BY c.cid, qo.iname";
         try {

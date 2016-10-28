@@ -29,27 +29,28 @@ import org.apache.phoenix.query.QueryServices;
 public class StatisticsCollectorFactory {
 
     public static StatisticsCollector createStatisticsCollector(RegionCoprocessorEnvironment env,
-            String tableName, long clientTimestamp, byte[] guidepostWidthBytes,
+            String tableName, long clientTimeStamp, byte[] guidepostWidthBytes,
             byte[] guidepostsPerRegionBytes) throws IOException {
-        if (statisticsEnabled(env)) {
-            return new DefaultStatisticsCollector(env, tableName, clientTimestamp, null,
-                    guidepostWidthBytes, guidepostsPerRegionBytes);
-        } else {
-            return new NoOpStatisticsCollector();
-        }
+        return createStatisticsCollector(env, tableName, clientTimeStamp, null, guidepostWidthBytes, guidepostsPerRegionBytes);
     }
 
     public static StatisticsCollector createStatisticsCollector(
             RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp,
             byte[] storeName) throws IOException {
+        return createStatisticsCollector(env, tableName, clientTimeStamp, storeName, null, null);
+    }
+
+    public static StatisticsCollector createStatisticsCollector(
+            RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp,
+            byte[] storeName, byte[] guidepostWidthBytes,
+            byte[] guidepostsPerRegionBytes) throws IOException {
         if (statisticsEnabled(env)) {
             return new DefaultStatisticsCollector(env, tableName, clientTimeStamp, storeName,
-                    null, null);
+                    guidepostWidthBytes, guidepostsPerRegionBytes);
         } else {
             return new NoOpStatisticsCollector();
         }
     }
-
     
     /**
      * Determines if statistics are enabled (which is the default). This is done on the

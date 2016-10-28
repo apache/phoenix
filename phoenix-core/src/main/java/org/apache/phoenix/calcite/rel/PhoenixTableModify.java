@@ -171,8 +171,8 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
                                 Integer scale = rsScale == 0 ? null : rsScale;
                                 // We are guaranteed that the two column will have compatible types,
                                 // as we checked that before.
-                                if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(), precision, scale,
-                                        column.getMaxLength(), column.getScale())) { throw new SQLExceptionInfo.Builder(
+                                if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(), SortOrder.getDefault(), precision,
+                                        scale, column.getMaxLength(), column.getScale())) { throw new SQLExceptionInfo.Builder(
                                         SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
                                         .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build()
                                         .buildException(); }
@@ -182,7 +182,8 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
                                         table.rowKeyOrderOptimizable());
                                 values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                             }
-                            setValues(values, pkSlotIndexes, columnIndexes, table, mutation, connection, useServerTimestamp);
+                            // TODO onDupKeyBytes
+                            setValues(values, pkSlotIndexes, columnIndexes, table, mutation, connection, useServerTimestamp, null);
                             rowCount++;
                             // Commit a batch if auto commit is true and we're at our batch size
                             if (isAutoCommit && rowCount % batchSize == 0) {
@@ -211,7 +212,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         }
     }
     
-    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes, PTable table, Map<ImmutableBytesPtr,RowMutationState> mutation, PhoenixConnection connection, boolean useServerTimestamp) {
+    private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes, PTable table, Map<ImmutableBytesPtr,RowMutationState> mutation, PhoenixConnection connection, boolean useServerTimestamp, byte[] onDupKeyBytes) {
         Map<PColumn,byte[]> columnValues = Maps.newHashMapWithExpectedSize(columnIndexes.length);
         byte[][] pkValues = new byte[table.getPKColumns().size()][];
         // If the table uses salting, the first byte is the salting byte, set to an empty array
@@ -242,7 +243,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         }
         ImmutableBytesPtr ptr = new ImmutableBytesPtr();
         table.newKey(ptr, pkValues);
-        mutation.put(ptr, new RowMutationState(columnValues, connection.getStatementExecutionCounter(), rowTsColInfo));
+        mutation.put(ptr, new RowMutationState(columnValues, connection.getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
     }
 
     private static MutationPlan delete(final PhoenixConnection connection,
@@ -355,11 +356,11 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
                 }
                 // When issuing deletes, we do not care about the row time ranges. Also, if the table had a row timestamp column, then the
                 // row key will already have its value. 
-                mutations.put(ptr, new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO));
+                mutations.put(ptr, new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                 if (indexTableRef != null) {
                     ImmutableBytesPtr indexPtr = new ImmutableBytesPtr(); // allocate new as this is a key in a Map
                     rs.getCurrentRow().getKey(indexPtr);
-                    indexMutations.put(indexPtr, new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO));
+                    indexMutations.put(indexPtr, new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                 }
                 if (mutations.size() > maxSize) {
                     throw new IllegalArgumentException("MutationState size of " + mutations.size() + " is bigger than max allowed size of " + maxSize);

@@ -280,7 +280,11 @@ public class CorrelatePlanTest {
 
         @Override
         public Expression newExpression(int index) {
-            return new ColumnRef(tableRef, index).newColumnExpression();
+            try {
+                return new ColumnRef(tableRef, index).newColumnExpression();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override

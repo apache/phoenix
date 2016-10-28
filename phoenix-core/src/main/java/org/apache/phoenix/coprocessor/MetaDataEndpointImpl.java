@@ -150,7 +150,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -1586,7 +1585,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private static RowLock acquireLock(Region region, byte[] key, List<RowLock> locks)
         throws IOException {
-        RowLock rowLock = region.getRowLock(key, true);
+        RowLock rowLock = region.getRowLock(key, false);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }
@@ -2419,14 +2418,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     
     private class ColumnFinder extends StatelessTraverseAllExpressionVisitor<Void> {
         private boolean columnFound;
-        private final ColumnExpression columnExpression;
+        private final Expression columnExpression;
 
-        public ColumnFinder(ColumnExpression columnExpression) {
+        public ColumnFinder(Expression columnExpression) {
             this.columnExpression = columnExpression;
             columnFound = false;
         }
 
-        private Void process(ColumnExpression expression) {
+        private Void process(Expression expression) {
             if (expression.equals(columnExpression)) {
                 columnFound = true;
             }
@@ -2528,7 +2527,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     ColumnResolver columnResolver = FromCompiler.getResolver(baseTableRef);
                     StatementContext context = new StatementContext(statement, columnResolver);
                     Expression whereExpression = WhereCompiler.compile(context, viewWhere);
-                    ColumnExpression colExpression =
+                    Expression colExpression =
                             new ColumnRef(baseTableRef, existingViewColumn.getPosition())
                                     .newColumnExpression();
                     ColumnFinder columnFinder = new ColumnFinder(colExpression);
@@ -2906,7 +2905,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         boolean blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
                 QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
         if (!wasLocked) {
-            rowLock = region.getRowLock(key, true);
+            rowLock = region.getRowLock(key, false);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
@@ -2970,7 +2969,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try {
             rowLocks = new ArrayList<Region.RowLock>(keys.size());
             for (int i = 0; i < keys.size(); i++) {
-                Region.RowLock rowLock = region.getRowLock(keys.get(i), true);
+                Region.RowLock rowLock = region.getRowLock(keys.get(i), false);
                 if (rowLock == null) {
                     throw new IOException("Failed to acquire lock on "
                             + Bytes.toStringBinary(keys.get(i)));
@@ -3261,7 +3260,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             PIndexState newState =
                     PIndexState.fromSerializedValue(newKV.getValueArray()[newKV.getValueOffset()]);
-            RowLock rowLock = region.getRowLock(key, true);
+            RowLock rowLock = region.getRowLock(key, false);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }

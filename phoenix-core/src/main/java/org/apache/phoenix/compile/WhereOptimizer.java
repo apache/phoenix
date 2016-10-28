@@ -487,6 +487,10 @@ public class WhereOptimizer {
                 int initPosition = (table.getBucketNum() ==null ? 0 : 1) + (this.context.getConnection().getTenantId() != null && table.isMultiTenant() ? 1 : 0) + (table.getViewIndexId() == null ? 0 : 1);
                 if (initPosition == slot.getPKPosition()) {
                     minMaxRange = keyRange;
+                } else {
+                    // If we cannot set the minMaxRange, then we must not extract the expression since
+                    // we wouldn't be constraining the range at all based on it.
+                    extractNode = null;
                 }
             }
             return newKeyParts(slot, extractNode, keyRanges, minMaxRange);
@@ -750,12 +754,31 @@ public class WhereOptimizer {
                     	}
                     }
                 } else {
+                    boolean hasFirstSlot = true;
+                    boolean prevIsNull = false;
                     // TODO: Do the same optimization that we do for IN if the childSlots specify a fully qualified row key
                     for (KeySlot slot : childSlot) {
-                        // We have a nested OR with nothing for this slot, so continue
-                        if (slot == null) {
-                            return null; //If one childSlot does not have the PK columns, let Phoenix scan all the key ranges of the table. 
+                        if (hasFirstSlot) {
+                            // if the first slot is null, return null immediately
+                            if (slot == null) {
+                                return null;
+                            }
+                            // mark that we've handled the first slot
+                            hasFirstSlot = false;
                         }
+
+                        // now if current slot is the first one, it must not be null
+                        // if not the first, then it might be null, so check if all the rest are null
+                        if (slot == null) {
+                            prevIsNull = true;
+                            continue;
+                        } else {
+                            // current slot is not null but prev one is null, cannot OR these together (PHOENIX-3328)
+                            if (prevIsNull) {
+                                return null;
+                            }
+                        }
+
                         /*
                          * If we see a different PK column than before, we can't
                          * optimize it because our SkipScanFilter only handles

@@ -130,6 +130,9 @@ public class SequenceManager {
     public SequenceValueExpression newSequenceReference(PName tenantName,
             TableName tableName, ParseNode numToAllocateNode, SequenceValueParseNode.Op op) throws SQLException {
         String tenantId = tenantName == null ? null : tenantName.getString();
+        if (tableName.getSchemaName() == null && statement.getConnection().getSchema() != null) {
+            tableName = TableName.create(statement.getConnection().getSchema(), tableName.getTableName());
+        }
         int nSaltBuckets = statement.getConnection().getQueryServices().getSequenceSaltBuckets();
         long numToAllocate = determineNumToAllocate(tableName, numToAllocateNode);
         SequenceKey key = new SequenceKey(tenantId, tableName.getSchemaName(), tableName.getTableName(), nSaltBuckets);

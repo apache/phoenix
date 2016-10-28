@@ -14,7 +14,6 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.BindParameterExpression;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.CorrelateVariableFieldAccessExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -48,7 +47,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
     }
 
 	@Override
-	public ColumnExpression newColumnExpression(int index) {
+	public Expression newColumnExpression(int index) {
 		return tableMapping.newColumnExpression(index);
 	}
     

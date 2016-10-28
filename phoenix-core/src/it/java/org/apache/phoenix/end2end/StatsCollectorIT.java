@@ -40,13 +40,15 @@ import java.util.Random;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -69,10 +71,14 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     }
     
     private static Connection getConnection() throws SQLException {
+        return getConnection(Integer.MAX_VALUE);
+    }
+
+    private static Connection getConnection(Integer statsUpdateFreq) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
-        props.setProperty(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        props.setProperty(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(statsUpdateFreq));
         return DriverManager.getConnection(getUrl(), props);
     }
     
@@ -334,7 +340,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     
     @Test
     public void testCompactUpdatesStats() throws Exception {
-        testCompactUpdatesStats(null, fullTableName);
+        testCompactUpdatesStats(0, fullTableName);
     }
     
     @Test
@@ -342,9 +348,17 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         testCompactUpdatesStats(QueryServicesOptions.DEFAULT_STATS_UPDATE_FREQ_MS, fullTableName);
     }
     
-    private void testCompactUpdatesStats(Integer minStatsUpdateFreq, String tableName) throws Exception {
+    private static void invalidateStats(Connection conn, String tableName) throws SQLException {
+        PTable ptable = conn.unwrap(PhoenixConnection.class)
+                .getMetaDataCache().getTableRef(new PTableKey(null, tableName))
+                .getTable();
+        byte[] name = ptable.getPhysicalName().getBytes();
+        conn.unwrap(PhoenixConnection.class).getQueryServices().invalidateStats(new GuidePostsKey(name, SchemaUtil.getEmptyColumnFamily(ptable)));
+    }
+    
+    private void testCompactUpdatesStats(Integer statsUpdateFreq, String tableName) throws Exception {
         int nRows = 10;
-        Connection conn = getConnection();
+        Connection conn = getConnection(statsUpdateFreq);
         PreparedStatement stmt;
         conn.createStatement().execute("CREATE TABLE " + tableName + "(k CHAR(1) PRIMARY KEY, v INTEGER, w INTEGER) "
                 + HColumnDescriptor.KEEP_DELETED_CELLS + "=" + Boolean.FALSE);
@@ -358,9 +372,8 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         conn.commit();
         
         compactTable(conn, tableName);
-        if (minStatsUpdateFreq == null) {
-            ImmutableBytesPtr ptr = new ImmutableBytesPtr(Bytes.toBytes(tableName));
-            conn.unwrap(PhoenixConnection.class).getQueryServices().invalidateStats(ptr);
+        if (statsUpdateFreq == null) {
+            invalidateStats(conn, tableName);
         } else {
             // Confirm that when we have a non zero MIN_STATS_UPDATE_FREQ_MS_ATTRIB, after we run
             // UPDATATE STATISTICS, the new statistics are faulted in as expected.
@@ -379,13 +392,12 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         assertEquals(5, nDeletedRows);
         
         compactTable(conn, tableName);
-        if (minStatsUpdateFreq == null) {
-            ImmutableBytesPtr ptr = new ImmutableBytesPtr(Bytes.toBytes(tableName));
-            conn.unwrap(PhoenixConnection.class).getQueryServices().invalidateStats(ptr);
+        if (statsUpdateFreq == null) {
+            invalidateStats(conn, tableName);
         }
         
         keyRanges = getAllSplits(conn, tableName);
-        if (minStatsUpdateFreq != null) {
+        if (statsUpdateFreq != null) {
             assertEquals(nRows+1, keyRanges.size());
             // If we've set MIN_STATS_UPDATE_FREQ_MS_ATTRIB, an UPDATE STATISTICS will invalidate the cache
             // and force us to pull over the new stats
@@ -403,7 +415,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
     @Test
     public void testWithMultiCF() throws Exception {
         int nRows = 20;
-        Connection conn = getConnection();
+        Connection conn = getConnection(0);
         PreparedStatement stmt;
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName
@@ -478,6 +490,20 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         assertEquals(6, rs.getInt(4));
 
         assertFalse(rs.next());
+        
+        // Disable stats
+        conn.createStatement().execute("ALTER TABLE " + fullTableName + 
+                " SET " + PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=0");
+        TestUtil.analyzeTable(conn, fullTableName);
+        // Assert that there are no more guideposts
+        rs = conn.createStatement().executeQuery("SELECT count(1) FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + 
+                " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + "='" + fullTableName + "' AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NOT NULL");
+        assertTrue(rs.next());
+        assertEquals(0, rs.getLong(1));
+        assertFalse(rs.next());
+        rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
+        assertEquals("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + fullTableName,
+                QueryUtil.getExplainPlan(rs));
     }
 
     @Test
@@ -506,7 +532,6 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
             int endIndex = r.nextInt(strings.length - startIndex) + startIndex;
             long rows = endIndex - startIndex;
             long c2Bytes = rows * 35;
-            System.out.println(rows + ":" + startIndex + ":" + endIndex);
             rs = conn.createStatement().executeQuery(
                     "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from SYSTEM.STATS where PHYSICAL_NAME = '"
                             + fullTableName + "' AND GUIDE_POST_KEY>= cast('" + strings[startIndex]

@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.CUSTOM_ENTITY_DATA_FULL_NAME;
@@ -29,7 +30,6 @@ import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW8;
 import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -681,7 +681,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
-        conn.createStatement().execute("upsert into phoenix_test (id, ts) select id, null from phoenix_test where id <= 'bbb' limit 1");
+        conn.createStatement().execute("upsert into phoenix_test (id, ts) select id, CAST(null AS timestamp) from phoenix_test where id <= 'bbb' limit 1");
         conn.commit();
         conn.close();
 
@@ -1375,6 +1375,60 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
         assertEquals("[[128,0,0,54], [128,0,4,0]]", rs.getArray(2).toString());
     }
 
+    @Test
+    public void testUpsertSelectWithMultiByteCharsNoAutoCommit() throws Exception {
+        testUpsertSelectWithMultiByteChars(false);
+    }
+
+    @Test
+    public void testUpsertSelectWithMultiByteCharsAutoCommit() throws Exception {
+        testUpsertSelectWithMultiByteChars(true);
+    }
+
+    private void testUpsertSelectWithMultiByteChars(boolean autoCommit) throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(autoCommit);
+        conn.createStatement().execute(
+                "create table t1 (id bigint not null primary key, v varchar(20))");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(autoCommit);
+        conn.createStatement().execute("upsert into t1 values (1, 'foo')");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 15));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(autoCommit);
+        conn.createStatement().execute(
+                "upsert into t1(id, v) select id, '澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉' from t1 WHERE id = 1");
+        conn.commit();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(autoCommit);
+        ResultSet rs = conn.createStatement().executeQuery("select * from t1");
+
+        assertTrue(rs.next());
+        assertEquals(1, rs.getLong(1));
+        assertEquals("澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉", rs.getString(2));
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 25));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(autoCommit);
+        try {
+            conn.createStatement().execute(
+                    "upsert into t1(id, v) select id, '澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉' from t1 WHERE id = 1");
+            conn.commit();
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+        }
+    }
 
     @Test
     public void testParallelUpsertSelect() throws Exception {

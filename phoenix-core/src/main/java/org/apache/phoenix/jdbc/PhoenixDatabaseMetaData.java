@@ -1087,7 +1087,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     SQLViewTypeFunction.NAME + "(" + VIEW_TYPE + ") AS " + VIEW_TYPE + "," +
                     SQLIndexTypeFunction.NAME + "(" + INDEX_TYPE + ") AS " + INDEX_TYPE + "," +
                     TRANSACTIONAL + "," +
-                    IS_NAMESPACE_MAPPED +
+                    IS_NAMESPACE_MAPPED + "," +
+                    GUIDE_POSTS_WIDTH +
                     " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS +
                     " where " + COLUMN_NAME + " is null" +
                     " and " + COLUMN_FAMILY + " is null" +
@@ -1126,7 +1127,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     "'' " + VIEW_TYPE + "," +
                     "'' " + INDEX_TYPE + "," +
                     "CAST(null AS BOOLEAN) " + TRANSACTIONAL + "," +
-                    "CAST(null AS BOOLEAN) " + IS_NAMESPACE_MAPPED + "\n");
+                    "CAST(null AS BOOLEAN) " + IS_NAMESPACE_MAPPED + "," +
+                    "CAST(null AS BIGINT) " + GUIDE_POSTS_WIDTH + "\n");
             buf.append(
                     " from " + SYSTEM_SEQUENCE + "\n");
             StringBuilder whereClause = new StringBuilder();

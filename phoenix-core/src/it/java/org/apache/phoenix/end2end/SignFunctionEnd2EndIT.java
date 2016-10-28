@@ -51,7 +51,7 @@ public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
             ddl = "CREATE TABLE " + signedTableName
-                + " (k VARCHAR NOT NULL PRIMARY KEY, dec DECIMAL, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
+                + " (k VARCHAR NOT NULL PRIMARY KEY, \"DEC\" DECIMAL, doub DOUBLE, fl FLOAT, inte INTEGER, lon BIGINT, smalli SMALLINT, tinyi TINYINT)";
             conn.createStatement().execute(ddl);
             ddl = "CREATE TABLE " + unsignedTableName
                 + " (k VARCHAR NOT NULL PRIMARY KEY, doub UNSIGNED_DOUBLE, fl UNSIGNED_FLOAT, inte UNSIGNED_INT, lon UNSIGNED_LONG, smalli UNSIGNED_SMALLINT, tinyi UNSIGNED_TINYINT)";
@@ -96,7 +96,7 @@ public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
     private void testSignedNumberSpec(Connection conn, double data, int expected) throws Exception {
         updateSignedTable(conn, data);
         ResultSet rs = conn.createStatement().executeQuery(
-            "SELECT SIGN(dec),SIGN(doub),SIGN(fl),SIGN(inte),SIGN(lon),SIGN(smalli),SIGN(tinyi) FROM "
+            "SELECT SIGN(\"DEC\"),SIGN(doub),SIGN(fl),SIGN(inte),SIGN(lon),SIGN(smalli),SIGN(tinyi) FROM "
                 + signedTableName);
         assertTrue(rs.next());
         for (int i = 1; i <= 7; ++i) {
@@ -105,7 +105,7 @@ public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
         assertTrue(!rs.next());
 
         PreparedStatement stmt = conn.prepareStatement("SELECT k FROM " + signedTableName
-            + " WHERE SIGN(dec)=? AND SIGN(doub)=? AND SIGN(fl)=? AND SIGN(inte)=? AND SIGN(lon)=? AND SIGN(smalli)=? AND SIGN(tinyi)=?");
+            + " WHERE SIGN(\"DEC\")=? AND SIGN(doub)=? AND SIGN(fl)=? AND SIGN(inte)=? AND SIGN(lon)=? AND SIGN(smalli)=? AND SIGN(tinyi)=?");
         for (int i = 1; i <= 7; ++i)
             stmt.setInt(i, expected);
         rs = stmt.executeQuery();

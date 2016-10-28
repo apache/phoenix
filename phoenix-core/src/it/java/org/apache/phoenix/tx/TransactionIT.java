@@ -698,4 +698,19 @@ public class TransactionIT extends ParallelStatsDisabledIT {
 
         }
     }
+    
+    
+    @Test
+    public void testOnDupKeyForTransactionalTable() throws Exception {
+        // TODO: we should support having a transactional table defined for a connectionless connection
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String transactTableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + transactTableName + " (k integer not null primary key, v bigint) TRANSACTIONAL=true");
+            conn.createStatement().execute("UPSERT INTO " + transactTableName + " VALUES(0,0) ON DUPLICATE KEY UPDATE v = v + 1");
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_FOR_TRANSACTIONAL.getErrorCode(), e.getErrorCode());
+        }
+    }
+    
 }

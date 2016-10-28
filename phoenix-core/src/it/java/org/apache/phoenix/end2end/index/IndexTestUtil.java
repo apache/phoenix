@@ -43,11 +43,11 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -125,7 +125,7 @@ public class IndexTestUtil {
         long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
         if (dataMutation instanceof Delete && dataMutation.getFamilyCellMap().values().isEmpty()) {
             indexTable.newKey(ptr, indexValues);
-            row = indexTable.newRow(builder, ts, ptr);
+            row = indexTable.newRow(builder, ts, ptr, false);
             row.delete();
         } else {
             // If no column families in table, then nothing to look for 
@@ -153,7 +153,7 @@ public class IndexTestUtil {
                 }
             }
             indexTable.newKey(ptr, indexValues);
-            row = indexTable.newRow(builder, ts, ptr);
+            row = indexTable.newRow(builder, ts, ptr, false);
             int pos = 0;
             while ((pos = indexValuesSet.nextSetBit(pos)) >= 0) {
                 int index = nIndexColumns + indexOffset + pos++;

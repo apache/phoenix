@@ -36,6 +36,7 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -139,7 +140,6 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.covered.NonTxIndexBuilder;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.PhoenixIndexBuilder;
@@ -178,7 +178,8 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -234,7 +235,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final ReadOnlyProps props;
     private final String userName;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-    private final TableStatsCache tableStatsCache;
+    private final GuidePostsCache tableStatsCache;
 
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -347,7 +348,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         connectionQueues = ImmutableList.copyOf(list);
         // A little bit of a smell to leak `this` here, but should not be a problem
-        this.tableStatsCache = new TableStatsCache(this, config);
+        this.tableStatsCache = new GuidePostsCache(this, config);
         this.isAutoUpgradeEnabled = config.getBoolean(AUTO_UPGRADE_ENABLED, QueryServicesOptions.DEFAULT_AUTO_UPGRADE_ENABLED);
     }
 
@@ -1316,13 +1317,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private boolean ensureViewIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
-        HTableDescriptor desc = null;
         boolean wasDeleted = false;
         try (HBaseAdmin admin = getAdmin()) {
             try {
-                desc = admin.getTableDescriptor(physicalIndexName);
+                HTableDescriptor desc = admin.getTableDescriptor(physicalIndexName);
                 if (Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(desc.getValue(MetaDataUtil.IS_VIEW_INDEX_TABLE_PROP_BYTES)))) {
-                    this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalIndexName));
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
@@ -1330,6 +1329,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         admin.deleteTable(physicalIndexName);
                         clearTableRegionCache(physicalIndexName);
                         wasDeleted = true;
+                    } else {
+                        this.tableStatsCache.invalidateAll(desc);
                     }
                 }
             } catch (org.apache.hadoop.hbase.TableNotFoundException ignore) {
@@ -1347,7 +1348,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HBaseAdmin admin = getAdmin()) {
             try {
                 desc = admin.getTableDescriptor(physicalTableName);
-                this.tableStatsCache.invalidate(new ImmutableBytesPtr(physicalTableName));
+                for (byte[] fam : desc.getFamiliesKeys()) {
+                    this.tableStatsCache.invalidate(new GuidePostsKey(physicalTableName, fam));
+                }
                 final ReadOnlyProps props = this.getProps();
                 final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                 if (dropMetadata) {
@@ -1529,14 +1532,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (dropMetadata) {
                 flushParentPhysicalTable(table);
                 dropTables(result.getTableNamesToDelete());
+            } else {
+                invalidateTableStats(result.getTableNamesToDelete());
             }
-            invalidateTables(result.getTableNamesToDelete());
             long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
             if (tableType == PTableType.TABLE) {
                 byte[] physicalName = table.getPhysicalName().getBytes();
                 ensureViewIndexTableDropped(physicalName, timestamp);
                 ensureLocalIndexTableDropped(physicalName, timestamp);
-                tableStatsCache.invalidate(new ImmutableBytesPtr(physicalName));
+                tableStatsCache.invalidateAll(table);
             }
             break;
         default:
@@ -1597,24 +1601,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return result;
     }
 
-    private void invalidateTables(final List<byte[]> tableNamesToDelete) {
+    private void invalidateTableStats(final List<byte[]> tableNamesToDelete) {
         if (tableNamesToDelete != null) {
             for (byte[] tableName : tableNamesToDelete) {
-                tableStatsCache.invalidate(new ImmutableBytesPtr(Bytes.toString(tableName)
-                        .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR).getBytes()));
+                tableStatsCache.invalidateAll(tableName);
             }
         }
     }
 
+    private void dropTable(byte[] tableNameToDelete) throws SQLException {
+        dropTables(Collections.<byte[]>singletonList(tableNameToDelete));
+    }
+    
     private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
         SQLException sqlE = null;
         try (HBaseAdmin admin = getAdmin()) {
             if (tableNamesToDelete != null){
                 for ( byte[] tableName : tableNamesToDelete ) {
-                    if ( admin.tableExists(tableName) ) {
+                    try {
+                        HTableDescriptor htableDesc = this.getTableDescriptor(tableName);
                         admin.disableTable(tableName);
                         admin.deleteTable(tableName);
+                        tableStatsCache.invalidateAll(htableDesc);
                         clearTableRegionCache(tableName);
+                    } catch (TableNotFoundException ignore) {
                     }
                 }
             }
@@ -2247,8 +2257,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
             if (dropMetadata) {
                 dropTables(result.getTableNamesToDelete());
+            } else {
+                invalidateTableStats(result.getTableNamesToDelete());
             }
-            invalidateTables(result.getTableNamesToDelete());
             break;
         default:
             break;
@@ -2257,6 +2268,41 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     }
 
+    private PhoenixConnection removeNotNullConstraint(PhoenixConnection oldMetaConnection, String schemaName, String tableName, long timestamp, String columnName) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+        // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
+        PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
+        SQLException sqlE = null;
+        try {
+            metaConnection.createStatement().executeUpdate("UPSERT INTO " + SYSTEM_STATS_NAME + " (" + 
+                    PhoenixDatabaseMetaData.TENANT_ID + "," + PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
+                    PhoenixDatabaseMetaData.TABLE_NAME + "," + PhoenixDatabaseMetaData.COLUMN_NAME + "," +
+                    PhoenixDatabaseMetaData.COLUMN_FAMILY + "," + PhoenixDatabaseMetaData.NULLABLE + ") VALUES (" +
+                    "null," + schemaName + "," + tableName + "," + columnName + "," + QueryConstants.DEFAULT_COLUMN_FAMILY + "," + 
+                    ResultSetMetaData.columnNullable + ")");
+            metaConnection.commit();
+        } catch (NewerTableAlreadyExistsException e) {
+            logger.warn("Table already modified at this timestamp, so assuming column already nullable: " + columnName);
+        } catch (SQLException e) {
+            logger.warn("Add column failed due to:" + e);
+            sqlE = e;
+        } finally {
+            try {
+                oldMetaConnection.close();
+            } catch (SQLException e) {
+                if (sqlE != null) {
+                    sqlE.setNextException(e);
+                } else {
+                    sqlE = e;
+                }
+            }
+            if (sqlE != null) {
+                throw sqlE;
+            }
+        }
+        return metaConnection;
+    }
     /**
      * This closes the passed connection.
      */
@@ -2474,7 +2520,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             if (table.getValue(MetaDataUtil.PARENT_TABLE_KEY) == null
                                     && table.getValue(MetaDataUtil.IS_LOCAL_INDEX_TABLE_PROP_NAME) != null) {
                                 table.setValue(MetaDataUtil.PARENT_TABLE_KEY,
-                                        MetaDataUtil.getUserTableName(table.getNameAsString()));
+                                        MetaDataUtil.getLocalIndexUserTableName(table.getNameAsString()));
                                 // Explicitly disable, modify and enable the table to ensure
                                 // co-location of data and index regions. If we just modify the
                                 // table descriptor when online schema change enabled may reopen 
@@ -2620,6 +2666,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_0);
                     clearCache();
                 }
+                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
+                    metaConnection = addColumnsIfNotExists(
+                            metaConnection,
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
+                            PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + " "
+                                    + PLong.INSTANCE.getSqlTypeName());
+                    ConnectionQueryServicesImpl.this.removeTable(null,
+                            PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0);
+                    clearCache();
+                }
             }
 
 
@@ -2676,7 +2734,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             try {
                 metaConnection.createStatement().executeUpdate(
                         QueryConstants.CREATE_STATS_TABLE_METADATA);
-            } catch (NewerTableAlreadyExistsException ignore) {} catch (TableAlreadyExistsException e) {
+            } catch (NewerTableAlreadyExistsException ignore) {
+                
+            } catch (TableAlreadyExistsException e) {
                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_3_0) {
                     metaConnection = addColumnsIfNotExists(
@@ -2685,6 +2745,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP,
                             PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT + " "
                                     + PLong.INSTANCE.getSqlTypeName());
+                }
+                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
+                    // The COLUMN_FAMILY column should be nullable as we create a row in it without
+                    // any column family to mark when guideposts were last collected.
+                    metaConnection = removeNotNullConstraint(metaConnection,
+                            PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                            PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
+                            PhoenixDatabaseMetaData.COLUMN_FAMILY);
+                    ConnectionQueryServicesImpl.this.removeTable(null,
+                            PhoenixDatabaseMetaData.SYSTEM_STATS_NAME, null,
+                            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0);
+                    clearCache();
                 }
             }
             try {
@@ -3415,7 +3488,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sqlE = new SQLException(e);
             } finally {
                 try {
-                    if (tenantId.length == 0) tableStatsCache.invalidate(new ImmutableBytesPtr(SchemaUtil.getTableNameAsBytes(schemaName, tableName)));
                     htable.close();
                 } catch (IOException e) {
                     if (sqlE == null) {
@@ -3617,9 +3689,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public PTableStats getTableStats(final byte[] physicalName, final long clientTimeStamp) throws SQLException {
+    public GuidePostsInfo getTableStats(GuidePostsKey key) throws SQLException {
         try {
-            return tableStatsCache.get(new ImmutableBytesPtr(physicalName));
+            return tableStatsCache.get(key);
         } catch (ExecutionException e) {
             throw ServerUtil.parseServerException(e);
         }
@@ -3979,19 +4051,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     /**
-     * Manually adds {@link PTableStats} for a table to the client-side cache. Not a
+     * Manually adds {@link GuidePostsInfo} for a table to the client-side cache. Not a
      * {@link ConnectionQueryServices} method. Exposed for testing purposes.
      *
      * @param tableName Table name
      * @param stats Stats instance
      */
-    public void addTableStats(ImmutableBytesPtr tableName, PTableStats stats) {
-        this.tableStatsCache.put(Objects.requireNonNull(tableName), stats);
+    public void addTableStats(GuidePostsKey key, GuidePostsInfo info) {
+        this.tableStatsCache.put(Objects.requireNonNull(key), Objects.requireNonNull(info));
     }
 
     @Override
-    public void invalidateStats(ImmutableBytesPtr tableName) {
-        this.tableStatsCache.invalidate(Objects.requireNonNull(tableName));
+    public void invalidateStats(GuidePostsKey key) {
+        this.tableStatsCache.invalidate(Objects.requireNonNull(key));
     }
 
     @Override

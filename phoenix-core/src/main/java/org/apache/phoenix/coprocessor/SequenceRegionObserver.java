@@ -91,7 +91,7 @@ public class SequenceRegionObserver extends BaseRegionObserver {
     
     private static void acquireLock(Region region, byte[] key, List<RowLock> locks)
         throws IOException {
-        RowLock rowLock = region.getRowLock(key, true);
+        RowLock rowLock = region.getRowLock(key, false);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }

@@ -785,7 +785,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             Integer scaleToBe;
             if (indexField == null) {
                 Expression e = expressionItr.next();
-                isNullableToBe = true;
+                isNullableToBe = e.isNullable();
                 dataTypeToBe = IndexUtil.getIndexColumnDataType(isNullableToBe, e.getDataType());
                 sortOrderToBe = descIndexColumnBitSet.get(i) ? SortOrder.DESC : SortOrder.ASC;
                 maxLengthToBe = e.getMaxLength();

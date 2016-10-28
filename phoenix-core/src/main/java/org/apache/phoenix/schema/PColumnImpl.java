@@ -170,14 +170,14 @@ public class PColumnImpl implements PColumn {
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        PColumnImpl other = (PColumnImpl)obj;
+        if (! (obj instanceof PColumn) ) return false;
+        PColumn other = (PColumn)obj;
         if (familyName == null) {
-            if (other.familyName != null) return false;
-        } else if (!familyName.equals(other.familyName)) return false;
+            if (other.getFamilyName() != null) return false;
+        } else if (!familyName.equals(other.getFamilyName())) return false;
         if (name == null) {
-            if (other.name != null) return false;
-        } else if (!name.equals(other.name)) return false;
+            if (other.getName() != null) return false;
+        } else if (!name.equals(other.getName())) return false;
         return true;
     }
 

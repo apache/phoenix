@@ -43,6 +43,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
+
 import com.google.common.collect.Sets;
 
 
@@ -161,7 +162,7 @@ public class UnionPlan implements QueryPlan {
         ResultIterator iterator = iterator();
         iterator.explain(steps);
         // Indent plans steps nested under union, except last client-side merge/concat step (if there is one)
-        int offset = !orderBy.getOrderByExpressions().isEmpty() || limit != null ? 1 : 0;
+        int offset = !orderBy.getOrderByExpressions().isEmpty() && limit != null ? 2 : limit != null ? 1 : 0;
         for (int i = 1 ; i < steps.size()-offset; i++) {
             steps.set(i, "    " + steps.get(i));
         }

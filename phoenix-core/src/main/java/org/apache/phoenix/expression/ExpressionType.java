@@ -46,6 +46,7 @@ import org.apache.phoenix.expression.function.ConvertTimezoneFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.DayOfMonthFunction;
 import org.apache.phoenix.expression.function.DecodeFunction;
+import org.apache.phoenix.expression.function.DefaultValueExpression;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.DistinctValueAggregateFunction;
 import org.apache.phoenix.expression.function.EncodeFunction;
@@ -285,7 +286,8 @@ public enum ExpressionType {
     CeilMonthExpression(CeilMonthExpression.class),
     CeilYearExpression(CeilYearExpression.class),
     DayOfWeekFunction(DayOfWeekFunction.class),
-    DayOfYearFunction(DayOfYearFunction.class);
+    DayOfYearFunction(DayOfYearFunction.class),
+    DefaultValueExpression(DefaultValueExpression.class);
 
 
 

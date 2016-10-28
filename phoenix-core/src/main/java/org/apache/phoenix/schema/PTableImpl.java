@@ -22,6 +22,7 @@ import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 
 import java.io.IOException;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,17 +35,24 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
@@ -55,9 +63,9 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 import org.apache.tephra.TxConstants;
 
@@ -233,7 +241,7 @@ public class PTableImpl implements PTable {
                 table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
     }
 
-    public static PTableImpl makePTable(PTable table, List<PColumn> columns) throws SQLException {
+    public static PTableImpl makePTable(PTable table, Collection<PColumn> columns) throws SQLException {
         return new PTableImpl(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
                 table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
@@ -243,7 +251,7 @@ public class PTableImpl implements PTable {
                 table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, List<PColumn> columns) throws SQLException {
+    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns) throws SQLException {
         return new PTableImpl(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
                 sequenceNumber, table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(), table.getIndexes(),
@@ -253,7 +261,7 @@ public class PTableImpl implements PTable {
                 table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, List<PColumn> columns, boolean isImmutableRows) throws SQLException {
+    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns, boolean isImmutableRows) throws SQLException {
         return new PTableImpl(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
                 sequenceNumber, table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
@@ -263,7 +271,7 @@ public class PTableImpl implements PTable {
                 table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
     }
     
-    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, List<PColumn> columns, boolean isImmutableRows, boolean isWalDisabled,
+    public static PTableImpl makePTable(PTable table, long timeStamp, long sequenceNumber, Collection<PColumn> columns, boolean isImmutableRows, boolean isWalDisabled,
             boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped) throws SQLException {
         return new PTableImpl(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
@@ -583,9 +591,15 @@ public class PTableImpl implements PTable {
 
     @Override
     public int newKey(ImmutableBytesWritable key, byte[][] values) {
+        List<PColumn> columns = getPKColumns();
         int nValues = values.length;
         while (nValues > 0 && (values[nValues-1] == null || values[nValues-1].length == 0)) {
             nValues--;
+        }
+        for (PColumn column : columns) {
+            if (column.getExpressionStr() != null) {
+                nValues++;
+            }
         }
         int i = 0;
         TrustedByteArrayOutputStream os = new TrustedByteArrayOutputStream(SchemaUtil.estimateKeyLength(this));
@@ -596,11 +610,11 @@ public class PTableImpl implements PTable {
                 i++;
                 os.write(QueryConstants.SEPARATOR_BYTE_ARRAY);
             }
-            List<PColumn> columns = getPKColumns();
             int nColumns = columns.size();
             PDataType type = null;
             SortOrder sortOrder = null;
             boolean wasNull = false;
+
             while (i < nValues && i < nColumns) {
                 // Separate variable length column values in key with zero byte
                 if (type != null && !type.isFixedWidth()) {
@@ -612,7 +626,38 @@ public class PTableImpl implements PTable {
                 // This will throw if the value is null and the type doesn't allow null
                 byte[] byteValue = values[i++];
                 if (byteValue == null) {
-                    byteValue = ByteUtil.EMPTY_BYTE_ARRAY;
+                    if (column.getExpressionStr() != null) {
+                        try {
+                            String url = PhoenixRuntime.JDBC_PROTOCOL
+                                    + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                                    + PhoenixRuntime.CONNECTIONLESS;
+                            PhoenixConnection conn = DriverManager.getConnection(url)
+                                    .unwrap(PhoenixConnection.class);
+                            StatementContext context =
+                                    new StatementContext(new PhoenixStatement(conn));
+
+                            ExpressionCompiler compiler = new ExpressionCompiler(context);
+                            ParseNode defaultParseNode =
+                                    new SQLParser(column.getExpressionStr()).parseExpression();
+                            Expression defaultExpression = defaultParseNode.accept(compiler);
+                            defaultExpression.evaluate(null, key);
+                            column.getDataType().coerceBytes(key, null,
+                                    defaultExpression.getDataType(),
+                                    defaultExpression.getMaxLength(), defaultExpression.getScale(),
+                                    defaultExpression.getSortOrder(),
+                                    column.getMaxLength(), column.getScale(),
+                                    column.getSortOrder());
+                            byteValue = ByteUtil.copyKeyBytesIfNecessary(key);
+                        } catch (SQLException e) { // should not be possible
+                            throw new ConstraintViolationException(name.getString() + "."
+                                    + column.getName().getString()
+                                    + " failed to compile default value expression of "
+                                    + column.getExpressionStr());
+                        }
+                    }
+                    else {
+                        byteValue = ByteUtil.EMPTY_BYTE_ARRAY;
+                    }
                 }
                 wasNull = byteValue.length == 0;
                 // An empty byte array return value means null. Do this,
@@ -625,19 +670,14 @@ public class PTableImpl implements PTable {
                     throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
                 }
                 Integer	maxLength = column.getMaxLength();
-                if (maxLength != null && type.isFixedWidth() && byteValue.length < maxLength) {
-                    if (rowKeyOrderOptimizable()) {
-                        key.set(byteValue);
-                        type.pad(key, maxLength, sortOrder);
-                        byteValue = ByteUtil.copyKeyBytesIfNecessary(key);
-                    } else {
-                        // TODO: remove this incorrect code and move StringUtil.padChar() to TestUtil
-                        // once we require tables to have been upgraded
-                        byteValue = StringUtil.padChar(byteValue, maxLength);
-                    }
-                } else if (maxLength != null && !type.isArrayType() && byteValue.length > maxLength) {
-                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + SchemaUtil.toString(type, byteValue) + ")");
+                Integer scale = column.getScale();
+                key.set(byteValue);
+                if (!type.isSizeCompatible(key, null, type, sortOrder, null, null, maxLength, scale)) {
+                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " (" + SchemaUtil.toString(type, byteValue) + ")");
                 }
+                key.set(byteValue);
+                type.pad(key, maxLength, sortOrder);
+                byteValue = ByteUtil.copyKeyBytesIfNecessary(key);
                 os.write(byteValue, 0, byteValue.length);
             }
             // Need trailing byte for DESC columns
@@ -670,8 +710,8 @@ public class PTableImpl implements PTable {
         }
     }
 
-    private PRow newRow(KeyValueBuilder builder, long ts, ImmutableBytesWritable key, int i, byte[]... values) {
-        PRow row = new PRowImpl(builder, key, ts, getBucketNum());
+    private PRow newRow(KeyValueBuilder builder, long ts, ImmutableBytesWritable key, int i, boolean hasOnDupKey, byte[]... values) {
+        PRow row = new PRowImpl(builder, key, ts, getBucketNum(), hasOnDupKey);
         if (i < values.length) {
             for (PColumnFamily family : getColumnFamilies()) {
                 for (PColumn column : family.getColumns()) {
@@ -686,13 +726,13 @@ public class PTableImpl implements PTable {
 
     @Override
     public PRow newRow(KeyValueBuilder builder, long ts, ImmutableBytesWritable key,
-            byte[]... values) {
-        return newRow(builder, ts, key, 0, values);
+            boolean hasOnDupKey, byte[]... values) {
+        return newRow(builder, ts, key, 0, hasOnDupKey, values);
     }
 
     @Override
-    public PRow newRow(KeyValueBuilder builder, ImmutableBytesWritable key, byte[]... values) {
-        return newRow(builder, HConstants.LATEST_TIMESTAMP, key, values);
+    public PRow newRow(KeyValueBuilder builder, ImmutableBytesWritable key, boolean hasOnDupKey, byte[]... values) {
+        return newRow(builder, HConstants.LATEST_TIMESTAMP, key, hasOnDupKey, values);
     }
 
     @Override
@@ -730,14 +770,16 @@ public class PTableImpl implements PTable {
         // default to the generic builder, and only override when we know on the client
         private final KeyValueBuilder kvBuilder;
 
-        private Put setValues;
+        private Mutation setValues;
         private Delete unsetValues;
         private Mutation deleteRow;
         private final long ts;
+        private final boolean hasOnDupKey;
 
-        public PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum) {
+        public PRowImpl(KeyValueBuilder kvBuilder, ImmutableBytesWritable key, long ts, Integer bucketNum, boolean hasOnDupKey) {
             this.kvBuilder = kvBuilder;
             this.ts = ts;
+            this.hasOnDupKey = hasOnDupKey;
             if (bucketNum != null) {
                 this.key = SaltingUtil.getSaltedKey(key, bucketNum);
                 this.keyPtr = new ImmutableBytesPtr(this.key);
@@ -750,7 +792,7 @@ public class PTableImpl implements PTable {
         }
 
         private void newMutations() {
-            Put put = new Put(this.key);
+            Mutation put = this.hasOnDupKey ? new Increment(this.key) : new Put(this.key);
             Delete delete = new Delete(this.key);
             if (isWALDisabled()) {
                 put.setDurability(Durability.SKIP_WAL);
@@ -799,39 +841,41 @@ public class PTableImpl implements PTable {
         }
 
         @Override
-        public void setValue(PColumn column, Object value) {
-            byte[] byteValue = value == null ? ByteUtil.EMPTY_BYTE_ARRAY : column.getDataType().toBytes(value);
-            setValue(column, byteValue);
-        }
-
-        @Override
         public void setValue(PColumn column, byte[] byteValue) {
             deleteRow = null;
             byte[] family = column.getFamilyName().getBytes();
             byte[] qualifier = column.getName().getBytes();
             PDataType<?> type = column.getDataType();
             // Check null, since some types have no byte representation for null
+            if (byteValue == null) {
+                byteValue = ByteUtil.EMPTY_BYTE_ARRAY;
+            }
             boolean isNull = type.isNull(byteValue);
             if (isNull && !column.isNullable()) {
-                throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + " may not be null");
-            } else if (isNull && PTableImpl.this.isImmutableRows()) {
+                throw new ConstraintViolationException(name.getString() + "." + column.getName().getString() + 
+                        " may not be null");
+            } else if (isNull && PTableImpl.this.isImmutableRows() && column.getExpressionStr() == null) {
+                // Store nulls for immutable tables otherwise default value would be used
                 removeIfPresent(setValues, family, qualifier);
                 removeIfPresent(unsetValues, family, qualifier);
-            } else if (isNull && !getStoreNulls()) {
+            } else if (isNull && !getStoreNulls() && !this.hasOnDupKey && column.getExpressionStr() == null) {
+                // Cannot use column delete marker when row has ON DUPLICATE KEY clause
+                // because we cannot change a Delete mutation to a Put mutation in the
+                // case of updates occurring due to the execution of the clause.
                 removeIfPresent(setValues, family, qualifier);
                 deleteQuietly(unsetValues, kvBuilder, kvBuilder.buildDeleteColumns(keyPtr, column
                             .getFamilyName().getBytesPtr(), column.getName().getBytesPtr(), ts));
             } else {
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable(byteValue == null ?
-                        HConstants.EMPTY_BYTE_ARRAY : byteValue);
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable(byteValue);
                 Integer	maxLength = column.getMaxLength();
-            	if (!isNull && type.isFixedWidth() && maxLength != null) {
-    				if (ptr.getLength() < maxLength) {
-                        type.pad(ptr, maxLength, column.getSortOrder());
-                    } else if (ptr.getLength() > maxLength) {
-                        throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + " may not exceed " + maxLength + " bytes (" + type.toObject(byteValue) + ")");
-                    }
-            	}
+                Integer scale = column.getScale();
+                SortOrder sortOrder = column.getSortOrder();
+                if (!type.isSizeCompatible(ptr, null, type, sortOrder, null, null, maxLength, scale)) {
+                    throw new DataExceedsCapacityException(name.getString() + "." + column.getName().getString() + 
+                            " may not exceed " + maxLength + " (" + SchemaUtil.toString(type, byteValue) + ")");
+                }
+                ptr.set(byteValue);
+                type.pad(ptr, maxLength, sortOrder);
                 removeIfPresent(unsetValues, family, qualifier);
                 addQuietly(setValues, kvBuilder, kvBuilder.buildPut(keyPtr,
                         column.getFamilyName().getBytesPtr(), column.getName().getBytesPtr(),
@@ -1281,11 +1325,11 @@ public class PTableImpl implements PTable {
     public boolean equals(Object obj) {
         if (this == obj) return true;
         if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        PTableImpl other = (PTableImpl) obj;
+        if (! (obj instanceof PTable)) return false;
+        PTable other = (PTable) obj;
         if (key == null) {
-            if (other.key != null) return false;
-        } else if (!key.equals(other.key)) return false;
+            if (other.getKey() != null) return false;
+        } else if (!key.equals(other.getKey())) return false;
         return true;
     }
 }
