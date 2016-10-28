@@ -804,6 +804,33 @@ public class PhoenixRuntime {
     private static String addQuotes(String str) {
         return str == null ? str : "\"" + str + "\"";
     }
+    
+    /**
+    * Get the column family, column name pairs that make up the row key of the table that will be queried.
+    * @param conn - connection used to generate the query plan. Caller should take care of closing the connection appropriately.
+    * @param plan - query plan to get info for.
+    * @return the pairs of column family name and column name columns in the data table that make up the row key for
+    * the table used in the query plan. Column family names are optional and hence the first part of the pair is nullable.
+    * Column names and family names are enclosed in double quotes to allow for case sensitivity and for presence of 
+    * special characters. Salting column and view index id column are not included. If the connection is tenant specific 
+    * and the table used by the query plan is multi-tenant, then the tenant id column is not included as well.
+    * @throws SQLException
+    */
+    public static List<Pair<String, String>> getPkColsForSql(Connection conn, QueryPlan plan) throws SQLException {
+        checkNotNull(plan);
+        checkNotNull(conn);
+        List<PColumn> pkColumns = getPkColumns(plan.getTableRef().getTable(), conn, true);
+        List<Pair<String, String>> columns = Lists.newArrayListWithExpectedSize(pkColumns.size());
+        String columnName;
+        String familyName;
+        for (PColumn pCol : pkColumns ) {
+            columnName = addQuotes(pCol.getName().getString());
+            familyName = pCol.getFamilyName() != null ? addQuotes(pCol.getFamilyName().getString()) : null;
+            columns.add(new Pair<String, String>(familyName, columnName));
+        }
+        return columns;
+    }
+
     /**
      *
      * @param columns - Initialized empty list to be filled with the pairs of column family name and column name for columns that are used 
@@ -818,6 +845,7 @@ public class PhoenixRuntime {
      * names correspond to the index table.
      * @throws SQLException
      */
+    @Deprecated
     public static void getPkColsForSql(List<Pair<String, String>> columns, QueryPlan plan, Connection conn, boolean forDataTable) throws SQLException {
         checkNotNull(columns);
         checkNotNull(plan);
@@ -846,6 +874,7 @@ public class PhoenixRuntime {
      * types correspond to the index table.
      * @throws SQLException
      */
+    @Deprecated
     public static void getPkColsDataTypesForSql(List<Pair<String, String>> columns, List<String> dataTypes, QueryPlan plan, Connection conn, boolean forDataTable) throws SQLException {
         checkNotNull(columns);
         checkNotNull(dataTypes);
@@ -1025,6 +1054,11 @@ public class PhoenixRuntime {
         // normalize and remove quotes from family and column names before looking up.
         familyName = SchemaUtil.normalizeIdentifier(familyName);
         columnName = SchemaUtil.normalizeIdentifier(columnName);
+        // Column names are always for the data table, so we must translate them if
+        // we're dealing with an index table.
+        if (table.getType() == PTableType.INDEX) {
+            columnName = IndexUtil.getIndexColumnName(familyName, columnName);
+        }
         PColumn pColumn = null;
         if (familyName != null) {
             PColumnFamily family = table.getColumnFamily(familyName);
