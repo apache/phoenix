@@ -222,8 +222,8 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                     // We are guaranteed that the two column will have the
                     // same type.
                     if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(),
-                            expression.getMaxLength(), expression.getScale(), column.getMaxLength(),
-                            column.getScale())) {
+                            expression.getSortOrder(), expression.getMaxLength(), expression.getScale(),
+                            column.getMaxLength(), column.getScale())) {
                         throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
                             column.getScale());
                     }

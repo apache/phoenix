@@ -256,15 +256,18 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     }
 
     @Override
-    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, Integer maxLength,
-            Integer scale, Integer desiredMaxLength, Integer desiredScale) {
+    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, SortOrder sortOrder,
+            Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
         if (value == null) return true;
         PhoenixArray pArr = (PhoenixArray)value;
         PDataType baseType = PDataType.fromTypeId(srcType.getSqlType() - PDataType.ARRAY_TYPE_BASE);
+        // Since we only have a value and no byte[], use an empty length byte[] as otherwise
+        // isSizeCompatible will attempt to interpret the array ptr as a ptr to an element.
+        ImmutableBytesWritable elementPtr = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
         for (int i = 0; i < pArr.numElements; i++) {
             Object val = pArr.getElement(i);
-            if (!baseType.isSizeCompatible(ptr, val, baseType, srcType.getMaxLength(val), scale, desiredMaxLength,
-                    desiredScale)) { return false; }
+            if (!baseType.isSizeCompatible(elementPtr, val, baseType, sortOrder, srcType.getMaxLength(val), scale,
+                    desiredMaxLength, desiredScale)) { return false; }
         }
         return true;
     }
