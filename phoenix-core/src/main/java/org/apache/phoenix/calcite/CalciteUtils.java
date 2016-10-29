@@ -2,6 +2,7 @@ package org.apache.phoenix.calcite;
 
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.GregorianCalendar;
 import java.util.List;
@@ -107,6 +108,8 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.schema.PTableType;
@@ -734,6 +737,13 @@ public class CalciteUtils {
                 }
             }
         });
+        EXPRESSION_MAP.put(SqlKind.DEFAULT, new ExpressionFactory() {
+            @SuppressWarnings("rawtypes")
+            @Override
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
+                return null;
+            }
+        });
         EXPRESSION_MAP.put(SqlKind.OTHER_FUNCTION, new ExpressionFactory() {
             @Override
             public Expression newExpression(RexNode node,
@@ -747,6 +757,19 @@ public class CalciteUtils {
                         Function func = udf.getFunction();
                         if (func instanceof PhoenixScalarFunction) {
                             PhoenixScalarFunction scalarFunc = (PhoenixScalarFunction) func;
+                            BuiltInFunctionInfo info = new BuiltInFunctionInfo(scalarFunc.getFunctionInfo());
+                            if (info.getArgs().length > children.size()) {
+                                List<Expression> moreChildren = new ArrayList<Expression>(children);
+                                for (int i = children.size(); i < info.getArgs().length; i++) {
+                                    if(info.getArgs()[i].getDefaultValue() != null) {
+                                        moreChildren.add(info.getArgs()[i].getDefaultValue());
+                                    }
+                                }
+                                children = moreChildren;
+                            }
+                            for(int i = 0; i < children.size(); i++) {
+                                FunctionParseNode.validateFunctionArguement(info, i, children.get(i));
+                            }
                             return new UDFExpression(children, scalarFunc.getFunctionInfo());
                         }
                     } else if (op == SqlStdOperatorTable.SQRT) {
@@ -966,7 +989,9 @@ public class CalciteUtils {
         List<Expression> children = Lists.newArrayListWithExpectedSize(call.getOperands().size());
         for (RexNode op : call.getOperands()) {
             Expression child = getFactory(op).newExpression(op, implementor);
-            children.add(child);
+            if(child != null) {
+                children.add(child);
+            }
         }
         return children;
     }
