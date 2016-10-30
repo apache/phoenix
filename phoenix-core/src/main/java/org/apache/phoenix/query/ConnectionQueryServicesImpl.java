@@ -24,6 +24,7 @@ import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERS
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
@@ -36,6 +37,7 @@ import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -193,7 +195,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.JDBCUtil;
-import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -2274,30 +2275,44 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     }
 
-    private void removeNotNullConstraint(String schemaName, String tableName, long timestamp, String columnName) throws SQLException {
-        try (HTableInterface htable = this.getTable(SYSTEM_CATALOG_NAME_BYTES)) {
-            byte[] tableRowKey = SchemaUtil.getTableKey(null, schemaName, tableName);
-            Put tableHeader = new Put(tableRowKey);
-            tableHeader.add(KeyValueUtil.newKeyValue(tableRowKey, 
-                    QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, 
-                    QueryConstants.EMPTY_COLUMN_BYTES, 
-                    timestamp, 
-                    QueryConstants.EMPTY_COLUMN_VALUE_BYTES));
-            byte[] columnRowKey = SchemaUtil.getColumnKey(null, schemaName, tableName, columnName, null);
-            Put tableColumn = new Put(columnRowKey);
-            tableColumn.add(KeyValueUtil.newKeyValue(columnRowKey,
-                    QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                    PhoenixDatabaseMetaData.NULLABLE_BYTES,
-                    timestamp,
-                    PInteger.INSTANCE.toBytes(ResultSetMetaData.columnNullable)));
-            List<Mutation> mutations = Lists.<Mutation>newArrayList(tableHeader, tableColumn);
-            htable.batch(mutations, new Object[mutations.size()]);
-        } catch (IOException e) {
-            throw new SQLException(e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().isInterrupted();
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build().buildException();
+    private PhoenixConnection removeNotNullConstraint(PhoenixConnection oldMetaConnection, String schemaName, String tableName, long timestamp, String columnName) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(oldMetaConnection.getClientInfo());
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(timestamp));
+        // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
+        PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
+        SQLException sqlE = null;
+        try {
+            String dml = "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + PhoenixDatabaseMetaData.TENANT_ID + ","
+                    + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME + ","
+                    + PhoenixDatabaseMetaData.COLUMN_NAME + ","
+                    + PhoenixDatabaseMetaData.NULLABLE + ") VALUES (null, ?, ?, ?, ?)";
+            PreparedStatement stmt = metaConnection.prepareStatement(dml);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            stmt.setString(3, columnName);
+            stmt.setInt(4, ResultSetMetaData.columnNullable);
+            stmt.executeUpdate();
+            metaConnection.commit();
+        } catch (NewerTableAlreadyExistsException e) {
+            logger.warn("Table already modified at this timestamp, so assuming column already nullable: " + columnName);
+        } catch (SQLException e) {
+            logger.warn("Add column failed due to:" + e);
+            sqlE = e;
+        } finally {
+            try {
+                oldMetaConnection.close();
+            } catch (SQLException e) {
+                if (sqlE != null) {
+                    sqlE.setNextException(e);
+                } else {
+                    sqlE = e;
+                }
+            }
+            if (sqlE != null) {
+                throw sqlE;
+            }
         }
+        return metaConnection;
     }
     /**
      * This closes the passed connection.
@@ -2751,7 +2766,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0) {
                     // The COLUMN_FAMILY column should be nullable as we create a row in it without
                     // any column family to mark when guideposts were last collected.
-                    removeNotNullConstraint(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
+                    metaConnection = removeNotNullConstraint(metaConnection,
+                            PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME,
                             PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0,
                             PhoenixDatabaseMetaData.COLUMN_FAMILY);
