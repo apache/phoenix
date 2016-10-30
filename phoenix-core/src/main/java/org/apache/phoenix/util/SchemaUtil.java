@@ -262,6 +262,21 @@ public class SchemaUtil {
         return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName));
     }
 
+    public static byte[] getColumnKey(String tenantId, String schemaName, String tableName, String columnName, String familyName) {
+        Preconditions.checkNotNull(columnName,"Column name cannot be null");
+        if (familyName == null) {
+            return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), 
+                    QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName));
+        }
+        return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
+                QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), 
+                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
+                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName),
+                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(familyName));
+    }
+
     public static String getTableName(String schemaName, String tableName) {
         return getName(schemaName,tableName, false);
     }
