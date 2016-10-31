@@ -102,7 +102,7 @@ public class PhoenixObjectInspectorFactory {
                                 serdeParams.getEscapeChar());
                         break;
                     case CHAR:
-                        oi = new PhoenixCharObjectInspector();
+                        oi = new PhoenixCharObjectInspector((PrimitiveTypeInfo)type);
                         break;
                     case DATE:
                         oi = new PhoenixDateObjectInspector();
