@@ -72,8 +72,6 @@ import org.junit.Test;
 public class UpgradeIT extends ParallelStatsDisabledIT {
 
     private String tenantId;
-    private static final byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-            PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
     
     @Before
     public void generateTenantId() {
@@ -699,6 +697,8 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     @Test
     public void testAcquiringAndReleasingUpgradeMutex() throws Exception {
         ConnectionQueryServices services = null;
+        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                generateUniqueName());
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
             assertTrue(((ConnectionQueryServicesImpl)services)
@@ -724,8 +724,9 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         ConnectionQueryServices services = null;
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions));
-            FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions));
+            final byte[] mutexKey = Bytes.toBytes(generateUniqueName());
+            FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions, mutexKey));
+            FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions, mutexKey));
             Thread t1 = new Thread(task1);
             t1.setDaemon(true);
             Thread t2 = new Thread(task2);
@@ -760,11 +761,13 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         private final ConnectionQueryServices services;
         private final CountDownLatch latch;
         private final AtomicInteger numExceptions;
-        public AcquireMutexRunnable(AtomicBoolean acquireStatus, ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions) {
+        private final byte[] mutexRowKey;
+        public AcquireMutexRunnable(AtomicBoolean acquireStatus, ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions, byte[] mutexKey) {
             this.acquireStatus = acquireStatus;
             this.services = services;
             this.latch = latch;
             this.numExceptions = numExceptions;
+            this.mutexRowKey = mutexKey;
         }
         @Override
         public Void call() throws Exception {
