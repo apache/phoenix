@@ -311,6 +311,7 @@
       <artifactId>protobuf-java</artifactId>
       <version>${protobuf-java.version}</version>
     </dependency>
+    <!-- Intentionally avoid an dependencyManagement entry because of conflict with thin-client -->
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
