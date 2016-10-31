@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.calcite;
 
-import java.lang.reflect.Constructor;
 import java.util.List;
 
 import org.apache.calcite.adapter.enumerable.CallImplementor;
@@ -36,11 +35,7 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDataTypeFactory;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
-
 import com.google.common.collect.Lists;
 
 public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunction {
@@ -82,43 +77,33 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
         }
     }
 
-    public static PhoenixScalarFunction createBuiltinFunction(FunctionParseNode.BuiltInFunctionInfo info) {
-        List<FunctionArgument> args = Lists.newArrayList();
-
+    public static List<PhoenixScalarFunction> createBuiltinFunction(FunctionParseNode.BuiltInFunctionInfo info) {
         //TODO: add aggregate function support
         if(info.isAggregate()){
             throw new UnsupportedOperationException();
         }
 
-        for (FunctionParseNode.BuiltInFunctionArgInfo argInfo : info.getArgs()) {
-            Class<? extends PDataType>[] allowedTypes = argInfo.getAllowedTypes();
-            String argType = allowedTypes.length > 0 ? PDataTypeFactory.getInstance().instanceFromClass(allowedTypes[0]).toString() : null;
+        List<PhoenixScalarFunction> functionList = Lists.newArrayList();
 
-            if(argType == null){
-                throw new RuntimeException("function can't be converted");
+        for(List<FunctionArgument> argumentList : info.overloadArguments()){
+            try {
+                Class<? extends FunctionExpression> clazz = info.getFunc();
+                FunctionExpression func = clazz.newInstance();
+
+                if(info.getName() == "ROUND"){
+                    functionList.add(new PhoenixScalarFunction(
+                            new PFunction(info.getName(), argumentList, argumentList.get(0).getArgumentType(), clazz.getName(), null)));
+                } else {
+                    functionList.add(new PhoenixScalarFunction(
+                            new PFunction(info.getName(), argumentList, func.getDataType().getSqlTypeName(), clazz.getName(), null)));
+                }
+
+            } catch(Exception e) {
+                System.out.println("return type error" + info.getName());
+                throw new RuntimeException(e);
             }
-            FunctionArgument arg = new FunctionArgument(
-                    argType,
-                    false,
-                    argInfo.isConstant(),
-                    argInfo.getDefaultValue(),
-                    argInfo.getMinValue(),
-                    argInfo.getMaxValue());
-            args.add(arg);
         }
-
-        Class<? extends FunctionExpression> clazz = info.getFunc();
-        PDataType dType = null;
-
-        try {
-            FunctionExpression func = clazz.newInstance();
-            dType = func.getDataType();
-        } catch(Exception e){
-            System.out.println("return type error" + info.getName());
-            throw new RuntimeException(e);
-        }
-
-        return new PhoenixScalarFunction(new PFunction(info.getName(), args, dType.getSqlTypeName(), clazz.getName(), null));
+        return functionList;
     }
 
     @Override

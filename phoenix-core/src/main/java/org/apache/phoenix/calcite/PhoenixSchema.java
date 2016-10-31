@@ -75,7 +75,8 @@ public class PhoenixSchema implements Schema {
     protected final UDFExpression exp = new UDFExpression();
     private final static Function listJarsFunction = TableFunctionImpl
             .create(ListJarsTable.LIST_JARS_TABLE_METHOD);
-    private final static Map<String, PhoenixScalarFunction> builtinFunctions = Maps.newHashMap();
+    public final static Map<String, Collection<Function>> builtinFunctions = Maps.newHashMap();
+
     
     protected PhoenixSchema(String name, String schemaName,
             SchemaPlus parentSchema, PhoenixConnection pc) {
@@ -127,9 +128,10 @@ public class PhoenixSchema implements Schema {
         Collection<FunctionParseNode.BuiltInFunctionInfo>  infoCollection = ParseNodeFactory.getAll();
         for (FunctionParseNode.BuiltInFunctionInfo info : infoCollection) {
             try {
+                //TODO: aliasing for functions that already exist NOW, TRUNC
                 if(!CalciteUtils.TRANSLATED_BUILT_IN_FUNCTIONS.contains(info.getName())) {
                     builtinFunctions.put(info.getName(),
-                            PhoenixScalarFunction.createBuiltinFunction(info));
+                            (List<Function>)(Object)PhoenixScalarFunction.createBuiltinFunction(info));
                 }
             }
             catch(RuntimeException e){
@@ -183,7 +185,7 @@ public class PhoenixSchema implements Schema {
     public Collection<Function> getFunctions(String name) {
         assert(!builtinFunctions.isEmpty());
         if(builtinFunctions.get(name) != null){
-            return ImmutableList.of((Function) builtinFunctions.get(name));
+            return builtinFunctions.get(name);
         }
         Function func = views.get(name);
         if (func != null) {
