@@ -38,6 +38,7 @@ import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.ProxyUsers;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.query.QueryServices;
@@ -214,8 +215,14 @@ public final class QueryServer extends Configured implements Tool, Runnable {
         String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
         File keytab = new File(keytabPath);
 
+        String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS, null);
+        String[] additionalAllowedRealms = null;
+        if (null != realmsString) {
+            additionalAllowedRealms = StringUtils.split(realmsString, ',');
+        }
+
         // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
-        builder.withSpnego(ugi.getUserName())
+        builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
             .withAutomaticLogin(keytab)
             .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
       }
