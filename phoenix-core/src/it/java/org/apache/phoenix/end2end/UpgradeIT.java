@@ -24,7 +24,9 @@ import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_
 import static org.apache.phoenix.util.UpgradeUtil.SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -33,6 +35,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -41,8 +48,12 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl.UpgradeInProgressException;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PName;
@@ -556,7 +567,97 @@ public class UpgradeIT extends BaseHBaseManagedTimeIT {
             }
         }
     }
+    
+    @Test
+    public void testAcquiringAndReleasingUpgradeMutex() throws Exception {
+        ConnectionQueryServices services = null;
+        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                generateRandomString());
+        try (Connection conn = getConnection(false, null)) {
+            services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            assertTrue(((ConnectionQueryServicesImpl)services)
+                    .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey));
+            try {
+                ((ConnectionQueryServicesImpl)services)
+                        .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
+                fail();
+            } catch (UpgradeInProgressException expected) {
 
+            }
+            assertTrue(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
+            assertFalse(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
+        }
+    }
+    
+    @Test
+    public void testConcurrentUpgradeThrowsUprgadeInProgressException() throws Exception {
+        final AtomicBoolean mutexStatus1 = new AtomicBoolean(false);
+        final AtomicBoolean mutexStatus2 = new AtomicBoolean(false);
+        final CountDownLatch latch = new CountDownLatch(2);
+        final AtomicInteger numExceptions = new AtomicInteger(0);
+        ConnectionQueryServices services = null;
+        try (Connection conn = getConnection(false, null)) {
+            services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            final byte[] mutexKey = Bytes.toBytes(generateRandomString());
+            FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions, mutexKey));
+            FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions, mutexKey));
+            Thread t1 = new Thread(task1);
+            t1.setDaemon(true);
+            Thread t2 = new Thread(task2);
+            t2.setDaemon(true);
+            t1.start();
+            t2.start();
+            latch.await();
+            // make sure tasks didn't fail by calling get()
+            task1.get();
+            task2.get();
+            assertTrue("One of the threads should have acquired the mutex", mutexStatus1.get() || mutexStatus2.get());
+            assertNotEquals("One and only one thread should have acquired the mutex ", mutexStatus1.get(),
+                    mutexStatus2.get());
+            assertEquals("One and only one thread should have caught UpgradeRequiredException ", 1, numExceptions.get());
+        } finally {
+            if (services != null) {
+                releaseUpgradeMutex(services);
+            }
+        }
+    }
+    
+    private void releaseUpgradeMutex(ConnectionQueryServices services) {
+        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+        ((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey);
+        
+    }
+    
+    private static class AcquireMutexRunnable implements Callable<Void> {
+        
+        private final AtomicBoolean acquireStatus;
+        private final ConnectionQueryServices services;
+        private final CountDownLatch latch;
+        private final AtomicInteger numExceptions;
+        private final byte[] mutexRowKey;
+        public AcquireMutexRunnable(AtomicBoolean acquireStatus, ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions, byte[] mutexKey) {
+            this.acquireStatus = acquireStatus;
+            this.services = services;
+            this.latch = latch;
+            this.numExceptions = numExceptions;
+            this.mutexRowKey = mutexKey;
+        }
+        @Override
+        public Void call() throws Exception {
+            try {
+                ((ConnectionQueryServicesImpl)services).acquireUpgradeMutex(
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
+                acquireStatus.set(true);
+            } catch (UpgradeInProgressException e) {
+                numExceptions.incrementAndGet();
+            } finally {
+                latch.countDown();
+            }
+            return null;
+        }
+        
+    }
     private Connection createTenantConnection(String tenantId) throws SQLException {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
