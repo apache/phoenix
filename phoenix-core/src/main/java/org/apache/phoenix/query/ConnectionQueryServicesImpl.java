@@ -32,7 +32,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.util.UpgradeUtil.getUpgradeSnapshotName;
+import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
@@ -76,6 +76,7 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -83,8 +84,10 @@ import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
@@ -224,6 +227,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
+    private static final int TTL_FOR_MUTEX = 15 * 60; // 15min 
     protected final Configuration config;
     private final ConnectionInfo connectionInfo;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
@@ -267,6 +271,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> connectionQueues;
     private ScheduledExecutorService renewLeaseExecutor;
     private final boolean renewLeaseEnabled;
+    private static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
+    private static final byte[] UPGRADE_MUTEX_VALUE = UPGRADE_MUTEX;
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -2312,6 +2318,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         String snapshotName = null;
                         String sysCatalogTableName = null;
                         boolean hConnectionEstablished = false;
+                        boolean acquiredMutex = false;
+                        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+                        boolean snapshotCreated = false;
                         try {
                             openConnection();
                             hConnectionEstablished = true;
@@ -2353,9 +2363,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (upgradeSystemTables) {
                                     long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                                     sysCatalogTableName = e.getTable().getPhysicalName().getString();
-                                    if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP && acquireUpgradeMutex(currentServerSideTableTimeStamp, e.getTable().getPhysicalName().getBytes())) {
-                                        snapshotName = getUpgradeSnapshotName(sysCatalogTableName, currentServerSideTableTimeStamp);
+                                    if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP
+                                            && (acquiredMutex = acquireUpgradeMutex(currentServerSideTableTimeStamp, e
+                                                    .getTable().getPhysicalName().getBytes()))) {
+                                        snapshotName = getSysCatalogSnapshotName(currentServerSideTableTimeStamp);
                                         createSnapshot(snapshotName, sysCatalogTableName);
+                                        snapshotCreated = true;
                                     }
                                     String columnsToAdd = "";
                                     // This will occur if we have an older SYSTEM.CATALOG and we need to update it to include
@@ -2588,7 +2601,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 }
                             } finally {
                                 try {
-                                    restoreFromSnapshot(sysCatalogTableName, snapshotName, success);
+                                    if (snapshotCreated) {
+                                        restoreFromSnapshot(sysCatalogTableName, snapshotName, success);
+                                    }
                                 } catch (SQLException e) {
                                     if (initializationException != null) {
                                         initializationException.setNextException(e);
@@ -2609,6 +2624,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                         }
                                     } finally {
                                         initialized = true;
+                                        if (acquiredMutex) {
+                                            releaseUpgradeMutex(mutexRowKey);
+                                        }
                                         if (initializationException != null) {
                                             throw initializationException;
                                         }
@@ -2756,43 +2774,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
-                
-                /**
-                 * Acquire distributed mutex of sorts to make sure only one JVM is able to run the upgrade code by
-                 * making use of HBase's checkAndPut api.
-                 * <p>
-                 * This method was added as part of 4.8.1 release. For clients upgrading to 4.8.1, the old value in the
-                 * version cell will be null i.e. the {@value QueryConstants#UPGRADE_MUTEX} column will be non-existent. For client's
-                 * upgrading to a release newer than 4.8.1 the existing version cell will be non-null. The client which
-                 * wins the race will end up setting the version cell to the {@value MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP}
-                 * for the release.
-                 * </p>
-                 * 
-                 * @return true if client won the race, false otherwise
-                 * @throws IOException
-                 * @throws SQLException
-                 */
-                private boolean acquireUpgradeMutex(long currentServerSideTableTimestamp, byte[] sysCatalogTableName) throws IOException,
-                        SQLException {
-                    Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-                    try (HTableInterface sysCatalogTable = getTable(sysCatalogTableName)) {
-                        byte[] row = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
-                        byte[] family = PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-                        byte[] qualifier = QueryConstants.UPGRADE_MUTEX;
-                        byte[] oldValue = currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_8_1 ? null
-                                : PLong.INSTANCE.toBytes(currentServerSideTableTimestamp);
-                        byte[] newValue = PLong.INSTANCE.toBytes(MIN_SYSTEM_TABLE_TIMESTAMP);
-                        // Note that the timestamp for this put doesn't really matter since UPGRADE_MUTEX column isn't used
-                        // to calculate SYSTEM.CATALOG's server side timestamp.
-                        Put put = new Put(row);
-                        put.add(family, qualifier, newValue);
-                        boolean acquired = sysCatalogTable.checkAndPut(row, family, qualifier, oldValue, put);
-                        if (!acquired) { throw new UpgradeInProgressException(
-                                getVersion(currentServerSideTableTimestamp), getVersion(MIN_SYSTEM_TABLE_TIMESTAMP)); }
-                        return true;
-                    }
-                }
             });
         } catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
@@ -2800,7 +2781,63 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
-    private static class UpgradeInProgressException extends SQLException {
+    /**
+     * Acquire distributed mutex of sorts to make sure only one JVM is able to run the upgrade code by
+     * making use of HBase's checkAndPut api.
+     * 
+     * @return true if client won the race, false otherwise
+     * @throws IOException
+     * @throws SQLException
+     */
+    @VisibleForTesting
+    public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp, byte[] rowToLock) throws IOException,
+            SQLException {
+        Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
+        try (HBaseAdmin admin = getAdmin()) {
+            try {
+                HTableDescriptor tableDesc = new HTableDescriptor(
+                        TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES));
+                HColumnDescriptor columnDesc = new HColumnDescriptor(
+                        PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
+                columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
+                tableDesc.addFamily(columnDesc);
+                admin.createTable(tableDesc);
+            } catch (TableExistsException e) {
+                // Ignore
+            }
+        }
+        try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+            byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+            byte[] qualifier = UPGRADE_MUTEX;
+            byte[] oldValue = null;
+            byte[] newValue = UPGRADE_MUTEX_VALUE;
+            Put put = new Put(rowToLock);
+            put.add(family, qualifier, newValue);
+            boolean acquired = sysMutexTable.checkAndPut(rowToLock, family, qualifier, oldValue, put);
+            if (!acquired) { throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
+                    getVersion(MIN_SYSTEM_TABLE_TIMESTAMP)); }
+            return true;
+        }
+    }
+    
+    @VisibleForTesting
+    public boolean releaseUpgradeMutex(byte[] mutexRowKey) {
+        boolean released = false;
+        try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+            byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+            byte[] qualifier = UPGRADE_MUTEX;
+            byte[] expectedValue = UPGRADE_MUTEX_VALUE;
+            Delete delete = new Delete(mutexRowKey);
+            RowMutations mutations = new RowMutations(mutexRowKey);
+            mutations.add(delete);
+            released = sysMutexTable.checkAndMutate(mutexRowKey, family, qualifier, CompareOp.EQUAL, expectedValue, mutations);
+        } catch (Exception e) {
+            logger.warn("Release of upgrade mutex failed", e);
+        }
+        return released;
+    }
+    
+    public static class UpgradeInProgressException extends SQLException {
         public UpgradeInProgressException(String upgradeFrom, String upgradeTo) {
             super("Cluster is being concurrently upgraded from " + upgradeFrom + " to " + upgradeTo
                     + ". Please retry establishing connection.", SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS
