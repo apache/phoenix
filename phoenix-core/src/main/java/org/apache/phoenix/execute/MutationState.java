@@ -706,7 +706,7 @@ public class MutationState implements SQLCloseable {
                     }
 
                     @Override
-                    public Pair<byte[], List<Mutation>> next() {
+                     public Pair<byte[], List<Mutation>> next() {
                         Pair<PName, List<Mutation>> pair = mutationIterator.next();
                         return new Pair<byte[], List<Mutation>>(pair.getFirst().getBytes(), pair.getSecond());
                     }
@@ -727,6 +727,7 @@ public class MutationState implements SQLCloseable {
             public Pair<byte[], List<Mutation>> next() {
                 if (!innerIterator.hasNext()) {
                     current = iterator.next();
+                    innerIterator=init();
                 }
                 return innerIterator.next();
             }
