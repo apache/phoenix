@@ -37,8 +37,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * 
  * Aggregators that execute on the server-side
  *
- * 
- * @since 0.1
  */
 public class ServerAggregators extends Aggregators {
     public static final ServerAggregators EMPTY_AGGREGATORS = new ServerAggregators(new SingleAggregateFunction[0], new Aggregator[0], new Expression[0], 0);
@@ -104,6 +102,20 @@ public class ServerAggregators extends Aggregators {
         return aggregators;
     }
 
+    public static ServerAggregators newServerAggregators(ClientAggregators clientAggregators) {
+        int minNullableIndex = clientAggregators.getMinNullableIndex();
+        SingleAggregateFunction[] functions = clientAggregators.getFunctions();
+        int len = functions.length;
+        Aggregator[] aggregators = new Aggregator[len];
+        Expression[] expressions = new Expression[len];
+        for (int i = 0; i < len; i++) {
+            SingleAggregateFunction aggFunc = functions[i];
+            aggregators[i] = aggFunc.getAggregator();
+            expressions[i] = aggFunc.getAggregatorExpression();
+        }
+        return new ServerAggregators(functions, aggregators,expressions, minNullableIndex);
+    }
+    
     /**
      * Deserialize aggregators from the serialized byte array representation
      * @param b byte array representation of a list of Aggregators
