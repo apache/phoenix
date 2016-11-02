@@ -37,8 +37,6 @@ import org.apache.phoenix.schema.tuple.Tuple;
  * 
  * Aggregators that execute on the server-side
  *
- * 
- * @since 0.1
  */
 public class ServerAggregators extends Aggregators {
     public static final ServerAggregators EMPTY_AGGREGATORS = new ServerAggregators(new SingleAggregateFunction[0], new Aggregator[0], new Expression[0], 0);

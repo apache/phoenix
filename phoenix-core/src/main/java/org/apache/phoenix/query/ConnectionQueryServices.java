@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -142,4 +143,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     boolean isUpgradeRequired();
     void upgradeSystemTables(String url, Properties props) throws SQLException;
+    
+    public Configuration getConfiguration();
 }
