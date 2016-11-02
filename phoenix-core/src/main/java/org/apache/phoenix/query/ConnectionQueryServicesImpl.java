@@ -4112,4 +4112,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean isUpgradeRequired() {
         return upgradeRequired.get();
     }
+
+    @Override
+    public Configuration getConfiguration() {
+        return config;
+    }
 }
