@@ -33,7 +33,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.util.UpgradeUtil.getUpgradeSnapshotName;
+import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
@@ -2493,6 +2493,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean acquiredMutexLock = false;
         byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
                 PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+        boolean snapshotCreated = false;
         try {
             if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
                 throw new UpgradeNotRequiredException();
@@ -2516,9 +2517,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 sysCatalogTableName = e.getTable().getPhysicalName().getString();
                 if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP
                         && (acquiredMutexLock = acquireUpgradeMutex(currentServerSideTableTimeStamp, mutexRowKey))) {
-                    snapshotName = getUpgradeSnapshotName(sysCatalogTableName,
-                            currentServerSideTableTimeStamp);
+                    snapshotName = getSysCatalogSnapshotName(currentServerSideTableTimeStamp);
                     createSnapshot(snapshotName, sysCatalogTableName);
+                    snapshotCreated = true;
                 }
                 String columnsToAdd = "";
                 // This will occur if we have an older SYSTEM.CATALOG and we need to update it to
@@ -2810,7 +2811,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             } finally {
                 try {
-                    restoreFromSnapshot(sysCatalogTableName, snapshotName, success);
+                    if (snapshotCreated) {
+                        restoreFromSnapshot(sysCatalogTableName, snapshotName, success);
+                    }
                 } catch (SQLException e) {
                     if (toThrow != null) {
                         toThrow.setNextException(e);
