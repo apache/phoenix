@@ -19,7 +19,6 @@ package org.apache.phoenix.query;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -280,6 +279,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final boolean isAutoUpgradeEnabled;
     private final AtomicBoolean upgradeRequired = new AtomicBoolean(false);
     private static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
+    private static final byte[] UPGRADE_MUTEX_VALUE = UPGRADE_MUTEX; 
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -2973,13 +2973,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Acquire distributed mutex of sorts to make sure only one JVM is able to run the upgrade code by
      * making use of HBase's checkAndPut api.
-     * <p>
-     * This method was added as part of 4.9.0 release. For clients upgrading to 4.9.0, the old value in the
-     * cell will be null i.e. the {@value #UPGRADE_MUTEX} column will be non-existent. For client's
-     * upgrading to a release newer than 4.9.0 the existing cell value will be non-null. The client which
-     * wins the race will end up setting the cell value to the {@value MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP}
-     * for the release.
-     * </p>
      * 
      * @return true if client won the race, false otherwise
      * @throws IOException
@@ -3005,9 +2998,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
             byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
             byte[] qualifier = UPGRADE_MUTEX;
-            byte[] oldValue = currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_9_0 ? null
-                    : PLong.INSTANCE.toBytes(currentServerSideTableTimestamp);
-            byte[] newValue = PLong.INSTANCE.toBytes(MIN_SYSTEM_TABLE_TIMESTAMP);
+            byte[] oldValue = null;
+            byte[] newValue = UPGRADE_MUTEX_VALUE;
             Put put = new Put(rowToLock);
             put.addColumn(family, qualifier, newValue);
             boolean acquired = sysMutexTable.checkAndPut(rowToLock, family, qualifier, oldValue, put);
@@ -3023,7 +3015,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
             byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
             byte[] qualifier = UPGRADE_MUTEX;
-            byte[] expectedValue = PLong.INSTANCE.toBytes(MIN_SYSTEM_TABLE_TIMESTAMP);
+            byte[] expectedValue = UPGRADE_MUTEX_VALUE;
             Delete delete = new Delete(mutexRowKey);
             RowMutations mutations = new RowMutations(mutexRowKey);
             mutations.add(delete);
