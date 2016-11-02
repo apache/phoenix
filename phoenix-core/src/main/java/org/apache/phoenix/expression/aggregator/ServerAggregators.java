@@ -102,20 +102,6 @@ public class ServerAggregators extends Aggregators {
         return aggregators;
     }
 
-    public static ServerAggregators newServerAggregators(ClientAggregators clientAggregators) {
-        int minNullableIndex = clientAggregators.getMinNullableIndex();
-        SingleAggregateFunction[] functions = clientAggregators.getFunctions();
-        int len = functions.length;
-        Aggregator[] aggregators = new Aggregator[len];
-        Expression[] expressions = new Expression[len];
-        for (int i = 0; i < len; i++) {
-            SingleAggregateFunction aggFunc = functions[i];
-            aggregators[i] = aggFunc.getAggregator();
-            expressions[i] = aggFunc.getAggregatorExpression();
-        }
-        return new ServerAggregators(functions, aggregators,expressions, minNullableIndex);
-    }
-    
     /**
      * Deserialize aggregators from the serialized byte array representation
      * @param b byte array representation of a list of Aggregators

@@ -34,6 +34,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregators;
@@ -77,7 +78,12 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         this.groupBy = groupBy;
         this.having = having;
         this.clientAggregators = context.getAggregationManager().getAggregators();
-        this.serverAggregators = ServerAggregators.newServerAggregators(this.clientAggregators);
+        // We must deserialize rather than clone based off of client aggregators because
+        // upon deserialization we create the server-side aggregators instead of the client-side
+        // aggregators. We use the Configuration directly here to avoid the expense of creating
+        // another one.
+        this.serverAggregators = ServerAggregators.deserialize(context.getScan()
+                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration());
     }
 
     @Override

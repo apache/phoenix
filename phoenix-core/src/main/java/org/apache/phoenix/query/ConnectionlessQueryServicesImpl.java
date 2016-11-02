@@ -114,6 +114,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     private final GuidePostsCache guidePostsCache;
+    private final Configuration config;
     
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
@@ -137,7 +138,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
-        config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
         TransactionManager txnManager = new TransactionManager(config);
         this.txSystemClient = new InMemoryTxSystemClient(txnManager);
         this.guidePostsCache = new GuidePostsCache(this, config);
@@ -661,5 +662,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public boolean isUpgradeRequired() {
         return false;
+    }
+
+    @Override
+    public Configuration getConfiguration() {
+        return config;
     }
 }
