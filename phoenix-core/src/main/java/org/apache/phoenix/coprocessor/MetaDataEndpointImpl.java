@@ -1437,8 +1437,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (parentTable!=null && parentTable.getAutoPartitionSeqName()!=null) {
                     long autoPartitionNum = 1;
                     final Properties props = new Properties();
-                    UpgradeUtil.doNotUpgradeOnFirstConnection(props);
-                    try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
+                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
                         Statement stmt = connection.createStatement()) {
                         String seqName = parentTable.getAutoPartitionSeqName();
                         // Not going through the standard route of using statement.execute() as that code path
@@ -1505,9 +1504,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 Short indexId = null;
                 if (request.hasAllocateIndexId() && request.getAllocateIndexId()) {
                     String tenantIdStr = tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
-                    final Properties props = new Properties();
-                    UpgradeUtil.doNotUpgradeOnFirstConnection(props);
-                    try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class)){
+                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)){
                     PName physicalName = parentTable.getPhysicalName();
                     int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
                     SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName,
