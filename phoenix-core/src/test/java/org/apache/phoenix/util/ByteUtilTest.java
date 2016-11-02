@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import static org.junit.Assert.*;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
@@ -62,5 +63,45 @@ public class ByteUtilTest {
         
         key = new byte[] {(byte)255};
         assertNull(ByteUtil.nextKey(key));
+    }
+    
+    @Test
+    public void testGetLocateEndKeyInclusive() {
+        byte[] key=ByteUtil.getLocateEndKeyInclusive(HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+        assertTrue(Bytes.equals(key, HConstants.EMPTY_START_ROW));
+        key=ByteUtil.getLocateEndKeyInclusive(null, null);
+        assertTrue(key==null);
+        
+        byte[] regionEndKey=Bytes.toBytes(0x570a3d61);
+        key=ByteUtil.getLocateEndKeyInclusive(HConstants.EMPTY_START_ROW,regionEndKey);
+        assertTrue(Bytes.equals(key, Bytes.toBytes(0x570a3d60)));
+        key=ByteUtil.getLocateEndKeyInclusive(null,regionEndKey);
+        assertTrue(Bytes.equals(key, Bytes.toBytes(0x570a3d60)));
+        
+        regionEndKey=new byte[]{16,0,0,0};
+        key=ByteUtil.getLocateEndKeyInclusive(HConstants.EMPTY_START_ROW,regionEndKey);
+        assertTrue(Bytes.equals(key, new byte[]{16,0,0}));
+        key=ByteUtil.getLocateEndKeyInclusive(null,regionEndKey);
+        assertTrue(Bytes.equals(key, new byte[]{16,0,0}));
+        
+        regionEndKey=new byte[]{0};
+        key=ByteUtil.getLocateEndKeyInclusive(HConstants.EMPTY_START_ROW,regionEndKey);
+        assertTrue(Bytes.equals(key, HConstants.EMPTY_BYTE_ARRAY));
+        key=ByteUtil.getLocateEndKeyInclusive(null,regionEndKey);
+        assertTrue(Bytes.equals(key, HConstants.EMPTY_BYTE_ARRAY));
+        
+        
+        byte[] regionStartKey=new byte[]{0};
+        regionEndKey=new byte[]{16,0,0,0};
+        key=ByteUtil.getLocateEndKeyInclusive(regionStartKey,regionEndKey);
+        assertTrue(Bytes.equals(key, regionStartKey));
+        
+        regionStartKey=new byte[]{1};
+        key=ByteUtil.getLocateEndKeyInclusive(regionStartKey, HConstants.EMPTY_END_ROW);
+        assertTrue(Bytes.equals(key, regionStartKey));
+        key=ByteUtil.getLocateEndKeyInclusive(regionStartKey, null);
+        assertTrue(Bytes.equals(key, regionStartKey));
+        
+       
     }
 }
