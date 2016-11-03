@@ -131,8 +131,8 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         List<Pair<String,String>> pkColumns = PhoenixRuntime.getPkColsForSql(conn, plan);
         String fullTableName = plan.getTableRef().getTable().getName().getString();
         assertEquals("I", fullTableName);
-        byte[] encodedValues = PhoenixRuntime.encodeValues(conn, fullTableName, values, pkColumns);
-        Object[] decodedValues = PhoenixRuntime.decodeValues(conn, fullTableName, encodedValues, pkColumns);
+        byte[] encodedValues = PhoenixRuntime.encodeColumnValues(conn, fullTableName, values, pkColumns);
+        Object[] decodedValues = PhoenixRuntime.decodeColumnValues(conn, fullTableName, encodedValues, pkColumns);
         assertArrayEquals(values, decodedValues);
         
         plan = conn.createStatement().unwrap(PhoenixStatement.class).optimizeQuery("SELECT /*+ NO_INDEX */ ENTITY_HISTORY_ID FROM T");
@@ -140,8 +140,8 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         values = new Object[] {tenantId, parentId, createdDate, ehId};
         fullTableName = plan.getTableRef().getTable().getName().getString();
         assertEquals("T", fullTableName);
-        encodedValues = PhoenixRuntime.encodeValues(conn, fullTableName, values, pkColumns);
-        decodedValues = PhoenixRuntime.decodeValues(conn, fullTableName, encodedValues, pkColumns);
+        encodedValues = PhoenixRuntime.encodeColumnValues(conn, fullTableName, values, pkColumns);
+        decodedValues = PhoenixRuntime.decodeColumnValues(conn, fullTableName, encodedValues, pkColumns);
         assertArrayEquals(values, decodedValues);
     }
     
