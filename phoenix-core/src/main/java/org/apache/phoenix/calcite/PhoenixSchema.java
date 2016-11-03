@@ -334,36 +334,13 @@ public class PhoenixSchema implements Schema {
     private PhoenixSequence resolveSequence(String name) {
         try {
             SequenceManager manager = new SequenceManager((PhoenixStatement)pc.createStatement());
-            manager.newSequenceReference(pc.getTenantId(), TableName.createNormalized(schemaName, name) , null,
-                    SequenceValueParseNode.Op.CURRENT_VALUE);
-            try {
-                manager.validateSequences(Sequence.ValueOp.VALIDATE_SEQUENCE);
-            } catch (Exception e){
-                return null;
-            }
-
-            return new PhoenixSequence(schemaName, name, pc);
-
-            //new SequenceKey(pc.getTenantId().toString(), schemaName, name, 0);
-
-            // if it does, return a new PhoenixSequence with that schemaname, and name of sequence
-            // if it doesn't, return null
-            // FIXME: Do this the same way as resolving a table after PHOENIX-2489.
-/*            String tenantId = pc.getTenantId() == null ? null : pc.getTenantId().getString();
-            String q = "select 1 from " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-                    + " where " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
-                    + (schemaName == null ? " is null" : " = '" + schemaName + "'")
-                    + " and " + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                    + " = '" + name + "'"
-                    + " and " + PhoenixDatabaseMetaData.TENANT_ID
-                    + (tenantId == null ? " is null" : " = '" + tenantId + "'");
-            ResultSet rs = pc.createStatement().executeQuery(q);
-            if (rs.next()) {
-                return new PhoenixSequence(schemaName, name, pc);
-            }*/
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            manager.newSequenceReference(pc.getTenantId(), TableName.createNormalized(schemaName, name) , null, SequenceValueParseNode.Op.NEXT_VALUE);
+            manager.validateSequences(Sequence.ValueOp.VALIDATE_SEQUENCE);
+        } catch (SQLException e){
+            return null;
         }
+
+        return new PhoenixSequence(schemaName, name, pc);
     }
 
     /** Schema factory that creates a
