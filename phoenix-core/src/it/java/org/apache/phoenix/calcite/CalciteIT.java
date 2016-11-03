@@ -1315,6 +1315,17 @@ public class CalciteIT extends BaseCalciteIT {
                         {6L, "00A323122312312"},
                         {8L, "00A423122312312"}})
                 .close();
+
+        start(false, 1000f).sql("select CURRENT VALUE FOR my.seq1, entity_id from aTable where a_string = 'a'")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(EXPR$0=[CURRENT_VALUE('\"MY\".\"SEQ1\"')], ENTITY_ID=[$1])\n" +
+                        "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                .resultIs(1, new Object[][]{
+                        {8L, "00A123122312312"},
+                        {8L, "00A223122312312"},
+                        {8L, "00A323122312312"},
+                        {8L, "00A423122312312"}})
+                .close();
         
         start(false, 1000f).sql("SELECT NEXT VALUE FOR seq0, item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\"")
                 .explainIs("PhoenixToEnumerableConverter\n" +
