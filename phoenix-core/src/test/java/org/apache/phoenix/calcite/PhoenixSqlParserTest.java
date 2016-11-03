@@ -53,11 +53,6 @@ public class PhoenixSqlParserTest extends SqlParserTest {
     }
 
     @Override
-    protected SqlNode parseStmt(String sql) throws SqlParseException {
-        return getSqlParser(sql).parseStmt();
-    }
-
-    @Override
     public void testBackTickQuery() {
         // Noop
     }
