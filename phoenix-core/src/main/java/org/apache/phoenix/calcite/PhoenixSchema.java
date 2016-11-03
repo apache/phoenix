@@ -74,6 +74,7 @@ public class PhoenixSchema implements Schema {
     protected final UDFExpression exp = new UDFExpression();
     private final static Function listJarsFunction = TableFunctionImpl
             .create(ListJarsTable.LIST_JARS_TABLE_METHOD);
+    private final PhoenixStatement statement;
     
     protected PhoenixSchema(String name, String schemaName,
             SchemaPlus parentSchema, PhoenixConnection pc) {
@@ -87,6 +88,11 @@ public class PhoenixSchema implements Schema {
         this.views = Maps.newHashMap();
         this.views.put("ListJars", listJarsFunction);
         this.viewTables = Sets.newHashSet();
+        try {
+            this.statement = (PhoenixStatement) pc.createStatement();
+        } catch (SQLException e){
+            throw new RuntimeException(e);
+        }
 
     }
 
@@ -333,7 +339,7 @@ public class PhoenixSchema implements Schema {
     
     private PhoenixSequence resolveSequence(String name) {
         try {
-            SequenceManager manager = new SequenceManager((PhoenixStatement)pc.createStatement());
+            SequenceManager manager = new SequenceManager(statement);
             manager.newSequenceReference(pc.getTenantId(), TableName.createNormalized(schemaName, name) , null, SequenceValueParseNode.Op.NEXT_VALUE);
             manager.validateSequences(Sequence.ValueOp.VALIDATE_SEQUENCE);
         } catch (SQLException e){
