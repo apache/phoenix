@@ -14,19 +14,22 @@ import org.apache.calcite.schema.impl.ViewTable;
 import org.apache.calcite.sql.ListJarsTable;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
@@ -34,7 +37,6 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -62,6 +64,7 @@ public class PhoenixSchema implements Schema {
     protected final String schemaName;
     protected final SchemaPlus parentSchema;
     protected final MetaDataClient client;
+    protected final SequenceManager sequenceManager;
     
     protected final Map<String, Schema> subSchemas;
     protected final Map<String, Table> tables;
@@ -83,6 +86,12 @@ public class PhoenixSchema implements Schema {
         this.views = Maps.newHashMap();
         this.views.put("ListJars", listJarsFunction);
         this.viewTables = Sets.newHashSet();
+        try {
+            PhoenixStatement stmt = (PhoenixStatement) pc.createStatement();
+            this.sequenceManager = new SequenceManager(stmt);
+        } catch (SQLException e){
+            throw new RuntimeException(e);
+        }
 
     }
 
@@ -329,24 +338,15 @@ public class PhoenixSchema implements Schema {
     
     private PhoenixSequence resolveSequence(String name) {
         try {
-            // FIXME: Do this the same way as resolving a table after PHOENIX-2489.
-            String tenantId = pc.getTenantId() == null ? null : pc.getTenantId().getString();
-            String q = "select 1 from " + PhoenixDatabaseMetaData.SYSTEM_SEQUENCE
-                    + " where " + PhoenixDatabaseMetaData.SEQUENCE_SCHEMA
-                    + (schemaName == null ? " is null" : " = '" + schemaName + "'")
-                    + " and " + PhoenixDatabaseMetaData.SEQUENCE_NAME
-                    + " = '" + name + "'"
-                    + " and " + PhoenixDatabaseMetaData.TENANT_ID
-                    + (tenantId == null ? " is null" : " = '" + tenantId + "'");
-            ResultSet rs = pc.createStatement().executeQuery(q);
-            if (rs.next()) {
-                return new PhoenixSequence(schemaName, name, pc);
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            sequenceManager.newSequenceReference(pc.getTenantId(),
+                    TableName.createNormalized(schemaName, name) ,
+                    null, SequenceValueParseNode.Op.NEXT_VALUE);
+            sequenceManager.validateSequences(Sequence.ValueOp.VALIDATE_SEQUENCE);
+        } catch (SQLException e){
+            return null;
         }
-        
-        return null;
+
+        return new PhoenixSequence(schemaName, name, pc);
     }
 
     /** Schema factory that creates a
