@@ -567,9 +567,17 @@ public class ScanRanges {
     }
 
     public int getBoundPkColumnCount() {
-        return this.useSkipScanFilter ? ScanUtil.getRowKeyPosition(slotSpan, ranges.size()) : getBoundPkSpan(ranges, slotSpan);
+        return this.useSkipScanFilter ? ScanUtil.getRowKeyPosition(slotSpan, ranges.size()) : Math.max(getBoundPkSpan(ranges, slotSpan), getBoundMinMaxSlotCount());
     }
 
+    public int getBoundMinMaxSlotCount() {
+        if (minMaxRange == KeyRange.EMPTY_RANGE || minMaxRange == KeyRange.EVERYTHING_RANGE) {
+            return 0;
+        }
+        // The minMaxRange is always a single key
+        return 1 + slotSpan[0];
+    }
+    
     public int getBoundSlotCount() {
         int count = 0;
         boolean hasUnbound = false;

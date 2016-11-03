@@ -637,6 +637,16 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
 
+    @Test
+    public void testTableUsedWithQueryMore() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 CHAR(3) NOT NULL, k2 CHAR(15) NOT NULL, k3 DATE NOT NULL, k4 CHAR(15) NOT NULL, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))");
+        conn.createStatement().execute("CREATE INDEX idx ON t(k1,k3,k2,k4)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM t WHERE (k1,k2,k3,k4) > ('001','001xx000003DHml',to_date('2015-10-21 09:50:55.0'),'017xx0000022FuI')");
+        assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
+    }
+
     private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {
         Connection conn = stmt.getConnection();
         QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
