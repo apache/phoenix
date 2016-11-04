@@ -18,6 +18,7 @@
 package org.apache.phoenix.hbase.index.table;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
 
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.TableName;
@@ -35,6 +36,11 @@ public class CoprocessorHTableFactory implements HTableFactory {
     @Override
     public HTableInterface getTable(ImmutableBytesPtr tablename) throws IOException {
         return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()));
+    }
+    
+    @Override
+    public HTableInterface getTable(ImmutableBytesPtr tablename,ExecutorService pool) throws IOException {
+        return this.e.getTable(TableName.valueOf(tablename.copyBytesIfNecessary()), pool);
     }
 
     @Override

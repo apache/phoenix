@@ -20,6 +20,7 @@ package org.apache.phoenix.hive.objectinspector;
 import org.apache.hadoop.hive.common.type.HiveChar;
 import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveCharObjectInspector;
+import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 
 /**
@@ -29,7 +30,11 @@ public class PhoenixCharObjectInspector extends AbstractPhoenixObjectInspector<H
         implements HiveCharObjectInspector {
 
     public PhoenixCharObjectInspector() {
-        super(TypeInfoFactory.charTypeInfo);
+        this(TypeInfoFactory.charTypeInfo);
+    }
+
+    public PhoenixCharObjectInspector(PrimitiveTypeInfo type) {
+        super(type);
     }
 
     @Override

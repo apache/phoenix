@@ -18,7 +18,6 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.types.PDataType;
 
 public class ExpressionUtil {
-
 	private ExpressionUtil() {
 	}
 

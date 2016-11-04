@@ -275,7 +275,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
                 values[i] = rs.getObject(i + 1);
             }
             conn = getTenantSpecificConnection(tenantId);
-            pkIds.add(Base64.encodeBytes(PhoenixRuntime.encodeValues(conn, tableOrViewName.toUpperCase(), values, columns)));
+            pkIds.add(Base64.encodeBytes(PhoenixRuntime.encodeColumnValues(conn, tableOrViewName.toUpperCase(), values, columns)));
         }
         return pkIds.toArray(new String[pkIds.size()]);
     }
@@ -293,7 +293,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         PreparedStatement stmt = conn.prepareStatement(query);
         int bindCounter = 1;
         for (int i = 0; i < cursorIds.length; i++) {
-            Object[] pkParts = PhoenixRuntime.decodeValues(conn, tableName.toUpperCase(), Base64.decode(cursorIds[i]), columns);
+            Object[] pkParts = PhoenixRuntime.decodeColumnValues(conn, tableName.toUpperCase(), Base64.decode(cursorIds[i]), columns);
             for (int j = 0; j < pkParts.length; j++) {
                 stmt.setObject(bindCounter++, pkParts[j]);
             }
@@ -348,11 +348,11 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
         try (Statement stmt = conn.createStatement()) {
             assertFalse(stmt.execute("CREATE TABLE IF NOT EXISTS " + table + " (\n" +
                 "PK VARCHAR(15) NOT NULL\n," +
-                "DEC DECIMAL,\n" +
+                "\"DEC\" DECIMAL,\n" +
                 "CONSTRAINT TABLE_PK PRIMARY KEY (PK))"));
         }
 
-        try (PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + table + " (PK, DEC) VALUES(?, ?)")) {
+        try (PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + table + " (PK, \"DEC\") VALUES(?, ?)")) {
             stmt.setString(1, "key");
             stmt.setBigDecimal(2, null);
             assertFalse(stmt.execute());
@@ -366,6 +366,109 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
             assertEquals("key", rs.getString(1));
             assertNull(rs.getBigDecimal(2));
             assertNull(rs.getBigDecimal(2, 10));
+        }
+    }
+    
+    // FIXME: this repros PHOENIX-3382, but turned up two more issues:
+    // 1) PHOENIX-3383 Comparison between descending row keys used in RVC is reverse
+    // 2) PHOENIX-3384 Optimize RVC expressions for non leading row key columns
+    @Test
+    public void testRVCOnDescWithLeadingPKEquality() throws Exception {
+        final Connection conn = DriverManager.getConnection(getUrl());
+        String fullTableName = generateUniqueName();
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + fullTableName + "(\n" + 
+                    "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
+                    "    SCORE DOUBLE NOT NULL,\n" + 
+                    "    ENTITY_ID CHAR(15) NOT NULL\n" + 
+                    "    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n" + 
+                    "        ORGANIZATION_ID,\n" + 
+                    "        SCORE DESC,\n" + 
+                    "        ENTITY_ID DESC\n" + 
+                    "    )\n" + 
+                    ") MULTI_TENANT=TRUE");
+        }
+        
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',3,'01')");
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',2,'04')");
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',2,'03')");
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',1,'02')");
+        conn.commit();
+
+        // FIXME: PHOENIX-3383
+        // This comparison is really backwards: it should be (score, entity_id) < (2, '04'),
+        // but because we're matching a descending key, our comparison has to be switched.
+        try (Statement stmt = conn.createStatement()) {
+            final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
+                    "FROM " + fullTableName + "\n" + 
+                    "WHERE organization_id = 'org1'\n" + 
+                    "AND (score, entity_id) > (2, '04')\n" + 
+                    "ORDER BY score DESC, entity_id DESC\n" + 
+                    "LIMIT 3");
+            assertTrue(rs.next());
+            assertEquals("03", rs.getString(1));
+            assertEquals(2.0, rs.getDouble(2), 0.001);
+            assertTrue(rs.next());
+            assertEquals("02", rs.getString(1));
+            assertEquals(1.0, rs.getDouble(2), 0.001);
+            assertFalse(rs.next());
+        }
+        // FIXME: PHOENIX-3384
+        // It should not be necessary to specify organization_id in this query
+        try (Statement stmt = conn.createStatement()) {
+            final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
+                    "FROM " + fullTableName + "\n" + 
+                    "WHERE organization_id = 'org1'\n" + 
+                    "AND (organization_id, score, entity_id) > ('org1', 2, '04')\n" + 
+                    "ORDER BY score DESC, entity_id DESC\n" + 
+                    "LIMIT 3");
+            assertTrue(rs.next());
+            assertEquals("03", rs.getString(1));
+            assertEquals(2.0, rs.getDouble(2), 0.001);
+            assertTrue(rs.next());
+            assertEquals("02", rs.getString(1));
+            assertEquals(1.0, rs.getDouble(2), 0.001);
+            assertFalse(rs.next());
+        }
+    }
+    
+    @Test
+    public void testSingleDescPKColumnComparison() throws Exception {
+        final Connection conn = DriverManager.getConnection(getUrl());
+        String fullTableName = generateUniqueName();
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + fullTableName + "(\n" + 
+                    "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
+                    "    SCORE DOUBLE NOT NULL,\n" + 
+                    "    ENTITY_ID CHAR(15) NOT NULL\n" + 
+                    "    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n" + 
+                    "        ORGANIZATION_ID,\n" + 
+                    "        SCORE DESC,\n" + 
+                    "        ENTITY_ID DESC\n" + 
+                    "    )\n" + 
+                    ") MULTI_TENANT=TRUE");
+        }
+        
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',3,'01')");
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',2,'04')");
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',2,'03')");
+        conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES ('org1',1,'02')");
+        conn.commit();
+
+        try (Statement stmt = conn.createStatement()) {
+            // Even though SCORE is descending, the > comparison makes sense logically
+            // and doesn't have to be reversed as RVC expression comparisons do (which
+            // is really just a bug - see PHOENIX-3383).
+            final ResultSet rs = stmt.executeQuery("SELECT entity_id, score\n" + 
+                    "FROM " + fullTableName + "\n" + 
+                    "WHERE organization_id = 'org1'\n" + 
+                    "AND score > 2.0\n" + 
+                    "ORDER BY score DESC\n" + 
+                    "LIMIT 3");
+            assertTrue(rs.next());
+            assertEquals("01", rs.getString(1));
+            assertEquals(3.0, rs.getDouble(2), 0.001);
+            assertFalse(rs.next());
         }
     }
 }

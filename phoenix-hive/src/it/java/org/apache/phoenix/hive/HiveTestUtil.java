@@ -567,6 +567,7 @@ public class HiveTestUtil {
 
     public void init() throws Exception {
         testWarehouse = conf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE);
+        conf.setBoolVar(HiveConf.ConfVars.SUBMITLOCALTASKVIACHILD, false);
         String execEngine = conf.get("hive.execution.engine");
         conf.set("hive.execution.engine", "mr");
         SessionState.start(conf);

@@ -21,6 +21,9 @@ import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.metastore.api.Decimal;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector;
+import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.HiveDecimalUtils;
+import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 
 import java.math.BigDecimal;
@@ -30,17 +33,25 @@ public class PhoenixDecimalObjectInspector extends
         implements HiveDecimalObjectInspector {
 
     public PhoenixDecimalObjectInspector() {
-        super(TypeInfoFactory.decimalTypeInfo);
+        this(TypeInfoFactory.decimalTypeInfo);
+    }
+
+    public PhoenixDecimalObjectInspector(PrimitiveTypeInfo typeInfo) {
+        super(typeInfo);
     }
 
     @Override
     public Object copyObject(Object o) {
-        return o == null ? null : new Decimal((Decimal) o);
+        return o == null ? null : new BigDecimal(o.toString());
     }
 
     @Override
     public HiveDecimal getPrimitiveJavaObject(Object o) {
-        return HiveDecimal.create((BigDecimal) o);
+        if (o == null) {
+            return null;
+        }
+
+        return HiveDecimalUtils.enforcePrecisionScale(HiveDecimal.create((BigDecimal) o),(DecimalTypeInfo)typeInfo);
     }
 
     @Override
@@ -49,15 +60,13 @@ public class PhoenixDecimalObjectInspector extends
 
         if (o != null) {
             try {
-                value = new HiveDecimalWritable((HiveDecimalWritable) o);
+                value = new HiveDecimalWritable(getPrimitiveJavaObject(o));
             } catch (Exception e) {
                 logExceptionMessage(o, "DECIMAL");
             }
         }
 
         return value;
-
-//		return super.getPrimitiveWritableObject(o);
     }
 
 }

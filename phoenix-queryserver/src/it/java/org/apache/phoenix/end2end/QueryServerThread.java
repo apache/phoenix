@@ -18,28 +18,28 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.queryserver.server.Main;
+import org.apache.phoenix.queryserver.server.QueryServer;
 
 /** Wraps up the query server for tests. */
 public class QueryServerThread extends Thread {
 
-  private final Main main;
+  private final QueryServer main;
 
   public QueryServerThread(String[] argv, Configuration conf) {
     this(argv, conf, null);
   }
 
   public QueryServerThread(String[] argv, Configuration conf, String name) {
-    this(new Main(argv, conf), name);
+    this(new QueryServer(argv, conf), name);
   }
 
-  private QueryServerThread(Main m, String name) {
+  private QueryServerThread(QueryServer m, String name) {
     super(m, "query server" + (name == null ? "" : (" - " + name)));
     this.main = m;
     setDaemon(true);
   }
 
-  public Main getMain() {
+  public QueryServer getQueryServer() {
     return main;
   }
 }

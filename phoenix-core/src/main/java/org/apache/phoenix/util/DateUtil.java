@@ -95,7 +95,7 @@ public class DateUtil {
         }
     }
     
-    private static TimeZone getTimeZone(String timeZoneId) {
+    public static TimeZone getTimeZone(String timeZoneId) {
         TimeZone parserTimeZone;
         if (timeZoneId == null) {
             parserTimeZone = DateUtil.DEFAULT_TIME_ZONE;

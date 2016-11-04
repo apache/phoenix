@@ -38,6 +38,7 @@ import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.ProxyUsers;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.query.QueryServices;
@@ -60,9 +61,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * A query server for Phoenix over Calcite's Avatica.
  */
-public final class Main extends Configured implements Tool, Runnable {
+public final class QueryServer extends Configured implements Tool, Runnable {
 
-  protected static final Log LOG = LogFactory.getLog(Main.class);
+  protected static final Log LOG = LogFactory.getLog(QueryServer.class);
 
   private final String[] argv;
   private final CountDownLatch runningLatch = new CountDownLatch(1);
@@ -94,9 +95,11 @@ public final class Main extends Configured implements Tool, Runnable {
   public static void logProcessInfo(Configuration conf) {
     // log environment variables unless asked not to
     if (conf == null || !conf.getBoolean(QueryServices.QUERY_SERVER_ENV_LOGGING_ATTRIB, false)) {
-      Set<String> skipWords = new HashSet<String>(QueryServicesOptions.DEFAULT_QUERY_SERVER_SKIP_WORDS);
+      Set<String> skipWords = new HashSet<String>(
+          QueryServicesOptions.DEFAULT_QUERY_SERVER_SKIP_WORDS);
       if (conf != null) {
-        String[] confSkipWords = conf.getStrings(QueryServices.QUERY_SERVER_ENV_LOGGING_SKIPWORDS_ATTRIB);
+        String[] confSkipWords = conf.getStrings(
+            QueryServices.QUERY_SERVER_ENV_LOGGING_SKIPWORDS_ATTRIB);
         if (confSkipWords != null) {
           skipWords.addAll(Arrays.asList(confSkipWords));
         }
@@ -119,12 +122,12 @@ public final class Main extends Configured implements Tool, Runnable {
   }
 
   /** Constructor for use from {@link org.apache.hadoop.util.ToolRunner}. */
-  public Main() {
+  public QueryServer() {
     this(null, null);
   }
 
   /** Constructor for use as {@link java.lang.Runnable}. */
-  public Main(String[] argv, Configuration conf) {
+  public QueryServer(String[] argv, Configuration conf) {
     this.argv = argv;
     setConf(conf);
   }
@@ -168,7 +171,8 @@ public final class Main extends Configured implements Tool, Runnable {
   public int run(String[] args) throws Exception {
     logProcessInfo(getConf());
     try {
-      final boolean isKerberos = "kerberos".equalsIgnoreCase(getConf().get(QueryServices.QUERY_SERVER_HBASE_SECURITY_CONF_ATTRIB));
+      final boolean isKerberos = "kerberos".equalsIgnoreCase(getConf().get(
+          QueryServices.QUERY_SERVER_HBASE_SECURITY_CONF_ATTRIB));
 
       // handle secure cluster credentials
       if (isKerberos) {
@@ -176,8 +180,10 @@ public final class Main extends Configured implements Tool, Runnable {
             getConf().get(QueryServices.QUERY_SERVER_DNS_INTERFACE_ATTRIB, "default"),
             getConf().get(QueryServices.QUERY_SERVER_DNS_NAMESERVER_ATTRIB, "default")));
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Login to " + hostname + " using " + getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB)
-              + " and principal " + getConf().get(QueryServices.QUERY_SERVER_KERBEROS_PRINCIPAL_ATTRIB) + ".");
+          LOG.debug("Login to " + hostname + " using " + getConf().get(
+              QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB)
+              + " and principal " + getConf().get(
+                  QueryServices.QUERY_SERVER_KERBEROS_PRINCIPAL_ATTRIB) + ".");
         }
         SecurityUtil.login(getConf(), QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB,
             QueryServices.QUERY_SERVER_KERBEROS_PRINCIPAL_ATTRIB, hostname);
@@ -185,7 +191,8 @@ public final class Main extends Configured implements Tool, Runnable {
       }
 
       Class<? extends PhoenixMetaFactory> factoryClass = getConf().getClass(
-          QueryServices.QUERY_SERVER_META_FACTORY_ATTRIB, PhoenixMetaFactoryImpl.class, PhoenixMetaFactory.class);
+          QueryServices.QUERY_SERVER_META_FACTORY_ATTRIB, PhoenixMetaFactoryImpl.class,
+          PhoenixMetaFactory.class);
       int port = getConf().getInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB,
           QueryServicesOptions.DEFAULT_QUERY_SERVER_HTTP_PORT);
       LOG.debug("Listening on port " + port);
@@ -208,8 +215,14 @@ public final class Main extends Configured implements Tool, Runnable {
         String keytabPath = getConf().get(QueryServices.QUERY_SERVER_KEYTAB_FILENAME_ATTRIB);
         File keytab = new File(keytabPath);
 
+        String realmsString = getConf().get(QueryServices.QUERY_SERVER_KERBEROS_ALLOWED_REALMS, null);
+        String[] additionalAllowedRealms = null;
+        if (null != realmsString) {
+            additionalAllowedRealms = StringUtils.split(realmsString, ',');
+        }
+
         // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
-        builder.withSpnego(ugi.getUserName())
+        builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
             .withAutomaticLogin(keytab)
             .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
       }
@@ -277,7 +290,8 @@ public final class Main extends Configured implements Tool, Runnable {
     }
 
     @Override
-    public <T> T doAsRemoteUser(String remoteUserName, String remoteAddress, final Callable<T> action) throws Exception {
+    public <T> T doAsRemoteUser(String remoteUserName, String remoteAddress,
+        final Callable<T> action) throws Exception {
       // We are guaranteed by Avatica that the `remoteUserName` is properly authenticated by the
       // time this method is called. We don't have to verify the wire credentials, we can assume the
       // user provided valid credentials for who it claimed it was.
@@ -327,7 +341,7 @@ public final class Main extends Configured implements Tool, Runnable {
   }
 
   public static void main(String[] argv) throws Exception {
-    int ret = ToolRunner.run(HBaseConfiguration.create(), new Main(), argv);
+    int ret = ToolRunner.run(HBaseConfiguration.create(), new QueryServer(), argv);
     System.exit(ret);
   }
 }

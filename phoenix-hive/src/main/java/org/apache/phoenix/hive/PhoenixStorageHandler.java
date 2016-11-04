@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveStoragePredicateHandler;
 import org.apache.hadoop.hive.ql.metadata.InputEstimator;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
+import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.SerDe;
 import org.apache.hadoop.mapred.InputFormat;
@@ -40,8 +41,6 @@ import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.hive.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.hive.ppd.PhoenixPredicateDecomposer;
-import org.apache.phoenix.hive.ppd.PhoenixPredicateDecomposerManager;
-import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
 import java.util.List;
@@ -144,7 +143,10 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
             tableProperties.setProperty(PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME,
                     tableName);
         }
+        SessionState sessionState = SessionState.get();
 
+        String sessionId = sessionState.getSessionId();
+        jobProperties.put(PhoenixConfigurationUtil.SESSION_ID, sessionId);
         jobProperties.put(PhoenixConfigurationUtil.INPUT_TABLE_NAME, tableName);
         jobProperties.put(PhoenixStorageHandlerConstants.ZOOKEEPER_QUORUM, tableProperties
                 .getProperty(PhoenixStorageHandlerConstants.ZOOKEEPER_QUORUM,
@@ -176,19 +178,9 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
     public DecomposedPredicate decomposePredicate(JobConf jobConf, Deserializer deserializer,
                                                   ExprNodeDesc predicate) {
         PhoenixSerDe phoenixSerDe = (PhoenixSerDe) deserializer;
-        String tableName = phoenixSerDe.getTableProperties().getProperty
-                (PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME);
-        String predicateKey = PhoenixStorageHandlerUtil.getTableKeyOfSession(jobConf, tableName);
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Decomposing predicate with predicateKey : " + predicateKey);
-        }
-
         List<String> columnNameList = phoenixSerDe.getSerdeParams().getColumnNames();
-        PhoenixPredicateDecomposer predicateDecomposer = PhoenixPredicateDecomposerManager
-                .createPredicateDecomposer(predicateKey, columnNameList);
 
-        return predicateDecomposer.decomposePredicate(predicate);
+        return PhoenixPredicateDecomposer.create(columnNameList).decomposePredicate(predicate);
     }
 
     @Override

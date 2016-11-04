@@ -20,7 +20,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedMap;
@@ -30,7 +29,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
@@ -77,11 +75,11 @@ public class StatisticsUtil {
     /** Number of parts in our complex key */
     protected static final int NUM_KEY_PARTS = 3;
     
-    public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, byte[] guidePostStartKey) {
+    public static byte[] getRowKey(byte[] table, ImmutableBytesWritable fam, byte[] guidePostStartKey) {
         return getRowKey(table, fam, new ImmutableBytesWritable(guidePostStartKey,0,guidePostStartKey.length));
     }
 
-    public static byte[] getRowKey(byte[] table, ImmutableBytesPtr fam, ImmutableBytesWritable guidePostStartKey) {
+    public static byte[] getRowKey(byte[] table, ImmutableBytesWritable fam, ImmutableBytesWritable guidePostStartKey) {
         // always starts with the source table
         int guidePostLength = guidePostStartKey.getLength();
         boolean hasGuidePost = guidePostLength > 0;
@@ -99,25 +97,36 @@ public class StatisticsUtil {
         return rowKey;
     }
 
-    public static byte[] getKey(byte[] table, ImmutableBytesPtr fam) {
+    private static byte[] getStartKey(byte[] table, ImmutableBytesWritable fam) {
+        return getKey(table, fam, false);
+    }
+    
+    private static byte[] getEndKey(byte[] table, ImmutableBytesWritable fam) {
+        byte[] key = getKey(table, fam, true);
+        ByteUtil.nextKey(key, key.length);
+        return key;
+    }
+    
+    private static byte[] getKey(byte[] table, ImmutableBytesWritable fam, boolean terminateWithSeparator) {
         // always starts with the source table and column family
-        byte[] rowKey = new byte[table.length + fam.getLength() + 1];
+        byte[] rowKey = new byte[table.length + fam.getLength() + 1 + (terminateWithSeparator ? 1 : 0)];
         int offset = 0;
         System.arraycopy(table, 0, rowKey, offset, table.length);
         offset += table.length;
         rowKey[offset++] = QueryConstants.SEPARATOR_BYTE; // assumes stats table columns not DESC
         System.arraycopy(fam.get(), fam.getOffset(), rowKey, offset, fam.getLength());
         offset += fam.getLength();
+        if (terminateWithSeparator) {
+            rowKey[offset] = QueryConstants.SEPARATOR_BYTE;
+        }
         return rowKey;
     }
 
-    public static byte[] copyRow(KeyValue kv) {
-        return Arrays.copyOfRange(kv.getRowArray(), kv.getRowOffset(), kv.getRowOffset() + kv.getRowLength());
-    }
-
-    public static byte[] getAdjustedKey(byte[] key, byte[] tableNameBytes, ImmutableBytesPtr cf, boolean nextKey) {
-        if (Bytes.compareTo(key, ByteUtil.EMPTY_BYTE_ARRAY) != 0) { return getRowKey(tableNameBytes, cf, key); }
-        key = ByteUtil.concat(getKey(tableNameBytes, cf), QueryConstants.SEPARATOR_BYTE_ARRAY);
+    private static byte[] getAdjustedKey(byte[] key, byte[] tableNameBytes, ImmutableBytesWritable cf, boolean nextKey) {
+        if (Bytes.compareTo(key, ByteUtil.EMPTY_BYTE_ARRAY) != 0) {
+            return getRowKey(tableNameBytes, cf, key); 
+        }
+        key = getKey(tableNameBytes, cf, nextKey);
         if (nextKey) {
             ByteUtil.nextKey(key, key.length);
         }
@@ -127,8 +136,10 @@ public class StatisticsUtil {
     public static List<Result> readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, ImmutableBytesPtr cf,
             byte[] startKey, byte[] stopKey, long clientTimeStamp) throws IOException {
         List<Result> statsForRegion = new ArrayList<Result>();
-        Scan s = MetaDataUtil.newTableRowsScan(getAdjustedKey(startKey, tableNameBytes, cf, false),
-                getAdjustedKey(stopKey, tableNameBytes, cf, true), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+        Scan s = MetaDataUtil.newTableRowsScan(
+                getAdjustedKey(startKey, tableNameBytes, cf, false),
+                getAdjustedKey(stopKey, tableNameBytes, cf, true), 
+                MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                 clientTimeStamp);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
         ResultScanner scanner = null;
@@ -146,40 +157,27 @@ public class StatisticsUtil {
         return statsForRegion;
     }
 
-    public static PTableStats readStatistics(HTableInterface statsHTable, byte[] tableNameBytes, long clientTimeStamp)
+    public static GuidePostsInfo readStatistics(HTableInterface statsHTable, GuidePostsKey key, long clientTimeStamp)
             throws IOException {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        Scan s = MetaDataUtil.newTableRowsScan(tableNameBytes, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        ptr.set(key.getColumnFamily());
+        byte[] tableNameBytes = key.getPhysicalName();
+        byte[] startKey = getStartKey(tableNameBytes, ptr);
+        byte[] endKey = getEndKey(tableNameBytes, ptr);
+        Scan s = MetaDataUtil.newTableRowsScan(startKey, endKey, MetaDataProtocol.MIN_TABLE_TIMESTAMP, clientTimeStamp);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES);
         s.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES);
-        ResultScanner scanner = null;
-        long timeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
-        TreeMap<byte[], GuidePostsInfoBuilder> guidePostsInfoWriterPerCf = new TreeMap<byte[], GuidePostsInfoBuilder>(Bytes.BYTES_COMPARATOR);
-        try {
-            scanner = statsHTable.getScanner(s);
+        GuidePostsInfoBuilder guidePostsInfoWriter = new GuidePostsInfoBuilder();
+        Cell current = null;
+        try (ResultScanner scanner = statsHTable.getScanner(s)) {
             Result result = null;
             while ((result = scanner.next()) != null) {
                 CellScanner cellScanner = result.cellScanner();
                 long rowCount = 0;
                 long byteCount = 0;
-                byte[] cfName = null;
-                int tableNameLength;
-                int cfOffset;
-                int cfLength;
-                boolean valuesSet = false;
-                // Only the two cells with quals GUIDE_POSTS_ROW_COUNT_BYTES and GUIDE_POSTS_BYTES would be retrieved
-                while (cellScanner.advance()) {
-                    Cell current = cellScanner.current();
-                    if (!valuesSet) {
-                        tableNameLength = tableNameBytes.length + 1;
-                        cfOffset = current.getRowOffset() + tableNameLength;
-                        cfLength = getVarCharLength(current.getRowArray(), cfOffset,
-                                current.getRowLength() - tableNameLength);
-                        ptr.set(current.getRowArray(), cfOffset, cfLength);
-                        valuesSet = true;
-                    }
-                    cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                 while (cellScanner.advance()) {
+                    current = cellScanner.current();
                     if (Bytes.equals(current.getQualifierArray(), current.getQualifierOffset(),
                             current.getQualifierLength(), PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES, 0,
                             PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT_BYTES.length)) {
@@ -191,28 +189,22 @@ public class StatisticsUtil {
                         byteCount = PLong.INSTANCE.getCodec().decodeLong(current.getValueArray(),
                                 current.getValueOffset(), SortOrder.getDefault());
                     }
-                    if (current.getTimestamp() > timeStamp) {
-                        timeStamp = current.getTimestamp();
-                    }
                 }
-                if (cfName != null) {
+                if (current != null) {
+                    int tableNameLength = tableNameBytes.length + 1;
+                    int cfOffset = current.getRowOffset() + tableNameLength;
+                    int cfLength = getVarCharLength(current.getRowArray(), cfOffset,
+                            current.getRowLength() - tableNameLength);
+                    ptr.set(current.getRowArray(), cfOffset, cfLength);
+                    byte[] cfName = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     byte[] newGPStartKey = getGuidePostsInfoFromRowKey(tableNameBytes, cfName, result.getRow());
-                    GuidePostsInfoBuilder guidePostsInfoWriter = guidePostsInfoWriterPerCf.get(cfName);
-                    if (guidePostsInfoWriter == null) {
-                        guidePostsInfoWriter = new GuidePostsInfoBuilder();
-                        guidePostsInfoWriterPerCf.put(cfName, guidePostsInfoWriter);
-                    }
                     guidePostsInfoWriter.addGuidePosts(newGPStartKey, byteCount, rowCount);
                 }
             }
-            if (!guidePostsInfoWriterPerCf.isEmpty()) { return new PTableStatsImpl(
-                    getGuidePostsPerCf(guidePostsInfoWriterPerCf), timeStamp); }
-        } finally {
-            if (scanner != null) {
-                scanner.close();
-            }
         }
-        return PTableStats.EMPTY_STATS;
+        // We write a row with an empty KeyValue in the case that stats were generated but without enough data
+        // for any guideposts. If we have no rows, it means stats were never generated.
+        return current == null ? GuidePostsInfo.NO_GUIDEPOST : guidePostsInfoWriter.isEmpty() ? GuidePostsInfo.EMPTY_GUIDEPOST : guidePostsInfoWriter.build();
     }
 
     private static SortedMap<byte[], GuidePostsInfo> getGuidePostsPerCf(

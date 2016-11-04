@@ -18,7 +18,6 @@
 package org.apache.phoenix.expression.aggregator;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
@@ -56,6 +55,10 @@ abstract public class Aggregators {
     
     public KeyValueSchema getValueSchema() {
         return schema;
+    }
+    
+    public int getMinNullableIndex() {
+        return schema.getMinNullable();
     }
     
     @Override

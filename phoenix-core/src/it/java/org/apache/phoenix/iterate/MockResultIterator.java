@@ -40,7 +40,7 @@ public class MockResultIterator implements PeekingResultIterator {
 
     private final Tuple tuple;
 
-    public MockResultIterator(String id, PTable table) {
+    public MockResultIterator(String id, PTable table) throws SQLException {
         TupleProjector projector = new TupleProjector(table);
         List<Cell> result = new ArrayList<>();
         result.add(new KeyValue(Bytes.toBytes(id), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, Bytes.toBytes(id)));

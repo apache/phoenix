@@ -37,7 +37,9 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -693,53 +695,92 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     }
     
     @Test
+    public void testAcquiringAndReleasingUpgradeMutex() throws Exception {
+        ConnectionQueryServices services = null;
+        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                generateUniqueName());
+        try (Connection conn = getConnection(false, null)) {
+            services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            assertTrue(((ConnectionQueryServicesImpl)services)
+                    .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey));
+            try {
+                ((ConnectionQueryServicesImpl)services)
+                        .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
+                fail();
+            } catch (UpgradeInProgressException expected) {
+
+            }
+            assertTrue(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
+            assertFalse(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
+        }
+    }
+    
+    @Test
     public void testConcurrentUpgradeThrowsUprgadeInProgressException() throws Exception {
         final AtomicBoolean mutexStatus1 = new AtomicBoolean(false);
         final AtomicBoolean mutexStatus2 = new AtomicBoolean(false);
         final CountDownLatch latch = new CountDownLatch(2);
         final AtomicInteger numExceptions = new AtomicInteger(0);
+        ConnectionQueryServices services = null;
         try (Connection conn = getConnection(false, null)) {
-            final ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            Thread t1 = new Thread(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions));
+            services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            final byte[] mutexKey = Bytes.toBytes(generateUniqueName());
+            FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions, mutexKey));
+            FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions, mutexKey));
+            Thread t1 = new Thread(task1);
             t1.setDaemon(true);
-            Thread t2 = new Thread(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions));
-            t2.setDaemon(true);;
+            Thread t2 = new Thread(task2);
+            t2.setDaemon(true);
             t1.start();
             t2.start();
             latch.await();
+            // make sure tasks didn't fail by calling get()
+            task1.get();
+            task2.get();
             assertTrue("One of the threads should have acquired the mutex", mutexStatus1.get() || mutexStatus2.get());
-            assertNotEquals("One and only one thread should have acquired the mutex ", mutexStatus1.get(), mutexStatus2.get());
+            assertNotEquals("One and only one thread should have acquired the mutex ", mutexStatus1.get(),
+                    mutexStatus2.get());
             assertEquals("One and only one thread should have caught UpgradeRequiredException ", 1, numExceptions.get());
+        } finally {
+            if (services != null) {
+                releaseUpgradeMutex(services);
+            }
         }
     }
     
-    private static class AcquireMutexRunnable implements Runnable {
+    private void releaseUpgradeMutex(ConnectionQueryServices services) {
+        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+        ((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey);
+        
+    }
+    
+    private static class AcquireMutexRunnable implements Callable<Void> {
         
         private final AtomicBoolean acquireStatus;
         private final ConnectionQueryServices services;
         private final CountDownLatch latch;
         private final AtomicInteger numExceptions;
-        public AcquireMutexRunnable(AtomicBoolean acquireStatus, ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions) {
+        private final byte[] mutexRowKey;
+        public AcquireMutexRunnable(AtomicBoolean acquireStatus, ConnectionQueryServices services, CountDownLatch latch, AtomicInteger numExceptions, byte[] mutexKey) {
             this.acquireStatus = acquireStatus;
             this.services = services;
             this.latch = latch;
             this.numExceptions = numExceptions;
+            this.mutexRowKey = mutexKey;
         }
         @Override
-        public void run() {
+        public Void call() throws Exception {
             try {
                 ((ConnectionQueryServicesImpl)services).acquireUpgradeMutex(
-                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0,
-                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
                 acquireStatus.set(true);
             } catch (UpgradeInProgressException e) {
                 numExceptions.incrementAndGet();
-            }
-            catch (IOException | SQLException ignore) {
-
             } finally {
                 latch.countDown();
             }
+            return null;
         }
         
     }

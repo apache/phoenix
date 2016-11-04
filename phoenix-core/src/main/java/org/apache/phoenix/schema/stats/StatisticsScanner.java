@@ -83,8 +83,9 @@ public class StatisticsScanner implements InternalScanner {
      *
      * @param results
      *            next batch of {@link KeyValue}s
+     * @throws IOException 
      */
-    private void updateStats(final List<Cell> results) {
+    private void updateStats(final List<Cell> results) throws IOException {
         if (!results.isEmpty()) {
             tracker.collectStatistics(results);
         }

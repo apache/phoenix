@@ -227,13 +227,17 @@ public class IndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testCreateIndexAfterUpsertStarted() throws Exception {
-        String tableName = "TBL_" + generateUniqueName();
-        String indexName = "IND_" + generateUniqueName();
-        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
-        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
-        testCreateIndexAfterUpsertStarted(false, fullTableName + "1", fullIndexName + "1");
+        testCreateIndexAfterUpsertStarted(false, 
+                SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
+                SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()));
+    }
+
+    @Test
+    public void testCreateIndexAfterUpsertStartedTxnl() throws Exception {
         if (transactional) {
-            testCreateIndexAfterUpsertStarted(true, fullTableName + "2", fullIndexName + "2");
+            testCreateIndexAfterUpsertStarted(true, 
+                    SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()),
+                    SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, generateUniqueName()));
         }
     }
 

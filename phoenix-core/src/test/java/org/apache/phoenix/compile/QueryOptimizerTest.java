@@ -444,12 +444,12 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("create table "
                     + "XYZ.ABC"
                     + "   (organization_id char(15) not null, \n"
-                    + "    dec DECIMAL(10,2) not null,\n"
+                    + "    \"DEC\" DECIMAL(10,2) not null,\n"
                     + "    a_string_array varchar(100) array[] not null,\n"
                     + "    b_string varchar(100),\n"
                     + "    CF.a_integer integer,\n"
                     + "    a_date date,\n"
-                    + "    CONSTRAINT pk PRIMARY KEY (organization_id, dec, a_string_array)\n"
+                    + "    CONSTRAINT pk PRIMARY KEY (organization_id, \"DEC\", a_string_array)\n"
                     + ")" + (salted ? "SALT_BUCKETS=4" : "") + (multitenant == true ? (salted ? ",MULTI_TENANT=true" : "MULTI_TENANT=true") : ""));
 
             
@@ -470,10 +470,10 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             String expectedColumnNameDataTypes = multitenant ? "\"DEC\" DECIMAL(10,2),\"A_STRING_ARRAY\" VARCHAR(100) ARRAY" : "\"ORGANIZATION_ID\" CHAR(15),\"DEC\" DECIMAL(10,2),\"A_STRING_ARRAY\" VARCHAR(100) ARRAY";
             String tableName = multitenant ? "ABC_VIEW" : "XYZ.ABC";
             String tenantFilter = multitenant ? "" : "organization_id = ? AND ";
-            String orderByRowKeyClause = multitenant ? "dec" : "organization_id";
+            String orderByRowKeyClause = multitenant ? "DEC" : "organization_id";
             
             // Filter on row key columns of data table. No order by. No limit.
-            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " dec = ? and a_string_array = ?";
+            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " \"DEC\" = ? and a_string_array = ?";
             stmt = conn.prepareStatement(sql);
             int counter = 1;
             if (!multitenant) {
@@ -489,7 +489,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             
             counter = 1;
             // Filter on row key columns of data table. Order by row key columns. Limit specified.
-            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " dec = ? and a_string_array = ? ORDER BY " + orderByRowKeyClause + " LIMIT 100";
+            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " \"DEC\" = ? and a_string_array = ? ORDER BY " + orderByRowKeyClause + " LIMIT 100";
             stmt = conn.prepareStatement(sql);
             if (!multitenant) {
                 stmt.setString(counter++, "ORGID");
@@ -501,7 +501,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
             
             counter = 1;
             // Filter on row key columns of data table. Order by non-row key columns. Limit specified.
-            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " dec = ? and a_string_array = ? ORDER BY a_date LIMIT 100";
+            sql = "SELECT CF.a_integer FROM " + tableName + " where " + tenantFilter + " \"DEC\" = ? and a_string_array = ? ORDER BY a_date LIMIT 100";
             stmt = conn.prepareStatement(sql);
             if (!multitenant) {
                 stmt.setString(counter++, "ORGID");
@@ -637,12 +637,21 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
 
+    @Test
+    public void testTableUsedWithQueryMore() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute("CREATE TABLE t (k1 CHAR(3) NOT NULL, k2 CHAR(15) NOT NULL, k3 DATE NOT NULL, k4 CHAR(15) NOT NULL, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))");
+        conn.createStatement().execute("CREATE INDEX idx ON t(k1,k3,k2,k4)");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM t WHERE (k1,k2,k3,k4) > ('001','001xx000003DHml',to_date('2015-10-21 09:50:55.0'),'017xx0000022FuI')");
+        assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
+    }
+
     private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {
         Connection conn = stmt.getConnection();
         QueryPlan plan = PhoenixRuntime.getOptimizedQueryPlan(stmt);
         
-        List<Pair<String, String>> columns = new ArrayList<Pair<String, String>>();
-        PhoenixRuntime.getPkColsForSql(columns, plan, conn, true);
+        List<Pair<String, String>> columns = PhoenixRuntime.getPkColsForSql(conn, plan);
         assertEquals(expectedPkCols, Joiner.on(",").join(getColumnNames(columns)));
         List<String> dataTypes = new ArrayList<String>();
         columns = new ArrayList<Pair<String,String>>();

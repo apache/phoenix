@@ -26,6 +26,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,16 +43,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -62,11 +61,13 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.phoenix.cache.GlobalCache;
-import org.apache.phoenix.cache.ServerCacheClient;
+import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -80,7 +81,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -296,6 +297,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     	// Set SCN so that we don't ping server and have the upper bound set back to
                     	// the timestamp when the failure occurred.
                     	props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(Long.MAX_VALUE));
+                    	
+                    	//Set timeout to max value as rebuilding may take time
+                    	props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+                    	props.setProperty(QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB, Long.toString(Long.MAX_VALUE));
+                    	props.setProperty(QueryServices.RPC_TIMEOUT_ATTRIB, Long.toString(Long.MAX_VALUE));
                     	// don't run a second index populations upsert select 
                         props.setProperty(QueryServices.INDEX_POPULATION_SLEEP_TIME, "0"); 
                         conn = QueryUtil.getConnectionOnServer(props, env.getConfiguration()).unwrap(PhoenixConnection.class);
@@ -320,7 +326,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     // Allow index to begin incremental maintenance as index is back online and we
                     // cannot transition directly from DISABLED -> ACTIVE
                     if (Bytes.compareTo(PIndexState.DISABLE.getSerializedBytes(), indexState) == 0) {
-                        updateIndexState(indexTableFullName, env, PIndexState.DISABLE, PIndexState.INACTIVE);
+                        updateIndexState(conn, indexTableFullName, env, PIndexState.DISABLE, PIndexState.INACTIVE);
                     }
                     List<PTable> indexesToPartiallyRebuild = dataTableToIndexesMap.get(dataPTable);
                     if (indexesToPartiallyRebuild == null) {
@@ -360,65 +366,33 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                             long timeStamp = Math.max(0, earliestDisableTimestamp - overlapTime);
                             LOG.info("Starting to build " + dataPTable + " indexes " + indexesToPartiallyRebuild
                                     + " from timestamp=" + timeStamp);
-                            Scan dataTableScan = IndexManagementUtil.newLocalStateScan(maintainers);
+
+                            TableRef tableRef = new TableRef(null, dataPTable, HConstants.LATEST_TIMESTAMP, false);
+                            // TODO Need to set high timeout 
+                            PostDDLCompiler compiler = new PostDDLCompiler(conn);
+                            MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), null, null, null,
+                                    HConstants.LATEST_TIMESTAMP);
+                            Scan dataTableScan = IndexManagementUtil.newLocalStateScan(plan.getContext().getScan(),
+                                    maintainers);
                             long scanEndTime = getTimestampForBatch(timeStamp);
                             dataTableScan.setTimeRange(timeStamp, scanEndTime);
-                            byte[] physicalTableName = dataPTable.getPhysicalName().getBytes();
-                            try (HTableInterface dataHTable = conn.getQueryServices().getTable(physicalTableName)) {
-                                Result result;
-                                try (ResultScanner dataTableScanner = dataHTable.getScanner(dataTableScan)) {
-                                    int batchSize = conn.getMutateBatchSize();
-                                    List<Mutation> mutations = Lists.newArrayListWithExpectedSize(batchSize);
-                                    ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable(
-                                            ByteUtil.EMPTY_BYTE_ARRAY);
-                                    IndexMaintainer.serializeAdditional(dataPTable, indexMetaDataPtr,
-                                            indexesToPartiallyRebuild, conn);
-                                    byte[] attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
-                                    byte[] uuidValue = ServerCacheClient.generateId();
-
-                                    while ((result = dataTableScanner.next()) != null && !result.isEmpty()) {
-                                        Put put = null;
-                                        Delete del = null;
-                                        for (Cell cell : result.rawCells()) {
-                                            if (KeyValue.Type.codeToType(cell.getTypeByte()) == KeyValue.Type.Put) {
-                                                if (put == null) {
-                                                    put = new Put(CellUtil.cloneRow(cell));
-                                                    put.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                                    put.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
-                                                    put.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
-                                                            PDataType.TRUE_BYTES);
-                                                    mutations.add(put);
-                                                }
-                                                put.add(cell);
-                                            } else {
-                                                if (del == null) {
-                                                    del = new Delete(CellUtil.cloneRow(cell));
-                                                    del.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                                    del.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
-                                                    del.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS,
-                                                            PDataType.TRUE_BYTES);
-                                                    mutations.add(del);
-                                                }
-                                                del.addDeleteMarker(cell);
-                                            }
-                                        }
-                                        if (mutations.size() == batchSize) {
-                                            dataHTable.batch(mutations);
-                                            uuidValue = ServerCacheClient.generateId();
-                                            mutations.clear();
-                                        }
-                                    }
-                                    if (!mutations.isEmpty()) {
-                                        dataHTable.batch(mutations);
-                                    }
-                                }
-                            }
+                            dataTableScan.setCacheBlocks(false);
+                            dataTableScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
+                            
+                            ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable(
+                                    ByteUtil.EMPTY_BYTE_ARRAY);
+                            IndexMaintainer.serializeAdditional(dataPTable, indexMetaDataPtr, indexesToPartiallyRebuild,
+                                    conn);
+                            byte[] attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
+                            dataTableScan.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
+                            MutationState mutationState = plan.execute();
+                            long rowCount = mutationState.getUpdateCount();
+                            LOG.info(rowCount + " rows of index which are rebuild");
                             for (PTable indexPTable : indexesToPartiallyRebuild) {
                                 if (scanEndTime == HConstants.LATEST_TIMESTAMP) {
-                                    String indexTableFullName = SchemaUtil.getTableName(
-                                            indexPTable.getSchemaName().getString(),
-                                            indexPTable.getTableName().getString());
-                                    updateIndexState(indexTableFullName, env, PIndexState.INACTIVE, PIndexState.ACTIVE);
+                                	String indexTableFullName = SchemaUtil.getTableName(indexPTable.getSchemaName()
+                                            .getString(), indexPTable.getTableName().getString());
+                                    updateIndexState(conn, indexTableFullName, env, PIndexState.INACTIVE, PIndexState.ACTIVE);
                                 } else {
 
                                     // Not changing the state of the index , just updating disabled timestamp for
@@ -448,6 +422,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                                             "During Round-robin build: Successfully updated index disabled timestamp  for "
                                                     + indexTableName + " to " + scanEndTime);
                                 }
+
                             }
                         } catch (Exception e) { // Log, but try next table's indexes
                             LOG.warn("Unable to rebuild " + dataPTable + " indexes " + indexesToPartiallyRebuild
@@ -488,11 +463,11 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
         }
     }
     
-    private static void updateIndexState(String indexTableName, RegionCoprocessorEnvironment env, PIndexState oldState,
+    private static void updateIndexState(PhoenixConnection conn, String indexTableName, RegionCoprocessorEnvironment env, PIndexState oldState,
             PIndexState newState) throws ServiceException, Throwable {
         byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
         String schemaName = SchemaUtil.getSchemaNameFromFullName(indexTableName);
-        String indexName = SchemaUtil.getSchemaNameFromFullName(indexTableName);
+        String indexName = SchemaUtil.getTableNameFromFullName(indexTableName);
         // Mimic the Put that gets generated by the client on an update of the index state
         Put put = new Put(indexTableKey);
         put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.INDEX_STATE_BYTES,
@@ -504,9 +479,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                     PLong.INSTANCE.toBytes(0));
         }
         final List<Mutation> tableMetadata = Collections.<Mutation> singletonList(put);
-        Connection conn = QueryUtil.getConnection(env.getConfiguration());
-        MetaDataMutationResult result = conn.unwrap(PhoenixConnection.class).getQueryServices()
-                .updateIndexState(tableMetadata, null);
+        MetaDataMutationResult result = conn.getQueryServices().updateIndexState(tableMetadata, null);
         MutationCode code = result.getMutationCode();
         if (code == MutationCode.TABLE_NOT_FOUND) { throw new TableNotFoundException(schemaName, indexName); }
         if (code == MutationCode.UNALLOWED_TABLE_MUTATION) { throw new SQLExceptionInfo.Builder(

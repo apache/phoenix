@@ -154,7 +154,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
-                    + "(varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2) SELECT varchar_pk, char_pk, int_pk, long_pk , decimal_pk, null FROM "
+                    + "(varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2) SELECT varchar_pk, char_pk, int_pk, long_pk , decimal_pk, CAST(null AS BIGINT) FROM "
                     + fullTableName + " WHERE long_col2=?");
             stmt.setLong(1,3L);
             assertEquals(1,stmt.executeUpdate());
@@ -706,7 +706,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
               while (true) {
                 rs = conn1.createStatement().executeQuery(query);
                 assertTrue(rs.next());
-                System.out.println("Number of rows returned:" + rs.getInt(1));
                 assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
                 try {
                   List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);

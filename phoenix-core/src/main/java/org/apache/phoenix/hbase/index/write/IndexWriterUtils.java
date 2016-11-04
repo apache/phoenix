@@ -54,6 +54,9 @@ public class IndexWriterUtils {
 
   /** Configuration key that HBase uses to set the max number of threads for an HTable */
   public static final String HTABLE_THREAD_KEY = "hbase.htable.threads.max";
+   public static final String INDEX_WRITES_THREAD_MAX_PER_REGIONSERVER_KEY = "phoenix.index.writes.threads.max";
+   public static final String HTABLE_KEEP_ALIVE_KEY = "hbase.htable.threads.keepalivetime";
+   
   private IndexWriterUtils() {
     // private ctor for utilites
   }

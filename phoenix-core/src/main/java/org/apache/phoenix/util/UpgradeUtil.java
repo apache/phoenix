@@ -348,7 +348,7 @@ public class UpgradeUtil {
                     HTableDescriptor[] localIndexTables = admin.listTables(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*");
                     String localIndexSplitter = LocalIndexSplitter.class.getName();
                     for (HTableDescriptor table : localIndexTables) {
-                        HTableDescriptor dataTableDesc = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getUserTableName(table.getNameAsString())));
+                        HTableDescriptor dataTableDesc = admin.getTableDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getNameAsString())));
                         HColumnDescriptor[] columnFamilies = dataTableDesc.getColumnFamilies();
                         boolean modifyTable = false;
                         for(HColumnDescriptor cf : columnFamilies) {
@@ -1897,8 +1897,9 @@ public class UpgradeUtil {
         }
     }
 
-    public static final String getUpgradeSnapshotName(String tableString, long currentSystemTableTimestamp) {
-        Format formatter = new SimpleDateFormat("yyyyMMddHHmmssZ");
+    public static final String getSysCatalogSnapshotName(long currentSystemTableTimestamp) {
+        String tableString = SYSTEM_CATALOG_NAME;
+        Format formatter = new SimpleDateFormat("yyyyMMddHHmmss");
         String date = formatter.format(new Date(System.currentTimeMillis()));
         String upgradingFrom = getVersion(currentSystemTableTimestamp);
         return "SNAPSHOT_" + tableString + "_" + upgradingFrom + "_TO_" + CURRENT_CLIENT_VERSION + "_" + date;

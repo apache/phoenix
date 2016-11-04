@@ -625,10 +625,12 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
                     "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName1 + "\n" + 
                     "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
                     "    CLIENT MERGE SORT\n" + 
+                    "    CLIENT LIMIT 1\n" + 
                     "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + tableName2 + "\n" + 
                     "        SERVER TOP 1 ROW SORTED BY [COL1]\n" + 
-                    "    CLIENT MERGE SORT\n" + 
-                    "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs)); 
+                    "    CLIENT MERGE SORT\n" +
+                    "    CLIENT LIMIT 1\n" + 
+                    "CLIENT MERGE SORT\nCLIENT LIMIT 1", QueryUtil.getExplainPlan(rs)); 
             
             String limitPlan = 
                     "UNION ALL OVER 2 QUERIES\n" + 

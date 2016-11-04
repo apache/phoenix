@@ -86,13 +86,14 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PrefixByteCodec;
 import org.apache.phoenix.util.PrefixByteDecoder;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -120,7 +121,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
 
     private final List<List<Scan>> scans;
     private final List<KeyRange> splits;
-    private final PTableStats tableStats;
     private final byte[] physicalTableName;
     protected final QueryPlan plan;
     protected final String scanId;
@@ -348,7 +348,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     
     public BaseResultIterators(QueryPlan plan, Integer perScanLimit, Integer offset, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         super(plan.getContext(), plan.getTableRef(), plan.getGroupBy(), plan.getOrderBy(),
-                plan.getStatement().getHint(), plan.getLimit(), offset);
+                plan.getStatement().getHint(), QueryUtil.getOffsetLimit(plan.getLimit(), plan.getOffset()), offset);
         this.plan = plan;
         this.scan = scan;
         this.scanGrouper = scanGrouper;
@@ -363,9 +363,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (null == currentSCN) {
           currentSCN = HConstants.LATEST_TIMESTAMP;
         }
-        tableStats = useStats() && StatisticsUtil.isStatsEnabled(TableName.valueOf(physicalTableName))
-                ? context.getConnection().getQueryServices().getTableStats(physicalTableName, currentSCN)
-                : PTableStats.EMPTY_STATS;
         // Used to tie all the scans together during logging
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
@@ -425,55 +422,40 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return guideIndex;
     }
 
-    private GuidePostsInfo getGuidePosts(Set<byte[]> whereConditions) {
-        if (!useStats()) { return GuidePostsInfo.NO_GUIDEPOST; }
+    private GuidePostsInfo getGuidePosts() throws SQLException {
+        if (!useStats() || !StatisticsUtil.isStatsEnabled(TableName.valueOf(physicalTableName))) {
+            return GuidePostsInfo.NO_GUIDEPOST;
+        }
 
-        GuidePostsInfo gps = null;
+        TreeSet<byte[]> whereConditions = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+        for(Pair<byte[], byte[]> where : context.getWhereConditionColumns()) {
+            byte[] cf = where.getFirst();
+            if (cf != null) {
+                whereConditions.add(cf);
+            }
+        }
         PTable table = getTable();
-        Map<byte[], GuidePostsInfo> guidePostMap = tableStats.getGuidePosts();
         byte[] defaultCF = SchemaUtil.getEmptyColumnFamily(getTable());
-        if (table.getColumnFamilies().isEmpty()) {
-            // For sure we can get the defaultCF from the table
-            gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
-        } else {
-            if (whereConditions.isEmpty() || whereConditions.contains(defaultCF)) {
-                gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
-            } else {
-                byte[] familyInWhere = whereConditions.iterator().next();
-                GuidePostsInfo guidePostsInfo = guidePostMap.get(familyInWhere);
-                if (guidePostsInfo != null) {
-                    gps = guidePostsInfo;
-                } else {
-                    // As there are no guideposts collected for the where family we go with the default CF
-                    gps = getDefaultFamilyGuidePosts(guidePostMap, defaultCF);
+        byte[] cf = null;
+        if ( !table.getColumnFamilies().isEmpty() && !whereConditions.isEmpty() ) {
+            for(Pair<byte[], byte[]> where : context.getWhereConditionColumns()) {
+                byte[] whereCF = where.getFirst();
+                if (Bytes.compareTo(defaultCF, whereCF) == 0) {
+                    cf = defaultCF;
+                    break;
                 }
             }
-        }
-        if (gps == null) { return GuidePostsInfo.NO_GUIDEPOST; }
-        return gps;
-    }
-
-    private GuidePostsInfo getDefaultFamilyGuidePosts(Map<byte[], GuidePostsInfo> guidePostMap, byte[] defaultCF) {
-        if (guidePostMap.get(defaultCF) != null) {
-                return guidePostMap.get(defaultCF);
-        }
-        return null;
-    }
-
-    private static String toString(List<byte[]> gps) {
-        StringBuilder buf = new StringBuilder(gps.size() * 100);
-        buf.append("[");
-        for (int i = 0; i < gps.size(); i++) {
-            buf.append(Bytes.toStringBinary(gps.get(i)));
-            buf.append(",");
-            if (i > 0 && i < gps.size()-1 && (i % 10) == 0) {
-                buf.append("\n");
+            if (cf == null) {
+                cf = context.getWhereConditionColumns().get(0).getFirst();
             }
         }
-        buf.setCharAt(buf.length()-1, ']');
-        return buf.toString();
+        if (cf == null) {
+            cf = defaultCF;
+        }
+        GuidePostsKey key = new GuidePostsKey(physicalTableName, cf);
+        return context.getConnection().getQueryServices().getTableStats(key);
     }
-    
+
     private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
@@ -565,14 +547,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         PTable table = getTable();
         boolean isSalted = table.getBucketNum() != null;
         boolean isLocalIndex = table.getIndexType() == IndexType.LOCAL;
-        TreeSet<byte[]> whereConditions = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
-        for(Pair<byte[], byte[]> where : context.getWhereConditionColumns()) {
-            byte[] cf = where.getFirst();
-            if (cf != null) {
-                whereConditions.add(cf);
-            }
-        }
-        GuidePostsInfo gps = getGuidePosts(whereConditions);
+        GuidePostsInfo gps = getGuidePosts();
         hasGuidePosts = gps != GuidePostsInfo.NO_GUIDEPOST;
         boolean traverseAllRegions = isSalted || isLocalIndex;
         if (!traverseAllRegions) {
@@ -649,8 +624,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         if (newScan != null) {
                             ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                                 regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
-                            estimatedRows += gps.getRowCounts().get(guideIndex);
-                            estimatedSize += gps.getByteCounts().get(guideIndex);
+                            estimatedRows += gps.getRowCounts()[guideIndex];
+                            estimatedSize += gps.getByteCounts()[guideIndex];
                         }
                         scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
                         currentKeyBytes = currentGuidePostBytes;

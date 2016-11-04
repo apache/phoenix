@@ -29,6 +29,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.Stoppable;
+import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -178,6 +179,14 @@ public class IndexBuildManager implements Stoppable {
     return delegate.isEnabled(m);
   }
 
+  public boolean isAtomicOp(Mutation m) throws IOException {
+    return delegate.isAtomicOp(m);
+  }
+
+  public List<Mutation> executeAtomicOp(Increment inc) throws IOException {
+      return delegate.executeAtomicOp(inc);
+  }
+  
   @Override
   public void stop(String why) {
     if (stopped) {
@@ -196,4 +205,5 @@ public class IndexBuildManager implements Stoppable {
   public IndexBuilder getBuilderForTesting() {
     return this.delegate;
   }
+
 }

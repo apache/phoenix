@@ -17,17 +17,22 @@
 package org.apache.phoenix.query;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.schema.stats.PTableStats;
+import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.stats.GuidePostsInfo;
+import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -42,16 +47,16 @@ import com.google.common.cache.RemovalNotification;
 import com.google.common.cache.Weigher;
 
 /**
- * "Client-side" cache for storing {@link PTableStats} for Phoenix tables. Intended to decouple
+ * "Client-side" cache for storing {@link GuidePostsInfo} for a column family. Intended to decouple
  * Phoenix from a specific version of Guava's cache.
  */
-public class TableStatsCache {
-    private static final Logger logger = LoggerFactory.getLogger(TableStatsCache.class);
+public class GuidePostsCache {
+    private static final Logger logger = LoggerFactory.getLogger(GuidePostsCache.class);
 
     private final ConnectionQueryServices queryServices;
-    private final LoadingCache<ImmutableBytesPtr, PTableStats> cache;
+    private final LoadingCache<GuidePostsKey, GuidePostsInfo> cache;
 
-    public TableStatsCache(ConnectionQueryServices queryServices, Configuration config) {
+    public GuidePostsCache(ConnectionQueryServices queryServices, Configuration config) {
         this.queryServices = Objects.requireNonNull(queryServices);
         // Number of millis to expire cache values after write
         final long statsUpdateFrequency = config.getLong(
@@ -67,9 +72,9 @@ public class TableStatsCache {
                 // Maximum total weight (size in bytes) of stats entries
                 .maximumWeight(maxTableStatsCacheSize)
                 // Defer actual size to the PTableStats.getEstimatedSize()
-                .weigher(new Weigher<ImmutableBytesPtr, PTableStats>() {
-                    @Override public int weigh(ImmutableBytesPtr key, PTableStats stats) {
-                        return stats.getEstimatedSize();
+                .weigher(new Weigher<GuidePostsKey, GuidePostsInfo>() {
+                    @Override public int weigh(GuidePostsKey key, GuidePostsInfo info) {
+                        return info.getEstimatedSize();
                     }
                 })
                 // Log removals at TRACE for debugging
@@ -81,27 +86,26 @@ public class TableStatsCache {
     /**
      * {@link CacheLoader} implementation for the Phoenix Table Stats cache.
      */
-    protected class StatsLoader extends CacheLoader<ImmutableBytesPtr, PTableStats> {
+    protected class StatsLoader extends CacheLoader<GuidePostsKey, GuidePostsInfo> {
         @Override
-        public PTableStats load(ImmutableBytesPtr tableName) throws Exception {
+        public GuidePostsInfo load(GuidePostsKey statsKey) throws Exception {
             @SuppressWarnings("deprecation")
             HTableInterface statsHTable = queryServices.getTable(SchemaUtil.getPhysicalName(
                     PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES,
                             queryServices.getProps()).getName());
-            final byte[] tableNameBytes = tableName.copyBytesIfNecessary();
             try {
-                PTableStats stats = StatisticsUtil.readStatistics(statsHTable, tableNameBytes,
-                        Long.MAX_VALUE);
-                traceStatsUpdate(tableNameBytes, stats);
-                return stats;
+                GuidePostsInfo guidePostsInfo = StatisticsUtil.readStatistics(statsHTable, statsKey,
+                        HConstants.LATEST_TIMESTAMP);
+                traceStatsUpdate(statsKey, guidePostsInfo);
+                return guidePostsInfo;
             } catch (TableNotFoundException e) {
                 // On a fresh install, stats might not yet be created, don't warn about this.
                 logger.debug("Unable to locate Phoenix stats table", e);
-                return PTableStats.EMPTY_STATS;
+                return GuidePostsInfo.NO_GUIDEPOST;
             } catch (IOException e) {
                 logger.warn("Unable to read from stats table", e);
                 // Just cache empty stats. We'll try again after some time anyway.
-                return PTableStats.EMPTY_STATS;
+                return GuidePostsInfo.NO_GUIDEPOST;
             } finally {
                 try {
                     statsHTable.close();
@@ -115,10 +119,12 @@ public class TableStatsCache {
         /**
          * Logs a trace message for newly inserted entries to the stats cache.
          */
-        void traceStatsUpdate(byte[] tableName, PTableStats stats) {
-            logger.trace("Updating local TableStats cache (id={}) for {}, size={}bytes",
-                  new Object[] {Objects.hashCode(TableStatsCache.this), Bytes.toString(tableName),
-                  stats.getEstimatedSize()});
+        void traceStatsUpdate(GuidePostsKey key, GuidePostsInfo info) {
+            if (logger.isTraceEnabled()) {
+                logger.trace("Updating local TableStats cache (id={}) for {}, size={}bytes",
+                      new Object[] {Objects.hashCode(GuidePostsCache.this), key,
+                      info.getEstimatedSize()});
+            }
         }
     }
 
@@ -126,7 +132,7 @@ public class TableStatsCache {
      * Returns the underlying cache. Try to use the provided methods instead of accessing the cache
      * directly.
      */
-    LoadingCache<ImmutableBytesPtr, PTableStats> getCache() {
+    LoadingCache<GuidePostsKey, GuidePostsInfo> getCache() {
         return cache;
     }
 
@@ -136,8 +142,8 @@ public class TableStatsCache {
      *
      * @see com.google.common.cache.LoadingCache#get(Object)
      */
-    public PTableStats get(ImmutableBytesPtr tableName) throws ExecutionException {
-        return getCache().get(tableName);
+    public GuidePostsInfo get(GuidePostsKey key) throws ExecutionException {
+        return getCache().get(key);
     }
 
     /**
@@ -145,8 +151,8 @@ public class TableStatsCache {
      *
      * @see com.google.common.cache.Cache#put(Object, Object)
      */
-    public void put(ImmutableBytesPtr tableName, PTableStats stats) {
-        getCache().put(Objects.requireNonNull(tableName), Objects.requireNonNull(stats));
+    public void put(GuidePostsKey key, GuidePostsInfo info) {
+        getCache().put(Objects.requireNonNull(key), Objects.requireNonNull(info));
     }
 
     /**
@@ -154,8 +160,8 @@ public class TableStatsCache {
      *
      * @see com.google.common.cache.Cache#invalidate(Object)
      */
-    public void invalidate(ImmutableBytesPtr tableName) {
-        getCache().invalidate(Objects.requireNonNull(tableName));
+    public void invalidate(GuidePostsKey key) {
+        getCache().invalidate(Objects.requireNonNull(key));
     }
 
     /**
@@ -166,21 +172,54 @@ public class TableStatsCache {
     public void invalidateAll() {
         getCache().invalidateAll();
     }
+    
+    /**
+     * Removes all mappings where the {@link org.apache.phoenix.schema.stats.GuidePostsKey#getPhysicalName()}
+     * equals physicalName. Because all keys in the map must be iterated, this method should be avoided.
+     * @param physicalName
+     */
+    public void invalidateAll(byte[] physicalName) {
+        for (GuidePostsKey key : getCache().asMap().keySet()) {
+            if (Bytes.compareTo(key.getPhysicalName(), physicalName) == 0) {
+                invalidate(key);
+            }
+        }
+    }
+    
+    public void invalidateAll(HTableDescriptor htableDesc) {
+        byte[] tableName = htableDesc.getTableName().getName();
+        for (byte[] fam : htableDesc.getFamiliesKeys()) {
+            invalidate(new GuidePostsKey(tableName, fam));
+        }
+    }
+    
+    public void invalidateAll(PTable table) {
+        byte[] physicalName = table.getPhysicalName().getBytes();
+        List<PColumnFamily> families = table.getColumnFamilies();
+        if (families.isEmpty()) {
+            invalidate(new GuidePostsKey(physicalName, SchemaUtil.getEmptyColumnFamily(table)));
+        } else {
+            for (PColumnFamily family : families) {
+                invalidate(new GuidePostsKey(physicalName, family.getName().getBytes()));
+            }
+        }
+    }
 
     /**
      * A {@link RemovalListener} implementation to track evictions from the table stats cache.
      */
     static class PhoenixStatsCacheRemovalListener implements
-            RemovalListener<ImmutableBytesPtr, PTableStats> {
+            RemovalListener<GuidePostsKey, GuidePostsInfo> {
         @Override
-        public void onRemoval(RemovalNotification<ImmutableBytesPtr, PTableStats> notification) {
-            final RemovalCause cause = notification.getCause();
-            if (wasEvicted(cause)) {
-                ImmutableBytesPtr ptr = notification.getKey();
-                String tableName = new String(ptr.get(), ptr.getOffset(), ptr.getLength());
-                logger.trace("Cached stats for {} with size={}bytes was evicted due to cause={}",
-                        new Object[] {tableName, notification.getValue().getEstimatedSize(),
-                                cause});
+        public void onRemoval(RemovalNotification<GuidePostsKey, GuidePostsInfo> notification) {
+            if (logger.isTraceEnabled()) {
+                final RemovalCause cause = notification.getCause();
+                if (wasEvicted(cause)) {
+                    GuidePostsKey key = notification.getKey();
+                    logger.trace("Cached stats for {} with size={}bytes was evicted due to cause={}",
+                            new Object[] {key, notification.getValue().getEstimatedSize(),
+                                    cause});
+                }
             }
         }
 

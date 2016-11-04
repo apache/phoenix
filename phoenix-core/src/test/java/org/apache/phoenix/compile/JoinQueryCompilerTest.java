@@ -41,6 +41,7 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
@@ -48,10 +49,44 @@ import org.junit.Test;
  */
 public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
     
+    @BeforeClass
+    public static void createJoinTables() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("create table " + JOIN_ORDER_TABLE_FULL_NAME +
+                    "   (\"order_id\" varchar(15) not null primary key, " +
+                    "    \"customer_id\" varchar(10), " +
+                    "    \"item_id\" varchar(10), " +
+                    "    price integer, " +
+                    "    quantity integer, " +
+                    "    date timestamp)");
+            conn.createStatement().execute("create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
+                    "   (\"customer_id\" varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    phone varchar(12), " +
+                    "    address varchar, " +
+                    "    loc_id varchar(5), " +
+                    "    date date)");
+            conn.createStatement().execute("create table " + JOIN_ITEM_TABLE_FULL_NAME +
+                    "   (\"item_id\" varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    price integer, " +
+                    "    discount1 integer, " +
+                    "    discount2 integer, " +
+                    "    \"supplier_id\" varchar(10), " +
+                    "    description varchar)");
+            conn.createStatement().execute("create table " + JOIN_SUPPLIER_TABLE_FULL_NAME +
+                    "   (\"supplier_id\" varchar(10) not null primary key, " +
+                    "    name varchar, " +
+                    "    phone varchar(12), " +
+                    "    address varchar, " +
+                    "    loc_id varchar(5))");
+        }
+    }
+    
     @Test
     public void testExplainPlan() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.date FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " 
+        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.\"DATE\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN "
     	+ JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" AND c.name LIKE 'C%' LEFT JOIN " 
     	+ JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN " 
     	+ JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";

@@ -150,7 +150,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.expression.ColumnExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -195,6 +194,9 @@ import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SequenceAllocation;
+import org.apache.phoenix.schema.SequenceAlreadyExistsException;
+import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -1434,8 +1436,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 if (parentTable!=null && parentTable.getAutoPartitionSeqName()!=null) {
                     long autoPartitionNum = 1;
                     final Properties props = new Properties();
-                    UpgradeUtil.doNotUpgradeOnFirstConnection(props);
-                    try (PhoenixConnection connection = DriverManager.getConnection(MetaDataUtil.getJdbcUrl(env), props).unwrap(PhoenixConnection.class);
+                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
                         Statement stmt = connection.createStatement()) {
                         String seqName = parentTable.getAutoPartitionSeqName();
                         // Not going through the standard route of using statement.execute() as that code path
@@ -1499,6 +1500,51 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         cell.getTimestamp(), Type.codeToType(cell.getTypeByte()), bytes);
                     cells.add(viewConstantCell);
                 }
+                Short indexId = null;
+                if (request.hasAllocateIndexId() && request.getAllocateIndexId()) {
+                    String tenantIdStr = tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
+                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)){
+                    PName physicalName = parentTable.getPhysicalName();
+                    int nSequenceSaltBuckets = connection.getQueryServices().getSequenceSaltBuckets();
+                    SequenceKey key = MetaDataUtil.getViewIndexSequenceKey(tenantIdStr, physicalName,
+                            nSequenceSaltBuckets, parentTable.isNamespaceMapped() );
+                        // TODO Review Earlier sequence was created at (SCN-1/LATEST_TIMESTAMP) and incremented at the client max(SCN,dataTable.getTimestamp), but it seems we should
+                        // use always LATEST_TIMESTAMP to avoid seeing wrong sequence values by different connection having SCN
+                        // or not. 
+                    long sequenceTimestamp = HConstants.LATEST_TIMESTAMP;
+                    try {
+                        connection.getQueryServices().createSequence(key.getTenantId(), key.getSchemaName(), key.getSequenceName(),
+                                Short.MIN_VALUE, 1, 1, Long.MIN_VALUE, Long.MAX_VALUE, false, sequenceTimestamp);
+                    } catch (SequenceAlreadyExistsException e) {
+                    }
+                    long[] seqValues = new long[1];
+                    SQLException[] sqlExceptions = new SQLException[1];
+                    connection.getQueryServices().incrementSequences(Collections.singletonList(new SequenceAllocation(key, 1)),
+                            HConstants.LATEST_TIMESTAMP, seqValues, sqlExceptions);
+                    if (sqlExceptions[0] != null) {
+                        throw sqlExceptions[0];
+                    }
+                    long seqValue = seqValues[0];
+                    if (seqValue > Short.MAX_VALUE) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.TOO_MANY_INDEXES);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        done.run(builder.build());
+                        return;
+                    }
+                    Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+                    NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
+                    List<Cell> cells = familyCellMap.get(TABLE_FAMILY_BYTES);
+                    Cell cell = cells.get(0);
+                    PDataType dataType = MetaDataUtil.getViewIndexIdDataType();
+                    Object val = dataType.toObject(seqValue, PLong.INSTANCE);
+                    byte[] bytes = new byte [dataType.getByteSize() + 1];
+                    dataType.toBytes(val, bytes, 0);
+                    Cell indexIdCell = new KeyValue(cell.getRow(), cell.getFamily(), VIEW_INDEX_ID_BYTES,
+                            cell.getTimestamp(), Type.codeToType(cell.getTypeByte()), bytes);
+                    cells.add(indexIdCell);
+                    indexId = (short) seqValue;
+                    }
+                }
                 
                 // TODO: Switch this to HRegion#batchMutate when we want to support indexes on the
                 // system table. Basically, we get all the locks that we don't already hold for all the
@@ -1518,6 +1564,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // Get timeStamp from mutations - the above method sets it if it's unset
                 long currentTimeStamp = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_NOT_FOUND);
+                if (indexId != null) {
+                    builder.setViewIndexId(indexId);
+                }
                 builder.setMutationTime(currentTimeStamp);
                 done.run(builder.build());
                 return;
@@ -1533,7 +1582,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private static RowLock acquireLock(Region region, byte[] key, List<RowLock> locks)
         throws IOException {
-        RowLock rowLock = region.getRowLock(key, true);
+        RowLock rowLock = region.getRowLock(key, false);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
         }
@@ -2366,14 +2415,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     
     private class ColumnFinder extends StatelessTraverseAllExpressionVisitor<Void> {
         private boolean columnFound;
-        private final ColumnExpression columnExpression;
+        private final Expression columnExpression;
 
-        public ColumnFinder(ColumnExpression columnExpression) {
+        public ColumnFinder(Expression columnExpression) {
             this.columnExpression = columnExpression;
             columnFound = false;
         }
 
-        private Void process(ColumnExpression expression) {
+        private Void process(Expression expression) {
             if (expression.equals(columnExpression)) {
                 columnFound = true;
             }
@@ -2475,7 +2524,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     ColumnResolver columnResolver = FromCompiler.getResolver(baseTableRef);
                     StatementContext context = new StatementContext(statement, columnResolver);
                     Expression whereExpression = WhereCompiler.compile(context, viewWhere);
-                    ColumnExpression colExpression =
+                    Expression colExpression =
                             new ColumnRef(baseTableRef, existingViewColumn.getPosition())
                                     .newColumnExpression();
                     ColumnFinder columnFinder = new ColumnFinder(colExpression);
@@ -2853,7 +2902,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         boolean blockWriteRebuildIndex = env.getConfiguration().getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE, 
                 QueryServicesOptions.DEFAULT_INDEX_FAILURE_BLOCK_WRITE);
         if (!wasLocked) {
-            rowLock = region.getRowLock(key, true);
+            rowLock = region.getRowLock(key, false);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
@@ -2917,7 +2966,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         try {
             rowLocks = new ArrayList<Region.RowLock>(keys.size());
             for (int i = 0; i < keys.size(); i++) {
-                Region.RowLock rowLock = region.getRowLock(keys.get(i), true);
+                Region.RowLock rowLock = region.getRowLock(keys.get(i), false);
                 if (rowLock == null) {
                     throw new IOException("Failed to acquire lock on "
                             + Bytes.toStringBinary(keys.get(i)));
@@ -3210,7 +3259,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             PIndexState newState =
                     PIndexState.fromSerializedValue(newKV.getValueArray()[newKV.getValueOffset()]);
-            RowLock rowLock = region.getRowLock(key, true);
+            RowLock rowLock = region.getRowLock(key, false);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }

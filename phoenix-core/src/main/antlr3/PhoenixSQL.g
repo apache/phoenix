@@ -135,6 +135,9 @@ tokens
     ONLY = 'only';
     EXECUTE = 'execute';
     UPGRADE = 'upgrade';
+    DEFAULT = 'default';
+    DUPLICATE = 'duplicate';
+    IGNORE = 'ignore';
 }
 
 
@@ -441,7 +444,7 @@ create_table_node returns [CreateTableStatement ret]
    
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
-    :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
+    :   CREATE SCHEMA (IF NOT ex=EXISTS)? (DEFAULT | s=identifier)
         {ret = factory.createSchema(s, ex!=null); }
     ;
 
@@ -642,12 +645,13 @@ column_defs returns [List<ColumnDef> ret]
 ;
 
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)?
+    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? (pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)?
         { $ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null, 
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
             pk != null, 
             order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
+            df == null ? null : df.toString(),
             rr != null); }
     ;
 
@@ -713,10 +717,26 @@ finally{ contextStack.pop(); }
 upsert_node returns [UpsertStatement ret]
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN) | s=select_node)
-        {ret = factory.upsert(factory.namedTable(null,t,p == null ? null : p.getFirst()), hint, p == null ? null : p.getSecond(), v, s, getBindCount(), new HashMap<String, UDFParseNode>(udfParseNodes)); }
+        ((VALUES LPAREN v=one_or_more_expressions RPAREN ( ON DUPLICATE KEY ( ig=IGNORE | ( UPDATE pairs=update_column_pairs ) ) )? ) | s=select_node)
+        {ret = factory.upsert(
+            factory.namedTable(null,t,p == null ? null : p.getFirst()), 
+            hint, p == null ? null : p.getSecond(), 
+            v, s, getBindCount(), 
+            new HashMap<String, UDFParseNode>(udfParseNodes),
+            ig != null ? Collections.<Pair<ColumnName,ParseNode>>emptyList() : pairs != null ? pairs : null); }
     ;
+  
+update_column_pairs returns [ List<Pair<ColumnName,ParseNode>> ret]
+@init{ret = new ArrayList<Pair<ColumnName,ParseNode>>(); }
+    :  p=update_column_pair { ret.add(p); }
+       (COMMA p=update_column_pair { ret.add(p); } )*
+;
 
+update_column_pair returns [ Pair<ColumnName,ParseNode> ret ]
+    :  c=column_name EQ e=expression { $ret = new Pair<ColumnName,ParseNode>(c,e); }
+;
+
+  
 upsert_column_refs returns [Pair<List<ColumnDef>,List<ColumnName>> ret]
 @init{ret = new Pair<List<ColumnDef>,List<ColumnName>>(new ArrayList<ColumnDef>(), new ArrayList<ColumnName>()); }
     :  d=dyn_column_name_or_def { if (d.getDataType()!=null) { $ret.getFirst().add(d); } $ret.getSecond().add(d.getColumnDefName()); } 
@@ -903,7 +923,7 @@ multiply_divide_modulo_expression returns [ParseNode ret]
     ;
 
 use_schema_node returns [UseSchemaStatement ret]
-	:   USE s=identifier
+	:   USE (DEFAULT | s=identifier)
         {ret = factory.useSchema(s); }
     ;
 

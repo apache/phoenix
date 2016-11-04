@@ -69,7 +69,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
                 "PTSDB(" +
                 "    INST, " +
                 "    HOST," +
-                "    DATE)" +
+                "    \"DATE\")" +
                 "VALUES (?, ?, CURRENT_DATE())");
         stmt.setString(1, "ab");
         stmt.setString(2, "a");
@@ -97,7 +97,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
                 "PTSDB(" +
                 "    INST, " +
                 "    HOST," +
-                "    DATE," +
+                "    \"DATE\"," +
                 "    VAL)" +
                 "VALUES (?, ?, ?, ?)");
         stmt.setString(1, "abc");
@@ -260,7 +260,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testSkipScan() throws Exception {
         long ts = nextTimestamp();
-        String query = "SELECT HOST FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2171-01-01 00:00:00')";
+        String query = "SELECT HOST FROM PTSDB WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00')";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -279,7 +279,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testSkipMax() throws Exception {
         long ts = nextTimestamp();
-        String query = "SELECT MAX(INST),MAX(DATE) FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2171-01-01 00:00:00')";
+        String query = "SELECT MAX(INST),MAX(\"DATE\") FROM PTSDB WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00')";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -298,7 +298,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
     @Test
     public void testSkipMaxWithLimit() throws Exception {
         long ts = nextTimestamp();
-        String query = "SELECT MAX(INST),MAX(DATE) FROM PTSDB WHERE INST='abc' AND DATE>=TO_DATE('1970-01-01 00:00:00') AND DATE <TO_DATE('2171-01-01 00:00:00') LIMIT 2";
+        String query = "SELECT MAX(INST),MAX(\"DATE\") FROM PTSDB WHERE INST='abc' AND \"DATE\">=TO_DATE('1970-01-01 00:00:00') AND \"DATE\" <TO_DATE('2171-01-01 00:00:00') LIMIT 2";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -444,7 +444,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         conn.close();
 
         // Comparisons against null are always false.
-        String query = "SELECT HOST,DATE FROM PTSDB WHERE HOST='' AND INST=''";
+        String query = "SELECT HOST,\"DATE\" FROM PTSDB WHERE HOST='' AND INST=''";
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {
@@ -473,7 +473,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.close();
 
-        String query = "SELECT HOST,DATE FROM PTSDB WHERE INST='x' AND HOST='y'";
+        String query = "SELECT HOST,\"DATE\" FROM PTSDB WHERE INST='x' AND HOST='y'";
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {
@@ -503,8 +503,8 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.close();
 
-        String query1 = "SELECT INST,DATE FROM PTSDB WHERE INST='x''y'";
-        String query2 = "SELECT INST,DATE FROM PTSDB WHERE INST='x\\\'y'";
+        String query1 = "SELECT INST,\"DATE\" FROM PTSDB WHERE INST='x''y'";
+        String query2 = "SELECT INST,\"DATE\" FROM PTSDB WHERE INST='x\\\'y'";
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {
@@ -544,7 +544,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         initPtsdbTableValues(ts);
 
-        String query = "SELECT HOST,DATE FROM PTSDB WHERE INST='x' AND HOST='y'";
+        String query = "SELECT HOST,\"DATE\" FROM PTSDB WHERE INST='x' AND HOST='y'";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -566,7 +566,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("upsert into "+PTSDB2_NAME+"(inst,date,val2) VALUES (?, ?, ?)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into "+PTSDB2_NAME+"(inst,\"DATE\",val2) VALUES (?, ?, ?)");
         stmt.setString(1, "a");
         stmt.setDate(2, d);
         stmt.setDouble(3, 101.3);
@@ -603,7 +603,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         String query = "SELECT MAX(val2)"
         + " FROM "+PTSDB2_NAME
         + " WHERE inst='a'"
-        + " GROUP BY ROUND(date,'day',1)"
+        + " GROUP BY ROUND(\"DATE\",'day',1)"
         + " ORDER BY MAX(val2)"; // disambiguate row order
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -631,8 +631,8 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
         String query = "SELECT inst,MAX(val2),MIN(val2)"
         + " FROM "+PTSDB2_NAME
-        + " GROUP BY inst,ROUND(date,'day',1)"
-        + " ORDER BY inst,ROUND(date,'day',1)"
+        + " GROUP BY inst,ROUND(\"DATE\",'day',1)"
+        + " ORDER BY inst,ROUND(\"DATE\",'day',1)"
         ;
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -701,9 +701,9 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
         String query = "SELECT SUM(val1),SUM(val2),SUM(val3) FROM "+PTSDB2_NAME;
-        String sql1 = "UPSERT INTO "+PTSDB2_NAME+"(inst,date,val1) VALUES (?, ?, ?)";
-        String sql2 = "UPSERT INTO "+PTSDB2_NAME+"(inst,date,val2) VALUES (?, ?, ?)";
-        String sql3 = "UPSERT INTO "+PTSDB2_NAME+"(inst,date,val3) VALUES (?, ?, ?)";
+        String sql1 = "UPSERT INTO "+PTSDB2_NAME+"(inst,\"DATE\",val1) VALUES (?, ?, ?)";
+        String sql2 = "UPSERT INTO "+PTSDB2_NAME+"(inst,\"DATE\",val2) VALUES (?, ?, ?)";
+        String sql3 = "UPSERT INTO "+PTSDB2_NAME+"(inst,\"DATE\",val3) VALUES (?, ?, ?)";
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         // conn.setAutoCommit(true);
@@ -801,7 +801,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             assertTrue(rs.next());
             assertEquals("x",rs.getString("inst"));
             assertEquals("y",rs.getString("host"));
-            assertEquals(D1, rs.getDate("date"));
+            assertEquals(D1, rs.getDate("DATE"));
             assertEquals(BigDecimal.valueOf(0.5), rs.getBigDecimal("val"));
             assertFalse(rs.next());
         } finally {
@@ -814,7 +814,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         long ts = nextTimestamp();
         initPtsdbTableValues(ts);
 
-        String query = "SELECT HOST,TO_CHAR(DATE) FROM PTSDB WHERE INST='x' AND HOST='y'";
+        String query = "SELECT HOST,TO_CHAR(\"DATE\") FROM PTSDB WHERE INST='x' AND HOST='y'";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -835,7 +835,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
         String format = "HH:mm:ss";
         Format dateFormatter = DateUtil.getDateFormatter(format);
-        String query = "SELECT HOST,TO_CHAR(DATE,'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y'";
+        String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y'";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -856,7 +856,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
 
         String format = "yyyy-MM-dd HH:mm:ss.S";
         Format dateFormatter = DateUtil.getDateFormatter(format);
-        String query = "SELECT HOST,TO_CHAR(DATE,'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y' and DATE=TO_DATE(?,'" + format + "')";
+        String query = "SELECT HOST,TO_CHAR(\"DATE\",'" + format + "') FROM PTSDB WHERE INST='x' AND HOST='y' and \"DATE\"=TO_DATE(?,'" + format + "')";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -1604,7 +1604,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + ts;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
-        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB(INST, HOST, DATE, VAL, PATTERN VARCHAR) VALUES (?, ?, ?, 0.5, 'x_Z%')");
+        PreparedStatement stmt = conn.prepareStatement("upsert into PTSDB(INST, HOST, \"DATE\", VAL, PATTERN VARCHAR) VALUES (?, ?, ?, 0.5, 'x_Z%')");
         stmt.setDate(3, D1);
 
         stmt.setString(1, "a");
@@ -1742,7 +1742,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
         stmt.execute();
         conn.close();
 
-        String query = "SELECT HOST,INST,DATE FROM PTSDB WHERE HOST IS NULL AND INST IS NULL AND DATE=?";
+        String query = "SELECT HOST,INST,\"DATE\" FROM PTSDB WHERE HOST IS NULL AND INST IS NULL AND \"DATE\"=?";
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         conn = DriverManager.getConnection(url, props);
         try {

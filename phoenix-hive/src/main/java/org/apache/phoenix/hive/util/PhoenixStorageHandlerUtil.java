@@ -33,6 +33,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.DNS;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
 import javax.naming.NamingException;
 import java.io.ByteArrayInputStream;
@@ -75,7 +76,9 @@ public class PhoenixStorageHandlerUtil {
         DateFormat df = null;
 
         for (int i = 0, limit = values.length; i < limit; i++) {
-            if (serdeConstants.STRING_TYPE_NAME.equals(typeName)) {
+            if (serdeConstants.STRING_TYPE_NAME.equals(typeName) ||
+                    typeName.startsWith(serdeConstants.CHAR_TYPE_NAME) ||
+                    typeName.startsWith(serdeConstants.VARCHAR_TYPE_NAME)) {
                 results[i] = values[i];
             } else if (serdeConstants.INT_TYPE_NAME.equals(typeName)) {
                 results[i] = new Integer(values[i]);
@@ -182,10 +185,8 @@ public class PhoenixStorageHandlerUtil {
     }
 
     public static String getTableKeyOfSession(JobConf jobConf, String tableName) {
-        SessionState sessionState = SessionState.get();
 
-        String sessionId = sessionState.getSessionId();
-
+        String sessionId = jobConf.get(PhoenixConfigurationUtil.SESSION_ID);
         return new StringBuilder("[").append(sessionId).append("]-").append(tableName).toString();
     }
 

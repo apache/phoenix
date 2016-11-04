@@ -123,7 +123,7 @@ public class StatementContext {
         this.timeFormatter = DateUtil.getTimeFormatter(timeFormat);
         this.timestampFormat = props.get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
         this.timestampFormatter = DateUtil.getTimestampFormatter(timestampFormat);
-        this.dateFormatTimeZone = TimeZone.getTimeZone(props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
+        this.dateFormatTimeZone = DateUtil.getTimeZone(props.get(QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB,
                 DateUtil.DEFAULT_TIME_ZONE_ID));
         this.numberFormat = props.get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         this.tempPtr = new ImmutableBytesWritable();

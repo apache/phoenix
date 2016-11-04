@@ -90,7 +90,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterIT {
     public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped) {
         this.transactional = transactional;
         this.localIndex = localIndex;
-        this.tableDDLOptions = transactional ? " TRANSACTIONAL=true " : "";
+        this.tableDDLOptions = " SALT_BUCKETS=2 " + (transactional ? ", TRANSACTIONAL=true " : "");
         this.tableName = (localIndex ? "L_" : "") + TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "")
                 + (isNamespaceMapped ? "_NM" : "");
         this.indexName = FailingRegionObserver.INDEX_NAME;
@@ -178,8 +178,8 @@ public class MutableIndexFailureIT extends BaseOwnClusterIT {
             
             query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            String expectedPlan = "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-                    + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped);
+            String expectedPlan = "CLIENT PARALLEL 2-WAY FULL SCAN OVER "
+                    + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped)+"\nCLIENT MERGE SORT";
             assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -230,8 +230,8 @@ public class MutableIndexFailureIT extends BaseOwnClusterIT {
                 // Verify previous writes succeeded to data table
                 query = "SELECT /*+ NO_INDEX */ k,v1 FROM " + fullTableName;
                 rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                expectedPlan = "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-                        + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped);
+                expectedPlan = "CLIENT PARALLEL 2-WAY FULL SCAN OVER "
+                        + SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped)+"\nCLIENT MERGE SORT";
                 assertEquals(expectedPlan, QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
                 assertTrue(rs.next());
@@ -252,6 +252,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterIT {
             // re-enable index table
             FailingRegionObserver.FAIL_WRITE = false;
             waitForIndexToBeActive(conn,indexName);
+            waitForIndexToBeActive(conn,indexName+"_2");
             waitForIndexToBeActive(conn,secondIndexName);
 
             // Verify UPSERT on data table still work after index table is recreated
@@ -375,9 +376,7 @@ public class MutableIndexFailureIT extends BaseOwnClusterIT {
             conn.commit();
             fail();
         } catch (SQLException e) {
-            System.out.println();
         } catch (Exception e) {
-            System.out.println();
         }
 
     }

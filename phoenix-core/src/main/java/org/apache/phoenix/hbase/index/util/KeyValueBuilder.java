@@ -18,9 +18,11 @@
 package org.apache.phoenix.hbase.index.util;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.KVComparator;
@@ -40,13 +42,14 @@ public abstract class KeyValueBuilder {
      * @throws RuntimeException if there is an IOException thrown from the underlying {@link Put}
      */
     @SuppressWarnings("javadoc")
-    public static void addQuietly(Put put, KeyValueBuilder builder, KeyValue kv) {
-        try {
-            put.add(kv);
-        } catch (IOException e) {
-            throw new RuntimeException("KeyValue Builder " + builder + " created an invalid kv: "
-                    + kv + "!");
+    public static void addQuietly(Mutation m, KeyValueBuilder builder, KeyValue kv) {
+        byte [] family = CellUtil.cloneFamily(kv);
+        List<Cell> list = m.getFamilyCellMap().get(family);
+        if (list == null) {
+            list = new ArrayList<Cell>();
+            m.getFamilyCellMap().put(family, list);
         }
+        list.add(kv);
     }
 
     /**

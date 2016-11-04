@@ -57,6 +57,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
+import org.apache.phoenix.index.PhoenixIndexBuilder;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -620,6 +621,8 @@ public class MutationState implements SQLCloseable {
         long timestampToUse = timestamp;
         while (iterator.hasNext()) {
             Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry = iterator.next();
+            byte[] onDupKeyBytes = rowEntry.getValue().getOnDupKeyBytes();
+            boolean hasOnDupKey = onDupKeyBytes != null;
             ImmutableBytesPtr key = rowEntry.getKey();
             RowMutationState state = rowEntry.getValue();
             if (tableWithRowTimestampCol) {
@@ -635,7 +638,7 @@ public class MutationState implements SQLCloseable {
             }
             PRow row =
                     tableRef.getTable()
-                            .newRow(connection.getKeyValueBuilder(), timestampToUse, key);
+                            .newRow(connection.getKeyValueBuilder(), timestampToUse, key, hasOnDupKey);
             List<Mutation> rowMutations, rowMutationsPertainingToIndex;
             if (rowEntry.getValue().getColumnValues() == PRow.DELETE_MARKER) { // means delete
                 row.delete();
@@ -650,6 +653,15 @@ public class MutationState implements SQLCloseable {
                     row.setValue(valueEntry.getKey(), valueEntry.getValue());
                 }
                 rowMutations = row.toRowMutations();
+                // Pass through ON DUPLICATE KEY info through mutations
+                // In the case of the same clause being used on many statements, this will be
+                // inefficient because we're transmitting the same information for each mutation.
+                // TODO: use our ServerCache 
+                for (Mutation mutation : rowMutations) {
+                    if (onDupKeyBytes != null) {
+                        mutation.setAttribute(PhoenixIndexBuilder.ATOMIC_OP_ATTRIB, onDupKeyBytes);
+                    }
+                }
                 rowMutationsPertainingToIndex = rowMutations;
             }
             mutationList.addAll(rowMutations);
@@ -694,7 +706,7 @@ public class MutationState implements SQLCloseable {
                     }
 
                     @Override
-                    public Pair<byte[], List<Mutation>> next() {
+                     public Pair<byte[], List<Mutation>> next() {
                         Pair<PName, List<Mutation>> pair = mutationIterator.next();
                         return new Pair<byte[], List<Mutation>>(pair.getFirst().getBytes(), pair.getSecond());
                     }
@@ -715,6 +727,7 @@ public class MutationState implements SQLCloseable {
             public Pair<byte[], List<Mutation>> next() {
                 if (!innerIterator.hasNext()) {
                     current = iterator.next();
+                    innerIterator=init();
                 }
                 return innerIterator.next();
             }
@@ -1452,15 +1465,22 @@ public class MutationState implements SQLCloseable {
         @Nonnull private Map<PColumn,byte[]> columnValues;
         private int[] statementIndexes;
         @Nonnull private final RowTimestampColInfo rowTsColInfo;
+        private byte[] onDupKeyBytes;
         
-        public RowMutationState(@Nonnull Map<PColumn,byte[]> columnValues, int statementIndex, @Nonnull RowTimestampColInfo rowTsColInfo) {
+        public RowMutationState(@Nonnull Map<PColumn,byte[]> columnValues, int statementIndex, @Nonnull RowTimestampColInfo rowTsColInfo,
+                byte[] onDupKeyBytes) {
             checkNotNull(columnValues);
             checkNotNull(rowTsColInfo);
             this.columnValues = columnValues;
             this.statementIndexes = new int[] {statementIndex};
             this.rowTsColInfo = rowTsColInfo;
+            this.onDupKeyBytes = onDupKeyBytes;
         }
 
+        byte[] getOnDupKeyBytes() {
+            return onDupKeyBytes;
+        }
+        
         Map<PColumn, byte[]> getColumnValues() {
             return columnValues;
         }
@@ -1470,7 +1490,14 @@ public class MutationState implements SQLCloseable {
         }
 
         void join(RowMutationState newRow) {
-            getColumnValues().putAll(newRow.getColumnValues());
+            // If we already have a row and the new row has an ON DUPLICATE KEY clause
+            // ignore the new values (as that's what the server will do).
+            if (newRow.onDupKeyBytes == null) {
+                getColumnValues().putAll(newRow.getColumnValues());
+            }
+            // Concatenate ON DUPLICATE KEY bytes to allow multiple
+            // increments of the same row in the same commit batch.
+            this.onDupKeyBytes = PhoenixIndexBuilder.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
             statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
         }
         

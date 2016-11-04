@@ -288,6 +288,7 @@ public interface QueryConstants {
             IS_NAMESPACE_MAPPED + " BOOLEAN," +
             AUTO_PARTITION_SEQ + " VARCHAR," +
             APPEND_ONLY_SCHEMA + " BOOLEAN," +
+            GUIDE_POSTS_WIDTH + " BIGINT," +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + ","
             + TABLE_SCHEM + "," + TABLE_NAME + "," + COLUMN_NAME + "," + COLUMN_FAMILY + "))\n" +
             HConstants.VERSIONS + "=" + MetaDataProtocol.DEFAULT_MAX_META_DATA_VERSIONS + ",\n" +
@@ -300,7 +301,7 @@ public interface QueryConstants {
             "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_STATS_TABLE + "\"(\n" +
             // PK columns
             PHYSICAL_NAME  + " VARCHAR NOT NULL," +
-            COLUMN_FAMILY + " VARCHAR NOT NULL," +
+            COLUMN_FAMILY + " VARCHAR," +
             GUIDE_POST_KEY  + " VARBINARY," +
             GUIDE_POSTS_WIDTH + " BIGINT," +
             LAST_STATS_UPDATE_TIME+ " DATE, "+
@@ -362,6 +363,5 @@ public interface QueryConstants {
     public static final byte[] OFFSET_FAMILY = "f_offset".getBytes();
     public static final byte[] OFFSET_COLUMN = "c_offset".getBytes();
     public static final String LAST_SCAN = "LAST_SCAN";
-    public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
 
 }
