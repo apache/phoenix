@@ -106,7 +106,9 @@ public class IndexExtendedIT extends BaseTest {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        /* Commenting out due to potential issue in PHOENIX-3448 and general flappiness
         clientProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+        */
         clientProps.put(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.TRUE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
                 .iterator()));
@@ -117,8 +119,10 @@ public class IndexExtendedIT extends BaseTest {
         return Arrays.asList(new Boolean[][] {     
                  { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
                  { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
+                 /* Commenting out due to potential issue in PHOENIX-3448 and general flappiness
                  { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
                  { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true } 
+                 */
            });
     }
     
