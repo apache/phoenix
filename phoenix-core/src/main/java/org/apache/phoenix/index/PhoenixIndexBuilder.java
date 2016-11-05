@@ -31,6 +31,7 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -191,6 +192,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
             get.setFilter(new FirstKeyOnlyFilter());
         }
         MultiKeyValueTuple tuple;
+        List<Cell> flattenedCells = null;
         List<Cell>cells = this.env.getRegion().get(get, false);
         if (cells.isEmpty()) {
             if (skipFirstOp) {
@@ -200,7 +202,8 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                 repeat--; // Skip first operation (if first wasn't ON DUPLICATE KEY IGNORE)
             }
             // Base current state off of new row
-            tuple = new MultiKeyValueTuple(flattenCells(inc, estimatedSize));
+            flattenedCells = flattenCells(inc, estimatedSize);
+            tuple = new MultiKeyValueTuple(flattenedCells);
         } else {
             // Base current state off of existing row
             tuple = new MultiKeyValueTuple(cells);
@@ -212,6 +215,12 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
             List<Expression> expressions = operation.getSecond();
             for (int j = 0; j < repeat; j++) { // repeater loop
                 ptr.set(rowKey);
+                // Sort the list of cells (if they've been flattened in which case they're not necessarily
+                // ordered correctly). We only need the list sorted if the expressions are going to be
+                // executed, not when the outer loop is exited. Hence we do it here, at the top of the loop.
+                if (flattenedCells != null) {
+                    Collections.sort(flattenedCells,KeyValue.COMPARATOR);
+                }
                 PRow row = table.newRow(GenericKeyValueBuilder.INSTANCE, ts, ptr, false);
                 for (int i = 0; i < expressions.size(); i++) {
                     Expression expression = expressions.get(i);
@@ -233,7 +242,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
                     byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
                     row.setValue(column, bytes);
                 }
-                List<Cell> flattenedCells = Lists.newArrayListWithExpectedSize(estimatedSize);
+                flattenedCells = Lists.newArrayListWithExpectedSize(estimatedSize);
                 List<Mutation> mutations = row.toRowMutations();
                 for (Mutation source : mutations) {
                     flattenCells(source, flattenedCells);
