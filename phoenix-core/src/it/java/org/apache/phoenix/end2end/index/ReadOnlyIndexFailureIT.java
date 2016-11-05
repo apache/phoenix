@@ -29,7 +29,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -113,11 +112,9 @@ public class ReadOnlyIndexFailureIT extends BaseOwnClusterIT {
         serverProps.put("hbase.coprocessor.region.classes", FailingRegionObserver.class.getName());
         serverProps.put("hbase.coprocessor.abortonerror", "false");
         serverProps.put(Indexer.CHECK_VERSION_CONF_KEY, "false");
-        Map<String, String> clientProps = 
-                Collections.singletonMap(QueryServices.TRANSACTIONS_ENABLED, "true");
         NUM_SLAVES_BASE = 4;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), 
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
+                ReadOnlyProps.EMPTY_PROPS);
     }
 
     @Test
