@@ -54,8 +54,8 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -67,6 +67,7 @@ import com.google.common.collect.Maps;
  * Tests for the {@link IndexTool}
  */
 @RunWith(Parameterized.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class IndexExtendedIT extends BaseTest {
     private final boolean localIndex;
     private final boolean transactional;
@@ -127,9 +128,6 @@ public class IndexExtendedIT extends BaseTest {
     @Test
     public void testMutableIndexWithUpdates() throws Exception {
         if (!mutable || transactional) {
-            return;
-        }
-        if (localIndex) { // FIXME: remove once this test works for local indexes
             return;
         }
         String schemaName = generateUniqueName();
@@ -204,9 +202,6 @@ public class IndexExtendedIT extends BaseTest {
 
     @Test
     public void testSecondaryIndex() throws Exception {
-        if (localIndex) { // FIXME: remove once this test works for local indexes
-            return;
-        }
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -409,7 +404,6 @@ public class IndexExtendedIT extends BaseTest {
     }
 
     // Moved from LocalIndexIT because it was causing parallel runs to hang
-    @Ignore
     @Test
     public void testLocalIndexScanAfterRegionSplit() throws Exception {
         // This test just needs be run once
@@ -512,7 +506,6 @@ public class IndexExtendedIT extends BaseTest {
     }
 
     // Moved from LocalIndexIT because it was causing parallel runs to hang
-    @Ignore
     @Test
     public void testLocalIndexScanAfterRegionsMerge() throws Exception {
         // This test just needs be run once
