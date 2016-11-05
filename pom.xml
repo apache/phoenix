@@ -117,8 +117,8 @@
     <maven.assembly.version>2.5.2</maven.assembly.version>
 
     <!-- Plugin options -->
-    <numForkedUT>6</numForkedUT>
-    <numForkedIT>6</numForkedIT>
+    <numForkedUT>4</numForkedUT>
+    <numForkedIT>4</numForkedIT>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
