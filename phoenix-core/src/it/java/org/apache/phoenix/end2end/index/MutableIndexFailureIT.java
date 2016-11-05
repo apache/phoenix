@@ -43,9 +43,9 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseOwnClusterIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
@@ -56,6 +56,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -74,20 +75,26 @@ import com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class MutableIndexFailureIT extends BaseOwnClusterIT {
-    public static volatile boolean FAIL_WRITE = false;
+public class MutableIndexFailureIT extends BaseTest {
     public static final String INDEX_NAME = "IDX";
+
+    public static volatile boolean FAIL_WRITE = false;
+    public static volatile String fullTableName;
     
     private String tableName;
     private String indexName;
-    public static volatile String fullTableName;
     private String fullIndexName;
 
     private final boolean transactional;
     private final boolean localIndex;
     private final String tableDDLOptions;
     private final boolean isNamespaceMapped;
-    private String schema = "TEST";
+    private String schema = generateUniqueName();
+
+    @AfterClass
+    public static void doTeardown() throws Exception {
+        tearDownMiniCluster();
+    }
 
     public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped) {
         this.transactional = transactional;
