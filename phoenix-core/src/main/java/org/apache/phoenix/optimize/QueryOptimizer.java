@@ -309,13 +309,16 @@ public class QueryOptimizer {
     /**
      * Order the plans among all the possible ones from best to worst.
      * Since we don't keep stats yet, we use the following simple algorithm:
-     * 1) If the query is a point lookup (i.e. we have a set of exact row keys), choose among those.
+     * 1) If the query is a point lookup (i.e. we have a set of exact row keys), choose that one immediately.
      * 2) If the query has an ORDER BY and a LIMIT, choose the plan that has all the ORDER BY expression
      * in the same order as the row key columns.
      * 3) If there are more than one plan that meets (1&2), choose the plan with:
-     *    a) the most row key columns that may be used to form the start/stop scan key.
+     *    a) the most row key columns that may be used to form the start/stop scan key (i.e. bound slots).
      *    b) the plan that preserves ordering for a group by.
-     *    c) the data table plan
+     *    c) the non local index table plan
+     * TODO: We should make more of a cost based choice: The largest number of bound slots does not necessarily
+     * correspond to the least bytes scanned. We could consider the slots bound for upper and lower ranges 
+     * separately, or we could calculate the bytes scanned between the start and stop row of each table.
      * @param plans the list of candidate plans
      * @return list of plans ordered from best to worst.
      */
@@ -380,11 +383,13 @@ public class QueryOptimizer {
             public int compare(QueryPlan plan1, QueryPlan plan2) {
                 PTable table1 = plan1.getTableRef().getTable();
                 PTable table2 = plan2.getTableRef().getTable();
+                int boundCount1 = plan1.getContext().getScanRanges().getBoundPkColumnCount();
+                int boundCount2 = plan2.getContext().getScanRanges().getBoundPkColumnCount();
                 // For shared indexes (i.e. indexes on views and local indexes),
                 // a) add back any view constants as these won't be in the index, and
                 // b) ignore the viewIndexId which will be part of the row key columns.
-                int c = (plan2.getContext().getScanRanges().getBoundPkColumnCount() + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) -
-                        (plan1.getContext().getScanRanges().getBoundPkColumnCount() + (table1.getViewIndexId() == null ? 0 : (boundRanges - 1)));
+                int c = (boundCount2 + (table2.getViewIndexId() == null ? 0 : (boundRanges - 1))) -
+                        (boundCount1 + (table1.getViewIndexId() == null ? 0 : (boundRanges - 1)));
                 if (c != 0) return c;
                 if (plan1.getGroupBy() != null && plan2.getGroupBy() != null) {
                     if (plan1.getGroupBy().isOrderPreserving() != plan2.getGroupBy().isOrderPreserving()) {
