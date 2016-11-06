@@ -41,8 +41,10 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 import com.google.common.base.Joiner;
@@ -645,6 +647,54 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         QueryPlan plan = stmt.optimizeQuery("SELECT * FROM t WHERE (k1,k2,k3,k4) > ('001','001xx000003DHml',to_date('2015-10-21 09:50:55.0'),'017xx0000022FuI')");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
+    }
+
+    @Test
+    public void testViewUsedWithQueryMoreSalted() throws Exception {
+        testViewUsedWithQueryMore(3);
+    }
+    
+    @Test
+    public void testViewUsedWithQueryMoreUnsalted() throws Exception {
+        testViewUsedWithQueryMore(null);
+    }
+    
+    private void testViewUsedWithQueryMore(Integer saltBuckets) throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        int offset = saltBuckets == null ? 0 : 1;
+        conn.createStatement().execute("CREATE TABLE MY_TABLES.MY_TABLE "
+                + "(ORGANIZATION_ID CHAR(15) NOT NULL, "
+                + "PKCOL1 CHAR(15) NOT NULL,"
+                + "PKCOL2 CHAR(15) NOT NULL,"
+                + "PKCOL3 CHAR(15) NOT NULL,"
+                + "PKCOL4 CHAR(15) NOT NULL,COL1 "
+                + "CHAR(15),"
+                + "COL2 CHAR(15)"
+                + "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID,PKCOL1,PKCOL2,PKCOL3,PKCOL4)) MULTI_TENANT=true" + (saltBuckets == null ? "" : (",SALT_BUCKETS=" + saltBuckets)));
+        conn.createStatement().execute("CREATE INDEX MY_TABLE_INDEX \n" + 
+                "ON MY_TABLES.MY_TABLE (PKCOL1, PKCOL3, PKCOL2, PKCOL4)\n" + 
+                "INCLUDE (COL1, COL2)");
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "000000000000000");
+        Connection tsconn = DriverManager.getConnection(getUrl(), props);
+        tsconn.createStatement().execute("CREATE VIEW MY_TABLE_MT_VIEW AS SELECT * FROM MY_TABLES.MY_TABLE");
+        PhoenixStatement stmt = tsconn.createStatement().unwrap(PhoenixStatement.class);
+        QueryPlan plan = stmt.optimizeQuery("select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3, pkcol4) > ('0', '0', '0', '0')");
+        assertEquals("MY_TABLE_MT_VIEW", plan.getTableRef().getTable().getTableName().getString());
+        
+        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol1, pkcol2) > ('0', '0') and pkcol3 = '000000000000000' and pkcol4 = '000000000000000'");
+        assertEquals(3 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
+        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol3, pkcol4) > ('0', '0') and pkcol1 = '000000000000000'");
+        assertEquals(2 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
+        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3) < ('0', '0', '0')");
+        assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
+        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3) < ('9', '9', '9') and (pkcol1, pkcol2) > ('0', '0')");
+        assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
+        plan = stmt.compileQuery("select * from my_table_mt_view where pkcol1 = 'a' and pkcol2 = 'b' and pkcol3 = 'c' and (pkcol1, pkcol2) < ('z', 'z')");
+        assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
+        // TODO: in theory pkcol2 and pkcol3 could be bound, but we don't have the logic for that yet
+        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol2, pkcol3) > ('0', '0') and pkcol1 = '000000000000000'");
+        assertEquals(2 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
     }
 
     private void assertPlanDetails(PreparedStatement stmt, String expectedPkCols, String expectedPkColsDataTypes, boolean expectedHasOrderBy, int expectedLimit) throws SQLException {
