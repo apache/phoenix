@@ -16,19 +16,20 @@ package org.apache.phoenix.spark
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
-import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
+
 import scala.collection.JavaConversions._
 
 class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Serializable {
 
   def saveToPhoenix(tableName: String, cols: Seq[String],
-                    conf: Configuration = new Configuration, zkUrl: Option[String] = None)
+                    conf: Configuration = new Configuration, zkUrl: Option[String] = None, tenantId: Option[String] = None)
                     : Unit = {
 
     // Create a configuration object to use for saving
-    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrl, Some(conf))
+    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrl, tenantId, Some(conf))
 
     // Retrieve the zookeeper URL
     val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
@@ -37,7 +38,7 @@ class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Seria
     val phxRDD = data.mapPartitions{ rows =>
 
       // Create a within-partition config to retrieve the ColumnInfo list
-      @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrlFinal)
+      @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrlFinal, tenantId)
       @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
 
       rows.map { row =>

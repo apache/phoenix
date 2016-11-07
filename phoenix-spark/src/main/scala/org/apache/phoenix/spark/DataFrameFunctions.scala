@@ -16,23 +16,24 @@ package org.apache.phoenix.spark
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
-import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.util.SchemaUtil
 import org.apache.spark.Logging
 import org.apache.spark.sql.DataFrame
+
 import scala.collection.JavaConversions._
 
 class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
 
   def saveToPhoenix(tableName: String, conf: Configuration = new Configuration,
-                    zkUrl: Option[String] = None): Unit = {
+                    zkUrl: Option[String] = None, tenantId: Option[String] = None): Unit = {
 
 
     // Retrieve the schema field names and normalize to Phoenix, need to do this outside of mapPartitions
     val fieldArray = data.schema.fieldNames.map(x => SchemaUtil.normalizeIdentifier(x))
 
     // Create a configuration object to use for saving
-    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, Some(conf))
+    @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, tenantId, Some(conf))
 
     // Retrieve the zookeeper URL
     val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
@@ -41,7 +42,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
     val phxRDD = data.mapPartitions{ rows =>
  
        // Create a within-partition config to retrieve the ColumnInfo list
-       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal)
+       @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal, tenantId)
        @transient val columns = PhoenixConfigurationUtil.getUpsertColumnMetadataList(partitionConfig).toList
  
        rows.map { row =>

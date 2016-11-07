@@ -16,14 +16,12 @@ package org.apache.phoenix.spark
 import java.sql.{Connection, DriverManager}
 import java.util.Date
 
-import org.apache.hadoop.hbase.{HConstants}
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
-import org.apache.phoenix.schema.{ColumnNotFoundException}
 import org.apache.phoenix.schema.types.PVarchar
-import org.apache.phoenix.util.{SchemaUtil, ColumnInfo}
-import org.apache.spark.sql.{Row, SaveMode, SQLContext}
+import org.apache.phoenix.util.{ColumnInfo, SchemaUtil}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{Row, SQLContext, SaveMode}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
 import org.scalatest._
@@ -48,6 +46,8 @@ object PhoenixSparkITHelper extends BaseHBaseManagedTimeIT {
 }
 
 class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
+  // A global tenantId we can use across tests
+  val TenantId = "theTenant"
   var conn: Connection = _
   var sc: SparkContext = _
 
@@ -60,16 +60,21 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     ConfigurationUtil.getZookeeperURL(hbaseConfiguration).get
   }
 
-  override def beforeAll() {
-    PhoenixSparkITHelper.doSetup
+  // Runs SQL commands located in the file defined in the sqlSource argument
+  // Optional argument tenantId used for running tenant-specific SQL
+  def setupTables(sqlSource: String, tenantId: Option[String]): Unit = {
+    val url = tenantId match {
+      case Some(tenantId) => PhoenixSparkITHelper.getUrl + ";TenantId=" + tenantId
+      case _ => PhoenixSparkITHelper.getUrl
+    }
 
-    conn = DriverManager.getConnection(PhoenixSparkITHelper.getUrl)
+    conn = DriverManager.getConnection(url)
     conn.setAutoCommit(true)
+
+    val setupSqlSource = getClass.getClassLoader.getResourceAsStream(sqlSource)
 
     // each SQL statement used to set up Phoenix must be on a single line. Yes, that
     // can potentially make large lines.
-    val setupSqlSource = getClass.getClassLoader.getResourceAsStream("setup.sql")
-
     val setupSql = scala.io.Source.fromInputStream(setupSqlSource).getLines()
       .filter(line => ! line.startsWith("--") && ! line.isEmpty)
 
@@ -78,6 +83,15 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
       stmt.execute(sql)
     }
     conn.commit()
+  }
+
+  override def beforeAll() {
+    PhoenixSparkITHelper.doSetup
+
+    // We pass in null for TenantId here since these tables will be globally visible
+    setupTables("globalSetup.sql", null)
+    // We pass in a TenantId to allow the DDL to create tenant-specific tables/views
+    setupTables("tenantSetup.sql", Some(TenantId))
 
     val conf = new SparkConf()
       .setAppName("PhoenixSparkIT")
@@ -266,6 +280,42 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     }
 
     // Verify they match
+    (0 to results.size - 1).foreach { i =>
+      dataSet(i) shouldEqual results(i)
+    }
+  }
+
+  test("Can save to Phoenix tenant-specific view") {
+    val sqlContext = new SQLContext(sc)
+
+    // This view name must match the view we create in phoenix-spark/src/it/resources/tenantSetup.sql
+    val ViewName = "TENANT_VIEW"
+
+    // Columns from the TENANT_VIEW schema
+    val OrgId = "ORGANIZATION_ID"
+    val TenantCol = "TENANT_ONLY_COL"
+
+    // Data matching the schema for TENANT_VIEW created in tenantSetup.sql
+    val dataSet = List(("testOrg1", "data1"), ("testOrg2", "data2"), ("testOrg3", "data3"))
+
+    sc
+      .parallelize(dataSet)
+      .saveToPhoenix(
+        ViewName,
+        Seq(OrgId, TenantCol),
+        hbaseConfiguration,
+        tenantId = Some(TenantId)
+      )
+
+    // Load the results
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT " + OrgId + "," + TenantCol + " FROM " + ViewName)
+    val results = ListBuffer[(String, String)]()
+    while (rs.next()) {
+      results.append((rs.getString(1), rs.getString(2)))
+    }
+
+    // Verify results match the dataset
     (0 to results.size - 1).foreach { i =>
       dataSet(i) shouldEqual results(i)
     }
