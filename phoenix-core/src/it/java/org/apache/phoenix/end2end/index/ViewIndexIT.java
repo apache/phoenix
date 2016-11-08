@@ -317,8 +317,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testUpdateOnTenantViewWithGlobalView() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = getConnection();
         String baseSchemaName = "PLATFORM_ENTITY";
         String baseTableName = generateUniqueName();
         String baseFullName = SchemaUtil.getTableName(baseSchemaName, baseTableName);
@@ -328,6 +327,9 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         String tsViewTableName = "TSV_" + generateUniqueName();
         String tsViewFullName = SchemaUtil.getTableName(baseSchemaName, tsViewTableName);
         try {
+            if (isNamespaceMapped) {
+                conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + baseSchemaName);
+            }
             conn.createStatement().execute(
                     "CREATE TABLE " + baseFullName + "(\n" + "    ORGANIZATION_ID CHAR(15) NOT NULL,\n"
                             + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_DATE DATE,\n"
@@ -360,21 +362,22 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             tsConn.createStatement().execute("UPSERT INTO " + tsViewFullName + "(INT1,DOUBLE1,IS_BOOLEAN,TEXT1) VALUES (10,10.0, true, 'j')");
             tsConn.commit();
             
-            assertRowCount(tsConn, tsViewFullName, baseFullName, 10);
+            String basePhysicalName = SchemaUtil.getPhysicalHBaseTableName(baseFullName, isNamespaceMapped, PTableType.TABLE).getString();
+            assertRowCount(tsConn, tsViewFullName, basePhysicalName, 10);
             
             tsConn.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE TEXT1='d'");
             tsConn.commit();
-            assertRowCount(tsConn, tsViewFullName, baseFullName, 9);
+            assertRowCount(tsConn, tsViewFullName, basePhysicalName, 9);
 
             tsConn.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE INT1=2");
             tsConn.commit();
-            assertRowCount(tsConn, tsViewFullName, baseFullName, 8);
+            assertRowCount(tsConn, tsViewFullName, basePhysicalName, 8);
             
             // Use different connection for delete
             Connection tsConn2 = DriverManager.getConnection(getUrl(), tsProps);
             tsConn2.createStatement().execute("DELETE FROM " + tsViewFullName + " WHERE DOUBLE1 > 7.5 AND DOUBLE1 < 9.5");
             tsConn2.commit();
-            assertRowCount(tsConn2, tsViewFullName, baseFullName, 6);
+            assertRowCount(tsConn2, tsViewFullName, basePhysicalName, 6);
             
             tsConn2.createStatement().execute("DROP VIEW " + tsViewFullName);
             // Should drop view and index and remove index data
@@ -400,7 +403,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                     "CREATE INDEX " + indexName + " \n" + "ON " + viewFullName + " (TEXT1 DESC, INT1)\n"
                             + "INCLUDE (CREATED_BY, DOUBLE1, IS_BOOLEAN, CREATED_DATE)");
-            assertRowCount(tsConn3, tsViewFullName, baseFullName, 0);
+            assertRowCount(tsConn3, tsViewFullName, basePhysicalName, 0);
             
             tsConn.close();
             tsConn2.close();
