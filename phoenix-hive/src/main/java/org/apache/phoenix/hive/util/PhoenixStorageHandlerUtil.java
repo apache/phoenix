@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.io.AcidOutputFormat.Options;
 import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.DNS;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
@@ -46,7 +47,10 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
@@ -203,6 +207,14 @@ public class PhoenixStorageHandlerUtil {
         }
 
         return columnTypeMap;
+    }
+
+    public static List<String> getReadColumnNames(Configuration conf) {
+        String colNames = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR);
+        if (colNames != null && !colNames.isEmpty()) {
+            return Arrays.asList(colNames.split(PhoenixStorageHandlerConstants.COMMA));
+        }
+        return Collections.EMPTY_LIST;
     }
 
     public static boolean isTransactionalTable(Properties tableProperties) {
