@@ -14,6 +14,4 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-
-
 CREATE VIEW IF NOT EXISTS TENANT_VIEW(TENANT_ONLY_COL VARCHAR) AS SELECT * FROM MULTITENANT_TEST_TABLE

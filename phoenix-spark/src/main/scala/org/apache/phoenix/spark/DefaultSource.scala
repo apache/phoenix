@@ -17,9 +17,8 @@
  */
 package org.apache.phoenix.spark
 
-import org.apache.spark.sql.{SaveMode, DataFrame, SQLContext}
-import org.apache.spark.sql.sources.{CreatableRelationProvider, BaseRelation, RelationProvider}
-import org.apache.phoenix.spark._
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider}
+import org.apache.spark.sql.{DataFrame, SQLContext, SaveMode}
 
 class DefaultSource extends RelationProvider with CreatableRelationProvider {
 
@@ -45,7 +44,7 @@ class DefaultSource extends RelationProvider with CreatableRelationProvider {
     verifyParameters(parameters)
 
     // Save the DataFrame to Phoenix
-    data.saveToPhoenix(parameters("table"), zkUrl = parameters.get("zkUrl"))
+    data.saveToPhoenix(parameters("table"), zkUrl = parameters.get("zkUrl"), tenantId = parameters.get("TenantId"))
 
     // Return a relation of the saved data
     createRelation(sqlContext, parameters)
@@ -56,4 +55,5 @@ class DefaultSource extends RelationProvider with CreatableRelationProvider {
     if (parameters.get("table").isEmpty) throw new RuntimeException("No Phoenix 'table' option defined")
     if (parameters.get("zkUrl").isEmpty) throw new RuntimeException("No Phoenix 'zkUrl' option defined")
   }
+
 }

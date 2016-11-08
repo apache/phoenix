@@ -13,99 +13,21 @@
  */
 package org.apache.phoenix.spark
 
-import java.sql.{Connection, DriverManager}
 import java.util.Date
 
-import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
-import org.apache.phoenix.query.BaseTest
 import org.apache.phoenix.schema.types.PVarchar
 import org.apache.phoenix.util.{ColumnInfo, SchemaUtil}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
-import org.apache.spark.{SparkConf, SparkContext}
 import org.joda.time.DateTime
-import org.scalatest._
 
 import scala.collection.mutable.ListBuffer
 
-/*
-  Note: If running directly from an IDE, these are the recommended VM parameters:
-  -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
- */
-
-// Helper object to access the protected abstract static methods hidden in BaseHBaseManagedTimeIT
-object PhoenixSparkITHelper extends BaseHBaseManagedTimeIT {
-  def getTestClusterConfig = BaseHBaseManagedTimeIT.getTestClusterConfig
-  def doSetup = {
-    // The @ClassRule doesn't seem to be getting picked up, force creation here before setup
-    BaseTest.tmpFolder.create()
-    BaseHBaseManagedTimeIT.doSetup()
-  }
-  def doTeardown = BaseHBaseManagedTimeIT.doTeardown()
-  def getUrl = BaseTest.getUrl
-}
-
-class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
-  // A global tenantId we can use across tests
-  val TenantId = "theTenant"
-  var conn: Connection = _
-  var sc: SparkContext = _
-
-  lazy val hbaseConfiguration = {
-    val conf = PhoenixSparkITHelper.getTestClusterConfig
-    conf
-  }
-
-  lazy val quorumAddress = {
-    ConfigurationUtil.getZookeeperURL(hbaseConfiguration).get
-  }
-
-  // Runs SQL commands located in the file defined in the sqlSource argument
-  // Optional argument tenantId used for running tenant-specific SQL
-  def setupTables(sqlSource: String, tenantId: Option[String]): Unit = {
-    val url = tenantId match {
-      case Some(tenantId) => PhoenixSparkITHelper.getUrl + ";TenantId=" + tenantId
-      case _ => PhoenixSparkITHelper.getUrl
-    }
-
-    conn = DriverManager.getConnection(url)
-    conn.setAutoCommit(true)
-
-    val setupSqlSource = getClass.getClassLoader.getResourceAsStream(sqlSource)
-
-    // each SQL statement used to set up Phoenix must be on a single line. Yes, that
-    // can potentially make large lines.
-    val setupSql = scala.io.Source.fromInputStream(setupSqlSource).getLines()
-      .filter(line => ! line.startsWith("--") && ! line.isEmpty)
-
-    for (sql <- setupSql) {
-      val stmt = conn.createStatement()
-      stmt.execute(sql)
-    }
-    conn.commit()
-  }
-
-  override def beforeAll() {
-    PhoenixSparkITHelper.doSetup
-
-    // We pass in null for TenantId here since these tables will be globally visible
-    setupTables("globalSetup.sql", null)
-    // We pass in a TenantId to allow the DDL to create tenant-specific tables/views
-    setupTables("tenantSetup.sql", Some(TenantId))
-
-    val conf = new SparkConf()
-      .setAppName("PhoenixSparkIT")
-      .setMaster("local[2]") // 2 threads, some parallelism
-      .set("spark.ui.showConsoleProgress", "false") // Disable printing stage progress
-
-    sc = new SparkContext(conf)
-  }
-
-  override def afterAll() {
-    conn.close()
-    sc.stop()
-    PhoenixSparkITHelper.doTeardown
-  }
+/**
+  * Note: If running directly from an IDE, these are the recommended VM parameters:
+  * -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
+  */
+class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
   test("Can convert Phoenix schema") {
     val phoenixSchema = List(
@@ -134,7 +56,8 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     df2.registerTempTable("sql_table_2")
 
-    val sqlRdd = sqlContext.sql("""
+    val sqlRdd = sqlContext.sql(
+      """
         |SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1
         |INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)""".stripMargin
     )
@@ -176,9 +99,10 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
     df2.registerTempTable("sql_table_2")
 
-    val sqlRdd = sqlContext.sql("""
-      |SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1
-      |INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)""".stripMargin
+    val sqlRdd = sqlContext.sql(
+      """
+        |SELECT t1.ID, t1.COL1, t2.ID, t2.TABLE1_ID FROM sql_table_1 AS t1
+        |INNER JOIN sql_table_2 AS t2 ON (t2.TABLE1_ID = t1.ID)""".stripMargin
     )
 
     val count = sqlRdd.count()
@@ -210,10 +134,11 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     val df1 = sqlContext.phoenixTableAsDataFrame(
       "DATE_PREDICATE_TEST_TABLE",
       Array("ID", "TIMESERIES_KEY"),
-      predicate = Some("""
-        |ID > 0 AND TIMESERIES_KEY BETWEEN
-        |CAST(TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP) AND
-        |CAST(TO_DATE('1990-01-30 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP)""".stripMargin),
+      predicate = Some(
+        """
+          |ID > 0 AND TIMESERIES_KEY BETWEEN
+          |CAST(TO_DATE('1990-01-01 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP) AND
+          |CAST(TO_DATE('1990-01-30 00:00:01', 'yyyy-MM-dd HH:mm:ss') AS TIMESTAMP)""".stripMargin),
       conf = hbaseConfiguration)
 
     df1.registerTempTable("date_predicate_test_table")
@@ -285,42 +210,6 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
     }
   }
 
-  test("Can save to Phoenix tenant-specific view") {
-    val sqlContext = new SQLContext(sc)
-
-    // This view name must match the view we create in phoenix-spark/src/it/resources/tenantSetup.sql
-    val ViewName = "TENANT_VIEW"
-
-    // Columns from the TENANT_VIEW schema
-    val OrgId = "ORGANIZATION_ID"
-    val TenantCol = "TENANT_ONLY_COL"
-
-    // Data matching the schema for TENANT_VIEW created in tenantSetup.sql
-    val dataSet = List(("testOrg1", "data1"), ("testOrg2", "data2"), ("testOrg3", "data3"))
-
-    sc
-      .parallelize(dataSet)
-      .saveToPhoenix(
-        ViewName,
-        Seq(OrgId, TenantCol),
-        hbaseConfiguration,
-        tenantId = Some(TenantId)
-      )
-
-    // Load the results
-    val stmt = conn.createStatement()
-    val rs = stmt.executeQuery("SELECT " + OrgId + "," + TenantCol + " FROM " + ViewName)
-    val results = ListBuffer[(String, String)]()
-    while (rs.next()) {
-      results.append((rs.getString(1), rs.getString(2)))
-    }
-
-    // Verify results match the dataset
-    (0 to results.size - 1).foreach { i =>
-      dataSet(i) shouldEqual results(i)
-    }
-  }
-
   test("Can save Java and Joda dates to Phoenix (no config)") {
     val dt = new DateTime()
     val date = new Date()
@@ -330,7 +219,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
       .parallelize(dataSet)
       .saveToPhoenix(
         "OUTPUT_TEST_TABLE",
-        Seq("ID","COL1","COL2","COL3"),
+        Seq("ID", "COL1", "COL2", "COL3"),
         zkUrl = Some(quorumAddress)
       )
 
@@ -440,7 +329,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
       .parallelize(dataSet)
       .saveToPhoenix(
         "ARRAY_TEST_TABLE",
-        Seq("ID","VCARRAY"),
+        Seq("ID", "VCARRAY"),
         zkUrl = Some(quorumAddress)
       )
 
@@ -479,7 +368,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
 
   test("Ensure DataFrame field normalization (PHOENIX-2196)") {
     val rdd1 = sc
-      .parallelize(Seq((1L,1L,"One"),(2L,2L,"Two")))
+      .parallelize(Seq((1L, 1L, "One"), (2L, 2L, "Two")))
       .map(p => Row(p._1, p._2, p._3))
 
     val sqlContext = new SQLContext(sc)
@@ -630,7 +519,7 @@ class PhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterAll {
   }
 
   test("Can save binary types back to phoenix") {
-    val dataSet = List((2L, Array[Byte](1), Array[Byte](1,2,3), Array[Array[Byte]](Array[Byte](1), Array[Byte](2))))
+    val dataSet = List((2L, Array[Byte](1), Array[Byte](1, 2, 3), Array[Array[Byte]](Array[Byte](1), Array[Byte](2))))
 
     sc
       .parallelize(dataSet)
