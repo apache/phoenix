@@ -1,5 +1,6 @@
 package org.apache.calcite.jdbc;
 
+import java.io.File;
 import java.io.InputStream;
 import java.io.Reader;
 import java.sql.NClob;
@@ -28,7 +29,14 @@ import org.apache.calcite.avatica.AvaticaStatement;
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.Meta.Signature;
 import org.apache.calcite.avatica.Meta.StatementHandle;
+import org.apache.calcite.avatica.remote.AvaticaHttpClientFactory;
+import org.apache.calcite.avatica.remote.Service.Factory;
 import org.apache.calcite.avatica.remote.TypedValue;
+import org.apache.calcite.avatica.util.Casing;
+import org.apache.calcite.avatica.util.Quoting;
+import org.apache.calcite.config.CalciteConnectionConfig;
+import org.apache.calcite.config.Lex;
+import org.apache.calcite.config.NullCollation;
 import org.apache.calcite.avatica.QueryState;
 import org.apache.calcite.avatica.UnregisteredDriver;
 import org.apache.calcite.jdbc.CalciteConnectionImpl;
@@ -36,9 +44,12 @@ import org.apache.calcite.jdbc.CalciteFactory;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Ord;
+import org.apache.calcite.model.JsonSchema.Type;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.validate.SqlConformance;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixSchema;
+import org.apache.phoenix.calcite.PhoenixSqlConformance;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.RuntimeContext;
@@ -118,6 +129,17 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                 Properties info, final CalciteSchema rootSchema,
                 JavaTypeFactory typeFactory) {
             super(driver, factory, url, info, rootSchema, typeFactory);
+        }
+
+        @Override
+        public CalciteConnectionConfig config() {
+            final CalciteConnectionConfig config = super.config();
+            return new DelegateCalciteConnectionConfig(config) {
+                @Override
+                public SqlConformance conformance() {
+                    return PhoenixSqlConformance.INSTANCE;
+                }
+            };
         }
 
         @Override
@@ -468,6 +490,159 @@ public class PhoenixCalciteFactory extends CalciteFactory {
     extends AvaticaDatabaseMetaData {
         PhoenixCalciteDatabaseMetaData(PhoenixCalciteConnection connection) {
             super(connection);
+        }
+    }
+
+    private static class DelegateCalciteConnectionConfig implements CalciteConnectionConfig {
+        private final CalciteConnectionConfig delegate;
+
+        DelegateCalciteConnectionConfig(CalciteConnectionConfig delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public String authentication() {
+            return delegate.authentication();
+        }
+
+        @Override
+        public String avaticaPassword() {
+            return delegate.avaticaPassword();
+        }
+
+        @Override
+        public String avaticaUser() {
+            return delegate.avaticaUser();
+        }
+
+        @Override
+        public Factory factory() {
+            return delegate.factory();
+        }
+
+        @Override
+        public String httpClientClass() {
+            return delegate.httpClientClass();
+        }
+
+        @Override
+        public AvaticaHttpClientFactory httpClientFactory() {
+            return delegate.httpClientFactory();
+        }
+
+        @Override
+        public File kerberosKeytab() {
+            return delegate.kerberosKeytab();
+        }
+
+        @Override
+        public String kerberosPrincipal() {
+            return delegate.kerberosPrincipal();
+        }
+
+        @Override
+        public String schema() {
+            return delegate.schema();
+        }
+
+        @Override
+        public String serialization() {
+            return delegate.serialization();
+        }
+
+        @Override
+        public String timeZone() {
+            return delegate.timeZone();
+        }
+
+        @Override
+        public String url() {
+            return delegate.url();
+        }
+
+        @Override
+        public boolean autoTemp() {
+            return delegate.autoTemp();
+        }
+
+        @Override
+        public boolean materializationsEnabled() {
+            return delegate.materializationsEnabled();
+        }
+
+        @Override
+        public boolean createMaterializations() {
+            return delegate.createMaterializations();
+        }
+
+        @Override
+        public NullCollation defaultNullCollation() {
+            return delegate.defaultNullCollation();
+        }
+
+        @Override
+        public <T> T fun(Class<T> operatorTableClass, T defaultOperatorTable) {
+            return delegate.fun(operatorTableClass, defaultOperatorTable);
+        }
+
+        @Override
+        public String model() {
+            return delegate.model();
+        }
+
+        @Override
+        public Lex lex() {
+            return delegate.lex();
+        }
+
+        @Override
+        public Quoting quoting() {
+            return delegate.quoting();
+        }
+
+        @Override
+        public Casing unquotedCasing() {
+            return delegate.unquotedCasing();
+        }
+
+        @Override
+        public Casing quotedCasing() {
+            return delegate.quotedCasing();
+        }
+
+        @Override
+        public boolean caseSensitive() {
+            return delegate.caseSensitive();
+        }
+
+        @Override
+        public <T> T schemaFactory(Class<T> schemaFactoryClass, T defaultSchemaFactory) {
+            return delegate.schemaFactory(schemaFactoryClass, defaultSchemaFactory);
+        }
+
+        @Override
+        public Type schemaType() {
+            return delegate.schemaType();
+        }
+
+        @Override
+        public boolean spark() {
+            return delegate.spark();
+        }
+
+        @Override
+        public boolean forceDecorrelate() {
+            return delegate.forceDecorrelate();
+        }
+
+        @Override
+        public <T> T typeSystem(Class<T> typeSystemClass, T defaultTypeSystem) {
+            return delegate.typeSystem(typeSystemClass, defaultTypeSystem);
+        }
+
+        @Override
+        public SqlConformance conformance() {
+            return delegate.conformance();
         }
     }
 }

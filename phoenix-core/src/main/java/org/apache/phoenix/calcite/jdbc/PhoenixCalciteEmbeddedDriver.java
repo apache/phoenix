@@ -31,7 +31,6 @@ import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.function.Function0;
 import org.apache.calcite.schema.SchemaPlus;
-import org.apache.calcite.sql.validate.SqlConformance;
 import org.apache.phoenix.calcite.PhoenixPrepareImpl;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
@@ -90,10 +89,6 @@ public abstract class PhoenixCalciteEmbeddedDriver extends Driver implements SQL
                 info2,
                 CalciteConnectionProperty.TYPE_SYSTEM.camelName(),
                 PhoenixRelDataTypeSystem.class.getName());
-        setPropertyIfNotSpecified(
-                info2,
-                CalciteConnectionProperty.CONFORMANCE.camelName(),
-                SqlConformance.ORACLE_10.toString());
         setPropertyIfNotSpecified(
                 info2,
                 CalciteConnectionProperty.MATERIALIZATIONS_ENABLED.camelName(),
