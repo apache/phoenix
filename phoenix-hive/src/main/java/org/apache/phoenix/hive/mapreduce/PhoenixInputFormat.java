@@ -36,7 +36,6 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.*;
@@ -110,7 +109,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
             }
 
             query = PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName,
-                    ColumnProjectionUtils.getReadColumnNames(jobConf), conditionList);
+                    PhoenixStorageHandlerUtil.getReadColumnNames(jobConf), conditionList);
         } else if (PhoenixStorageHandlerConstants.TEZ.equals(executionEngine)) {
             Map<String, String> columnTypeMap = PhoenixStorageHandlerUtil.createColumnTypeMap
                     (jobConf);
@@ -120,7 +119,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
 
             String whereClause = jobConf.get(TableScanDesc.FILTER_TEXT_CONF_STR);
             query = PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName,
-                    ColumnProjectionUtils.getReadColumnNames(jobConf), whereClause, columnTypeMap);
+                    PhoenixStorageHandlerUtil.getReadColumnNames(jobConf), whereClause, columnTypeMap);
         } else {
             throw new IOException(executionEngine + " execution engine unsupported yet.");
         }
