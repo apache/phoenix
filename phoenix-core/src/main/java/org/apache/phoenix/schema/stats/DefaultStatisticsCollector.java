@@ -121,7 +121,8 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     env.getRegion().getTableDesc());
         } else {
             // Next check for GUIDE_POST_WIDTH on table
-            HTableInterface htable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
+            HTableInterface htable = env.getTable(
+                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
             Get get = new Get(ptableKey);
             get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
             Result result = htable.get(get);
