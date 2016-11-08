@@ -120,7 +120,8 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             super(driver, factory, url, info, rootSchema, typeFactory);
         }
 
-        public CalciteStatement createStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
+        @Override
+        public CalciteStatement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
             try {
                 return super.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability);
             } catch (SQLException e) {
@@ -160,6 +161,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             return super.enumerable(handle, signature);
         }
 
+        @Override
         public void abort(final Executor executor) throws SQLException {
             call(new PhoenixConnectionCallable() {
                 @Override

@@ -128,7 +128,8 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
                 //    TODO instead of getting a random sample value, we'd better get it from
                 //    existing guidepost bytes.
                 // 3) test whether this dynamic filter is worth a recompile at runtime.
-                PhoenixRelImplementor tmpImplementor = new PhoenixRelImplementorImpl(RuntimeContext.EMPTY_CONTEXT) {                    
+                PhoenixRelImplementor tmpImplementor = new PhoenixRelImplementorImpl(
+                        context, RuntimeContext.EMPTY_CONTEXT) {                    
                     @SuppressWarnings("rawtypes")
                     @Override
                     public Expression newBindParameterExpression(int index, PDataType type, Integer maxLength) {

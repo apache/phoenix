@@ -8,6 +8,7 @@ import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -24,6 +25,7 @@ public interface PhoenixRelImplementor {
     @SuppressWarnings("rawtypes")
     Expression newFieldAccessExpression(String variableId, int index, PDataType type);
     SequenceValueExpression newSequenceExpression(PhoenixSequence seq, SequenceValueParseNode.Op op);
+    StatementContext getStatementContext();
     RuntimeContext getRuntimeContext();
     void setTableMapping(TableMapping tableMapping);
     TableMapping getTableMapping();

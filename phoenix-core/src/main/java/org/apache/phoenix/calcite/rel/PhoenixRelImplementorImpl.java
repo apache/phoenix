@@ -10,6 +10,7 @@ import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.execute.TupleProjector;
@@ -31,12 +32,15 @@ import org.apache.phoenix.schema.types.PDataType;
 import com.google.common.collect.Lists;
 
 public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
+    private final StatementContext statementContext;
     private final RuntimeContext runtimeContext;
 	private Stack<ImplementorContext> contextStack;
 	private SequenceManager sequenceManager;
 	private TableMapping tableMapping;
 	
-	public PhoenixRelImplementorImpl(RuntimeContext runtimeContext) {
+	public PhoenixRelImplementorImpl(
+	        StatementContext statementContext, RuntimeContext runtimeContext) {
+	    this.statementContext = statementContext;
 	    this.runtimeContext = runtimeContext;
 	    this.contextStack = new Stack<ImplementorContext>();
 	}
@@ -73,6 +77,11 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public StatementContext getStatementContext() {
+        return statementContext;
     }
     
     @Override

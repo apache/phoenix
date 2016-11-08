@@ -18,6 +18,7 @@ import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.prepare.Prepare.Materialization;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.calcite.rel.rules.JoinCommuteRule;
 import org.apache.calcite.rel.rules.SortProjectTransposeRule;
@@ -59,6 +60,7 @@ import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
 import org.apache.phoenix.calcite.rel.PhoenixTemporarySort;
+import org.apache.phoenix.calcite.rules.PhoenixConverterRules.PhoenixToEnumerableConverterRule;
 import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
 import org.apache.phoenix.calcite.rules.PhoenixForwardTableScanRule;
 import org.apache.phoenix.calcite.rules.PhoenixJoinSingleValueAggregateMergeRule;
@@ -72,6 +74,7 @@ import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -158,7 +161,20 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 PhoenixTemporarySort.class,
                 PhoenixServerProject.class,
                 "PhoenixSortProjectTransposeRule"));
-        
+
+        final PhoenixConnection pc =
+                getPhoenixConnection(prepareContext.getRootSchema().plus());
+        try {
+            final StatementContext context =
+                    new StatementContext((PhoenixStatement) pc.createStatement());
+            ConverterRule[] rules = PhoenixToEnumerableConverterRule
+                    .createPhoenixToEnumerableConverterRules(context);
+            for (ConverterRule rule : rules) {
+                planner.addRule(rule);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         for (RelOptRule rule : this.defaultConverterRules) {
             planner.addRule(rule);
         }

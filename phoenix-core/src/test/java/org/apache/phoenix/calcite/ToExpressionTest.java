@@ -30,7 +30,6 @@ import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.RuntimeContext;
-import org.apache.phoenix.execute.RuntimeContextImpl;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -62,11 +61,13 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 	    private final PTable table;
 	    private final Expression phoenixExpr;
 	    private final RexNode calciteExpr;
+	    private final StatementContext context;
 
 	    public ExpressionChecker(String tableName, String ddl, String sql, ExpressionGetter getter) throws Exception {
 	        Connection conn = DriverManager.getConnection(getOldUrl());
 	        PhoenixConnection pc = conn.unwrap(PhoenixConnection.class);
 	        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+	        this.context = new StatementContext(stmt);
 
 	        conn.createStatement().execute(ddl);
 	        this.table = pc.getMetaDataCache().getTableRef(new PTableKey(null,tableName)).getTable();
@@ -82,7 +83,8 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
 	    }
 
 	    public ExpressionChecker checkExpressionEquality() {        
-	        PhoenixRelImplementor implementor = new PhoenixRelImplementorImpl(RuntimeContext.EMPTY_CONTEXT);
+	        PhoenixRelImplementor implementor =
+	                new PhoenixRelImplementorImpl(context, RuntimeContext.EMPTY_CONTEXT);
 	        implementor.setTableMapping(new TableMapping(table));
 	        Expression e = CalciteUtils.toExpression(this.calciteExpr, implementor);
 	        assertEquals(this.phoenixExpr,e);

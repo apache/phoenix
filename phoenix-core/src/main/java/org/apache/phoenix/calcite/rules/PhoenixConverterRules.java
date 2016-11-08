@@ -59,6 +59,7 @@ import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
 import org.apache.phoenix.calcite.rel.PhoenixUncollect;
 import org.apache.phoenix.calcite.rel.PhoenixUnion;
 import org.apache.phoenix.calcite.rel.PhoenixValues;
+import org.apache.phoenix.compile.StatementContext;
 
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
@@ -73,11 +74,6 @@ public class PhoenixConverterRules {
     private PhoenixConverterRules() {}
 
     public static final RelOptRule[] RULES = {
-        PhoenixToEnumerableConverterRule.SERVER,
-        PhoenixToEnumerableConverterRule.SERVERJOIN,
-        PhoenixToEnumerableConverterRule.SERVERAGG,
-        PhoenixToEnumerableConverterRule.CLIENT,
-        PhoenixToEnumerableConverterRule.MUTATION,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
@@ -101,11 +97,6 @@ public class PhoenixConverterRules {
     };
 
     public static final RelOptRule[] CONVERTIBLE_RULES = {
-        PhoenixToEnumerableConverterRule.SERVER,
-        PhoenixToEnumerableConverterRule.SERVERJOIN,
-        PhoenixToEnumerableConverterRule.SERVERAGG,
-        PhoenixToEnumerableConverterRule.CLIENT,
-        PhoenixToEnumerableConverterRule.MUTATION,
         PhoenixClientSortRule.INSTANCE,
         PhoenixServerSortRule.SERVER,
         PhoenixServerSortRule.SERVERJOIN,
@@ -872,24 +863,27 @@ public class PhoenixConverterRules {
      * {@link org.apache.calcite.adapter.enumerable.EnumerableConvention}.
      */
     public static class PhoenixToEnumerableConverterRule extends ConverterRule {
-        public static final ConverterRule SERVER =
-                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVER);
-        public static final ConverterRule SERVERJOIN =
-                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERJOIN);
-        public static final ConverterRule SERVERAGG =
-                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERAGG);
-        public static final ConverterRule CLIENT =
-                new PhoenixToEnumerableConverterRule(PhoenixConvention.CLIENT);
-        public static final ConverterRule MUTATION =
-                new PhoenixToEnumerableConverterRule(PhoenixConvention.MUTATION);
+        private final StatementContext context;
+        public static ConverterRule[] createPhoenixToEnumerableConverterRules(
+                StatementContext context) {
+            return new ConverterRule[] {
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVER, context),
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERJOIN, context),
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.SERVERAGG, context),
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.CLIENT, context),
+                new PhoenixToEnumerableConverterRule(PhoenixConvention.MUTATION, context)                    
+            };
+        }
 
-        private PhoenixToEnumerableConverterRule(Convention inputConvention) {
+        private PhoenixToEnumerableConverterRule(
+                Convention inputConvention, StatementContext context) {
             super(RelNode.class, inputConvention, EnumerableConvention.INSTANCE,
                 "PhoenixToEnumerableConverterRule:" + inputConvention);
+            this.context = context;
         }
 
         @Override public RelNode convert(RelNode rel) {
-            return PhoenixToEnumerableConverter.create(rel);
+            return PhoenixToEnumerableConverter.create(rel, context);
         }
     }
     

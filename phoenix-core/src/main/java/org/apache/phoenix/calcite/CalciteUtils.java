@@ -738,7 +738,6 @@ public class CalciteUtils {
             }
         });
         EXPRESSION_MAP.put(SqlKind.DEFAULT, new ExpressionFactory() {
-            @SuppressWarnings("rawtypes")
             @Override
             public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return null;

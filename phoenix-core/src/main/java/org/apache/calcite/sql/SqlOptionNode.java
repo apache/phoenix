@@ -42,8 +42,8 @@ public class SqlOptionNode extends SqlNode {
             propertyName = key.names.get(1);
         }
 
-        PhoenixRelImplementor
-                implementor = new PhoenixRelImplementorImpl(RuntimeContext.EMPTY_CONTEXT);
+        PhoenixRelImplementor implementor =
+                new PhoenixRelImplementorImpl(null, RuntimeContext.EMPTY_CONTEXT);
         this.value = CalciteUtils.convertSqlLiteral(literal, implementor);
     }
 

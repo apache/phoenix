@@ -30,6 +30,7 @@ import org.apache.phoenix.calcite.rel.PhoenixRelImplementor.ImplementorContext;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.execute.DelegateQueryPlan;
 import org.apache.phoenix.execute.RuntimeContext;
@@ -42,22 +43,26 @@ import org.apache.phoenix.iterate.ResultIterator;
  * Scan of a Phoenix table.
  */
 public class PhoenixToEnumerableConverter extends ConverterImpl implements EnumerableRel {
+    private final StatementContext context;
 
-    public static PhoenixToEnumerableConverter create(RelNode input) {
+    public static PhoenixToEnumerableConverter create(
+            RelNode input, StatementContext context) {
         RelOptCluster cluster = input.getCluster();
         RelTraitSet traits = input.getTraitSet().replace(EnumerableConvention.INSTANCE);
-        return new PhoenixToEnumerableConverter(cluster, traits, input);
+        return new PhoenixToEnumerableConverter(cluster, traits, input, context);
     }
 
     private PhoenixToEnumerableConverter(
         RelOptCluster cluster,
         RelTraitSet traits,
-        RelNode input) {
+        RelNode input,
+        StatementContext context) {
         super(cluster, ConventionTraitDef.INSTANCE, traits, input);
+        this.context = context;
     }
 
     @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
-        return create(sole(inputs));
+        return create(sole(inputs), context);
     }
 
     @Override public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
@@ -92,10 +97,11 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
         return implementor.result(physType, list.toBlock());
     }
     
-    static StatementPlan makePlan(PhoenixRel rel) {
+    StatementPlan makePlan(PhoenixRel rel) {
         RuntimeContext runtimeContext = new RuntimeContextImpl();
         RuntimeContext.THREAD_LOCAL.get().add(runtimeContext);
-        final PhoenixRelImplementor phoenixImplementor = new PhoenixRelImplementorImpl(runtimeContext);
+        final PhoenixRelImplementor phoenixImplementor =
+                new PhoenixRelImplementorImpl(context, runtimeContext);
         phoenixImplementor.pushContext(new ImplementorContext(true, false, ImmutableIntList.identity(rel.getRowType().getFieldCount())));
         final StatementPlan plan = rel.implement(phoenixImplementor);
         if (!(plan instanceof QueryPlan)) {

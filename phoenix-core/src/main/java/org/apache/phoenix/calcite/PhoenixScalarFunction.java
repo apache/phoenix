@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 
 public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunction {
     private final PFunction functionInfo;
+    @SuppressWarnings("rawtypes")
     private final PDataType returnType;
     private final List<FunctionParameter> parameters;
     
@@ -58,6 +59,7 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
                             return getArgumentName(arg.getArgPosition());
                         }
 
+                        @SuppressWarnings("rawtypes")
                         public RelDataType getType(RelDataTypeFactory typeFactory) {
                             PDataType dataType =
                                     arg.isArrayType() ? PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil
