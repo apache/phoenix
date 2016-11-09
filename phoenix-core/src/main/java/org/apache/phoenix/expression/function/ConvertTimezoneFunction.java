@@ -23,10 +23,11 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.JodaTimezoneCache;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.joda.time.DateTimeZone;
 
 /**
@@ -35,7 +36,7 @@ import org.joda.time.DateTimeZone;
  *
  */
 @FunctionParseNode.BuiltInFunction(name = ConvertTimezoneFunction.NAME, args = {
-    @FunctionParseNode.Argument(allowedTypes = { PDate.class }),
+    @FunctionParseNode.Argument(allowedTypes = { PTimestamp.class }),
     @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
     @FunctionParseNode.Argument(allowedTypes = { PVarchar.class })})
 public class ConvertTimezoneFunction extends ScalarFunction {
