@@ -39,7 +39,7 @@ import org.junit.Test;
 public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
 
     @Test
-    public void testConvertTimezoneEurope() throws Exception {
+    public void testDateConvertTimezoneEurope() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String timezone_offset_test = generateUniqueName();
         String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
@@ -52,6 +52,26 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs = conn.createStatement().executeQuery(
             "SELECT k1, dates, CONVERT_TZ(dates, 'UTC', 'Europe/Prague') FROM "
+                + timezone_offset_test);
+
+        assertTrue(rs.next());
+        assertEquals(1393635600000L, rs.getDate(3).getTime()); //Sat, 01 Mar 2014 01:00:00
+    }
+
+    @Test
+    public void testTimestampConvertTimezoneEurope() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String timezone_offset_test = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + timezone_offset_test
+            + " (k1 INTEGER NOT NULL, timestamps TIMESTAMP CONSTRAINT pk PRIMARY KEY (k1))";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO " + timezone_offset_test
+            + " (k1, timestamps) VALUES (1, TO_TIMESTAMP('2014-03-01 00:00:00'))";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT k1, timestamps, CONVERT_TZ(timestamps, 'UTC', 'Europe/Prague') FROM "
                 + timezone_offset_test);
 
         assertTrue(rs.next());
