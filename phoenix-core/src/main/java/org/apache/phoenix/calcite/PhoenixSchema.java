@@ -128,10 +128,9 @@ public class PhoenixSchema implements Schema {
         Collection<FunctionParseNode.BuiltInFunctionInfo>  infoCollection = ParseNodeFactory.getAll();
         for (FunctionParseNode.BuiltInFunctionInfo info : infoCollection) {
             try {
-                //TODO: aliasing for functions that already exist NOW, TRUNC
                 if(!CalciteUtils.TRANSLATED_BUILT_IN_FUNCTIONS.contains(info.getName())) {
                     builtinFunctions.put(info.getName(),
-                            (List<Function>)(Object)PhoenixScalarFunction.createBuiltinFunction(info));
+                            (List<Function>)(Object)PhoenixScalarFunction.createBuiltinFunctions(info));
                 }
             }
             catch(RuntimeException e){

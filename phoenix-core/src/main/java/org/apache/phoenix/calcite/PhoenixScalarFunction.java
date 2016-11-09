@@ -27,6 +27,7 @@ import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ImplementableFunction;
 import org.apache.calcite.schema.ScalarFunction;
@@ -43,6 +44,7 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
     @SuppressWarnings("rawtypes")
     private final PDataType returnType;
     private final List<FunctionParameter> parameters;
+    private final FunctionParseNode.BuiltInFunctionInfo parseInfo;
     
     public PhoenixScalarFunction(PFunction functionInfo) {
         this.functionInfo = functionInfo;
@@ -75,37 +77,58 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
                         }
                     });
         }
+        this.parseInfo = null;
     }
 
-    public static List<PhoenixScalarFunction> createBuiltinFunction(FunctionParseNode.BuiltInFunctionInfo info) {
-        //TODO: add aggregate function support
-        if(info.isAggregate()){
-            throw new UnsupportedOperationException();
-        }
+    public PhoenixScalarFunction(FunctionParseNode.BuiltInFunctionInfo parseInfo, List<FunctionParameter> parameters, PDataType returnType){
+        this.parseInfo = parseInfo;
+        this.parameters = parameters;
+        this.returnType = returnType;
+        this.functionInfo = null;
+    }
 
+    public static List<PhoenixScalarFunction> createBuiltinFunctions(FunctionParseNode.BuiltInFunctionInfo parseInfo){
         List<PhoenixScalarFunction> functionList = Lists.newArrayList();
-
-        for(List<FunctionArgument> argumentList : info.overloadArguments()){
+        for(List<FunctionArgument> argumentList : parseInfo.overloadArguments()){
             try {
-                Class<? extends FunctionExpression> clazz = info.getFunc();
+                Class<? extends FunctionExpression> clazz = parseInfo.getFunc();
                 FunctionExpression func = clazz.newInstance();
+                List<FunctionParameter> parameters = Lists.newArrayListWithExpectedSize(argumentList.size());
+                PDataType returnType = func.getDataType();
+                if(returnType == null) { throw new RuntimeException(); }
+                for (final FunctionArgument arg : argumentList) {
+                    parameters.add(
+                            new FunctionParameter() {
+                                public int getOrdinal() {
+                                    return arg.getArgPosition();
+                                }
 
-                if(info.getName() == "ROUND"){
-                    functionList.add(new PhoenixScalarFunction(
-                            new PFunction(info.getName(), argumentList, argumentList.get(0).getArgumentType(), clazz.getName(), null)));
-                } else {
-                    functionList.add(new PhoenixScalarFunction(
-                            new PFunction(info.getName(), argumentList, func.getDataType().getSqlTypeName(), clazz.getName(), null)));
+                                public String getName() {
+                                    return getArgumentName(arg.getArgPosition());
+                                }
+
+                                @SuppressWarnings("rawtypes")
+                                public RelDataType getType(RelDataTypeFactory typeFactory) {
+                                    PDataType dataType =
+                                            arg.isArrayType() ? PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil
+                                                    .normalizeIdentifier(SchemaUtil.normalizeIdentifier(arg
+                                                            .getArgumentType())))) : PDataType.fromSqlTypeName(SchemaUtil
+                                                    .normalizeIdentifier(arg.getArgumentType()));
+                                    return typeFactory.createJavaType(dataType.getJavaClass());
+                                }
+
+                                public boolean isOptional() {
+                                    return arg.getDefaultValue() != null;
+                                }
+                            });
                 }
-
-            } catch(Exception e) {
-                System.out.println("return type error" + info.getName());
+                functionList.add(new PhoenixScalarFunction(parseInfo, parameters, returnType));
+            } catch (Exception e){
                 throw new RuntimeException(e);
             }
         }
         return functionList;
     }
-
     @Override
     public RelDataType getReturnType(RelDataTypeFactory typeFactory) {
         return typeFactory.createJavaType(returnType.getJavaClass());
@@ -118,6 +141,10 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
     
     public PFunction getFunctionInfo() {
         return functionInfo;
+    }
+
+    public FunctionParseNode.BuiltInFunctionInfo getParseInfo(){
+        return parseInfo;
     }
 
     private static String getArgumentName(int ordinal) {

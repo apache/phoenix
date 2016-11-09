@@ -769,7 +769,7 @@ public class CalciteUtils {
                         Function func = udf.getFunction();
                         if (func instanceof PhoenixScalarFunction) {
                             PhoenixScalarFunction scalarFunc = (PhoenixScalarFunction) func;
-                            BuiltInFunctionInfo info = new BuiltInFunctionInfo(scalarFunc.getFunctionInfo());
+                            BuiltInFunctionInfo info = scalarFunc.getParseInfo() != null ? scalarFunc.getParseInfo() : new BuiltInFunctionInfo(scalarFunc.getFunctionInfo());
                             if (info.getArgs().length > children.size()) {
                                 List<Expression> moreChildren = new ArrayList<Expression>(children);
                                 for (int i = children.size(); i < info.getArgs().length; i++) {
@@ -781,6 +781,14 @@ public class CalciteUtils {
                             }
                             for(int i = 0; i < children.size(); i++) {
                                 FunctionParseNode.validateFunctionArguement(info, i, children.get(i));
+                            }
+                            if(scalarFunc.getParseInfo() != null){
+                                BuiltInFunctionInfo parseInfo = scalarFunc.getParseInfo();
+                                try {
+                                    FunctionParseNode parseNode = parseInfo.getNodeCtor().newInstance(parseInfo.getName(), Lists.newArrayList(), parseInfo);
+                                    assert(parseNode != null);
+                                    return parseNode.create(children, implementor.getStatementContext());
+                                } catch (Exception e) {throw new RuntimeException ("Failed to create builtin function " + parseInfo.getName(), e);}
                             }
                             return new UDFExpression(children, scalarFunc.getFunctionInfo());
                         }
