@@ -27,7 +27,6 @@ import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ImplementableFunction;
 import org.apache.calcite.schema.ScalarFunction;
@@ -36,7 +35,9 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.util.SchemaUtil;
+
 import com.google.common.collect.Lists;
 
 public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunction {
@@ -92,10 +93,17 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
         for(List<FunctionArgument> argumentList : parseInfo.overloadArguments()){
             try {
                 Class<? extends FunctionExpression> clazz = parseInfo.getFunc();
-                FunctionExpression func = clazz.newInstance();
                 List<FunctionParameter> parameters = Lists.newArrayListWithExpectedSize(argumentList.size());
-                PDataType returnType = func.getDataType();
-                if(returnType == null) { throw new RuntimeException(); }
+
+                List<PDataType> returnTypes = Lists.newArrayList();
+                try {
+                    FunctionExpression func = clazz.newInstance();
+                    returnTypes.add(func.getDataType());
+                } catch (Exception e){
+                    returnTypes.addAll(PDataTypeFactory.getInstance().getTypes());
+                }
+                assert(!returnTypes.isEmpty());
+
                 for (final FunctionArgument arg : argumentList) {
                     parameters.add(
                             new FunctionParameter() {
@@ -122,7 +130,9 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
                                 }
                             });
                 }
-                functionList.add(new PhoenixScalarFunction(parseInfo, parameters, returnType));
+                for(PDataType returnType : returnTypes) {
+                    functionList.add(new PhoenixScalarFunction(parseInfo, parameters, returnType));
+                }
             } catch (Exception e){
                 throw new RuntimeException(e);
             }
