@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -40,7 +39,7 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class CountDistinctCompressionIT extends BaseOwnClusterIT {
+public class CountDistinctCompressionIT extends BaseUniqueNamesOwnClusterIT {
     @BeforeClass
     public static void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
@@ -52,9 +51,9 @@ public class CountDistinctCompressionIT extends BaseOwnClusterIT {
     @Test
     public void testDistinctCountOnColumn() throws Exception {
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), (Date)null, null, getUrl());
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), (Date)null, null, getUrl());
 
-        String query = "SELECT count(DISTINCT A_STRING) FROM aTable";
+        String query = "SELECT count(DISTINCT A_STRING) FROM " + tableName;
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);

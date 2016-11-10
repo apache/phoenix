@@ -41,13 +41,14 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.wal.WALEdit;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseOwnClusterIT;
+import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -57,13 +58,13 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public class TxWriteFailureIT extends BaseOwnClusterIT {
+public class TxWriteFailureIT extends BaseUniqueNamesOwnClusterIT {
 	
-    private static final String SCHEMA_NAME = "S";
-    private static final String DATA_TABLE_NAME = "T";
-    private static final String INDEX_TABLE_NAME = "I";
-    private static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, DATA_TABLE_NAME);
-    private static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, INDEX_TABLE_NAME);
+    private String schemaName;
+    private String dataTableName;
+    private String indexName;
+    private String dataTableFullName;
+    private String indexFullName;
     private static final String ROW_TO_FAIL = "fail";
     
     private final boolean localIndex;
@@ -92,6 +93,15 @@ public class TxWriteFailureIT extends BaseOwnClusterIT {
                  { false, false }, { false, true }, { true, false }, { true, true }
            });
     }
+    
+    @Before
+    public void generateTableNames() throws SQLException {
+        schemaName = generateUniqueName();
+        dataTableName = generateUniqueName();
+        indexName = generateUniqueName();
+        dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        indexFullName = SchemaUtil.getTableName(schemaName, indexName); 
+    }
 	
 	@Test
     public void testIndexTableWriteFailure() throws Exception {
@@ -110,11 +120,11 @@ public class TxWriteFailureIT extends BaseOwnClusterIT {
         Connection conn = driver.connect(url, props);
         conn.setAutoCommit(false);
         conn.createStatement().execute(
-                "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR PRIMARY KEY, v1 VARCHAR)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+                "CREATE TABLE " + dataTableFullName + " (k VARCHAR PRIMARY KEY, v1 VARCHAR)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
         conn.createStatement().execute(
-                "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1)");
+                "CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + dataTableFullName + " (v1)");
         
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?)");
         // to create a data table write failure set k as the ROW_TO_FAIL, to create an index table write failure set v1 as the ROW_TO_FAIL, 
         // FailingRegionObserver will throw an exception if the put contains ROW_TO_FAIL
         stmt.setString(1, !indexTableWriteFailure ? ROW_TO_FAIL : "k1");
@@ -137,9 +147,9 @@ public class TxWriteFailureIT extends BaseOwnClusterIT {
         conn.commit();
         
         // verify that only k3,v3 exists in the data table
-        String dataSql = "SELECT k, v1 FROM " + DATA_TABLE_FULL_NAME + " order by k";
+        String dataSql = "SELECT k, v1 FROM " + dataTableFullName + " order by k";
         rs = conn.createStatement().executeQuery("EXPLAIN "+dataSql);
-        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER S.T",
+        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dataTableFullName,
                 QueryUtil.getExplainPlan(rs));
         rs = conn.createStatement().executeQuery(dataSql);
         assertTrue(rs.next());
@@ -148,16 +158,16 @@ public class TxWriteFailureIT extends BaseOwnClusterIT {
         assertFalse(rs.next());
 
         // verify the only k3,v3  exists in the index table
-        String indexSql = "SELECT k, v1 FROM " + DATA_TABLE_FULL_NAME + " order by v1";
+        String indexSql = "SELECT k, v1 FROM " + dataTableFullName + " order by v1";
         rs = conn.createStatement().executeQuery("EXPLAIN "+indexSql);
         if(localIndex) {
             assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + DATA_TABLE_FULL_NAME + " [1]\n" + 
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableFullName + " [1]\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
         } else {
-	        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + INDEX_TABLE_FULL_NAME + "\n    SERVER FILTER BY FIRST KEY ONLY",
+	        assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexFullName + "\n    SERVER FILTER BY FIRST KEY ONLY",
 	                QueryUtil.getExplainPlan(rs));
         }
         rs = conn.createStatement().executeQuery(indexSql);
@@ -166,7 +176,7 @@ public class TxWriteFailureIT extends BaseOwnClusterIT {
         assertEquals("v3", rs.getString(2));
         assertFalse(rs.next());
         
-        conn.createStatement().execute("DROP TABLE " + DATA_TABLE_FULL_NAME);
+        conn.createStatement().execute("DROP TABLE " + dataTableFullName);
 	}
 	
 	

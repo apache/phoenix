@@ -994,7 +994,7 @@ public class SchemaUtil {
 
     public static TableName getPhysicalTableName(byte[] fullTableName, Configuration conf) {
         return getPhysicalTableName(fullTableName, isNamespaceMappingEnabled(
-                isSystemTable(fullTableName) ? PTableType.SYSTEM : null, new ReadOnlyProps(conf.iterator())));
+                isSystemTable(fullTableName) ? PTableType.SYSTEM : null, conf));
     }
 
     public static TableName getPhysicalName(byte[] fullTableName, ReadOnlyProps readOnlyProps) {
@@ -1018,6 +1018,14 @@ public class SchemaUtil {
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {
         return PTableType.TABLE.equals(tableType) && isNamespaceMappingEnabled(tableType, props);
+    }
+    
+    public static boolean isNamespaceMappingEnabled(PTableType type, Configuration conf) {
+        return conf.getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
+                QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED)
+                && (type == null || !PTableType.SYSTEM.equals(type)
+                        || conf.getBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
+                                QueryServicesOptions.DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE));
     }
 
     public static boolean isNamespaceMappingEnabled(PTableType type, ReadOnlyProps readOnlyProps) {

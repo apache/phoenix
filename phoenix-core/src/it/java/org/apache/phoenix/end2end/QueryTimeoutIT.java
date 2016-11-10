@@ -42,14 +42,20 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
 
-public class QueryTimeoutIT extends BaseOwnClusterIT {
-    private static final String TEST_TABLE_NAME = "T";
+public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
+    private String tableName;
+    
+    @Before
+    public void generateTableName() throws SQLException {
+        tableName = generateUniqueName();
+    }
     
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -105,8 +111,8 @@ public class QueryTimeoutIT extends BaseOwnClusterIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
-                "CREATE TABLE " + TEST_TABLE_NAME + "(k BIGINT PRIMARY KEY, v VARCHAR)");
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TEST_TABLE_NAME + " VALUES(?, 'AAAAAAAAAAAAAAAAAAAA')");
+                "CREATE TABLE " + tableName + "(k BIGINT PRIMARY KEY, v VARCHAR)");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?, 'AAAAAAAAAAAAAAAAAAAA')");
         for (int i = 1; i <= nRows; i++) {
             stmt.setLong(1, i);
             stmt.executeUpdate();
@@ -115,13 +121,13 @@ public class QueryTimeoutIT extends BaseOwnClusterIT {
             }
         }
         conn.commit();
-        conn.createStatement().execute("UPDATE STATISTICS " + TEST_TABLE_NAME);
+        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
         
         PhoenixStatement pstmt = conn.createStatement().unwrap(PhoenixStatement.class);
         pstmt.setQueryTimeout(1);
         long startTime = System.currentTimeMillis();
         try {
-            ResultSet rs = pstmt.executeQuery("SELECT count(*) FROM " + TEST_TABLE_NAME);
+            ResultSet rs = pstmt.executeQuery("SELECT count(*) FROM " + tableName);
             // Force lots of chunks so query is cancelled
             assertTrue(pstmt.getQueryPlan().getSplits().size() > 1000);
             rs.next();
