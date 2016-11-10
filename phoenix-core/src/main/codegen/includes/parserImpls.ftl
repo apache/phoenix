@@ -181,6 +181,75 @@ SqlNode SqlCreateTable() :
 
 /**
  * Parses statement
+ *   ALTER TABLE
+ */
+SqlNode SqlAlterTable() :
+{
+    SqlParserPos pos;
+    SqlIdentifier tableName;
+    boolean isView = false;
+    boolean ifExists = false;
+    SqlNodeList columnNames = null;
+    boolean ifNotExists = false;
+    SqlNodeList newColumnDefs = null;
+    SqlNodeList tableOptions = null;
+}
+{
+    <ALTER> { pos = getPos(); } 
+    (
+        <VIEW> { isView = true; }
+        |
+        <TABLE> { isView = false; }
+    )
+    tableName = DualIdentifier()
+    (
+        (
+            <ADD>
+            (
+                <IF> <NOT> <EXISTS> { ifNotExists = true; }
+                |
+                {
+                    ifNotExists = false;
+                }
+            )
+            newColumnDefs = ColumnDefList()
+            (
+                tableOptions = FamilyOptionList()
+                |
+                {
+                    tableOptions = SqlNodeList.EMPTY;
+                }
+            )
+        )
+        |
+        <DROP> <COLUMN>
+        (
+            <IF> <EXISTS> { ifExists = true; }
+            |
+            {
+                ifExists = false;
+            }
+        )
+        columnNames = ColumnNamesList()
+        |
+        <SET>
+        tableOptions = FamilyOptionList()
+        |
+        {
+            tableOptions = SqlNodeList.EMPTY;
+        }
+    )
+    {
+    return new SqlAlterTable(pos.plus(getPos()), tableName,
+            SqlLiteral.createBoolean(isView, SqlParserPos.ZERO), 
+            SqlLiteral.createBoolean(ifExists, SqlParserPos.ZERO),columnNames,
+            SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO), newColumnDefs,
+            tableOptions);
+     }
+}
+
+/**
+ * Parses statement
  *   CREATE INDEX
  */
 SqlNode SqlCreateIndex() :
@@ -543,6 +612,23 @@ SqlNodeList ColumnDefList() :
     ) *
     {
         return new SqlNodeList(columnDefList, pos.plus(getPos()));
+    }
+}
+
+SqlNodeList ColumnNamesList() :
+{
+    SqlParserPos pos;
+    SqlNode e;
+    List<SqlNode> columnNamesList;
+}
+{
+    { pos = getPos(); }
+    e = DualIdentifier() { columnNamesList = startList(e); }
+    (
+        <COMMA> e = DualIdentifier() { columnNamesList.add(e); }
+    ) *
+    {
+        return new SqlNodeList(columnNamesList, pos.plus(getPos()));
     }
 }
 

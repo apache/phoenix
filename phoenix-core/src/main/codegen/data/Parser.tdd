@@ -75,6 +75,7 @@
     "SqlDropFunction()"
     "SqlUploadJarsNode()"
     "SqlDeleteJarNode()"
+    "SqlAlterTable()"
   ]
 
   # List of methods for parsing custom literals.

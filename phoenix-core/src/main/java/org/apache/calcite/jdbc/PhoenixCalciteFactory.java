@@ -3,6 +3,7 @@ package org.apache.calcite.jdbc;
 import java.io.File;
 import java.io.InputStream;
 import java.io.Reader;
+import java.sql.DatabaseMetaData;
 import java.sql.NClob;
 import java.sql.ResultSetMetaData;
 import java.sql.RowId;
@@ -290,7 +291,20 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         private static interface PhoenixConnectionCallable {
             void call(PhoenixConnection conn) throws SQLException;
         }
-        
+
+        @Override
+        public DatabaseMetaData getMetaData() throws SQLException {
+            for (String subSchemaName : getRootSchema().getSubSchemaNames()) {
+                try {
+                    PhoenixSchema phoenixSchema =
+                            getRootSchema().getSubSchema(subSchemaName).unwrap(PhoenixSchema.class);
+                    return phoenixSchema.pc.getMetaData();
+                } catch (ClassCastException e) {
+                }
+            }
+            return super.getMetaData();
+        }
+
         @SuppressWarnings("unchecked")
         @Override
         public <T> T unwrap(Class<T> iface) throws SQLException {

@@ -45,6 +45,7 @@ import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.calcite.parse.SqlAlterTable;
 import org.apache.phoenix.calcite.parse.SqlCreateFunction;
 import org.apache.phoenix.calcite.parse.SqlCreateIndex;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
@@ -79,6 +80,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
@@ -86,6 +88,7 @@ import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
@@ -103,6 +106,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
@@ -437,6 +441,66 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 MetaDataClient client = new MetaDataClient(connection);
                 client.dropSequence(drop);
                 break;                
+            }
+            case ALTER_TABLE: {
+                final SqlAlterTable alterTable = (SqlAlterTable) node;
+                final TableName name;
+                if (alterTable.tableName.isSimple()) {
+                    name = TableName.create(null, alterTable.tableName.getSimple());
+                } else {
+                    name = TableName.create(alterTable.tableName.names.get(0), alterTable.tableName.names.get(1));
+                }
+                final NamedTableNode namedTable = NamedTableNode.create(name);
+                if(alterTable.newColumnDefs != null || alterTable.tableOptions != null) {
+                    final List<ColumnDef> columnDefs = Lists.newArrayList();
+                    if(alterTable.newColumnDefs != null) {
+                        for (SqlNode columnDef : alterTable.newColumnDefs) {
+                            columnDefs.add(((SqlColumnDefNode) columnDef).columnDef);
+                        }
+                    }
+                    boolean ifNotExists = false;
+                    if(alterTable.ifNotExists != null) {
+                        ifNotExists = alterTable.ifNotExists.booleanValue();
+                    }
+                    final ListMultimap<String, Pair<String, Object>> props = convertOptions(alterTable.tableOptions);
+                    AddColumnStatement addColumn =
+                            nodeFactory
+                                    .addColumn(
+                                        namedTable,
+                                        alterTable.isView.booleanValue() ? PTableType.VIEW
+                                                : (QueryConstants.SYSTEM_SCHEMA_NAME.equals(name
+                                                        .getSchemaName()) ? PTableType.SYSTEM
+                                                        : PTableType.TABLE), columnDefs,
+                                        ifNotExists, props);
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.addColumn(addColumn);
+                } else {
+                    final List<ColumnName> columnNames = Lists.newArrayList();
+                    for (SqlNode e : alterTable.columnNames) {
+                        SqlIdentifier n = (SqlIdentifier) e;
+                        ColumnName columnName;
+                        if (n.isSimple()) {
+                            columnName = ColumnName.caseSensitiveColumnName(n.getSimple());
+                        } else {
+                            columnName = ColumnName.caseSensitiveColumnName(n.names.get(0), n.names.get(1));
+                        }
+                        columnNames.add(columnName);
+                    }
+                    boolean ifExists = false;
+                    if(alterTable.ifExists != null) {
+                        ifExists = alterTable.ifExists.booleanValue();
+                    }
+                    DropColumnStatement dropColumn =
+                            nodeFactory.dropColumn(
+                                namedTable,
+                                alterTable.isView.booleanValue() ? PTableType.VIEW
+                                        : (QueryConstants.SYSTEM_SCHEMA_NAME.equals(name
+                                                .getSchemaName()) ? PTableType.SYSTEM
+                                                : PTableType.TABLE), columnNames, ifExists);
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.dropColumn(dropColumn);
+                }
+                break;
             }
             case OTHER_DDL: {
                 if (node instanceof SqlUpdateStatistics) {
