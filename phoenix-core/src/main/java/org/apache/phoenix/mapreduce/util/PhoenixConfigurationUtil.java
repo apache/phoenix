@@ -188,7 +188,6 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         configuration.setLong(UPSERT_BATCH_SIZE, batchSize);
     }
-    
     /**
      * Sets which HBase cluster a Phoenix MapReduce job should read from
      * @param configuration
@@ -235,7 +234,8 @@ public final class PhoenixConfigurationUtil {
             LOG.info(String.format("UseUpsertColumns=%s, upsertColumnList.size()=%s, upsertColumnList=%s "
                     ,!upsertColumnList.isEmpty(), upsertColumnList.size(), Joiner.on(",").join(upsertColumnList)
                     ));
-        } 
+        }
+        //get column metalist by checking if dynamic column support is needed.
        columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, upsertColumnList);
        // we put the encoded column infos in the Configuration for re usability.
        ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList); 
@@ -354,7 +354,6 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         return configuration.get(OUTPUT_TABLE_NAME);
     }
-    
     /**
      * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will read from
      * @param configuration
