@@ -34,6 +34,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
@@ -48,63 +49,91 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
+import com.google.common.collect.Maps;
+
 @RunWith(Parameterized.class)
-public class StatsCollectorIT extends ParallelStatsEnabledIT {
+public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
     private final String tableDDLOptions;
     private String tableName;
     private String schemaName;
     private String fullTableName;
-        
-    public StatsCollectorIT( boolean transactional) {
+    private String physicalTableName;
+    private final boolean userTableNamespaceMapped;
+    
+    public StatsCollectorIT(boolean transactional, boolean userTableNamespaceMapped) {
         this.tableDDLOptions= transactional ? " TRANSACTIONAL=true" : "";
+        this.userTableNamespaceMapped = userTableNamespaceMapped;
     }
     
-    private static Connection getConnection() throws SQLException {
+    @Parameters(name="transactional = {0}, isUserTableNamespaceMapped = {1}")
+    public static Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][] {{false,true}, {false, false}, {true, false}, {true, true}});
+    }
+    
+    @BeforeClass
+    public static void doSetup() throws Exception {
+        // enable name space mapping at global level on both client and server side
+        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(7);
+        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
+        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        clientProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
+        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+    }
+    
+    @Before
+    public void generateTableNames() throws SQLException {
+        schemaName = generateUniqueName();
+        if (userTableNamespaceMapped) {
+            try (Connection conn = getConnection()) {
+                conn.createStatement().execute("CREATE SCHEMA " + schemaName);
+            }
+        }
+        tableName = "T_" + generateUniqueName();
+        fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        physicalTableName = SchemaUtil.getPhysicalHBaseTableName(fullTableName, userTableNamespaceMapped, PTableType.TABLE).getString();
+    }
+
+    private Connection getConnection() throws SQLException {
         return getConnection(Integer.MAX_VALUE);
     }
 
-    private static Connection getConnection(Integer statsUpdateFreq) throws SQLException {
+    private Connection getConnection(Integer statsUpdateFreq) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(QueryServices.EXPLAIN_CHUNK_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.TRUE.toString());
         props.setProperty(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Integer.toString(statsUpdateFreq));
+        // enable/disable namespace mapping at connection level
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(userTableNamespaceMapped));
         return DriverManager.getConnection(getUrl(), props);
     }
     
-    @Before
-    public void generateTableNames() {
-        schemaName = TestUtil.DEFAULT_SCHEMA_NAME;
-        tableName = "T_" + generateUniqueName();
-        fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-    }
-
-    @Parameters(name="transactional = {0}")
-    public static Collection<Boolean> data() {
-        return Arrays.asList(false,true);
-    }
-
     @Test
     public void testUpdateEmptyStats() throws Exception {
         Connection conn = getConnection();
         conn.setAutoCommit(true);
         conn.createStatement().execute(
                 "CREATE TABLE " + fullTableName +" ( k CHAR(1) PRIMARY KEY )"  + tableDDLOptions);
-        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+        conn.createStatement().execute("UPDATE STATISTICS " + fullTableName);
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
         String explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 1-CHUNK 0 ROWS 0 BYTES PARALLEL 1-WAY FULL SCAN OVER " + fullTableName + "\n" + 
+                "CLIENT 1-CHUNK 0 ROWS 0 BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n" + 
                 "    SERVER FILTER BY FIRST KEY ONLY",
                 explainPlan);
         conn.close();
@@ -123,20 +152,20 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT v2 FROM " + fullTableName + " WHERE v2='foo'");
         explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 3-CHUNK 0 ROWS 0 BYTES PARALLEL 3-WAY FULL SCAN OVER " + fullTableName + "\n" +
+                "CLIENT 3-CHUNK 0 ROWS 0 BYTES PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
                 "    SERVER FILTER BY B.V2 = 'foo'\n" + 
                 "CLIENT MERGE SORT",
                 explainPlan);
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
         explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 4-CHUNK 1 ROWS 34 BYTES PARALLEL 3-WAY FULL SCAN OVER " + fullTableName + "\n" +
+                "CLIENT 4-CHUNK 1 ROWS 34 BYTES PARALLEL 3-WAY FULL SCAN OVER " + physicalTableName + "\n" +
                 "CLIENT MERGE SORT",
                 explainPlan);
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName + " WHERE k = 'a'");
         explainPlan = QueryUtil.getExplainPlan(rs);
         assertEquals(
-                "CLIENT 1-CHUNK 1 ROWS 202 BYTES PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + fullTableName + "\n" +
+                "CLIENT 1-CHUNK 1 ROWS 202 BYTES PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER " + physicalTableName + "\n" +
                 "CLIENT MERGE SORT",
                 explainPlan);
         
@@ -157,11 +186,11 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
                 		+ tableDDLOptions );
         String[] s;
         Array array;
-        conn = upsertValues(props, tableName);
+        conn = upsertValues(props, fullTableName);
         // CAll the update statistics query here. If already major compaction has run this will not get executed.
-        stmt = conn.prepareStatement("UPDATE STATISTICS " + tableName);
+        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
         stmt.execute();
-        stmt = upsertStmt(conn, tableName);
+        stmt = upsertStmt(conn, fullTableName);
         stmt.setString(1, "z");
         s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
         array = conn.createArrayOf("VARCHAR", s);
@@ -170,9 +199,9 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         array = conn.createArrayOf("VARCHAR", s);
         stmt.setArray(3, array);
         stmt.execute();
-        stmt = conn.prepareStatement("UPDATE STATISTICS " + tableName);
+        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
         stmt.execute();
-        rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName);
+        rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName);
         assertTrue(rs.next());
         conn.close();
     }
@@ -370,8 +399,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
             stmt.executeUpdate();
         }
         conn.commit();
-        
-        compactTable(conn, tableName);
+        compactTable(conn, physicalTableName);
         if (statsUpdateFreq == null) {
             invalidateStats(conn, tableName);
         } else {
@@ -391,7 +419,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         conn.commit();
         assertEquals(5, nDeletedRows);
         
-        compactTable(conn, tableName);
+        compactTable(conn, physicalTableName);
         if (statsUpdateFreq == null) {
             invalidateStats(conn, tableName);
         }
@@ -407,7 +435,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         }
         assertEquals(nRows/2+1, keyRanges.size());
         ResultSet rs = conn.createStatement().executeQuery("SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM "
-                + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE PHYSICAL_NAME='" + tableName + "'");
+                + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE PHYSICAL_NAME='" + physicalTableName + "'");
         rs.next();
         assertEquals(nRows - nDeletedRows, rs.getLong(1));
     }
@@ -445,11 +473,11 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         List<KeyRange> keyRanges = getAllSplits(conn, fullTableName);
         assertEquals(26, keyRanges.size());
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        assertEquals("CLIENT 26-CHUNK 25 ROWS 12420 BYTES PARALLEL 1-WAY FULL SCAN OVER " + fullTableName,
+        assertEquals("CLIENT 26-CHUNK 25 ROWS 12420 BYTES PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
                 QueryUtil.getExplainPlan(rs));
 
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        List<HRegionLocation> regions = services.getAllTableRegions(Bytes.toBytes(fullTableName));
+        List<HRegionLocation> regions = services.getAllTableRegions(Bytes.toBytes(physicalTableName));
         assertEquals(1, regions.size());
 
         TestUtil.analyzeTable(conn, fullTableName);
@@ -463,7 +491,7 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
                 .createStatement()
                 .executeQuery(
                         "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH),COUNT(*) from SYSTEM.STATS where PHYSICAL_NAME = '"
-                                + fullTableName + "' GROUP BY COLUMN_FAMILY ORDER BY COLUMN_FAMILY");
+                                + physicalTableName + "' GROUP BY COLUMN_FAMILY ORDER BY COLUMN_FAMILY");
 
         assertTrue(rs.next());
         assertEquals("A", rs.getString(1));
@@ -497,12 +525,12 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
         TestUtil.analyzeTable(conn, fullTableName);
         // Assert that there are no more guideposts
         rs = conn.createStatement().executeQuery("SELECT count(1) FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + 
-                " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + "='" + fullTableName + "' AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NOT NULL");
+                " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + "='" + physicalTableName + "' AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY + " IS NOT NULL");
         assertTrue(rs.next());
         assertEquals(0, rs.getLong(1));
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + fullTableName);
-        assertEquals("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + fullTableName,
+        assertEquals("CLIENT 1-CHUNK PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
                 QueryUtil.getExplainPlan(rs));
     }
 
@@ -532,9 +560,10 @@ public class StatsCollectorIT extends ParallelStatsEnabledIT {
             int endIndex = r.nextInt(strings.length - startIndex) + startIndex;
             long rows = endIndex - startIndex;
             long c2Bytes = rows * 35;
+            String physicalTableName = SchemaUtil.getPhysicalHBaseTableName(fullTableName, userTableNamespaceMapped, PTableType.TABLE).getString();
             rs = conn.createStatement().executeQuery(
                     "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from SYSTEM.STATS where PHYSICAL_NAME = '"
-                            + fullTableName + "' AND GUIDE_POST_KEY>= cast('" + strings[startIndex]
+                            + physicalTableName + "' AND GUIDE_POST_KEY>= cast('" + strings[startIndex]
                             + "' as varbinary) AND  GUIDE_POST_KEY<cast('" + strings[endIndex]
                             + "' as varbinary) and COLUMN_FAMILY='C2' group by COLUMN_FAMILY");
             if (startIndex < endIndex) {
