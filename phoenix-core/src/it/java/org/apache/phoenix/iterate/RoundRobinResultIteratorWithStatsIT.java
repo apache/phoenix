@@ -29,19 +29,27 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.end2end.BaseOwnClusterIT;
+import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
-public class RoundRobinResultIteratorWithStatsIT extends BaseOwnClusterIT {
+public class RoundRobinResultIteratorWithStatsIT extends BaseUniqueNamesOwnClusterIT {
+    
+    private String tableName;
+    
+    @Before
+    public void generateTableName() {
+        tableName = generateUniqueName();
+    }
     
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -62,9 +70,8 @@ public class RoundRobinResultIteratorWithStatsIT extends BaseOwnClusterIT {
     public void testRoundRobinBehavior() throws Exception {
         int nRows = 30000;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String testTable = "testRoundRobinBehavior".toUpperCase();
-            conn.createStatement().execute("CREATE TABLE " + testTable + "(K VARCHAR PRIMARY KEY)");
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + testTable + " VALUES(?)");
+            conn.createStatement().execute("CREATE TABLE " + tableName + "(K VARCHAR PRIMARY KEY)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?)");
             for (int i = 1; i <= nRows; i++) {
                 stmt.setString(1, i + "");
                 stmt.executeUpdate();
@@ -73,11 +80,11 @@ public class RoundRobinResultIteratorWithStatsIT extends BaseOwnClusterIT {
                 }
             }
             conn.commit();
-            conn.createStatement().execute("UPDATE STATISTICS " + testTable);
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
             PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
             MockParallelIteratorFactory parallelIteratorFactory = new MockParallelIteratorFactory();
             phxConn.setIteratorFactory(parallelIteratorFactory);
-            ResultSet rs = stmt.executeQuery("SELECT * FROM " + testTable);
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
             StatementContext ctx = rs.unwrap(PhoenixResultSet.class).getContext();
             PTable table = ctx.getResolver().getTables().get(0).getTable();
             parallelIteratorFactory.setTable(table);

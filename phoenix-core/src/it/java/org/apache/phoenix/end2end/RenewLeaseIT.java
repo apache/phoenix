@@ -43,10 +43,10 @@ import org.junit.Test;
 import com.google.common.collect.Maps;
 
 
-public class RenewLeaseIT extends BaseOwnClusterIT {
+public class RenewLeaseIT extends BaseUniqueNamesOwnClusterIT {
     private static final long RPC_TIMEOUT = 2000;
     private static volatile boolean SLEEP_NOW = false;
-    private static final String TABLE_NAME = "FOO_BAR";
+    private final String TABLE_NAME = generateUniqueName();
     
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -74,7 +74,7 @@ public class RenewLeaseIT extends BaseOwnClusterIT {
         }
     }
     
-    public static class SleepingRegionObserver extends SimpleRegionObserver {
+    public class SleepingRegionObserver extends SimpleRegionObserver {
         @Override
         public boolean preScannerNext(final ObserverContext<RegionCoprocessorEnvironment> c,
                 final InternalScanner s, final List<Result> results,

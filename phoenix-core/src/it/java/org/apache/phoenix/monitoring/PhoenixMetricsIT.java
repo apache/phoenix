@@ -46,7 +46,7 @@ import java.util.Properties;
 import java.util.Set;
 
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.end2end.BaseOwnClusterIT;
+import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.QueryServices;
@@ -61,7 +61,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-public class PhoenixMetricsIT extends BaseOwnClusterIT {
+public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     private static final List<String> mutationMetricsToSkip = Lists
             .newArrayList(MetricType.MUTATION_COMMIT_TIME.name());
@@ -89,10 +89,11 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testGlobalPhoenixMetricsForQueries() throws Exception {
-        createTableAndInsertValues("T", true);
+        String tableName = generateUniqueName();
+        createTableAndInsertValues(tableName, true);
         resetGlobalMetrics(); // we want to count metrics related only to the below query
         Connection conn = DriverManager.getConnection(getUrl());
-        String query = "SELECT * FROM T";
+        String query = "SELECT * FROM " + tableName;
         ResultSet rs = conn.createStatement().executeQuery(query);
         while (rs.next()) {
             rs.getString(1);
@@ -116,7 +117,8 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testGlobalPhoenixMetricsForMutations() throws Exception {
-        createTableAndInsertValues("T", true);
+        String tableName = generateUniqueName();
+        createTableAndInsertValues(tableName, true);
         assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getTotalSum());
         assertEquals(10, GLOBAL_MUTATION_SQL_COUNTER.getMetric().getTotalSum());
         assertTrue(GLOBAL_MUTATION_BYTES.getMetric().getTotalSum() > 0);
@@ -131,13 +133,15 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testGlobalPhoenixMetricsForUpsertSelect() throws Exception {
-        createTableAndInsertValues("T", true);
+        String tableFrom = generateUniqueName();
+        String tableTo = generateUniqueName();
+        createTableAndInsertValues(tableFrom, true);
         resetGlobalMetrics();
-        String ddl = "CREATE TABLE T2 (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
+        String ddl = "CREATE TABLE " + tableTo + "  (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
         resetGlobalMetrics();
-        String dml = "UPSERT INTO T2 (K, V) SELECT K, V FROM T";
+        String dml = "UPSERT INTO " + tableTo + " (K, V) SELECT K, V FROM " + tableFrom;
         conn.createStatement().executeUpdate(dml);
         conn.commit();
         assertEquals(10, GLOBAL_MUTATION_BATCH_SIZE.getMetric().getTotalSum());
@@ -181,7 +185,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testOverallQueryMetricsForSelect() throws Exception {
-        String tableName = "SCANMETRICS";
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = 6";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
@@ -189,7 +193,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testReadMetricsForSelect() throws Exception {
-        String tableName = "READMETRICSFORSELECT";
+        String tableName = generateUniqueName();
         long numSaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + numSaltBuckets;
@@ -214,7 +218,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testMetricsForUpsert() throws Exception {
-        String tableName = "UPSERTMETRICS";
+        String tableName = generateUniqueName();
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = 6";
         Connection ddlConn = DriverManager.getConnection(getUrl());
         ddlConn.createStatement().execute(ddl);
@@ -256,7 +260,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testMetricsForUpsertSelect() throws Exception {
-        String tableName1 = "UPSERTFROM";
+        String tableName1 = generateUniqueName();
         long table1SaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName1 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + table1SaltBuckets;
@@ -266,7 +270,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
         int numRows = 10;
         insertRowsInTable(tableName1, numRows);
 
-        String tableName2 = "UPSERTTO";
+        String tableName2 = generateUniqueName();
         ddl = "CREATE TABLE " + tableName2 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = 10";
         ddlConn = DriverManager.getConnection(getUrl());
         ddlConn.createStatement().execute(ddl);
@@ -286,7 +290,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testMetricsForDelete() throws Exception {
-        String tableName = "DELETEMETRICS";
+        String tableName = generateUniqueName();
         long tableSaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + tableSaltBuckets;
@@ -309,7 +313,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testNoMetricsCollectedForConnection() throws Exception {
-        String tableName = "NOMETRICS";
+        String tableName = generateUniqueName();
         long tableSaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + tableSaltBuckets;
@@ -334,7 +338,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testMetricsForUpsertWithAutoCommit() throws Exception {
-        String tableName = "VERIFYUPSERTAUTOCOMMIT";
+        String tableName = generateUniqueName();
         long tableSaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + tableSaltBuckets;
@@ -374,7 +378,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testMetricsForDeleteWithAutoCommit() throws Exception {
-        String tableName = "VERIFYDELETEAUTOCOMMIT";
+        String tableName = generateUniqueName();
         long tableSaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + tableSaltBuckets;
@@ -420,7 +424,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testMetricsForUpsertSelectWithAutoCommit() throws Exception {
-        String tableName1 = "UPSERTFROMAUTOCOMMIT";
+        String tableName1 = generateUniqueName();
         long table1SaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName1 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + table1SaltBuckets;
@@ -430,7 +434,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
         int numRows = 10;
         insertRowsInTable(tableName1, numRows);
 
-        String tableName2 = "UPSERTTOAUTCOMMIT";
+        String tableName2 = generateUniqueName();
         ddl = "CREATE TABLE " + tableName2 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = 10";
         ddlConn = DriverManager.getConnection(getUrl());
         ddlConn.createStatement().execute(ddl);
@@ -508,11 +512,11 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
     @Test
     public void testMutationMetricsWhenUpsertingToMultipleTables() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String table1 = "TABLE1";
+            String table1 = generateUniqueName();
             createTableAndInsertValues(true, 10, conn, table1);
-            String table2 = "TABLE2";
+            String table2 = generateUniqueName();
             createTableAndInsertValues(true, 10, conn, table2);
-            String table3 = "TABLE3";
+            String table3 = generateUniqueName();
             createTableAndInsertValues(true, 10, conn, table3);
             Map<String, Map<String, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(conn);
             assertTrue("Mutation metrics not present for " + table1, mutationMetrics.get(table1) != null);
@@ -528,7 +532,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
         Connection conn = null;
         try {
             conn = DriverManager.getConnection(getUrl());
-            createTableAndInsertValues(true, 10, conn, "clearmetrics");
+            createTableAndInsertValues(true, 10, conn, generateUniqueName());
             assertTrue("Mutation metrics not present", PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(conn).size() > 0);
         } finally {
             if (conn != null) {
@@ -541,15 +545,15 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
 
     @Test
     public void testMetricsForUpsertingIntoImmutableTableWithIndices() throws Exception {
-        String dataTable = "IMMTABLEWITHINDICES";
+        String dataTable = generateUniqueName();
         String tableDdl = "CREATE TABLE "
                 + dataTable
                 + " (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, V1 INTEGER, V2 INTEGER, V3 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(K1, K2)) IMMUTABLE_ROWS = true";
-        String index1 = "I1";
+        String index1 = generateUniqueName() + "_IDX";
         String index1Ddl = "CREATE INDEX " + index1 + " ON " + dataTable + " (V1) include (V2)";
-        String index2 = "I2";
+        String index2 = generateUniqueName() + "_IDX";
         String index2Ddl = "CREATE INDEX " + index2 + " ON " + dataTable + " (V2) include (V3)";
-        String index3 = "I3";
+        String index3 = generateUniqueName() + "_IDX";
         String index3Ddl = "CREATE INDEX " + index3 + " ON " + dataTable + " (V3) include (V1)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute(tableDdl);
@@ -586,7 +590,7 @@ public class PhoenixMetricsIT extends BaseOwnClusterIT {
     
     @Test
     public void testMetricsForUpsertSelectSameTable() throws Exception {
-        String tableName = "UPSERTSAME";
+        String tableName = generateUniqueName();
         long table1SaltBuckets = 6;
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
                 + table1SaltBuckets;

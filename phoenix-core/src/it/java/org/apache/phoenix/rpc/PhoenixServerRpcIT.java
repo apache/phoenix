@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -42,22 +43,23 @@ import org.apache.hadoop.hbase.master.AssignmentManager;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.BaseOwnClusterIT;
+import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
-public class PhoenixServerRpcIT extends BaseOwnClusterIT {
+public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
 
-    private static final String SCHEMA_NAME = "S";
-    private static final String INDEX_TABLE_NAME = "I";
-    private static final String DATA_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "T");
-    private static final String INDEX_TABLE_FULL_NAME = SchemaUtil.getTableName(SCHEMA_NAME, "I");
+    private String schemaName;
+    private String indexName;
+    private String dataTableFullName;
+    private String indexTableFullName;
     
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -75,6 +77,14 @@ public class PhoenixServerRpcIT extends BaseOwnClusterIT {
         TestPhoenixIndexRpcSchedulerFactory.reset();
     }
     
+    @Before
+    public void generateTableNames() throws SQLException {
+        schemaName = generateUniqueName();
+        indexName = generateUniqueName();
+        indexTableFullName = SchemaUtil.getTableName(schemaName, indexName);
+        dataTableFullName = SchemaUtil.getTableName(schemaName, generateUniqueName());
+    }
+    
     @Test
     public void testIndexQos() throws Exception { 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -82,15 +92,15 @@ public class PhoenixServerRpcIT extends BaseOwnClusterIT {
         try {
             // create the table 
             conn.createStatement().execute(
-                    "CREATE TABLE " + DATA_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+                    "CREATE TABLE " + dataTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
     
             // create the index 
             conn.createStatement().execute(
-                    "CREATE INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME + " (v1) INCLUDE (v2)");
+                    "CREATE INDEX " + indexName + " ON " + dataTableFullName + " (v1) INCLUDE (v2)");
 
-            ensureTablesOnDifferentRegionServers(DATA_TABLE_FULL_NAME, INDEX_TABLE_FULL_NAME);
+            ensureTablesOnDifferentRegionServers(dataTableFullName, indexTableFullName);
     
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_FULL_NAME + " VALUES(?,?,?)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
             stmt.setString(1, "k1");
             stmt.setString(2, "v1");
             stmt.setString(3, "v2");
@@ -98,13 +108,13 @@ public class PhoenixServerRpcIT extends BaseOwnClusterIT {
             conn.commit();
     
             // run select query that should use the index
-            String selectSql = "SELECT k, v2 from " + DATA_TABLE_FULL_NAME + " WHERE v1=?";
+            String selectSql = "SELECT k, v2 from " + dataTableFullName + " WHERE v1=?";
             stmt = conn.prepareStatement(selectSql);
             stmt.setString(1, "v1");
     
             // verify that the query does a range scan on the index table
             ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER S.I ['v1']", QueryUtil.getExplainPlan(rs));
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexTableFullName + " ['v1']", QueryUtil.getExplainPlan(rs));
     
             // verify that the correct results are returned
             rs = stmt.executeQuery();
@@ -115,13 +125,13 @@ public class PhoenixServerRpcIT extends BaseOwnClusterIT {
             
             // drop index table 
             conn.createStatement().execute(
-                    "DROP INDEX " + INDEX_TABLE_NAME + " ON " + DATA_TABLE_FULL_NAME );
+                    "DROP INDEX " + indexName + " ON " + dataTableFullName );
             // create a data table with the same name as the index table 
             conn.createStatement().execute(
-                    "CREATE TABLE " + INDEX_TABLE_FULL_NAME + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+                    "CREATE TABLE " + indexTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
             
             // upsert one row to the table (which has the same table name as the previous index table)
-            stmt = conn.prepareStatement("UPSERT INTO " + INDEX_TABLE_FULL_NAME + " VALUES(?,?,?)");
+            stmt = conn.prepareStatement("UPSERT INTO " + indexTableFullName + " VALUES(?,?,?)");
             stmt.setString(1, "k1");
             stmt.setString(2, "v1");
             stmt.setString(3, "v2");
@@ -129,7 +139,7 @@ public class PhoenixServerRpcIT extends BaseOwnClusterIT {
             conn.commit();
             
             // run select query on the new table
-            selectSql = "SELECT k, v2 from " + INDEX_TABLE_FULL_NAME + " WHERE v1=?";
+            selectSql = "SELECT k, v2 from " + indexTableFullName + " WHERE v1=?";
             stmt = conn.prepareStatement(selectSql);
             stmt.setString(1, "v1");
     
