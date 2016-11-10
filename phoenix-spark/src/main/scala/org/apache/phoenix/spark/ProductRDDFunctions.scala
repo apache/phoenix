@@ -27,7 +27,7 @@ class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Seria
   def saveToPhoenix(tableName: String, cols: Seq[String],
                     conf: Configuration = new Configuration, zkUrl: Option[String] = None, tenantId: Option[String] = None)
                     : Unit = {
-    
+
     // Create a configuration object to use for saving
     @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, cols, zkUrl, tenantId, Some(conf))
 
