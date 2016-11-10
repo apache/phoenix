@@ -61,6 +61,14 @@ public class SequenceManager {
         return sequenceMap == null ? 0 : sequenceMap.size();
     }
     
+    public void reset() {
+        sequenceMap.clear();
+        isNextSequence.clear();
+        sequencePosition = null;
+        nextSequences = null;
+        currentSequences = null;
+    }
+    
     private void setSequenceValues(long[] srcSequenceValues, long[] dstSequenceValues, SQLException[] sqlExceptions) throws SQLException {
         SQLException eTop = null;
         for (int i = 0; i < sqlExceptions.length; i++) {

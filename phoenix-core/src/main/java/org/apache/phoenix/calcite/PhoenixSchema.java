@@ -344,6 +344,8 @@ public class PhoenixSchema implements Schema {
             sequenceManager.validateSequences(Sequence.ValueOp.VALIDATE_SEQUENCE);
         } catch (SQLException e){
             return null;
+        } finally {
+            sequenceManager.reset();
         }
 
         return new PhoenixSequence(schemaName, name, pc);
