@@ -17,14 +17,9 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
-import static org.apache.commons.lang.StringUtils.isNotEmpty;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
-
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -43,9 +38,13 @@ import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+
+import static org.apache.commons.lang.StringUtils.isNotEmpty;
 
 /**
  * A utility class to set properties on the {#link Configuration} instance.
@@ -219,7 +218,7 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(schemaTp);
         return SchemaType.valueOf(schemaTp);
     }
-    
+
     public static List<ColumnInfo> getUpsertColumnMetadataList(final Configuration configuration) throws SQLException {
         Preconditions.checkNotNull(configuration);
         List<ColumnInfo> columnMetadataList = null;
@@ -234,13 +233,13 @@ public final class PhoenixConfigurationUtil {
         if(!upsertColumnList.isEmpty()) {
             LOG.info(String.format("UseUpsertColumns=%s, upsertColumnList.size()=%s, upsertColumnList=%s "
                     ,!upsertColumnList.isEmpty(), upsertColumnList.size(), Joiner.on(",").join(upsertColumnList)
-                    ));
-        } 
-       columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, upsertColumnList);
-       // we put the encoded column infos in the Configuration for re usability.
-       ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList); 
-       connection.close();
-       return columnMetadataList;
+            ));
+        }
+        columnMetadataList = PhoenixRuntime.generateColumnInfo(connection, tableName, upsertColumnList);
+        // we put the encoded column infos in the Configuration for re usability.
+        ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
+        connection.close();
+        return columnMetadataList;
     }
     
      public static String getUpsertStatement(final Configuration configuration) throws SQLException {
