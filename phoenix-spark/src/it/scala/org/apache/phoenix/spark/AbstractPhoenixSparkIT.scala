@@ -14,9 +14,11 @@
 package org.apache.phoenix.spark
 
 import java.sql.{Connection, DriverManager}
+import java.util.Properties
 
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT
 import org.apache.phoenix.query.BaseTest
+import org.apache.phoenix.util.PhoenixRuntime
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 
@@ -64,12 +66,13 @@ class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterA
   // Runs SQL commands located in the file defined in the sqlSource argument
   // Optional argument tenantId used for running tenant-specific SQL
   def setupTables(sqlSource: String, tenantId: Option[String]): Unit = {
-    val url = tenantId match {
-      case Some(tenantId) => PhoenixSparkITHelper.getUrl + ";TenantId=" + tenantId
-      case _ => PhoenixSparkITHelper.getUrl
+    val props = new Properties
+    val id = tenantId match {
+      case Some(tid) => props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tid)
+      case _ =>
     }
 
-    conn = DriverManager.getConnection(url)
+    conn = DriverManager.getConnection(PhoenixSparkITHelper.getUrl, props)
     conn.setAutoCommit(true)
 
     val setupSqlSource = getClass.getClassLoader.getResourceAsStream(sqlSource)

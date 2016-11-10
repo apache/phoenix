@@ -13,6 +13,7 @@
  */
 package org.apache.phoenix.spark
 
+import org.apache.phoenix.util.PhoenixRuntime
 import org.apache.spark.sql.SQLContext
 
 import scala.collection.mutable.ListBuffer
@@ -53,14 +54,6 @@ class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
     // Save to tenant-specific view
     df.saveToPhoenix("TENANT_VIEW", zkUrl = Some(quorumAddress), tenantId = Some(TenantId))
 
-    df.write
-      .format("org.apache.phoenix.spark")
-      .mode("overwrite")
-      .option("table", "TENANT_VIEW")
-      .option("TenantId", "theTenant")
-      .option("zkUrl", PhoenixSparkITHelper.getUrl)
-      .save()
-
     verifyResults
   }
 
@@ -77,7 +70,7 @@ class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
       .format("org.apache.phoenix.spark")
       .mode("overwrite")
       .option("table", "TENANT_VIEW")
-      .option("TenantId", "theTenant")
+      .option(PhoenixRuntime.TENANT_ID_ATTRIB, "theTenant")
       .option("zkUrl", PhoenixSparkITHelper.getUrl)
       .save()
 
