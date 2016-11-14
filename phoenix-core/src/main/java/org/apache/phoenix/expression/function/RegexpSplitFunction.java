@@ -70,7 +70,7 @@ public abstract class RegexpSplitFunction extends ScalarFunction {
         init();
     }
 
-    public Expression create(List<Expression> children, StatementContext context)
+    public static Expression create(List<Expression> children, StatementContext context)
             throws SQLException {
         QueryServices services = context.getConnection().getQueryServices();
         boolean useByteBasedRegex =

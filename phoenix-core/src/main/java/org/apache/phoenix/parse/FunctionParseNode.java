@@ -303,7 +303,8 @@ public class FunctionParseNode extends CompoundParseNode {
     public enum FunctionClassType {
         NONE,
         PARENT,
-        ALIAS
+        ALIAS,
+        UDF
     }
 
     /**
@@ -353,7 +354,7 @@ public class FunctionParseNode extends CompoundParseNode {
             }
             this.requiredArgCount = requiredArgCount;
             this.isAggregate = AggregateFunction.class.isAssignableFrom(UDFExpression.class);
-            this.classType = FunctionClassType.NONE;
+            this.classType = FunctionClassType.UDF;
         }
 
         public int getRequiredArgCount() {

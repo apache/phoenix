@@ -22,7 +22,8 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionArgInfo;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
@@ -34,6 +35,8 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -125,14 +128,40 @@ public class PhoenixSchema implements Schema {
         if(!builtinFunctions.isEmpty()) {
             return;
         }
-        Collection<FunctionParseNode.BuiltInFunctionInfo>  infoCollection = ParseNodeFactory.getAll();
-        for (FunctionParseNode.BuiltInFunctionInfo info : infoCollection) {
+        Collection<BuiltInFunctionInfo>  infoCollection = ParseNodeFactory.getSingleEntryFunctionMap();
+        for (BuiltInFunctionInfo info : infoCollection) {
             if(!CalciteUtils.TRANSLATED_BUILT_IN_FUNCTIONS.contains(info.getName())) {
                 builtinFunctions.put(info.getName(),
                         (List<Function>) (Object) PhoenixScalarFunction.createBuiltinFunctions(info));
             }
         }
 
+    }
+
+    public static List<List<PFunction.FunctionArgument>> overloadArguments(BuiltInFunctionArgInfo[] args){
+        List<List<PFunction.FunctionArgument>> overloadedArgs = Lists.newArrayList();
+        int solutions = 1;
+        for(int i = 0; i < args.length; solutions *= args[i].getAllowedTypes().length, i++);
+        for(int i = 0; i < solutions; i++) {
+            int j = 1;
+            short k = 0;
+            overloadedArgs.add(new ArrayList<PFunction.FunctionArgument>());
+            for(BuiltInFunctionArgInfo arg : args) {
+                Class<? extends PDataType>[] temp = arg.getAllowedTypes();
+                String inputArg = PDataTypeFactory.getInstance().instanceFromClass(temp[(i/j)%temp.length]).toString();
+                overloadedArgs.get(i).add( new PFunction.FunctionArgument(
+                        inputArg,
+                        false,
+                        arg.isConstant(),
+                        arg.getDefaultValue(),
+                        arg.getMinValue(),
+                        arg.getMaxValue(),
+                        k));
+                k++;
+                j *= temp.length;
+            }
+        }
+        return overloadedArgs;
     }
 
     @Override

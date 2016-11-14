@@ -185,7 +185,7 @@ public class ParseNodeFactory {
         return info;
     }
 
-    public static Collection<BuiltInFunctionInfo> getAll(){
+    public static Collection<BuiltInFunctionInfo> getSingleEntryFunctionMap(){
         initBuiltInFunctionMap();
         return SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP.values();
     }

@@ -47,7 +47,7 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
     private final PDataType returnType;
     private final List<FunctionParameter> parameters;
     private final BuiltInFunctionInfo parseInfo;
-    
+
     public PhoenixScalarFunction(PFunction functionInfo) {
         this.functionInfo = functionInfo;
         this.returnType =
@@ -109,13 +109,13 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
     }
 
     public static List<PhoenixScalarFunction> createBuiltinFunctions(BuiltInFunctionInfo parseInfo){
-        List<PhoenixScalarFunction> functionList = Lists.newArrayList();
+        List<List<FunctionArgument>> overloadedArgs = PhoenixSchema.overloadArguments(parseInfo.getArgs());
+        List<PhoenixScalarFunction> functionList = Lists.newArrayListWithExpectedSize(overloadedArgs.size());
+        Class<? extends FunctionExpression> clazz = parseInfo.getFunc();
+
         try {
-            for (List<FunctionArgument> argumentList : parseInfo.overloadArguments()) {
-                Class<? extends FunctionExpression> clazz = parseInfo.getFunc();
-                List<FunctionParameter>
-                        parameters =
-                        Lists.newArrayListWithExpectedSize(argumentList.size());
+            for (List<FunctionArgument> argumentList : overloadedArgs) {
+                List<FunctionParameter> parameters = Lists.newArrayListWithExpectedSize(argumentList.size());
                 PDataType returnType = evaluateReturnType(clazz, argumentList);
 
                 for (final FunctionArgument arg : argumentList) {

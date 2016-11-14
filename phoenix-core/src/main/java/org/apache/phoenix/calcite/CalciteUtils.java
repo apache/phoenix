@@ -89,6 +89,7 @@ import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
+import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
@@ -97,6 +98,7 @@ import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.ExpFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
+import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.LnFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
@@ -150,7 +152,6 @@ public class CalciteUtils {
             .defaultSchema(rootSchema).build();
     }
 
-    //TODO: Add aggregate functions
     protected static final List<String> TRANSLATED_BUILT_IN_FUNCTIONS = Lists.newArrayList(
             SqrtFunction.NAME,
             PowerFunction.NAME,
@@ -161,7 +162,10 @@ public class CalciteUtils {
             CurrentTimeFunction.NAME,
             LowerFunction.NAME,
             UpperFunction.NAME,
-            CoalesceFunction.NAME);
+            CoalesceFunction.NAME,
+            TrimFunction.NAME,
+            CeilFunction.NAME,
+            FloorFunction.NAME);
 
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();
