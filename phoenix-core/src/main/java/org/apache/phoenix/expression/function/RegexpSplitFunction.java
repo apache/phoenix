@@ -19,14 +19,18 @@ package org.apache.phoenix.expression.function;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBaseSplitter;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.RegexpSplitParseNode;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -48,7 +52,9 @@ import org.apache.phoenix.util.ByteUtil;
  @FunctionParseNode.BuiltInFunction(name=RegexpSplitFunction.NAME,
         nodeClass = RegexpSplitParseNode.class, args= {
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class}),
-        @FunctionParseNode.Argument(allowedTypes={PVarchar.class})})
+        @FunctionParseNode.Argument(allowedTypes={PVarchar.class})},
+        classType = FunctionParseNode.FunctionClassType.ALIAS,
+        derivedFunctions = {ByteBasedRegexpSplitFunction.class, StringBasedRegexpSplitFunction.class})
 public abstract class RegexpSplitFunction extends ScalarFunction {
 
     public static final String NAME = "REGEXP_SPLIT";
@@ -62,6 +68,19 @@ public abstract class RegexpSplitFunction extends ScalarFunction {
     public RegexpSplitFunction(List<Expression> children) {
         super(children);
         init();
+    }
+
+    public Expression create(List<Expression> children, StatementContext context)
+            throws SQLException {
+        QueryServices services = context.getConnection().getQueryServices();
+        boolean useByteBasedRegex =
+                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                        QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+        if (useByteBasedRegex) {
+            return new ByteBasedRegexpSplitFunction(children);
+        } else {
+            return new StringBasedRegexpSplitFunction(children);
+        }
     }
 
     private void init() {

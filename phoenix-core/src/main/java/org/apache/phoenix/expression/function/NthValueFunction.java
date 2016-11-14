@@ -47,6 +47,10 @@ public class NthValueFunction extends FirstLastValueBaseFunction {
     public NthValueFunction() {
     }
 
+    public NthValueFunction(List<Expression> childExpressions) {
+        this(childExpressions, null);
+    }
+
     public NthValueFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {
         super(childExpressions, delegate);
     }

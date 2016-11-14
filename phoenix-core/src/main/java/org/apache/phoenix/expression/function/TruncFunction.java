@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FloorParseNode;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -46,7 +47,9 @@ args = {
        @Argument(allowedTypes={PTimestamp.class, PDecimal.class}),
        @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
        @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
-       } 
+       },
+classType = FunctionParseNode.FunctionClassType.ALIAS,
+derivedFunctions = {FloorFunction.class}
 )
 public abstract class TruncFunction extends ScalarFunction {
     
@@ -56,6 +59,10 @@ public abstract class TruncFunction extends ScalarFunction {
     
     public TruncFunction(List<Expression> children) throws SQLException {
         super(children);
+    }
+
+    public static Expression TruncFunction(List<Expression> children) throws SQLException{
+        return FloorFunction.create(children);
     }
 
     @Override

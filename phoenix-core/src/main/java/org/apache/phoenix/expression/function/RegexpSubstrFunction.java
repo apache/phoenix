@@ -19,15 +19,20 @@ package org.apache.phoenix.expression.function;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.RegexpSubstrParseNode;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
@@ -52,7 +57,9 @@ import org.apache.phoenix.schema.types.PVarchar;
     nodeClass = RegexpSubstrParseNode.class, args={
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
-    @Argument(allowedTypes={PLong.class}, defaultValue="1")} )
+    @Argument(allowedTypes={PLong.class}, defaultValue="1")},
+    classType = FunctionParseNode.FunctionClassType.ALIAS,
+    derivedFunctions = {ByteBasedRegexpSubstrFunction.class, StringBasedRegexpSubstrFunction.class})
 public abstract class RegexpSubstrFunction extends PrefixFunction {
     public static final String NAME = "REGEXP_SUBSTR";
 
@@ -67,6 +74,19 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
     public RegexpSubstrFunction(List<Expression> children) {
         super(children);
         init();
+    }
+
+    public static Expression create(List<Expression> children, StatementContext context)
+            throws SQLException {
+        QueryServices services = context.getConnection().getQueryServices();
+        boolean useByteBasedRegex =
+                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                        QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+        if (useByteBasedRegex) {
+            return new ByteBasedRegexpSubstrFunction(children);
+        } else {
+            return new StringBasedRegexpSubstrFunction(children);
+        }
     }
 
     protected abstract AbstractBasePattern compilePatternSpec(String value);

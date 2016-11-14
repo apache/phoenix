@@ -17,12 +17,17 @@
  */
 package org.apache.phoenix.expression.function;
 
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.RoundParseNode;
+import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -38,7 +43,9 @@ import org.apache.phoenix.schema.types.PVarchar;
                         @Argument(allowedTypes={PTimestamp.class, PDecimal.class}),
                         @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
                         @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
-                        } 
+                        },
+                 classType = FunctionParseNode.FunctionClassType.PARENT,
+                 derivedFunctions = {RoundDateExpression.class, RoundTimestampExpression.class, RoundDecimalExpression.class}
                 )
 public abstract class RoundFunction extends ScalarFunction {
     
@@ -48,6 +55,21 @@ public abstract class RoundFunction extends ScalarFunction {
     
     public RoundFunction(List<Expression> children) {
         super(children);
+    }
+
+    public static Expression create(List<Expression> children) throws SQLException {
+        final Expression firstChild = children.get(0);
+        final PDataType firstChildDataType = firstChild.getDataType();
+
+        if(firstChildDataType.isCoercibleTo(PDate.INSTANCE)) {
+            return RoundDateExpression.create(children);
+        } else if (firstChildDataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+            return RoundTimestampExpression.create(children);
+        } else if(firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
+            return RoundDecimalExpression.create(children);
+        } else {
+            throw TypeMismatchException.newException(firstChildDataType, "1");
+        }
     }
     
     @Override

@@ -19,12 +19,17 @@ package org.apache.phoenix.expression.function;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.CurrentDateTimeFunction;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.CurrentDateParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+
+import java.sql.SQLException;
+import java.util.List;
 
 
 /**
@@ -44,6 +49,10 @@ public class CurrentDateFunction extends CurrentDateTimeFunction {
     
     public CurrentDateFunction() {
         this(System.currentTimeMillis());
+    }
+
+    public CurrentDateFunction(List<Expression> children, StatementContext context) throws SQLException {
+        this(context.getCurrentTime());
     }
 
     public CurrentDateFunction(long timeStamp) {

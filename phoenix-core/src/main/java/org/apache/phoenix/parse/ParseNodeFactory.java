@@ -129,6 +129,7 @@ public class ParseNodeFactory {
         }
         int nArgs = d.args().length;
         BuiltInFunctionInfo value = new BuiltInFunctionInfo(f, d);
+
         SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP.put(value.getName(), value);
         do {
             // Add function to function map, throwing if conflicts found
