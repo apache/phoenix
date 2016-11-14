@@ -31,11 +31,12 @@ import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ImplementableFunction;
 import org.apache.calcite.schema.ScalarFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.collect.Lists;
@@ -45,7 +46,7 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
     @SuppressWarnings("rawtypes")
     private final PDataType returnType;
     private final List<FunctionParameter> parameters;
-    private final FunctionParseNode.BuiltInFunctionInfo parseInfo;
+    private final BuiltInFunctionInfo parseInfo;
     
     public PhoenixScalarFunction(PFunction functionInfo) {
         this.functionInfo = functionInfo;
@@ -81,28 +82,41 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
         this.parseInfo = null;
     }
 
-    public PhoenixScalarFunction(FunctionParseNode.BuiltInFunctionInfo parseInfo, List<FunctionParameter> parameters, PDataType returnType){
+    public PhoenixScalarFunction(BuiltInFunctionInfo parseInfo, List<FunctionParameter> parameters, PDataType returnType){
         this.parseInfo = parseInfo;
         this.parameters = parameters;
         this.returnType = returnType;
         this.functionInfo = null;
     }
 
-    public static List<PhoenixScalarFunction> createBuiltinFunctions(FunctionParseNode.BuiltInFunctionInfo parseInfo){
-        List<PhoenixScalarFunction> functionList = Lists.newArrayList();
-        for(List<FunctionArgument> argumentList : parseInfo.overloadArguments()){
-            try {
-                Class<? extends FunctionExpression> clazz = parseInfo.getFunc();
-                List<FunctionParameter> parameters = Lists.newArrayListWithExpectedSize(argumentList.size());
+    private static PDataType evaluateReturnType(Class<? extends FunctionExpression> f, List<FunctionArgument> argumentList) {
+        BuiltInFunction d = f.getAnnotation(BuiltInFunction.class);
+        try {
+            // Direct evaluation of the return type
+            FunctionExpression func = f.newInstance();
+            return func.getDataType();
+        } catch (Exception e) {
+            // For alias functions, recursively call on it's target function
+            if (d.classType() == FunctionClassType.ALIAS) {
+                return evaluateReturnType(d.derivedFunctions()[0],argumentList);
+            }
+            // Last remaining solution is to grab the primary argument
+            else {
+                assert(argumentList.size() != 0);
+                return PDataType.fromSqlTypeName(argumentList.get(0).getArgumentType());
+            }
+        }
+    }
 
-                List<PDataType> returnTypes = Lists.newArrayList();
-                try {
-                    FunctionExpression func = clazz.newInstance();
-                    returnTypes.add(func.getDataType());
-                } catch (Exception e){
-                    returnTypes.addAll(PDataTypeFactory.getInstance().getTypes());
-                }
-                assert(!returnTypes.isEmpty());
+    public static List<PhoenixScalarFunction> createBuiltinFunctions(BuiltInFunctionInfo parseInfo){
+        List<PhoenixScalarFunction> functionList = Lists.newArrayList();
+        try {
+            for (List<FunctionArgument> argumentList : parseInfo.overloadArguments()) {
+                Class<? extends FunctionExpression> clazz = parseInfo.getFunc();
+                List<FunctionParameter>
+                        parameters =
+                        Lists.newArrayListWithExpectedSize(argumentList.size());
+                PDataType returnType = evaluateReturnType(clazz, argumentList);
 
                 for (final FunctionArgument arg : argumentList) {
                     parameters.add(
@@ -130,12 +144,10 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
                                 }
                             });
                 }
-                for(PDataType returnType : returnTypes) {
-                    functionList.add(new PhoenixScalarFunction(parseInfo, parameters, returnType));
-                }
-            } catch (Exception e){
-                throw new RuntimeException(e);
+                functionList.add(new PhoenixScalarFunction(parseInfo, parameters, returnType));
             }
+        } catch (Exception e){
+            throw new RuntimeException("Builtin function " + parseInfo.getName() + " could not be registered", e);
         }
         return functionList;
     }
@@ -153,7 +165,7 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
         return functionInfo;
     }
 
-    public FunctionParseNode.BuiltInFunctionInfo getParseInfo(){
+    public BuiltInFunctionInfo getParseInfo(){
         return parseInfo;
     }
 

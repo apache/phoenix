@@ -394,6 +394,7 @@ public class FunctionParseNode extends CompoundParseNode {
             for(int i = 0; i < args.length; solutions *= args[i].getAllowedTypes().length, i++);
             for(int i = 0; i < solutions; i++) {
                 int j = 1;
+                short k = 0;
                 overloadedArgs.add(new ArrayList<FunctionArgument>());
                 for(BuiltInFunctionArgInfo arg : args) {
                     Class<? extends PDataType>[] temp = arg.getAllowedTypes();
@@ -405,8 +406,8 @@ public class FunctionParseNode extends CompoundParseNode {
                             arg.getDefaultValue(),
                             arg.getMinValue(),
                             arg.getMaxValue(),
-                            (short)i));
-
+                            k));
+                    k++;
                     j *= temp.length;
                 }
             }

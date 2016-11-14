@@ -1,5 +1,6 @@
 package org.apache.phoenix.calcite;
 
+import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ import org.apache.calcite.util.Util;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -109,6 +111,7 @@ import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.SequenceValueParseNode;
@@ -785,9 +788,20 @@ public class CalciteUtils {
                             if(scalarFunc.getParseInfo() != null){
                                 BuiltInFunctionInfo parseInfo = scalarFunc.getParseInfo();
                                 try {
-                                    FunctionParseNode parseNode = parseInfo.getNodeCtor().newInstance(parseInfo.getName(), Lists.newArrayList(), parseInfo);
-                                    assert(parseNode != null);
-                                    return parseNode.create(children, implementor.getStatementContext());
+                                    if(parseInfo.getClassType() == FunctionClassType.PARENT || parseInfo.getClassType() == FunctionClassType.ALIAS){
+                                        try {
+                                            return (Expression) parseInfo.getFunc().getDeclaredMethod("create", List.class).invoke(null, children);
+                                        } catch (Exception e){
+                                            return (Expression) parseInfo.getFunc().getDeclaredMethod("create", List.class, StatementContext.class).invoke(null, children, implementor.getStatementContext());
+                                        }
+                                    }
+                                    if(parseInfo.getClassType() == FunctionClassType.NONE){
+                                        try {
+                                            return (Expression) parseInfo.getFunc().getDeclaredConstructor(List.class).newInstance(children);
+                                        } catch (Exception e){
+                                            return (Expression) parseInfo.getFunc().getDeclaredConstructor(List.class, StatementContext.class).newInstance(children, implementor.getStatementContext());
+                                        }
+                                    }
                                 } catch (Exception e) {throw new RuntimeException ("Failed to create builtin function " + parseInfo.getName(), e);}
                             }
                             return new UDFExpression(children, scalarFunc.getFunctionInfo());
