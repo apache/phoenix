@@ -19,8 +19,6 @@ package org.apache.phoenix.calcite;
 
 import java.io.IOException;
 
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserTest;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
@@ -46,7 +44,8 @@ public class PhoenixSqlParserTest extends SqlParserTest {
         getTester().checkNode("delete jar '/myjar.jar'", isDdl());
     }
 
-    private SqlParser getSqlParser(String sql) {
+    @Override
+    protected SqlParser getSqlParser(String sql) {
         return SqlParser.create(sql,
             SqlParser.configBuilder().setParserFactory(PhoenixParserImpl.FACTORY)
                 .build());
