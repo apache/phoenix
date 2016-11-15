@@ -1054,28 +1054,19 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     public void testBuiltinFunctionasUDF() throws Exception {
         Connection conn = driver.connect(calciteUrl, UDF_PROPS);
         Statement stmt = conn.createStatement();
-        conn.createStatement().execute("create table t12(k date not null primary key, k1 integer, lastname varchar)");
+        conn.createStatement().execute("create table t12(k date not null primary key, k1 integer)");
         String query = "UPSERT INTO t12"
-                + "(k, k1, lastname) "
-                + "VALUES(?,?,?)";
+                + "(k, k1) "
+                + "VALUES(?,?)";
         PreparedStatement pStmt = conn.prepareStatement(query);
         pStmt.setDate(1, java.sql.Date.valueOf("2016-06-06"));
         pStmt.setInt(2, 1);
-        pStmt.setString(3, "year");
         pStmt.execute();
         conn.commit();
-        stmt.execute("create function TO_DATE(VARCHAR) returns DATE as 'org.apache.phoenix.expression.function.ToDateFunction'");// using jar "
-                //+ "'"+util.getConfiguration().get(DYNAMIC_JARS_DIR_KEY) + "/myjar7.jar"+"'");
+        stmt.execute("create function TO_DATE(VARCHAR) returns DATE as 'org.apache.phoenix.expression.function.ToDateFunction'");
         ResultSet rs = stmt.executeQuery("select k from t12");
         assertTrue(rs.next());
         assertEquals(java.sql.Date.valueOf("2016-06-06"), rs.getDate(1));
-
-        Statement s = conn.createStatement();
-        query = "SELECT k FROM t12 where k=TO_DATE('2016-06-06')";
-        rs = s.executeQuery(query);
-        while(rs.next()){
-            System.out.println(rs.getString("k"));
-        }
     }
 
     /**
