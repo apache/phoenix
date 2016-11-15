@@ -1071,14 +1071,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                      * brought down.
                      */
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
-                    if (allowOnlineTableSchemaUpdate()) {
-                        // No need to wait/poll for this update
-                        admin.modifyTable(physicalTable, newDesc);
-                    } else {
-                        admin.disableTable(physicalTable);
-                        admin.modifyTable(physicalTable, newDesc);
-                        admin.enableTable(physicalTable);
-                    }
+                    modifyTable(tableName, newDesc, true);
                 }
                 return null;
             } else {
