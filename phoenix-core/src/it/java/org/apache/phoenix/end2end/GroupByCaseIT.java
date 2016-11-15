@@ -452,7 +452,7 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             conn = DriverManager.getConnection(getUrl(), props);
 
-            String tableName=generateUniqueName();
+            String tableName=generateRandomString();
             conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+ tableName +" ( "+
                     "ORGANIZATION_ID CHAR(15) NOT NULL,"+
@@ -466,7 +466,7 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
                     ")) "+options;
             conn.createStatement().execute(sql);
 
-            String indexTableName=generateUniqueName();
+            String indexTableName=generateRandomString();
             conn.createStatement().execute("DROP INDEX IF EXISTS "+indexTableName+" ON "+tableName);
             conn.createStatement().execute("CREATE INDEX "+indexTableName+" ON "+tableName+" (CONTAINER_ID, SCORE DESC, ENTITY_ID DESC)");
 
@@ -520,7 +520,7 @@ public class GroupByCaseIT extends BaseHBaseManagedTimeIT {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             conn = DriverManager.getConnection(getUrl(), props);
 
-            String tableName=generateUniqueName();
+            String tableName=generateRandomString();
             conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                     "ORGANIZATION_ID VARCHAR,"+
