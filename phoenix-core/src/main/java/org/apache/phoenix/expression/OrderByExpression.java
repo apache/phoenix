@@ -92,7 +92,6 @@ public class OrderByExpression implements Writable {
         // to the user.
         if (e.getSortOrder() == SortOrder.DESC) {
             isAscending = !isAscending;
-            isNullsLast = !isNullsLast;
         }
         return e + (isAscending ? "" : " DESC") + (isNullsLast ? " NULLS LAST" : "");
     }

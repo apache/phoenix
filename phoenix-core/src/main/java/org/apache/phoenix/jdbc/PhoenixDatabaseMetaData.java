@@ -1086,7 +1086,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     SELF_REFERENCING_COL_NAME + "," +
                     REF_GENERATION + "," +
                     IndexStateNameFunction.NAME + "(" + INDEX_STATE + ") AS " + INDEX_STATE + "," +
-                    IMMUTABLE_ROWS + "," +
+                     IMMUTABLE_ROWS + "," +
                     SALT_BUCKETS + "," +
                     MULTI_TENANT + "," +
                     VIEW_STATEMENT + "," +
