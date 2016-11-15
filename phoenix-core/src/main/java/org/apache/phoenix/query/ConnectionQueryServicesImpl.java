@@ -1073,7 +1073,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                      * brought down.
                      */
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
-                    modifyTable(tableName, newDesc, true);
+                    modifyTable(physicalTable, newDesc, true);
                 }
                 return null;
             } else {
