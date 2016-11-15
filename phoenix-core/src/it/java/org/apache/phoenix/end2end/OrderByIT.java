@@ -544,4 +544,237 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         assertEquals(0.9, rs.getDouble(1), 0.01);
         assertEquals("a", rs.getString(2));
     }
+
+    @Test
+    public void testNullsLastWithDesc() throws Exception {
+        Connection conn=null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName=generateUniqueName();
+            conn.createStatement().execute("DROP TABLE if exists "+tableName);
+            String sql="CREATE TABLE "+tableName+" ( "+
+                "ORGANIZATION_ID VARCHAR,"+
+                "CONTAINER_ID VARCHAR,"+
+                "ENTITY_ID VARCHAR NOT NULL,"+
+                "CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                "ORGANIZATION_ID DESC,"+
+                "CONTAINER_ID DESC,"+
+                "ENTITY_ID"+
+                "))";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('a',null,'11')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (null,'2','22')");
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES ('c','3','33')");
+            conn.commit();
+
+            //-----ORGANIZATION_ID
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID ASC NULLS FIRST";
+            ResultSet rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{null,"a"},{"3","c"},});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID ASC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{"3","c"},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{"3","c"},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{null,"a"},{"2",null}});
+
+            //----CONTAINER_ID
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID ASC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{"2",null},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID ASC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{"3","c"},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{"3","c"},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{"2",null},{null,"a"}});
+
+            conn.createStatement().execute("UPSERT INTO "+tableName+" VALUES (null,null,'44')");
+            conn.commit();
+
+            //-----ORGANIZATION_ID ASC  CONTAINER_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS FIRST,CONTAINER_ID NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{"2",null},{null,"a"},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS FIRST,CONTAINER_ID NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{null,null},{null,"a"},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS LAST,CONTAINER_ID NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{"3","c"},{null,null},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS LAST,CONTAINER_ID NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{"3","c"},{"2",null},{null,null}});
+
+
+            //-----ORGANIZATION_ID ASC  CONTAINER_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS FIRST,CONTAINER_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{"2",null},{null,"a"},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS FIRST,CONTAINER_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{null,null},{null,"a"},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS LAST,CONTAINER_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{"3","c"},{null,null},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID NULLS LAST,CONTAINER_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{"3","c"},{"2",null},{null,null}});
+
+            //-----ORGANIZATION_ID DESC  CONTAINER_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{"2",null},{"3","c"},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{null,null},{"3","c"},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{null,"a"},{null,null},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{null,"a"},{"2",null},{null,null}});
+
+            //-----ORGANIZATION_ID DESC  CONTAINER_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{"2",null},{"3","c"},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{null,null},{"3","c"},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{null,"a"},{null,null},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{null,"a"},{"2",null},{null,null}});
+
+            //-----CONTAINER_ID ASC  ORGANIZATION_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID NULLS FIRST,ORGANIZATION_ID NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{null,"a"},{"2",null},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID NULLS FIRST,ORGANIZATION_ID NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{null,null},{"2",null},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID NULLS LAST,ORGANIZATION_ID NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{"3","c"},{null,null},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID NULLS LAST,ORGANIZATION_ID NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{"3","c"},{null,"a"},{null,null}});
+
+            //-----CONTAINER_ID ASC  ORGANIZATION_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID ASC NULLS FIRST,ORGANIZATION_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{null,"a"},{"2",null},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID ASC NULLS FIRST,ORGANIZATION_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{null,null},{"2",null},{"3","c"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID ASC NULLS LAST,ORGANIZATION_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{"3","c"},{null,null},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID ASC NULLS LAST,ORGANIZATION_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"2",null},{"3","c"},{null,"a"},{null,null}});
+
+            //-----CONTAINER_ID DESC  ORGANIZATION_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID ASC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{null,"a"},{"3","c"},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID ASC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{null,null},{"3","c"},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID ASC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{"2",null},{null,null},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID ASC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{"2",null},{null,"a"},{null,null}});
+
+            //-----CONTAINER_ID DESC  ORGANIZATION_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,null},{null,"a"},{"3","c"},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{null,"a"},{null,null},{"3","c"},{"2",null}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID DESC NULLS FIRST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{"2",null},{null,null},{null,"a"}});
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM "+tableName+" order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID DESC NULLS LAST";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new String[][]{{"3","c"},{"2",null},{null,"a"},{null,null}});
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
+
+    private void assertResultSet(ResultSet rs,String[][] rows) throws Exception {
+        for(int rowIndex=0;rowIndex<rows.length;rowIndex++) {
+            assertTrue(rs.next());
+            for(int columnIndex=1;columnIndex<= rows[rowIndex].length;columnIndex++) {
+                String realValue=rs.getString(columnIndex);
+                String expectedValue=rows[rowIndex][columnIndex-1];
+                if(realValue==null) {
+                    assertTrue(expectedValue==null);
+                }
+                else {
+                    assertTrue(realValue.equals(expectedValue));
+                }
+            }
+        }
+        assertTrue(!rs.next());
+    }
+
 }
