@@ -100,10 +100,10 @@ public class OrderPreservingTracker {
     
     public void track(Expression node) {
         SortOrder sortOrder = node.getSortOrder();
-        track(node, sortOrder, sortOrder != SortOrder.getDefault());
+        track(node, sortOrder, null);
     }
     
-    public void track(Expression node, SortOrder sortOrder, boolean isNullsLast) {
+    public void track(Expression node, SortOrder sortOrder, Boolean isNullsLast) {
         if (isOrderPreserving) {
             Info info = node.accept(visitor);
             if (info == null) {
@@ -138,7 +138,7 @@ public class OrderPreservingTracker {
                         return;
                     }
                 }
-                if (node.isNullable()) {
+                if (isNullsLast!=null && node.isNullable()) {
                     if (!Boolean.valueOf(isNullsLast).equals(isReverse)) {
                         isOrderPreserving = false;
                         isReverse = false;

@@ -2427,4 +2427,362 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.close();
         }
     }
+    
+    @Test
+    public void testIndexOnViewWithChildView() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE PLATFORM_ENTITY.GLOBAL_TABLE (\n" + 
+                    "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
+                    "    KEY_PREFIX CHAR(3) NOT NULL,\n" + 
+                    "    CREATED_DATE DATE,\n" + 
+                    "    CREATED_BY CHAR(15),\n" + 
+                    "    CONSTRAINT PK PRIMARY KEY (\n" + 
+                    "        ORGANIZATION_ID,\n" + 
+                    "        KEY_PREFIX\n" + 
+                    "    )\n" + 
+                    ") VERSIONS=1, IMMUTABLE_ROWS=true, MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW PLATFORM_ENTITY.GLOBAL_VIEW  (\n" + 
+                    "    INT1 BIGINT NOT NULL,\n" + 
+                    "    DOUBLE1 DECIMAL(12, 3),\n" + 
+                    "    IS_BOOLEAN BOOLEAN,\n" + 
+                    "    TEXT1 VARCHAR,\n" + 
+                    "    CONSTRAINT PKVIEW PRIMARY KEY\n" + 
+                    "    (\n" + 
+                    "        INT1\n" + 
+                    "    )\n" + 
+                    ")\n" + 
+                    "AS SELECT * FROM PLATFORM_ENTITY.GLOBAL_TABLE WHERE KEY_PREFIX = '123'");
+            conn.createStatement().execute("CREATE INDEX GLOBAL_INDEX\n" + 
+                    "ON PLATFORM_ENTITY.GLOBAL_VIEW (TEXT1 DESC, INT1)\n" + 
+                    "INCLUDE (CREATED_BY, DOUBLE1, IS_BOOLEAN, CREATED_DATE)");
+            String query = "SELECT DOUBLE1 FROM PLATFORM_ENTITY.GLOBAL_VIEW\n"
+                    + "WHERE ORGANIZATION_ID = '00Dxx0000002Col' AND TEXT1='Test' AND INT1=1";
+            QueryPlan plan = getQueryPlan(conn, query);
+            assertEquals("PLATFORM_ENTITY.GLOBAL_VIEW", plan.getContext().getCurrentTable().getTable().getName()
+                    .getString());
+            query = "SELECT DOUBLE1 FROM PLATFORM_ENTITY.GLOBAL_VIEW\n"
+                    + "WHERE ORGANIZATION_ID = '00Dxx0000002Col' AND TEXT1='Test'";
+            plan = getQueryPlan(conn, query);
+            assertEquals("PLATFORM_ENTITY.GLOBAL_INDEX", plan.getContext().getCurrentTable().getTable().getName().getString());
+        }
+    }
+
+    @Test
+    public void testGroupByDescColumnBug3452() throws Exception {
+
+       Connection conn=null;
+        try {
+            conn= DriverManager.getConnection(getUrl());
+
+            conn.createStatement().execute("DROP TABLE if exists GROUPBYDESC3452");
+            String sql="CREATE TABLE GROUPBYDESC3452 ( "+
+                "ORGANIZATION_ID VARCHAR,"+
+                "CONTAINER_ID VARCHAR,"+
+                "ENTITY_ID VARCHAR NOT NULL,"+
+                "CONSTRAINT TEST_PK PRIMARY KEY ( "+
+                "ORGANIZATION_ID DESC,"+
+                "CONTAINER_ID DESC,"+
+                "ENTITY_ID"+
+                "))";
+            conn.createStatement().execute(sql);
+
+            //-----ORGANIZATION_ID
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID ASC NULLS FIRST";
+            QueryPlan queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==1);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID ASC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy()== OrderBy.REV_ROW_KEY_ORDER_BY);
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy()== OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==1);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+
+            //----CONTAINER_ID
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID ASC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==1);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID ASC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==1);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==1);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==1);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+
+            //-----ORGANIZATION_ID ASC  CONTAINER_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID NULLS FIRST,CONTAINER_ID NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID NULLS FIRST,CONTAINER_ID NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID NULLS LAST,CONTAINER_ID NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID NULLS LAST,CONTAINER_ID NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
+
+            //-----ORGANIZATION_ID ASC  CONTAINER_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID ASC NULLS FIRST,CONTAINER_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID ASC NULLS FIRST,CONTAINER_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID ASC NULLS LAST,CONTAINER_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID ASC NULLS LAST,CONTAINER_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+
+            //-----ORGANIZATION_ID DESC  CONTAINER_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID ASC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID ASC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID ASC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID ASC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID NULLS LAST"));
+
+            //-----ORGANIZATION_ID DESC  CONTAINER_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS FIRST,CONTAINER_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by ORGANIZATION_ID DESC NULLS LAST,CONTAINER_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+
+            //-----CONTAINER_ID ASC  ORGANIZATION_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID NULLS FIRST,ORGANIZATION_ID NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID NULLS FIRST,ORGANIZATION_ID NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID NULLS LAST,ORGANIZATION_ID NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID NULLS LAST,ORGANIZATION_ID NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID NULLS LAST"));
+
+            //-----CONTAINER_ID ASC  ORGANIZATION_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID ASC NULLS FIRST,ORGANIZATION_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID ASC NULLS FIRST,ORGANIZATION_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID ASC NULLS LAST,ORGANIZATION_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID ASC NULLS LAST,ORGANIZATION_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+
+            //-----CONTAINER_ID DESC  ORGANIZATION_ID ASC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID ASC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID ASC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID ASC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID ASC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID NULLS LAST"));
+
+            //-----CONTAINER_ID DESC  ORGANIZATION_ID DESC
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID,CONTAINER_ID order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS FIRST,ORGANIZATION_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID DESC NULLS FIRST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC"));
+
+            sql="SELECT CONTAINER_ID,ORGANIZATION_ID FROM GROUPBYDESC3452 group by ORGANIZATION_ID, CONTAINER_ID order by CONTAINER_ID DESC NULLS LAST,ORGANIZATION_ID DESC NULLS LAST";
+            queryPlan =getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().isOrderPreserving());
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().size()==2);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).toString().equals("CONTAINER_ID DESC NULLS LAST"));
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(1).toString().equals("ORGANIZATION_ID DESC NULLS LAST"));
+
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
+
+    private static QueryPlan getQueryPlan(Connection conn,String sql) throws SQLException {
+        PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+        QueryPlan queryPlan = statement.optimizeQuery(sql);
+        queryPlan.iterator();
+        return queryPlan;
+    }
 }
