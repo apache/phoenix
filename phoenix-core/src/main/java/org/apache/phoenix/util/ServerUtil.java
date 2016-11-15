@@ -25,6 +25,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
@@ -34,6 +35,7 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 
 
 @SuppressWarnings("deprecation")
@@ -113,6 +115,9 @@ public class ServerUtil {
     
     public static SQLException parseServerExceptionOrNull(Throwable t) {
         while (t.getCause() != null) {
+            if (t instanceof NotServingRegionException) {
+                return parseRemoteException(new StaleRegionBoundaryCacheException());
+            }
             t = t.getCause();
         }
         return parseRemoteException(t);
