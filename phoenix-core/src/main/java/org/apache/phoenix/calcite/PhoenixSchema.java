@@ -148,10 +148,10 @@ public class PhoenixSchema implements Schema {
             overloadedArgs.add(new ArrayList<PFunction.FunctionArgument>());
             for(BuiltInFunctionArgInfo arg : args) {
                 Class<? extends PDataType>[] temp = arg.getAllowedTypes();
-                String inputArg = PDataTypeFactory.getInstance().instanceFromClass(temp[(i/j)%temp.length]).toString();
+                PDataType dataType = PDataTypeFactory.getInstance().instanceFromClass(temp[(i/j)%temp.length]);
                 overloadedArgs.get(i).add( new PFunction.FunctionArgument(
-                        inputArg,
-                        false,
+                        dataType.toString(),
+                        dataType.isArrayType(),
                         arg.isConstant(),
                         arg.getDefaultValue(),
                         arg.getMinValue(),
