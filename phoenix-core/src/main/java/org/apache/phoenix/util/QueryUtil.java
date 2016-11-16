@@ -347,9 +347,8 @@ public final class QueryUtil {
         // read the hbase properties from the configuration
         int port = conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
         // Build the ZK quorum server string with "server:clientport" list, separated by ','
-        final String[] servers =
-                conf.getStrings(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST);
-        String server = Joiner.on(',').join(servers);
+        final String server =
+                conf.get(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST);
         String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         String url = getUrl(server, port, znodeParent, principal);
