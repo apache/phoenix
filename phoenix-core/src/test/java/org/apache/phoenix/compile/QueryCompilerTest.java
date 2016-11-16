@@ -2781,6 +2781,107 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testOrderPreservingGroupBy() throws Exception {
+        try (Connection conn= DriverManager.getConnection(getUrl())) {
+
+            conn.createStatement().execute("CREATE TABLE test (\n" + 
+                    "            pk1 INTEGER NOT NULL,\n" + 
+                    "            pk2 INTEGER NOT NULL,\n" + 
+                    "            pk3 INTEGER NOT NULL,\n" + 
+                    "            pk4 INTEGER NOT NULL,\n" + 
+                    "            v1 INTEGER,\n" + 
+                    "            CONSTRAINT pk PRIMARY KEY (\n" + 
+                    "               pk1,\n" + 
+                    "               pk2,\n" + 
+                    "               pk3,\n" + 
+                    "               pk4\n" + 
+                    "             )\n" + 
+                    "         )");
+            String[] queries = new String[] {
+                    "SELECT pk3 FROM test WHERE pk2 = 1 GROUP BY pk2+1,pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk2 = 1 GROUP BY pk2,pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 1 and pk2 = 2 GROUP BY pk1+pk2,pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 1 and pk2 = 2 GROUP BY pk4,CASE WHEN pk1 > pk2 THEN pk1 ELSE pk2 END,pk3 ORDER BY pk4,pk3",
+            };
+            int index = 0;
+            for (String query : queries) {
+                QueryPlan plan = getQueryPlan(conn, query);
+                assertTrue((index + 1) + ") " + queries[index], plan.getOrderBy().getOrderByExpressions().isEmpty());
+                index++;
+            }
+        }
+    }
+    
+    @Test
+    public void testNotOrderPreservingGroupBy() throws Exception {
+        try (Connection conn= DriverManager.getConnection(getUrl())) {
+
+            conn.createStatement().execute("CREATE TABLE test (\n" + 
+                    "            pk1 INTEGER NOT NULL,\n" + 
+                    "            pk2 INTEGER NOT NULL,\n" + 
+                    "            pk3 INTEGER NOT NULL,\n" + 
+                    "            pk4 INTEGER NOT NULL,\n" + 
+                    "            v1 INTEGER,\n" + 
+                    "            CONSTRAINT pk PRIMARY KEY (\n" + 
+                    "               pk1,\n" + 
+                    "               pk2,\n" + 
+                    "               pk3,\n" + 
+                    "               pk4\n" + 
+                    "             )\n" + 
+                    "         )");
+            String[] queries = new String[] {
+                    "SELECT pk3 FROM test WHERE pk1 = 1 and pk2 = 2 GROUP BY pk4,CASE WHEN pk1 > pk2 THEN coalesce(v1,1) ELSE pk2 END,pk3 ORDER BY pk4,pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 1 and pk2 = 2 GROUP BY CASE WHEN pk1 > pk2 THEN v1 WHEN pk1 = pk2 THEN pk1 ELSE pk2 END,pk3 ORDER BY CASE WHEN pk1 > pk2 THEN v1 WHEN pk1 = pk2 THEN pk1 ELSE pk2 END,pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 1 and pk2 = 2 GROUP BY CASE WHEN pk1 > pk2 THEN v1 WHEN pk1 = pk2 THEN pk1 ELSE pk2 END,pk3 ORDER BY CASE WHEN pk1 > pk2 THEN v1 WHEN pk1 = pk2 THEN pk1 ELSE pk2 END,pk3",
+                    "SELECT pk3 FROM test GROUP BY pk2,pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 1 GROUP BY pk1,pk2,pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 1 GROUP BY RAND()+pk1,pk2,pk3 ORDER BY pk3",
+                    "SELECT pk3 FROM test WHERE pk1 = 1 and pk2 = 2 GROUP BY CASE WHEN pk1 > pk2 THEN pk1 ELSE RAND(1) END,pk3 ORDER BY pk3",
+            };
+            int index = 0;
+            for (String query : queries) {
+                QueryPlan plan = getQueryPlan(conn, query);
+                assertFalse((index + 1) + ") " + queries[index], plan.getOrderBy().getOrderByExpressions().isEmpty());
+                index++;
+            }
+        }
+    }
+    
+    @Test
+    public void testGroupByDescColumnBug3451() throws Exception {
+
+        try (Connection conn= DriverManager.getConnection(getUrl())) {
+
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS GROUPBYTEST (\n" + 
+                    "            ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
+                    "            CONTAINER_ID CHAR(15) NOT NULL,\n" + 
+                    "            ENTITY_ID CHAR(15) NOT NULL,\n" + 
+                    "            SCORE DOUBLE,\n" + 
+                    "            CONSTRAINT TEST_PK PRIMARY KEY (\n" + 
+                    "               ORGANIZATION_ID,\n" + 
+                    "               CONTAINER_ID,\n" + 
+                    "               ENTITY_ID\n" + 
+                    "             )\n" + 
+                    "         )");
+            conn.createStatement().execute("CREATE INDEX SCORE_IDX ON GROUPBYTEST (ORGANIZATION_ID,CONTAINER_ID, SCORE DESC, ENTITY_ID DESC)");
+            QueryPlan plan = getQueryPlan(conn, "SELECT DISTINCT entity_id, score\n" + 
+                    "    FROM GROUPBYTEST\n" + 
+                    "    WHERE organization_id = 'org2'\n" + 
+                    "    AND container_id IN ( 'container1','container2','container3' )\n" + 
+                    "    ORDER BY score DESC\n" + 
+                    "    LIMIT 2");
+            assertFalse(plan.getOrderBy().getOrderByExpressions().isEmpty());
+            plan = getQueryPlan(conn, "SELECT DISTINCT entity_id, score\n" + 
+                    "    FROM GROUPBYTEST\n" + 
+                    "    WHERE entity_id = 'entity1'\n" + 
+                    "    AND container_id IN ( 'container1','container2','container3' )\n" + 
+                    "    ORDER BY score DESC\n" + 
+                    "    LIMIT 2");
+            assertTrue(plan.getOrderBy().getOrderByExpressions().isEmpty());
+        }
+    }
+
+    @Test
     public void testGroupByDescColumnBug3452() throws Exception {
 
        Connection conn=null;

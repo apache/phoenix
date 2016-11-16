@@ -33,7 +33,9 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.types.PChar;
@@ -586,6 +588,54 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testGroupByOrderByDescBug3451() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName=generateUniqueName();
+            String sql="CREATE TABLE " + tableName + " (\n" + 
+                    "            ORGANIZATION_ID CHAR(15) NOT NULL,\n" + 
+                    "            CONTAINER_ID CHAR(15) NOT NULL,\n" + 
+                    "            ENTITY_ID CHAR(15) NOT NULL,\n" + 
+                    "            SCORE DOUBLE,\n" + 
+                    "            CONSTRAINT TEST_PK PRIMARY KEY (\n" + 
+                    "               ORGANIZATION_ID,\n" + 
+                    "               CONTAINER_ID,\n" + 
+                    "               ENTITY_ID\n" + 
+                    "             )\n" + 
+                    "         )";
+            conn.createStatement().execute(sql);
+            String indexName=generateUniqueName();
+            conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(ORGANIZATION_ID,CONTAINER_ID, SCORE DESC, ENTITY_ID DESC)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('org2','container2','entityId6',1.1)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('org2','container1','entityId5',1.2)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('org2','container2','entityId4',1.3)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('org2','container1','entityId5',1.2)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('org2','container1','entityId3',1.4)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('org2','container3','entityId7',1.35)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('org2','container3','entityId8',1.45)");
+            conn.commit();
+            String query = "SELECT DISTINCT entity_id, score\n" + 
+                    "    FROM " + tableName + "\n" +
+                    "    WHERE organization_id = 'org2'\n" + 
+                    "    AND container_id IN ( 'container1','container2','container3' )\n" + 
+                    "    ORDER BY score DESC\n" + 
+                    "    LIMIT 2";
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery(query);
+            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            assertEquals(indexName, plan.getContext().getCurrentTable().getTable().getName().getString());
+            assertFalse(plan.getOrderBy().getOrderByExpressions().isEmpty());
+            assertTrue(rs.next());
+            assertEquals("entityId8", rs.getString(1));
+            assertEquals(1.45, rs.getDouble(2),0.001);
+            assertTrue(rs.next());
+            assertEquals("entityId3", rs.getString(1));
+            assertEquals(1.4, rs.getDouble(2),0.001);
+            assertFalse(rs.next());
+       }
+    }
+    
+    @Test
     public void testGroupByDescColumnWithNullsLastBug3452() throws Exception {
 
         Connection conn=null;
@@ -595,7 +645,6 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
             conn = DriverManager.getConnection(getUrl(), props);
 
             String tableName=generateUniqueName();
-            conn.createStatement().execute("DROP TABLE if exists "+tableName);
             String sql="CREATE TABLE "+tableName+" ( "+
                     "ORGANIZATION_ID VARCHAR,"+
                     "CONTAINER_ID VARCHAR,"+
