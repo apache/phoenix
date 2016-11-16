@@ -56,6 +56,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
@@ -63,9 +64,11 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.TransactionUtil;
@@ -1045,16 +1048,23 @@ public class IndexIT extends ParallelStatsDisabledIT {
         String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         // Check system tables priorities.
-        try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin()) {
-            for (HTableDescriptor htd : admin.listTables()) {
-                if (htd.getTableName().getNameAsString().startsWith(QueryConstants.SYSTEM_SCHEMA_NAME)) {
-                    String val = htd.getValue("PRIORITY");
-                    assertNotNull("PRIORITY is not set for table:" + htd, val);
-                    assertTrue(Integer.parseInt(val)
-                            >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
-                }
+        try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin(); 
+                Connection c = DriverManager.getConnection(getUrl())) {
+            ResultSet rs = c.getMetaData().getTables("", 
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, 
+                    null, 
+                    new String[] {PTableType.SYSTEM.toString()});
+            ReadOnlyProps p = c.unwrap(PhoenixConnection.class).getQueryServices().getProps();
+            while (rs.next()) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                String tName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+                org.apache.hadoop.hbase.TableName hbaseTableName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableName(schemaName, tName), p);
+                HTableDescriptor htd = admin.getTableDescriptor(hbaseTableName);
+                String val = htd.getValue("PRIORITY");
+                assertNotNull("PRIORITY is not set for table:" + htd, val);
+                assertTrue(Integer.parseInt(val)
+                        >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
             }
-
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
