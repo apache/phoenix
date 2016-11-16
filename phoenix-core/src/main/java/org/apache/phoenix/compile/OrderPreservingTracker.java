@@ -17,12 +17,15 @@ import java.util.List;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.CoerceExpression;
+import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving;
 import org.apache.phoenix.expression.function.ScalarFunction;
+import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
@@ -71,6 +74,7 @@ public class OrderPreservingTracker {
     private final Ordering ordering;
     private final int pkPositionOffset;
     private final List<Info> orderPreservingInfos;
+    private final TupleProjector projector;
     private boolean isOrderPreserving = true;
     private Boolean isReverse = null;
     private int orderPreservingColumnCount = 0;
@@ -81,21 +85,23 @@ public class OrderPreservingTracker {
     
     public OrderPreservingTracker(StatementContext context, GroupBy groupBy, Ordering ordering, int nNodes, TupleProjector projector) {
         this.context = context;
-        int pkPositionOffset = 0;
-        PTable table = context.getResolver().getTables().get(0).getTable();
-        isOrderPreserving = table.rowKeyOrderOptimizable();
-        if (groupBy.isEmpty()) { // FIXME: would the below table have any of these set in the case of a GROUP BY?
+        if (groupBy.isEmpty()) {
+            PTable table = context.getResolver().getTables().get(0).getTable();
+            this.isOrderPreserving = table.rowKeyOrderOptimizable();
             boolean isSalted = table.getBucketNum() != null;
             boolean isMultiTenant = context.getConnection().getTenantId() != null && table.isMultiTenant();
             boolean isSharedViewIndex = table.getViewIndexId() != null;
             // TODO: util for this offset, as it's computed in numerous places
-            pkPositionOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
+            this.pkPositionOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
+        } else {
+            this.isOrderPreserving = true;
+            this.pkPositionOffset = 0;
         }
-        this.pkPositionOffset = pkPositionOffset;
         this.groupBy = groupBy;
         this.visitor = new TrackOrderPreservingExpressionVisitor(projector);
         this.orderPreservingInfos = Lists.newArrayListWithExpectedSize(nNodes);
         this.ordering = ordering;
+        this.projector = projector;
     }
     
     public void track(Expression node) {
@@ -195,6 +201,31 @@ public class OrderPreservingTracker {
     
     private boolean hasEqualityConstraints(int startPos, int endPos) {
         ScanRanges ranges = context.getScanRanges();
+        // If a GROUP BY is being done, then the rows are ordered according to the GROUP BY key,
+        // not by the original row key order of the table (see PHOENIX-3451).
+        // We check each GROUP BY expression to see if it only references columns that are
+        // matched by equality constraints, in which case the expression itself would be constant.
+        // FIXME: this only recognizes row key columns that are held constant, not all columns.
+        // FIXME: we should optimize out any GROUP BY or ORDER BY expression which is deemed to
+        // be held constant based on the WHERE clause.
+        if (!groupBy.isEmpty()) {
+            for (int pos = startPos; pos < endPos; pos++) {
+                IsConstantVisitor visitor = new IsConstantVisitor(this.projector, ranges);
+                List<Expression> groupByExpressions = groupBy.getExpressions();
+                if (pos >= groupByExpressions.size()) { // sanity check - shouldn't be necessary
+                    return false;
+                }
+                Expression groupByExpression = groupByExpressions.get(pos);
+                if ( groupByExpression.getDeterminism().ordinal() > Determinism.PER_STATEMENT.ordinal() ) {
+                    return false;
+                }
+                Boolean isConstant = groupByExpression.accept(visitor);
+                if (!Boolean.TRUE.equals(isConstant)) {
+                    return false;
+                }
+            }
+            return true;
+        }
         for (int pos = startPos; pos < endPos; pos++) {
             if (!ranges.hasEqualityConstraint(pos)) {
                 return false;
@@ -207,6 +238,63 @@ public class OrderPreservingTracker {
         return Boolean.TRUE.equals(isReverse);
     }
 
+    /**
+     * 
+     * Determines if an expression is held constant. Only works for columns in the PK currently,
+     * as we only track whether PK columns are held constant.
+     *
+     */
+    private static class IsConstantVisitor extends StatelessTraverseAllExpressionVisitor<Boolean> {
+        private final TupleProjector projector;
+        private final ScanRanges scanRanges;
+        
+        public IsConstantVisitor(TupleProjector projector, ScanRanges scanRanges) {
+            this.projector = projector;
+            this.scanRanges = scanRanges;
+        }
+        
+        @Override
+        public Boolean defaultReturn(Expression node, List<Boolean> returnValues) {
+            if (node.getDeterminism().ordinal() > Determinism.PER_STATEMENT.ordinal() || 
+                    returnValues.size() < node.getChildren().size()) {
+                return Boolean.FALSE;
+            }
+            for (Boolean returnValue : returnValues) {
+                if (!returnValue) {
+                    return Boolean.FALSE;
+                }
+            }
+            return Boolean.TRUE;
+        }
+
+        @Override
+        public Boolean visit(RowKeyColumnExpression node) {
+            return scanRanges.hasEqualityConstraint(node.getPosition());
+        }
+
+        @Override
+        public Boolean visit(LiteralExpression node) {
+            return Boolean.TRUE;
+        }
+
+        @Override
+        public Boolean visit(ProjectedColumnExpression node) {
+            if (projector == null) {
+                return super.visit(node);
+            }
+            Expression expression = projector.getExpressions()[node.getPosition()];
+            // Only look one level down the projection.
+            if (expression instanceof ProjectedColumnExpression) {
+                return super.visit(node);
+            }
+            return expression.accept(this);
+        }
+    }
+    /**
+     * 
+     * Visitor used to determine if order is preserved across a list of expressions (GROUP BY or ORDER BY expressions)
+     *
+     */
     private static class TrackOrderPreservingExpressionVisitor extends StatelessTraverseNoExpressionVisitor<Info> {
         private final TupleProjector projector;
         
