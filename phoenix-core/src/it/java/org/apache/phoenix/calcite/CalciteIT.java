@@ -867,6 +867,52 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
     }
 
+    @Test public void testCountDistinct() throws Exception {
+        start(false, 1000f).sql("select count(distinct a_string) from aTable")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixServerAggregate(group=[{}], EXPR$0=[COUNT(DISTINCT $2)])\n" +
+                        "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {{3L}})
+                .close();
+
+        start(false, 1000f).sql("select a_string, count(distinct b_string) from atable group by a_string")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixServerAggregate(group=[{2}], EXPR$1=[COUNT(DISTINCT $3)], isOrdered=[false])\n" +
+                        "    PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(new Object[][] {
+                        {"a", 3L},
+                        {"b", 3L},
+                        {"c", 1L}})
+                .close();
+
+        start(false, 1000f).sql("select organization_id, entity_id, count(distinct b_string) from atable group by entity_id ,organization_id")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixServerAggregate(group=[{0, 1}], EXPR$2=[COUNT(DISTINCT $3)], isOrdered=[true])\n" +
+                        "    PhoenixTableScan(table=[[phoenix, ATABLE]], scanOrder=[FORWARD])\n")
+                .resultIs(new Object[][] {
+                        {"00D300000000XHP", "00A123122312312", 1L},
+                        {"00D300000000XHP", "00A223122312312", 1L},
+                        {"00D300000000XHP", "00A323122312312", 1L},
+                        {"00D300000000XHP", "00A423122312312", 1L},
+                        {"00D300000000XHP", "00B523122312312", 1L},
+                        {"00D300000000XHP", "00B623122312312", 1L},
+                        {"00D300000000XHP", "00B723122312312", 1L},
+                        {"00D300000000XHP", "00B823122312312", 1L},
+                        {"00D300000000XHP", "00C923122312312", 1L}})
+                .close();
+
+        start(false, 1000f).sql("select organization_id, count(distinct entity_id), b_string from atable group by organization_id, b_string")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(ORGANIZATION_ID=[$0], EXPR$1=[$2], B_STRING=[$1])\n" +
+                        "    PhoenixServerAggregate(group=[{0, 3}], EXPR$1=[COUNT(DISTINCT $1)], isOrdered=[false])\n" +
+                        "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
+                .resultIs(0, new Object[][] {
+                        {"00D300000000XHP", 3L, "b"},
+                        {"00D300000000XHP", 3L, "c"},
+                        {"00D300000000XHP", 3L, "e"}})
+                .close();
+    }
+
     @Test public void testOffset() throws Exception {
         start(false, 1000f).sql(
                 "select organization_id, entity_id, a_string from aTable offset 3")

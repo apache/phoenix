@@ -30,6 +30,8 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.AggregateFunction;
+import org.apache.phoenix.expression.function.CountAggregateFunction;
+import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
@@ -82,18 +84,6 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
     
     protected PhoenixAbstractAggregate(RelOptCluster cluster, RelTraitSet traits, RelNode child, boolean indicator, ImmutableBitSet groupSet, List<ImmutableBitSet> groupSets, List<AggregateCall> aggCalls) {
         super(cluster, traits, child, indicator, groupSet, groupSets, aggCalls);
-
-        for (AggregateCall aggCall : aggCalls) {
-            if (aggCall.isDistinct()) {
-                throw new UnsupportedOperationException( "distinct aggregation not supported");
-            }
-        }
-        switch (getGroupType()) {
-            case SIMPLE:
-                break;
-            default:
-                throw new UnsupportedOperationException("unsupported group type: " + getGroupType());
-        }
         
         this.isOrderedGroupBy = isOrderedGroupSet(groupSet, child);
     }
@@ -162,10 +152,14 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
     }
     
     protected void serializeAggregators(PhoenixRelImplementor implementor, StatementContext context, boolean isEmptyGroupBy) {
+        if(getGroupType() != Group.SIMPLE) throw new UnsupportedOperationException();
         // TODO sort aggFuncs. same problem with group by key sorting.
         List<SingleAggregateFunction> aggFuncs = Lists.newArrayList();
         for (AggregateCall call : aggCalls) {
             AggregateFunction aggFunc = CalciteUtils.toAggregateFunction(call.getAggregation(), call.getArgList(), implementor);
+            if(aggFunc instanceof CountAggregateFunction && call.isDistinct()){
+                aggFunc = new DistinctCountAggregateFunction(aggFunc.getChildren(), null);
+            }
             if (!(aggFunc instanceof SingleAggregateFunction)) {
                 throw new UnsupportedOperationException();
             }

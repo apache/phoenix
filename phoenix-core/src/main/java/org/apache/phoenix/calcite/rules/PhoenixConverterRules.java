@@ -899,9 +899,6 @@ public class PhoenixConverterRules {
         if (input.getGroupSets().size() > 1)
             return false;
         
-        if (input.containsDistinctCall())
-            return false;
-        
         if (input.getGroupType() != Group.SIMPLE)
             return false;
         
