@@ -112,9 +112,6 @@ public class IndexToolIT extends BaseTest {
     
     @Test
     public void testSecondaryIndex() throws Exception {
-//        if (localIndex) { // FIXME: remove once this test works for local indexes
-//            return;
-//        }
         final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
         final String indxTable = String.format("%s_%s", dataTable, "INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
