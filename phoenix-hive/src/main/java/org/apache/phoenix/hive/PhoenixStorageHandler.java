@@ -19,7 +19,10 @@ package org.apache.phoenix.hive;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.mapred.TableMapReduceUtil;
 import org.apache.hadoop.hive.common.JavaUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHook;
@@ -34,6 +37,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.Deserializer;
 import org.apache.hadoop.hive.serde2.SerDe;
+import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputFormat;
@@ -43,6 +47,7 @@ import org.apache.phoenix.hive.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.hive.ppd.PhoenixPredicateDecomposer;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -53,6 +58,22 @@ import java.util.Properties;
 @SuppressWarnings("deprecation")
 public class PhoenixStorageHandler extends DefaultStorageHandler implements
         HiveStoragePredicateHandler, InputEstimator {
+
+
+    private Configuration jobConf;
+    private Configuration hbaseConf;
+
+
+    @Override
+    public void setConf(Configuration conf) {
+        jobConf = conf;
+        hbaseConf = HBaseConfiguration.create(conf);
+    }
+
+    @Override
+    public Configuration getConf() {
+        return hbaseConf;
+    }
 
     private static final Log LOG = LogFactory.getLog(PhoenixStorageHandler.class);
 
@@ -65,6 +86,22 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
     @Override
     public HiveMetaHook getMetaHook() {
         return new PhoenixMetaHook();
+    }
+
+    @Override
+    public void configureJobConf(TableDesc tableDesc, JobConf jobConf) {
+        try {
+            TableMapReduceUtil.addDependencyJars(jobConf);
+            org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil.addDependencyJars(jobConf,
+                    PhoenixStorageHandler.class);
+            JobConf hbaseJobConf = new JobConf(getConf());
+            org.apache.hadoop.hbase.mapred.TableMapReduceUtil.initCredentials(hbaseJobConf);
+            ShimLoader.getHadoopShims().mergeCredentials(jobConf, hbaseJobConf);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+
     }
 
     @SuppressWarnings("rawtypes")
@@ -167,6 +204,24 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
                 (PhoenixStorageHandlerConstants.ZOOKEEPER_PORT));
         jobProperties.put(HConstants.ZOOKEEPER_ZNODE_PARENT, jobProperties.get
                 (PhoenixStorageHandlerConstants.ZOOKEEPER_PARENT));
+        addHBaseResources(jobConf, jobProperties);
+    }
+
+    /**
+     * Utility method to add hbase-default.xml and hbase-site.xml properties to a new map
+     * if they are not already present in the jobConf.
+     * @param jobConf Job configuration
+     * @param newJobProperties  Map to which new properties should be added
+     */
+    private void addHBaseResources(Configuration jobConf,
+                                   Map<String, String> newJobProperties) {
+        Configuration conf = new Configuration(false);
+        HBaseConfiguration.addHbaseResources(conf);
+        for (Map.Entry<String, String> entry : conf) {
+            if (jobConf.get(entry.getKey()) == null) {
+                newJobProperties.put(entry.getKey(), entry.getValue());
+            }
+        }
     }
 
     @Override
