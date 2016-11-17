@@ -74,7 +74,6 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -86,7 +85,6 @@ import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
@@ -271,8 +269,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private ScheduledExecutorService renewLeaseExecutor;
     private final boolean renewLeaseEnabled;
     private static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
-    private static final byte[] UPGRADE_MUTEX_VALUE = UPGRADE_MUTEX;
-    
+    private static final byte[] UPGRADE_MUTEX_LOCKED = "UPGRADE_MUTEX_LOCKED".getBytes();
+    private static final byte[] UPGRADE_MUTEX_UNLOCKED = "UPGRADE_MUTEX_UNLOCKED".getBytes();
+
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
     }
@@ -2798,6 +2797,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
                 tableDesc.addFamily(columnDesc);
                 admin.createTable(tableDesc);
+                try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+                    Put put = new Put(rowToLock);
+                    put.addColumn(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
+                    sysMutexTable.put(put);
+                }
             } catch (TableExistsException e) {
                 // Ignore
             }
@@ -2805,8 +2809,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (Table sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
             byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
             byte[] qualifier = UPGRADE_MUTEX;
-            byte[] oldValue = null;
-            byte[] newValue = UPGRADE_MUTEX_VALUE;
+            byte[] oldValue = UPGRADE_MUTEX_UNLOCKED;
+            byte[] newValue = UPGRADE_MUTEX_LOCKED;
             Put put = new Put(rowToLock);
             put.addColumn(family, qualifier, newValue);
             boolean acquired = sysMutexTable.checkAndPut(rowToLock, family, qualifier, oldValue, put);
@@ -2822,11 +2826,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (Table sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
             byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
             byte[] qualifier = UPGRADE_MUTEX;
-            byte[] expectedValue = UPGRADE_MUTEX_VALUE;
-            Delete delete = new Delete(mutexRowKey);
-            RowMutations mutations = new RowMutations(mutexRowKey);
-            mutations.add(delete);
-            released = sysMutexTable.checkAndMutate(mutexRowKey, family, qualifier, CompareOp.EQUAL, expectedValue, mutations);
+            byte[] expectedValue = UPGRADE_MUTEX_LOCKED;
+            byte[] newValue = UPGRADE_MUTEX_UNLOCKED;
+            Put put = new Put(mutexRowKey);
+            put.addColumn(family, qualifier, newValue);
+            released = sysMutexTable.checkAndPut(mutexRowKey, family, qualifier, expectedValue, put);
         } catch (Exception e) {
             logger.warn("Release of upgrade mutex failed", e);
         }
