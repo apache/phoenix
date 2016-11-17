@@ -37,12 +37,14 @@ import java.util.UUID;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -56,7 +58,7 @@ import com.google.common.collect.Maps;
  * Tests for the {@link IndexTool}
  */
 @RunWith(Parameterized.class)
-public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
+public class IndexToolIT extends BaseTest {
     
     private final String schemaName;
     private final String dataTable;
@@ -66,9 +68,14 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
     private final boolean directApi;
     private final String tableDDLOptions;
     
-    public IndexToolIT(boolean transactional, boolean localIndex, boolean mutable, boolean directApi) {
-        this.schemaName = "S";
-        this.dataTable = "T" + (transactional ? "_TXN" : "");
+    @AfterClass
+    public static void doTeardown() throws Exception {
+        tearDownMiniCluster();
+    }
+
+    public IndexToolIT(boolean transactional, boolean mutable, boolean localIndex, boolean directApi) {
+        this.schemaName = generateRandomString();
+        this.dataTable = generateRandomString();
         this.localIndex = localIndex;
         this.transactional = transactional;
         this.directApi = directApi;
@@ -88,9 +95,7 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
-        clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
-        setUpRealDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
+        setUpRealDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
     }
     
     @Parameters(name="transactional = {0} , mutable = {1} , localIndex = {2}, directApi = {3}")
@@ -98,17 +103,21 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
         return Arrays.asList(new Boolean[][] {     
                  { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
                  { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
+                 /* Commenting out due to potential issue in PHOENIX-3448 and general flappiness
                  { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
-                 { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true }
+                 { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true } 
+                 */
            });
     }
     
     @Test
     public void testSecondaryIndex() throws Exception {
+//        if (localIndex) { // FIXME: remove once this test works for local indexes
+//            return;
+//        }
         final String fullTableName = SchemaUtil.getTableName(schemaName, dataTable);
         final String indxTable = String.format("%s_%s", dataTable, "INDX");
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         Connection conn = DriverManager.getConnection(getUrl(), props);
         Statement stmt = conn.createStatement();
@@ -162,7 +171,9 @@ public class IndexToolIT extends BaseOwnClusterHBaseManagedTimeIT {
             //run the index MR job.
             final IndexTool indexingTool = new IndexTool();
             Configuration conf = new Configuration(getUtility().getConfiguration());
-            conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+            if (transactional) {
+                conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
+            }
             indexingTool.setConf(conf);
 
             final String[] cmdArgs = getArgValues(schemaName, dataTable, indxTable, directApi);
