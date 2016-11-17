@@ -19,7 +19,7 @@ package org.apache.phoenix.calcite;
 
 import java.io.IOException;
 
-import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.parser.SqlParserImplFactory;
 import org.apache.calcite.sql.parser.SqlParserTest;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.junit.Test;
@@ -45,10 +45,8 @@ public class PhoenixSqlParserTest extends SqlParserTest {
     }
 
     @Override
-    protected SqlParser getSqlParser(String sql) {
-        return SqlParser.create(sql,
-            SqlParser.configBuilder().setParserFactory(PhoenixParserImpl.FACTORY)
-                .build());
+    protected SqlParserImplFactory parserImplFactory() {
+        return PhoenixParserImpl.FACTORY;
     }
 
     @Override
