@@ -234,11 +234,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 !plan.getStatement().getHint().hasHint(HintNode.Hint.RANGE_SCAN) &&
                 cols < plan.getTableRef().getTable().getRowKeySchema().getFieldCount() &&
                 plan.getGroupBy().isOrderPreserving() &&
-                (context.getAggregationManager().isEmpty() || plan.getGroupBy().isUngroupedAggregate()))
-            {
-                ScanUtil.andFilterAtEnd(context.getScan(),
+                (context.getAggregationManager().isEmpty() || plan.getGroupBy().isUngroupedAggregate())) {
+                
+                ScanUtil.andFilterAtEnd(scan,
                         new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(),
                                 cols));
+                if (plan.getLimit() != null) { // We can push the limit to the server
+                    ScanUtil.andFilterAtEnd(scan, new PageFilter(plan.getLimit()));
+                }
             }
 
             if (optimizeProjection) {
