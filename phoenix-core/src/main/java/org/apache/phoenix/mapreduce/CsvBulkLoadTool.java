@@ -55,31 +55,39 @@ public class CsvBulkLoadTool extends AbstractBulkLoadTool {
         // we don't parse ZK_QUORUM_OPT here because we need it in order to
         // create the connection we need to build importColumns.
 
-        char delimiterChar = ',';
+        Character delimiterChar = ',';
         if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
-            String delimString = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue(DELIMITER_OPT.getOpt()));
+            String delimString = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue
+                    (DELIMITER_OPT.getOpt()));
             if (delimString.length() != 1) {
                 throw new IllegalArgumentException("Illegal delimiter character: " + delimString);
             }
             delimiterChar = delimString.charAt(0);
         }
 
-        char quoteChar = '"';
+        Character quoteChar = '"';
         if (cmdLine.hasOption(QUOTE_OPT.getOpt())) {
-            String quoteString = cmdLine.getOptionValue(QUOTE_OPT.getOpt());
-            if (quoteString.length() != 1) {
+            String quoteString = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue(QUOTE_OPT
+                    .getOpt()));
+            if(quoteString.length() == 0) {
+                quoteChar = null;
+            } else if (quoteString.length() != 1) {
                 throw new IllegalArgumentException("Illegal quote character: " + quoteString);
+            } else {
+                quoteChar = quoteString.charAt(0);
             }
-            quoteChar = quoteString.charAt(0);
         }
 
-        char escapeChar = '\\';
+        Character escapeChar = '\\';
         if (cmdLine.hasOption(ESCAPE_OPT.getOpt())) {
             String escapeString = cmdLine.getOptionValue(ESCAPE_OPT.getOpt());
-            if (escapeString.length() != 1) {
+            if(escapeString.length() == 0) {
+                escapeChar = null;
+            } else if (escapeString.length() != 1) {
                 throw new IllegalArgumentException("Illegal escape character: " + escapeString);
+            } else {
+                escapeChar = escapeString.charAt(0);
             }
-            escapeChar = escapeString.charAt(0);
         }
         
         String binaryEncoding = null;
