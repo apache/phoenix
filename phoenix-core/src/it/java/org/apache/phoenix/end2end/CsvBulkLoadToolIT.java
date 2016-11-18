@@ -139,7 +139,6 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.close();
     }
 
-
     @Test
     public void testImportWithTabs() throws Exception {
 
@@ -167,6 +166,42 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals("Name 1a", rs.getString(2));
+
+        rs.close();
+        stmt.close();
+    }
+
+    @Test
+    public void testImportWithTabsAndEmptyQuotes() throws Exception {
+
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE TABLE TABLE8 (ID INTEGER NOT NULL PRIMARY KEY, " +
+                "NAME1 VARCHAR, NAME2 VARCHAR)");
+
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input8.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1\t\"\\t123\tName 2a");
+        printWriter.println("2\tName 2a\tName 2b");
+        printWriter.close();
+
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(getUtility().getConfiguration());
+        int exitCode = csvBulkLoadTool.run(new String[] {
+                "--input", "/tmp/input8.csv",
+                "--table", "table8",
+                "--zookeeper", zkQuorum,
+                "-q", "\"\"",
+                "-e", "\"\"",
+                "--delimiter", "\\t"
+                });
+        assertEquals(0, exitCode);
+
+        ResultSet rs = stmt.executeQuery("SELECT id, name1, name2 FROM table8 ORDER BY id");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals("\"\\t123", rs.getString(2));
+        assertEquals("Name 2a", rs.getString(3));
 
         rs.close();
         stmt.close();
