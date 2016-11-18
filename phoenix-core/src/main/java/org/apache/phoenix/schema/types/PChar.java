@@ -153,8 +153,8 @@ public class PChar extends PDataType<String> {
 
     @Override
     public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
-        Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
-      return PVarchar.INSTANCE.isSizeCompatible(ptr, value, srcType, maxLength, scale, desiredMaxLength, desiredScale);
+        SortOrder sortOrder, Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
+      return PVarchar.INSTANCE.isSizeCompatible(ptr, value, srcType, sortOrder, maxLength, scale, desiredMaxLength, desiredScale);
     }
 
     @Override

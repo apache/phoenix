@@ -256,15 +256,15 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     }
 
     @Override
-    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, Integer maxLength,
-            Integer scale, Integer desiredMaxLength, Integer desiredScale) {
+    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, SortOrder sortOrder,
+            Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
         if (value == null) return true;
         PhoenixArray pArr = (PhoenixArray)value;
         PDataType baseType = PDataType.fromTypeId(srcType.getSqlType() - PDataType.ARRAY_TYPE_BASE);
         for (int i = 0; i < pArr.numElements; i++) {
             Object val = pArr.getElement(i);
-            if (!baseType.isSizeCompatible(ptr, val, baseType, srcType.getMaxLength(val), scale, desiredMaxLength,
-                    desiredScale)) { return false; }
+            if (!baseType.isSizeCompatible(ptr, val, baseType, sortOrder, srcType.getMaxLength(val), scale,
+                    desiredMaxLength, desiredScale)) { return false; }
         }
         return true;
     }
