@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -81,6 +82,7 @@ import com.google.common.collect.ImmutableSet;
  */
 public class ServerCacheClient {
     public static final int UUID_LENGTH = Bytes.SIZEOF_LONG;
+    public static final byte[] KEY_IN_FIRST_REGION = new byte[]{0};
     private static final Log LOG = LogFactory.getLog(ServerCacheClient.class);
     private static final Random RANDOM = new Random();
     private final PhoenixConnection connection;
@@ -177,7 +179,7 @@ public class ServerCacheClient {
                     // Call RPC once per server
                     servers.add(entry);
                     if (LOG.isDebugEnabled()) {LOG.debug(addCustomAnnotations("Adding cache entry to be sent for " + entry, connection));}
-                    final byte[] key = entry.getRegionInfo().getStartKey();
+                    final byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
                     final HTableInterface htable = services.getTable(cacheUsingTableRef.getTable().getPhysicalName().getBytes());
                     closeables.add(htable);
                     futures.add(executor.submit(new JobCallable<Boolean>() {
@@ -319,7 +321,7 @@ public class ServerCacheClient {
     		for (HRegionLocation entry : locations) {
     			if (remainingOnServers.contains(entry)) {  // Call once per server
     				try {
-    					byte[] key = entry.getRegionInfo().getStartKey();
+                        byte[] key = getKeyInRegion(entry.getRegionInfo().getStartKey());
     					iterateOverTable.coprocessorService(ServerCachingService.class, key, key, 
     							new Batch.Call<ServerCachingService, RemoveServerCacheResponse>() {
     						@Override
@@ -381,5 +383,13 @@ public class ServerCacheClient {
     public static String idToString(byte[] uuid) {
         assert(uuid.length == Bytes.SIZEOF_LONG);
         return Long.toString(Bytes.toLong(uuid));
+    }
+
+    private static byte[] getKeyInRegion(byte[] regionStartKey) {
+        assert (regionStartKey != null);
+        if (Bytes.equals(regionStartKey, HConstants.EMPTY_START_ROW)) {
+            return KEY_IN_FIRST_REGION;
+        }
+        return regionStartKey;
     }
 }

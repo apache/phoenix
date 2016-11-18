@@ -17,17 +17,24 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver
 import org.apache.phoenix.mapreduce.util.{ColumnInfoToStringEncoderDecoder, PhoenixConfigurationUtil}
-import org.apache.phoenix.util.ColumnInfo
+import org.apache.phoenix.util.{ColumnInfo, PhoenixRuntime}
+
 import scala.collection.JavaConversions._
 
 object ConfigurationUtil extends Serializable {
 
-  def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String], conf: Option[Configuration] = None): Configuration = {
+  def getOutputConfiguration(tableName: String, columns: Seq[String], zkUrl: Option[String], tenantId: Option[String] = None, conf: Option[Configuration] = None): Configuration = {
 
     // Create an HBaseConfiguration object from the passed in config, if present
     val config = conf match {
       case Some(c) => HBaseConfiguration.create(c)
       case _ => HBaseConfiguration.create()
+    }
+
+    // Set the tenantId in the config if present
+    tenantId match {
+      case Some(id) => setTenantId(config, id)
+      case _ =>
     }
 
     // Set the table to save to
@@ -59,7 +66,10 @@ object ConfigurationUtil extends Serializable {
       conf.setInt(HConstants.ZOOKEEPER_CLIENT_PORT, info.getPort)
     if (info.getRootNode != null)
       conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, info.getRootNode)
+  }
 
+  def setTenantId(conf: Configuration, tenantId: String) = {
+    conf.set(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId)
   }
 
   // Return a serializable representation of the columns

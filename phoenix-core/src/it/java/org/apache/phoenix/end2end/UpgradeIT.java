@@ -699,10 +699,12 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         ConnectionQueryServices services = null;
         byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
                 generateUniqueName());
+        boolean dropSysMutexTable = false;
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
             assertTrue(((ConnectionQueryServicesImpl)services)
                     .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey));
+            dropSysMutexTable = true;
             try {
                 ((ConnectionQueryServicesImpl)services)
                         .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
@@ -712,6 +714,16 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             }
             assertTrue(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
             assertFalse(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
+        } finally {
+            // We need to drop the SYSTEM.MUTEX table else other tests calling acquireUpgradeMutex will unexpectedly fail because they
+            // won't see the UNLOCKED cell present for their key. This cell is inserted into the table the first time we create the 
+            // SYSTEM.MUTEX table.
+            if (services != null && dropSysMutexTable) {
+                try (HBaseAdmin admin = services.getAdmin()) {
+                    admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
+                    admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
+                }
+            }
         }
     }
     
@@ -722,9 +734,10 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         final CountDownLatch latch = new CountDownLatch(2);
         final AtomicInteger numExceptions = new AtomicInteger(0);
         ConnectionQueryServices services = null;
+        final byte[] mutexKey = Bytes.toBytes(generateUniqueName());
+        boolean dropSysMutexTable = false;
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-            final byte[] mutexKey = Bytes.toBytes(generateUniqueName());
             FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions, mutexKey));
             FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions, mutexKey));
             Thread t1 = new Thread(task1);
@@ -738,21 +751,21 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             task1.get();
             task2.get();
             assertTrue("One of the threads should have acquired the mutex", mutexStatus1.get() || mutexStatus2.get());
+            dropSysMutexTable = true;
             assertNotEquals("One and only one thread should have acquired the mutex ", mutexStatus1.get(),
                     mutexStatus2.get());
             assertEquals("One and only one thread should have caught UpgradeRequiredException ", 1, numExceptions.get());
         } finally {
-            if (services != null) {
-                releaseUpgradeMutex(services);
+            // We need to drop the SYSTEM.MUTEX table else other tests calling acquireUpgradeMutex will unexpectedly fail because they
+            // won't see the UNLOCKED cell present for their key. This cell is inserted into the table the first time we create the 
+            // SYSTEM.MUTEX table.
+            if (services != null && dropSysMutexTable) {
+                try (HBaseAdmin admin = services.getAdmin()) {
+                    admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
+                    admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
+                }
             }
         }
-    }
-    
-    private void releaseUpgradeMutex(ConnectionQueryServices services) {
-        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
-        ((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey);
-        
     }
     
     private static class AcquireMutexRunnable implements Callable<Void> {

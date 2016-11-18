@@ -25,7 +25,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -40,7 +40,7 @@ import org.junit.runners.Parameterized.Parameters;
 import com.google.common.collect.Maps;
 
 @RunWith(Parameterized.class)
-public abstract class BaseLocalIndexIT extends ParallelStatsDisabledIT {
+public abstract class BaseLocalIndexIT extends BaseUniqueNamesOwnClusterIT {
     protected boolean isNamespaceMapped;
     protected String schemaName;
 

@@ -25,6 +25,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.HTablePool;
@@ -34,6 +35,7 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 
 
 @SuppressWarnings("deprecation")
@@ -113,6 +115,14 @@ public class ServerUtil {
     
     public static SQLException parseServerExceptionOrNull(Throwable t) {
         while (t.getCause() != null) {
+            /*
+             * Note that a NotServingRegionException could be thrown in multiple scenarios including splits, region
+             * move, table disabled, etc. This is a hack and is meant to address the buggy behavior introduced in HBase
+             * 0.98.21 and beyond. See HBASE-17122 for details.
+             */
+            if (t instanceof NotServingRegionException) {
+                return parseRemoteException(new StaleRegionBoundaryCacheException());
+            }
             t = t.getCause();
         }
         return parseRemoteException(t);
