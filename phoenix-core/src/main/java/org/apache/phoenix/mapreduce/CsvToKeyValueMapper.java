@@ -92,7 +92,7 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
     static class CsvLineParser implements LineParser<CSVRecord> {
         private final CSVFormat csvFormat;
 
-        CsvLineParser(char fieldDelimiter, char quote, char escape) {
+        CsvLineParser(Character fieldDelimiter, Character quote, Character escape) {
             this.csvFormat = CSVFormat.DEFAULT
                     .withIgnoreEmptyLines(true)
                     .withDelimiter(fieldDelimiter)
