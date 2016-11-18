@@ -321,8 +321,8 @@ public class PDecimal extends PRealNumber<BigDecimal> {
             maxLength = v.precision();
             scale = v.scale();
         } else {
-            this.coerceBytes(ptr, value, srcType, maxLength, scale, SortOrder.getDefault(), desiredMaxLength, desiredScale, sortOrder, true);
-            int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength());
+            this.coerceBytes(ptr, value, srcType, maxLength, scale, sortOrder, desiredMaxLength, desiredScale, sortOrder, true);
+            int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
             maxLength = v[0];
             scale = v[1];
         }
@@ -352,7 +352,7 @@ public class PDecimal extends PRealNumber<BigDecimal> {
                 BigDecimal v = (BigDecimal) object;
                 scale = v.scale();
             } else {
-                int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength());
+                int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength(), actualModifier);
                 scale = v[1];
             }
         }
