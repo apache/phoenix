@@ -40,14 +40,12 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeepDeletedCells;
-import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -2208,28 +2206,6 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 			}
 		}
 	}
-	
-	@Test
-    public void testQueryingDisabledTable() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tableName = generateUniqueName();
-            conn.createStatement().execute(
-                    "CREATE TABLE " + tableName
-                    + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) ");
-            try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
-                admin.disableTable(Bytes.toBytes(tableName));
-            }
-            String query = "SELECT * FROM " + tableName + " WHERE 1=1";
-            try (Connection conn2 = DriverManager.getConnection(getUrl())) {
-                try (ResultSet rs = conn2.createStatement().executeQuery(query)) {
-                    assertFalse(rs.next());
-                    fail();
-                } catch (PhoenixIOException ioe) {
-                    assertTrue(ioe.getCause() instanceof TableNotEnabledException);
-                }
-            }
-        }
-    }
 	
 }
  

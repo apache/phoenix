@@ -52,8 +52,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.TableNotEnabledException;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
@@ -753,20 +751,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         try { // Rethrow as SQLException
                             throw ServerUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException e2) {
-                           /*
-                            * Note that a StaleRegionBoundaryCacheException could be thrown in multiple scenarios including splits, region
-                            * moves, table disabled, etc. See ServerUtil.parseServerException() for details. 
-                            * Because of HBASE-17122 we need to explicitly check whether this exception is being
-                            * thrown because the table was disabled or because a split happened. This obviously is a HACK.
-                            * With older versions of HBase we were correctly thrown a TableNotEnabledException so this 
-                            * kind of hackery wasn't needed.
-                            * TODO: remove this once HBASE-17122 is fixed.
-                            */
-                            try (HBaseAdmin admin = context.getConnection().getQueryServices().getAdmin()) {
-                                if (admin.isTableDisabled(physicalTableName)) {
-                                    throw new TableNotEnabledException(physicalTableName);
-                                }
-                            }
                             scanPairItr.remove();
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries

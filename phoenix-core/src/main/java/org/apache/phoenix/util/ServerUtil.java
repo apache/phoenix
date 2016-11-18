@@ -115,11 +115,6 @@ public class ServerUtil {
     
     public static SQLException parseServerExceptionOrNull(Throwable t) {
         while (t.getCause() != null) {
-            /*
-             * Note that a NotServingRegionException could be thrown in multiple scenarios including splits, region
-             * move, table disabled, etc. This is a hack and is meant to address the buggy behavior introduced in HBase
-             * 0.98.21 and beyond. See HBASE-17122 for details.
-             */
             if (t instanceof NotServingRegionException) {
                 return parseRemoteException(new StaleRegionBoundaryCacheException());
             }
