@@ -22,7 +22,6 @@ import java.util.Collection;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.end2end.index.MutableIndexFailureIT.FailingRegionObserver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -53,7 +52,7 @@ public class IndexToolForPartialBuildWithNamespaceEnabled extends IndexToolForPa
         serverProps.put(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "2");
         serverProps.put(HConstants.HBASE_RPC_TIMEOUT_KEY, "10000");
         serverProps.put("hbase.client.pause", "5000");
-        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_BATCH_SIZE_ATTRIB, "2000");
+        serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_PERIOD, "2000");
         serverProps.put(QueryServices.INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB, "1000");
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);

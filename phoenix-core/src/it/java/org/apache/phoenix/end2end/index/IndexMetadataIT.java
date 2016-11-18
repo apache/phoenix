@@ -31,6 +31,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Properties;
 
@@ -583,7 +584,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testAsyncRebuildTimestamp() throws Exception {
-        long l0 = System.currentTimeMillis();
+        long startTimestamp = System.currentTimeMillis();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
@@ -591,19 +592,16 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
 
 
         String ddl = "create table " + testTable  + " (k varchar primary key, v1 varchar, v2 varchar, v3 varchar)";
-        PreparedStatement stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        Statement stmt = conn.createStatement();
+        stmt.execute(ddl);
         String indexName = "R_ASYNCIND_" + generateUniqueName();
         
         ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (v1) ";
-        stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        stmt.execute(ddl);
         ddl = "CREATE INDEX " + indexName + "2 ON " + testTable  + " (v2) ";
-        stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        stmt.execute(ddl);
         ddl = "CREATE INDEX " + indexName + "3 ON " + testTable  + " (v3)";
-        stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        stmt.execute(ddl);
         conn.createStatement().execute("ALTER INDEX "+indexName+"1 ON " + testTable +" DISABLE ");
         conn.createStatement().execute("ALTER INDEX "+indexName+"2 ON " + testTable +" REBUILD ");
         conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" REBUILD ASYNC");
@@ -615,10 +613,10 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             "order by table_name");
         assertTrue(rs.next());
         assertEquals(indexName + "3", rs.getString(1));
-        long l1 = rs.getLong(2);
-        assertTrue(l1>l0);
+        long asyncTimestamp = rs.getLong(2);
+		assertTrue("Async timestamp is recent timestamp", asyncTimestamp > startTimestamp);
         PTable table = PhoenixRuntime.getTable(conn, indexName+"3");
-        assertEquals(table.getTimeStamp(), l1);
+        assertEquals(table.getTimeStamp(), asyncTimestamp);
         assertFalse(rs.next());
         conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" DISABLE");
         rs = conn.createStatement().executeQuery(

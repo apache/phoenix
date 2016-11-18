@@ -103,6 +103,10 @@ public class IndexTool extends Configured implements Tool {
             "Data table name (mandatory)");
     private static final Option INDEX_TABLE_OPTION = new Option("it", "index-table", true,
             "Index table name(not required in case of partial rebuilding)");
+    
+    private static final Option PARTIAL_REBUILD_OPTION = new Option("pr", "partial-rebuild", false,
+            "To build indexes for a data table from least disabledTimeStamp");
+    
     private static final Option DIRECT_API_OPTION = new Option("direct", "direct", false,
             "If specified, we avoid the bulk load (optional)");
     private static final Option RUN_FOREGROUND_OPTION =
@@ -122,6 +126,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(SCHEMA_NAME_OPTION);
         options.addOption(DATA_TABLE_OPTION);
         options.addOption(INDEX_TABLE_OPTION);
+        options.addOption(PARTIAL_REBUILD_OPTION);
         options.addOption(DIRECT_API_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(OUTPUT_PATH_OPTION);
@@ -156,11 +161,15 @@ public class IndexTool extends Configured implements Tool {
                     + "parameter");
         }
 
-        if (!cmdLine.hasOption(OUTPUT_PATH_OPTION.getOpt())) {
-            throw new IllegalStateException(OUTPUT_PATH_OPTION.getLongOpt() + " is a mandatory "
-                    + "parameter");
-        }
-
+		if (!(cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt()) || cmdLine.hasOption(DIRECT_API_OPTION.getOpt()))
+				&& !cmdLine.hasOption(OUTPUT_PATH_OPTION.getOpt())) {
+			throw new IllegalStateException(OUTPUT_PATH_OPTION.getLongOpt() + " is a mandatory " + "parameter");
+		}
+        
+		if (cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt()) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())) {
+			throw new IllegalStateException("Index name should not be passed with " + PARTIAL_REBUILD_OPTION.getLongOpt());
+		}
+        		
         if (!(cmdLine.hasOption(DIRECT_API_OPTION.getOpt())) && cmdLine.hasOption(INDEX_TABLE_OPTION.getOpt())
                 && cmdLine.hasOption(RUN_FOREGROUND_OPTION
                         .getOpt())) {
@@ -193,8 +202,8 @@ public class IndexTool extends Configured implements Tool {
 
         }
 
-        public Job getJob(String schemaName, String indexTable, String dataTable, boolean useDirectApi) throws Exception {
-            if (indexTable == null) {
+        public Job getJob(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean isPartialBuild) throws Exception {
+            if (isPartialBuild) {
                 return configureJobForPartialBuild(schemaName, dataTable);
             } else {
                 return configureJobForAysncIndex(schemaName, indexTable, dataTable, useDirectApi);
@@ -262,9 +271,12 @@ public class IndexTool extends Configured implements Tool {
             
             //TODO: update disable indexes
             PhoenixConfigurationUtil.setDisableIndexes(configuration, StringUtils.join(",",disableIndexes));
+            
             final Job job = Job.getInstance(configuration, jobName);
+			if (outputPath != null) {
+				FileOutputFormat.setOutputPath(job, outputPath);
+			}
             job.setJarByClass(IndexTool.class);
-            FileOutputFormat.setOutputPath(job, outputPath);
             TableMapReduceUtil.initTableMapperJob(physicalTableName, scan, PhoenixIndexPartialBuildMapper.class, null,
                     null, job);
             TableMapReduceUtil.initCredentials(job);
@@ -437,6 +449,7 @@ public class IndexTool extends Configured implements Tool {
             final String schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
             final String dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
             final String indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
+            final boolean isPartialBuild = cmdLine.hasOption(PARTIAL_REBUILD_OPTION.getOpt());
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             boolean useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
@@ -461,11 +474,15 @@ public class IndexTool extends Configured implements Tool {
             }
             
             PTable pdataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
-            final Path outputPath = CsvBulkImportUtil.getOutputPath(new Path(basePath), pindexTable == null
-                    ? pdataTable.getPhysicalName().getString() : pindexTable.getPhysicalName().getString());
-            FileSystem.get(configuration).delete(outputPath, true);
+			Path outputPath = null;
+			if (basePath != null) {
+				outputPath = CsvBulkImportUtil.getOutputPath(new Path(basePath), pindexTable == null
+						? pdataTable.getPhysicalName().getString() : pindexTable.getPhysicalName().getString());
+				FileSystem.get(configuration).delete(outputPath, true);
+			}
+            
             Job job = new JobFactory(connection, configuration, outputPath).getJob(schemaName, indexTable, dataTable,
-                    useDirectApi);
+                    useDirectApi, isPartialBuild);
             if (!isForeground && useDirectApi) {
                 LOG.info("Running Index Build in Background - Submit async and exit");
                 job.submit();
@@ -485,8 +502,8 @@ public class IndexTool extends Configured implements Tool {
                     htable.close();
                     // Without direct API, we need to update the index state to ACTIVE from client.
                     IndexToolUtil.updateIndexState(connection, qDataTable, indexTable, PIndexState.ACTIVE);
+                    FileSystem.get(configuration).delete(outputPath, true);
                 }
-                FileSystem.get(configuration).delete(outputPath, true);
                 return 0;
             } else {
                 LOG.error("IndexTool job failed! Check logs for errors..");
