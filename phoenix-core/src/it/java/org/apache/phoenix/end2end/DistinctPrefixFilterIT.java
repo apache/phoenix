@@ -145,6 +145,7 @@ public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
 
         testSkipRange("SELECT %s prefix1 FROM "+ testTable + " GROUP BY prefix1 ORDER BY prefix1 DESC", 3);
         testSkipRange("SELECT %s DISTINCT prefix1 FROM " + testTable + " ORDER BY prefix1 DESC", 3);
+        testSkipRange("SELECT %s DISTINCT prefix1 FROM " + testTable + " ORDER BY prefix1 DESC LIMIT 2", 2);
     }
 
     @Test
