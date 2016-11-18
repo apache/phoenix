@@ -33,9 +33,6 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -86,14 +83,13 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -202,8 +198,8 @@ public class UpsertCompiler {
                     Integer scale = rsScale == 0 ? null : rsScale;
                     // We are guaranteed that the two column will have compatible types,
                     // as we checked that before.
-                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(), precision, scale,
-                            column.getMaxLength(), column.getScale())) { throw new SQLExceptionInfo.Builder(
+                    if (!column.getDataType().isSizeCompatible(ptr, value, column.getDataType(), SortOrder.getDefault(), precision,
+                            scale, column.getMaxLength(), column.getScale())) { throw new SQLExceptionInfo.Builder(
                             SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
                             .setMessage("value=" + column.getDataType().toStringLiteral(ptr, null)).build()
                             .buildException(); }
@@ -926,8 +922,8 @@ public class UpsertCompiler {
                                         + constantExpression.toString() + " in column " + column);
                         }
                         if (!column.getDataType().isSizeCompatible(ptr, value, constantExpression.getDataType(),
-                                constantExpression.getMaxLength(), constantExpression.getScale(), 
-                                column.getMaxLength(), column.getScale())) { 
+                                constantExpression.getSortOrder(), constantExpression.getMaxLength(), 
+                                constantExpression.getScale(), column.getMaxLength(), column.getScale())) { 
                             throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY).setColumnName(column.getName().getString())
                                 .setMessage("value=" + constantExpression.toString()).build().buildException();
