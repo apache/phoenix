@@ -1093,4 +1093,49 @@ public class IndexIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testQueryBackToDataTableWithDescPKColumn() throws SQLException {
+        doTestQueryBackToDataTableWithDescPKColumn(true);
+        doTestQueryBackToDataTableWithDescPKColumn(false);
+    }
+
+    private void doTestQueryBackToDataTableWithDescPKColumn(boolean isSecondPKDesc) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            // create data table and index table
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            String ddl = "CREATE TABLE " + fullTableName + "(p1 integer not null, p2 integer not null, " +
+                    " a integer, b integer CONSTRAINT PK PRIMARY KEY ";
+            if (isSecondPKDesc) {
+                ddl += "(p1, p2 desc))";
+            } else {
+                ddl += "(p1 desc, p2))";
+            }
+            stmt.executeUpdate(ddl);
+            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + fullIndexName + " on " + fullTableName + "(a)";
+            stmt.executeUpdate(ddl);
+
+            // upsert a single row
+            String upsert = "UPSERT INTO " + fullTableName + " VALUES(1,2,3,4)";
+            stmt.executeUpdate(upsert);
+
+            // try select with index
+            // a = 3, should hit index table, but we select column B, so it will query back to data table
+            String query = "SELECT /*+index(" + fullTableName + " " + fullIndexName + "*/ b from " + fullTableName +
+                    " WHERE a = 3";
+            ResultSet rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertFalse(rs.next());
+            rs.close();
+            stmt.close();
+        }
+    }
+
 }
