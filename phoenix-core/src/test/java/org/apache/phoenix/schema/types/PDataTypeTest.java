@@ -1671,7 +1671,7 @@ public class PDataTypeTest {
     }
 
     private void testReadDecimalPrecisionAndScaleFromRawBytes(BigDecimal bd, SortOrder sortOrder) {
-        byte[] b = PDecimal.INSTANCE.toBytes(bd);
+        byte[] b = PDecimal.INSTANCE.toBytes(bd, sortOrder);
         int[] v = PDataType.getDecimalPrecisionAndScale(b, 0, b.length, sortOrder);
         assertEquals(bd.toString(), bd.precision(), v[0]);
         assertEquals(bd.toString(), bd.scale(), v[1]);
