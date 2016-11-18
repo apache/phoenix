@@ -99,8 +99,8 @@ public class PVarchar extends PDataType<String> {
 
   @Override
   public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
-      Integer maxLength, Integer scale, Integer desiredMaxLength,
-      Integer desiredScale) {
+      SortOrder sortOrder, Integer maxLength, Integer scale,
+      Integer desiredMaxLength, Integer desiredScale) {
     if (ptr.getLength() != 0 && maxLength != null && desiredMaxLength != null) {
       return maxLength <= desiredMaxLength;
     }

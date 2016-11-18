@@ -1536,10 +1536,12 @@ public class PDataTypeTest {
     public void testGetDeicmalPrecisionAndScaleFromRawBytes() throws Exception {
         // Special case for 0.
         BigDecimal bd = new BigDecimal("0");
-        byte[] b = PDecimal.INSTANCE.toBytes(bd);
-        int[] v = PDataType.getDecimalPrecisionAndScale(b, 0, b.length);
-        assertEquals(0, v[0]);
-        assertEquals(0, v[1]);
+        for (SortOrder sortOrder : SortOrder.values()) {
+            byte[] b = PDecimal.INSTANCE.toBytes(bd, sortOrder);
+            int[] v = PDataType.getDecimalPrecisionAndScale(b, 0, b.length, sortOrder);
+            assertEquals(0, v[0]);
+            assertEquals(0, v[1]);
+        }
 
         BigDecimal[] bds = new BigDecimal[] {
                 new BigDecimal("1"),
@@ -1572,8 +1574,10 @@ public class PDataTypeTest {
         };
 
         for (int i=0; i<bds.length; i++) {
-            testReadDecimalPrecisionAndScaleFromRawBytes(bds[i]);
-            testReadDecimalPrecisionAndScaleFromRawBytes(bds[i].negate());
+            for (SortOrder sortOrder : SortOrder.values()) {
+                testReadDecimalPrecisionAndScaleFromRawBytes(bds[i], sortOrder);
+                testReadDecimalPrecisionAndScaleFromRawBytes(bds[i].negate(), sortOrder);
+            }
         }
         
         assertTrue(new BigDecimal("5").remainder(BigDecimal.ONE).equals(BigDecimal.ZERO));
@@ -1662,9 +1666,9 @@ public class PDataTypeTest {
         }
     }
 
-    private void testReadDecimalPrecisionAndScaleFromRawBytes(BigDecimal bd) {
-        byte[] b = PDecimal.INSTANCE.toBytes(bd);
-        int[] v = PDataType.getDecimalPrecisionAndScale(b, 0, b.length);
+    private void testReadDecimalPrecisionAndScaleFromRawBytes(BigDecimal bd, SortOrder sortOrder) {
+        byte[] b = PDecimal.INSTANCE.toBytes(bd, sortOrder);
+        int[] v = PDataType.getDecimalPrecisionAndScale(b, 0, b.length, sortOrder);
         assertEquals(bd.toString(), bd.precision(), v[0]);
         assertEquals(bd.toString(), bd.scale(), v[1]);
     }

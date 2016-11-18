@@ -301,7 +301,7 @@ public class PDecimal extends PRealNumber<BigDecimal> {
 
   @Override
   public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
-      Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
+      SortOrder sortOrder, Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
     if (ptr.getLength() == 0) {
       return true;
     }
@@ -321,7 +321,7 @@ public class PDecimal extends PRealNumber<BigDecimal> {
       maxLength = v.precision();
       scale = v.scale();
     } else {
-      int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength());
+      int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
       maxLength = v[0];
       scale = v[1];
     }
@@ -351,7 +351,7 @@ public class PDecimal extends PRealNumber<BigDecimal> {
         BigDecimal v = (BigDecimal) object;
         scale = v.scale();
       } else {
-        int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength());
+        int[] v = getDecimalPrecisionAndScale(ptr.get(), ptr.getOffset(), ptr.getLength(), actualModifier);
         scale = v[1];
       }
     }

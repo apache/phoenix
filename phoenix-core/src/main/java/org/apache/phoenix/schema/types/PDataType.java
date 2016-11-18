@@ -689,32 +689,32 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     // Calculate the precision and scale of a raw decimal bytes. Returns the values as an int
     // array. The first value is precision, the second value is scale.
     // Default scope for testing
-    protected static int[] getDecimalPrecisionAndScale(byte[] bytes, int offset, int length) {
+    protected static int[] getDecimalPrecisionAndScale(byte[] bytes, int offset, int length, SortOrder sortOrder) {
         // 0, which should have no precision nor scale.
-        if (length == 1 && bytes[offset] == ZERO_BYTE) { return new int[] { 0, 0 }; }
-        int signum = ((bytes[offset] & 0x80) == 0) ? -1 : 1;
+        if (length == 1 && sortOrder.normalize(bytes[offset])  == ZERO_BYTE) { return new int[] { 0, 0 }; }
+        int signum = ((sortOrder.normalize(bytes[offset]) & 0x80) == 0) ? -1 : 1;
         int scale;
         int index;
         int digitOffset;
         if (signum == 1) {
-            scale = (byte)(((bytes[offset] & 0x7F) - 65) * -2);
+            scale = (byte)(((sortOrder.normalize(bytes[offset]) & 0x7F) - 65) * -2);
             index = offset + length;
             digitOffset = POS_DIGIT_OFFSET;
         } else {
-            scale = (byte)((~bytes[offset] - 65 - 128) * -2);
-            index = offset + length - (bytes[offset + length - 1] == NEG_TERMINAL_BYTE ? 1 : 0);
+            scale = (byte)((~sortOrder.normalize(bytes[offset]) - 65 - 128) * -2);
+            index = offset + length - (sortOrder.normalize(bytes[offset + length - 1]) == NEG_TERMINAL_BYTE ? 1 : 0);
             digitOffset = -NEG_DIGIT_OFFSET;
         }
         length = index - offset;
         int precision = 2 * (length - 1);
-        int d = signum * bytes[--index] - digitOffset;
+        int d = signum * sortOrder.normalize(bytes[--index]) - digitOffset;
         if (d % 10 == 0) { // trailing zero
             // drop trailing zero and compensate in the scale and precision.
             d /= 10;
             scale--;
             precision -= 1;
         }
-        d = signum * bytes[offset + 1] - digitOffset;
+        d = signum * sortOrder.normalize(bytes[offset + 1]) - digitOffset;
         if (d < 10) { // Leading single digit
             // Compensate in the precision.
             precision -= 1;
@@ -727,6 +727,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         }
         return new int[] { precision, scale };
     }
+
 
     public boolean isCoercibleTo(PDataType targetType) {
         return this.equals(targetType) || targetType.equals(PVarbinary.INSTANCE);
@@ -747,14 +748,15 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
      * @param ptr bytes pointer for the value
      * @param value object representation of the value. May be null in which case ptr will be used
      * @param srcType the type of the value
+     * @param sortOrder TODO
      * @param maxLength the max length of the source value or null if not applicable
      * @param scale the scale of the source value or null if not applicable
      * @param desiredMaxLength the desired max length for the value to be coerced
      * @param desiredScale the desired scale for the value to be coerced 
      * @return true if the value may be coerced without losing precision and false otherwise.
      */
-    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, Integer maxLength,
-            Integer scale, Integer desiredMaxLength, Integer desiredScale) {
+    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType, SortOrder sortOrder,
+            Integer maxLength, Integer scale, Integer desiredMaxLength, Integer desiredScale) {
         return true;
     }
 
