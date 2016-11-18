@@ -49,10 +49,8 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.RegionTooBusyException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -114,14 +112,13 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
+import org.apache.tephra.TxConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-
-import org.apache.tephra.TxConstants;
 
 
 /**
@@ -537,9 +534,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         // We are guaranteed that the two column will have the
                                         // same type.
                                         if (!column.getDataType().isSizeCompatible(ptr, value,
-                                            column.getDataType(), expression.getMaxLength(),
-                                            expression.getScale(), column.getMaxLength(),
-                                            column.getScale())) {
+                                            column.getDataType(), expression.getSortOrder(),
+                                            expression.getMaxLength(), expression.getScale(),
+                                            column.getMaxLength(), column.getScale())) {
                                             throw new DataExceedsCapacityException(
                                                 column.getDataType(), column.getMaxLength(),
                                                 column.getScale());

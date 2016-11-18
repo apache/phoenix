@@ -112,8 +112,8 @@ public class PVarbinary extends PBinaryBase {
 
   @Override
   public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
-      Integer maxLength, Integer scale, Integer desiredMaxLength,
-      Integer desiredScale) {
+      SortOrder sortOrder, Integer maxLength, Integer scale,
+      Integer desiredMaxLength, Integer desiredScale) {
     if (ptr.getLength() != 0 && srcType.equals(PBinary.INSTANCE) && maxLength != null
         && desiredMaxLength != null) {
       return maxLength <= desiredMaxLength;

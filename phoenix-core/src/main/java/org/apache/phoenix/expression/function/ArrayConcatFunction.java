@@ -22,6 +22,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
@@ -52,16 +53,18 @@ public class ArrayConcatFunction extends ArrayModifierFunction {
         }
         boolean isLHSRowKeyOrderOptimized = PArrayDataType.isRowKeyOrderOptimized(getLHSExpr().getDataType(), getLHSExpr().getSortOrder(), ptr);
 
+        SortOrder sortOrder = getRHSExpr().getSortOrder();
         int actualLengthOfArray1 = Math.abs(PArrayDataType.getArrayLength(ptr, getLHSBaseType(), getLHSExpr().getMaxLength()));
         int lengthArray1 = ptr.getLength();
         int offsetArray1 = ptr.getOffset();
         byte[] array1Bytes = ptr.get();
         if (!getRHSExpr().evaluate(tuple, ptr)|| ptr.getLength() == 0){
+            sortOrder = getLHSExpr().getSortOrder();
             ptr.set(array1Bytes, offsetArray1, lengthArray1);
             return true;
         }
 
-        checkSizeCompatibility(ptr, getLHSExpr(), getLHSExpr().getDataType(), getRHSExpr(),getRHSExpr().getDataType());
+        checkSizeCompatibility(ptr, sortOrder, getLHSExpr(), getLHSExpr().getDataType(), getRHSExpr(),getRHSExpr().getDataType());
 
         // FIXME: calling version of coerceBytes that takes into account the separator used by LHS
         // If the RHS does not have the same separator, it'll be coerced to use it. It's unclear
