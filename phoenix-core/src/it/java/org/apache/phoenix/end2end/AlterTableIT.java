@@ -2225,16 +2225,19 @@ public class AlterTableIT extends BaseOwnClusterHBaseManagedTimeIT {
             conn.createStatement().execute(
                     "CREATE TABLE " + tableName
                     + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT PK PRIMARY KEY(K1,K2)) ");
+            
             try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
                 admin.disableTable(Bytes.toBytes(tableName));
-            }
-            String query = "SELECT * FROM " + tableName + " WHERE 1=1";
-            try (Connection conn2 = DriverManager.getConnection(getUrl())) {
-                try (ResultSet rs = conn2.createStatement().executeQuery(query)) {
-                    assertFalse(rs.next());
-                    fail();
-                } catch (PhoenixIOException ioe) {
-                    assertTrue(ioe.getCause() instanceof TableNotEnabledException);
+                String query = "SELECT * FROM " + tableName + " WHERE 1=1";
+                try (Connection conn2 = DriverManager.getConnection(getUrl())) {
+                    try (ResultSet rs = conn2.createStatement().executeQuery(query)) {
+                        assertFalse(rs.next());
+                        fail();
+                    } catch (PhoenixIOException ioe) {
+                        assertTrue(ioe.getCause() instanceof TableNotEnabledException);
+                    }
+                } finally {
+                    admin.enableTable(Bytes.toBytes(tableName));
                 }
             }
         }
