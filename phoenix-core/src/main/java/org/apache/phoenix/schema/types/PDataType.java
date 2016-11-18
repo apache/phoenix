@@ -689,9 +689,9 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     // Calculate the precision and scale of a raw decimal bytes. Returns the values as an int
     // array. The first value is precision, the second value is scale.
     // Default scope for testing
-    protected static int[] getDecimalPrecisionAndScale(byte[] bytes, int offset, int length) {
+    protected static int[] getDecimalPrecisionAndScale(byte[] bytes, int offset, int length, SortOrder sortOrder) {
         // 0, which should have no precision nor scale.
-        if (length == 1 && bytes[offset] == ZERO_BYTE) { return new int[] { 0, 0 }; }
+        if (length == 1 && sortOrder.normalize(bytes[offset])  == ZERO_BYTE) { return new int[] { 0, 0 }; }
         int signum = ((bytes[offset] & 0x80) == 0) ? -1 : 1;
         int scale;
         int index;
