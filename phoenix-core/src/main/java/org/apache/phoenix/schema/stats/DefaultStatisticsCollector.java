@@ -27,7 +27,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -297,15 +296,15 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
 
     @Override
     public void init() throws IOException {
-        this.guidePostsInfoWriterMap.clear();
-        maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
         initGuidepostDepth();
     }
 
     @Override
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
         Pair<Long, GuidePostsInfoBuilder> pair = guidePostsInfoWriterMap.get(fam);
-        if (pair != null) { return pair.getSecond().build(); }
+        if (pair != null) {
+            return pair.getSecond().build();
+        }
         return null;
     }
 
