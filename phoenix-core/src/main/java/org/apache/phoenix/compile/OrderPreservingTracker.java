@@ -120,16 +120,6 @@ public class OrderPreservingTracker {
                 if (node.getSortOrder() != sortOrder) {
                     if (isReverse == null) {
                         isReverse = true;
-                        /*
-                         * When a GROUP BY is not order preserving, we cannot do a reverse
-                         * scan to eliminate the ORDER BY since our server-side scan is not
-                         * ordered in that case.
-                         */
-                        if (!groupBy.isEmpty() && !groupBy.isOrderPreserving()) {
-                            isOrderPreserving = false;
-                            isReverse = false;
-                            return;
-                        }
                     } else if (!isReverse){
                         isOrderPreserving = false;
                         isReverse = false;
