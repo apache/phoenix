@@ -51,6 +51,8 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.hamcrest.CoreMatchers;
+import org.hamcrest.Matcher;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 
@@ -106,8 +108,12 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
             return DriverManager.getConnection(url, props);
         }
         
-        String getExplainPlanString() {
-            return "explain plan for";
+        String getExplainPlanString(boolean json) {
+            if (json) {
+                return "explain plan as json for ";
+            } else {
+                return "explain plan for ";
+            }
         }
 
         public Sql sql(String sql) {
@@ -169,28 +175,33 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
         }
 
         public Sql explainIs(String expected) throws SQLException {
-            return checkExplain(expected, true);
+            Assert.assertEquals(expected, getExplainPlan(false));
+            return this;
+        }
+
+        public Sql explainIs(Matcher<PlanRelNode> planRelNodeMatcher) throws SQLException {
+            String explainPlan = getExplainPlan(true);
+            Assert.assertThat(PlanRelNode.parsePlan(explainPlan), planRelNodeMatcher);
+            return this;
         }
 
         public Sql explainMatches(String expected) throws SQLException {
-            return checkExplain(expected, false);
+            String explainPlan = getExplainPlan(false);
+            Assert.assertTrue(
+                    "Explain plan \"" + explainPlan
+                            + "\" does not match \"" + expected + "\"",
+                    explainPlan.matches(expected));
+            return this;
         }
 
-        private Sql checkExplain(String expected, boolean exact) throws SQLException {
+        private String getExplainPlan(boolean json) throws SQLException {
             final Statement statement = start.getConnection().createStatement();
-            final ResultSet resultSet = statement.executeQuery(start.getExplainPlanString() + " " + sql);
-            String explain = QueryUtil.getExplainPlan(resultSet);
+            final ResultSet resultSet = statement.executeQuery(
+                    start.getExplainPlanString(json) + " " + sql);
+            String explainPlan = QueryUtil.getExplainPlan(resultSet);
             resultSet.close();
             statement.close();
-            if (exact) {
-                Assert.assertEquals(explain, expected);
-            } else {
-                Assert.assertTrue(
-                        "Explain plan \"" + explain
-                        + "\" does not match \"" + expected + "\"",
-                        explain.matches(expected));
-            }
-            return this;
+            return explainPlan;
         }
 
         public List<Object[]> getResult() throws SQLException {
