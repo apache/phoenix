@@ -19,6 +19,13 @@ package org.apache.phoenix.hive.mapreduce;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -37,9 +44,14 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.mapred.*;
+import org.apache.hadoop.mapred.InputFormat;
+import org.apache.hadoop.mapred.InputSplit;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.RecordReader;
+import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -56,14 +68,6 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PhoenixRuntime;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.Statement;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 
 /**
  * Custom InputFormat to feed into Hive
@@ -112,8 +116,8 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
             query = PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName,
                     PhoenixStorageHandlerUtil.getReadColumnNames(jobConf), conditionList);
         } else if (PhoenixStorageHandlerConstants.TEZ.equals(executionEngine)) {
-            Map<String, String> columnTypeMap = PhoenixStorageHandlerUtil.createColumnTypeMap
-                    (jobConf);
+            Map<String, TypeInfo> columnTypeMap =
+                    PhoenixStorageHandlerUtil.createColumnTypeMap(jobConf);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Column type map for TEZ : " + columnTypeMap);
             }
