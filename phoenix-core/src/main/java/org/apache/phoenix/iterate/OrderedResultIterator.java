@@ -279,7 +279,10 @@ public class OrderedResultIterator implements PeekingResultIterator {
 
     @Override
     public void close() throws SQLException {
-        resultIterator.close();
+        // Guard against resultIterator being null
+        if (null != resultIterator) {
+            resultIterator.close();
+        }
         resultIterator = PeekingResultIterator.EMPTY_ITERATOR;
     }
 
