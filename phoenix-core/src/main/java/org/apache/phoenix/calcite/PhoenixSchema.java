@@ -4,17 +4,21 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.ArrayListMultimap;
 
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.schema.*;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.TableFunctionImpl;
 import org.apache.calcite.schema.impl.ViewTable;
 import org.apache.calcite.sql.ListJarsTable;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.ColumnDef;
@@ -22,8 +26,10 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionArgInfo;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
@@ -78,7 +84,7 @@ public class PhoenixSchema implements Schema {
     protected final UDFExpression exp = new UDFExpression();
     private final static Function listJarsFunction = TableFunctionImpl
             .create(ListJarsTable.LIST_JARS_TABLE_METHOD);
-    public final static Map<String, Collection<Function>> builtinFunctions = Maps.newHashMap();
+    public final static Multimap<String, Function> builtinFunctions = ArrayListMultimap.create();
 
     
     protected PhoenixSchema(String name, String schemaName,
@@ -128,14 +134,34 @@ public class PhoenixSchema implements Schema {
         if(!builtinFunctions.isEmpty()) {
             return;
         }
-        Collection<BuiltInFunctionInfo>  infoCollection = ParseNodeFactory.getSingleEntryFunctionMap();
-        for (BuiltInFunctionInfo info : infoCollection) {
-            if(!CalciteUtils.TRANSLATED_BUILT_IN_FUNCTIONS.contains(info.getName())) {
-                builtinFunctions.put(info.getName(),
-                        (List<Function>) (Object) PhoenixScalarFunction.createBuiltinFunctions(info));
+        Multimap<String, BuiltInFunctionInfo> infoMap = ParseNodeFactory.getBuiltInFunctionMultimap();
+        List<BuiltInFunctionInfo> aliasFunctions = Lists.newArrayList();
+        for (BuiltInFunctionInfo info : infoMap.values()) {
+            //TODO: Support aggregate functions
+            if(!CalciteUtils.TRANSLATED_BUILT_IN_FUNCTIONS.contains(info.getName()) && !info.isAggregate()) {
+                if (info.getClassType() == FunctionClassType.ALIAS) {
+                    aliasFunctions.add(info);
+                    continue;
+                }
+                builtinFunctions.putAll(info.getName(), PhoenixScalarFunction.createBuiltinFunctions(info));
             }
         }
+        // Single depth alias functions only
+        for(BuiltInFunctionInfo info : aliasFunctions) {
+            // Point the alias function to its derived functions
+            for (Class<? extends FunctionExpression> func : info.getDerivedFunctions()) {
+                BuiltInFunction d = func.getAnnotation(BuiltInFunction.class);
+                Collection<Function> targetFunction = builtinFunctions.get(d.name());
 
+                // Target function not implemented
+                if(targetFunction.isEmpty()) {
+                    for(BuiltInFunctionInfo derivedInfo : infoMap.get(d.name())) {
+                        targetFunction.addAll(PhoenixScalarFunction.createBuiltinFunctions(derivedInfo));
+                    }
+                }
+                builtinFunctions.putAll(info.getName(), targetFunction);
+            }
+        }
     }
 
     public static List<List<PFunction.FunctionArgument>> overloadArguments(BuiltInFunctionArgInfo[] args){
@@ -207,7 +233,7 @@ public class PhoenixSchema implements Schema {
     @Override
     public Collection<Function> getFunctions(String name) {
         assert(!builtinFunctions.isEmpty());
-        if(builtinFunctions.get(name) != null){
+        if(!builtinFunctions.get(name).isEmpty()){
             return builtinFunctions.get(name);
         }
         Function func = views.get(name);

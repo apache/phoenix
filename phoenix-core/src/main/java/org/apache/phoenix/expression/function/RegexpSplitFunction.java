@@ -53,7 +53,7 @@ import org.apache.phoenix.util.ByteUtil;
         nodeClass = RegexpSplitParseNode.class, args= {
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class}),
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class})},
-        classType = FunctionParseNode.FunctionClassType.ALIAS,
+        classType = FunctionParseNode.FunctionClassType.ABSTRACT,
         derivedFunctions = {ByteBasedRegexpSplitFunction.class, StringBasedRegexpSplitFunction.class})
 public abstract class RegexpSplitFunction extends ScalarFunction {
 
@@ -68,19 +68,6 @@ public abstract class RegexpSplitFunction extends ScalarFunction {
     public RegexpSplitFunction(List<Expression> children) {
         super(children);
         init();
-    }
-
-    public static Expression create(List<Expression> children, StatementContext context)
-            throws SQLException {
-        QueryServices services = context.getConnection().getQueryServices();
-        boolean useByteBasedRegex =
-                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
-                        QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
-        if (useByteBasedRegex) {
-            return new ByteBasedRegexpSplitFunction(children);
-        } else {
-            return new StringBasedRegexpSplitFunction(children);
-        }
     }
 
     private void init() {

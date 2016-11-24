@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Collection;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
@@ -56,6 +57,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 
 /**
  * 
@@ -74,7 +76,7 @@ public class ParseNodeFactory {
         AvgAggregateFunction.class
         );
     private static final Map<BuiltInFunctionKey, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MAP = Maps.newHashMap();
-    private static final Map<String, BuiltInFunctionInfo> SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP = Maps.newHashMap();
+    private static final Multimap<String, BuiltInFunctionInfo> BUILT_IN_FUNCTION_MULTIMAP = ArrayListMultimap.create();
     private static final BigDecimal MAX_LONG = BigDecimal.valueOf(Long.MAX_VALUE);
 
 
@@ -129,21 +131,24 @@ public class ParseNodeFactory {
         }
         int nArgs = d.args().length;
         BuiltInFunctionInfo value = new BuiltInFunctionInfo(f, d);
+        if (d.classType() != FunctionParseNode.FunctionClassType.ABSTRACT) {
+            BUILT_IN_FUNCTION_MULTIMAP.put(value.getName(), value);
+        }
+        if (d.classType() != FunctionParseNode.FunctionClassType.DERIVED) {
+            do {
+                // Add function to function map, throwing if conflicts found
+                // Add entry for each possible version of function based on arguments that are not required to be present (i.e. arg with default value)
+                BuiltInFunctionKey key = new BuiltInFunctionKey(value.getName(), nArgs);
+                if (BUILT_IN_FUNCTION_MAP.put(key, value) != null) {
+                    throw new IllegalStateException("Multiple " + value.getName() + " functions with " + nArgs + " arguments");
+                }
+            } while (--nArgs >= 0 && d.args()[nArgs].defaultValue().length() > 0);
 
-        SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP.put(value.getName(), value);
-        do {
-            // Add function to function map, throwing if conflicts found
-            // Add entry for each possible version of function based on arguments that are not required to be present (i.e. arg with default value)
-            BuiltInFunctionKey key = new BuiltInFunctionKey(value.getName(), nArgs);
-            if (BUILT_IN_FUNCTION_MAP.put(key, value) != null) {
-                throw new IllegalStateException("Multiple " + value.getName() + " functions with " + nArgs + " arguments");
-            }
-        } while (--nArgs >= 0 && d.args()[nArgs].defaultValue().length() > 0);
-
-        // Look for default values that aren't at the end and throw
-        while (--nArgs >= 0) {
-            if (d.args()[nArgs].defaultValue().length() > 0) {
-                throw new IllegalStateException("Function " + value.getName() + " has non trailing default value of '" + d.args()[nArgs].defaultValue() + "'. Only trailing arguments may have default values");
+            // Look for default values that aren't at the end and throw
+            while (--nArgs >= 0) {
+                if (d.args()[nArgs].defaultValue().length() > 0) {
+                    throw new IllegalStateException("Function " + value.getName() + " has non trailing default value of '" + d.args()[nArgs].defaultValue() + "'. Only trailing arguments may have default values");
+                }
             }
         }
     }
@@ -185,9 +190,9 @@ public class ParseNodeFactory {
         return info;
     }
 
-    public static Collection<BuiltInFunctionInfo> getSingleEntryFunctionMap(){
+    public static Multimap<String, BuiltInFunctionInfo> getBuiltInFunctionMultimap(){
         initBuiltInFunctionMap();
-        return SINGLE_SIGNATURE_BUILT_IN_FUNCTION_MAP.values();
+        return BUILT_IN_FUNCTION_MULTIMAP;
     }
 
     public ParseNodeFactory() {

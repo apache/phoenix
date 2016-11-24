@@ -42,14 +42,14 @@ import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.collect.Lists;
 
 public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunction {
-    private final PFunction functionInfo;
+    private final PFunction pFunction;
     @SuppressWarnings("rawtypes")
     private final PDataType returnType;
     private final List<FunctionParameter> parameters;
-    private final BuiltInFunctionInfo parseInfo;
+    private final BuiltInFunctionInfo builtInFunction;
 
     public PhoenixScalarFunction(PFunction functionInfo) {
-        this.functionInfo = functionInfo;
+        this.pFunction = functionInfo;
         this.returnType =
                 PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(functionInfo.getReturnType()));
         this.parameters = Lists.newArrayListWithExpectedSize(functionInfo.getFunctionArguments().size());
@@ -79,14 +79,14 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
                         }
                     });
         }
-        this.parseInfo = null;
+        this.builtInFunction = null;
     }
 
-    public PhoenixScalarFunction(BuiltInFunctionInfo parseInfo, List<FunctionParameter> parameters, PDataType returnType){
-        this.parseInfo = parseInfo;
+    public PhoenixScalarFunction(BuiltInFunctionInfo info, List<FunctionParameter> parameters, PDataType returnType){
+        this.builtInFunction = info;
         this.parameters = parameters;
         this.returnType = returnType;
-        this.functionInfo = null;
+        this.pFunction = null;
     }
 
     private static PDataType evaluateReturnType(Class<? extends FunctionExpression> f, List<FunctionArgument> argumentList) {
@@ -96,22 +96,20 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
             FunctionExpression func = f.newInstance();
             return func.getDataType();
         } catch (Exception e) {
-            // For alias functions, recursively call on it's target function
-            if (d.classType() == FunctionClassType.ALIAS) {
-                return evaluateReturnType(d.derivedFunctions()[0],argumentList);
+            // should never happen
+            if (d.classType() == FunctionClassType.ALIAS || d.classType() == FunctionClassType.ABSTRACT) {
+                throw new RuntimeException();
             }
-            // Last remaining solution is to grab the primary argument
-            else {
-                assert(argumentList.size() != 0);
-                return PDataType.fromSqlTypeName(argumentList.get(0).getArgumentType());
-            }
+            // Grab the primary argument
+            assert(argumentList.size() != 0);
+            return PDataType.fromSqlTypeName(argumentList.get(0).getArgumentType());
         }
     }
 
-    public static List<PhoenixScalarFunction> createBuiltinFunctions(BuiltInFunctionInfo parseInfo){
-        List<List<FunctionArgument>> overloadedArgs = PhoenixSchema.overloadArguments(parseInfo.getArgs());
+    public static List<PhoenixScalarFunction> createBuiltinFunctions(BuiltInFunctionInfo functionInfo){
+        List<List<FunctionArgument>> overloadedArgs = PhoenixSchema.overloadArguments(functionInfo.getArgs());
         List<PhoenixScalarFunction> functionList = Lists.newArrayListWithExpectedSize(overloadedArgs.size());
-        Class<? extends FunctionExpression> clazz = parseInfo.getFunc();
+        Class<? extends FunctionExpression> clazz = functionInfo.getFunc();
 
         try {
             for (List<FunctionArgument> argumentList : overloadedArgs) {
@@ -144,10 +142,10 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
                                 }
                             });
                 }
-                functionList.add(new PhoenixScalarFunction(parseInfo, parameters, returnType));
+                functionList.add(new PhoenixScalarFunction(functionInfo, parameters, returnType));
             }
         } catch (Exception e){
-            throw new RuntimeException("Builtin function " + parseInfo.getName() + " could not be registered", e);
+            throw new RuntimeException("Builtin function " + functionInfo.getName() + " could not be registered", e);
         }
         return functionList;
     }
@@ -161,12 +159,12 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
         return parameters;
     }
     
-    public PFunction getFunctionInfo() {
-        return functionInfo;
+    public PFunction getPFunction() {
+        return pFunction;
     }
 
-    public BuiltInFunctionInfo getParseInfo(){
-        return parseInfo;
+    public BuiltInFunctionInfo getBuiltInFunction(){
+        return builtInFunction;
     }
 
     private static String getArgumentName(int ordinal) {

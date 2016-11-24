@@ -61,10 +61,6 @@ public abstract class TruncFunction extends ScalarFunction {
         super(children);
     }
 
-    public static Expression TruncFunction(List<Expression> children) throws SQLException{
-        return FloorFunction.create(children);
-    }
-
     @Override
     public String getName() {
         return NAME;

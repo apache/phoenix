@@ -302,7 +302,8 @@ public class FunctionParseNode extends CompoundParseNode {
 
     public enum FunctionClassType {
         NONE,
-        PARENT,
+        ABSTRACT,
+        DERIVED,
         ALIAS,
         UDF
     }
@@ -320,6 +321,7 @@ public class FunctionParseNode extends CompoundParseNode {
         private final boolean isAggregate;
         private final int requiredArgCount;
         private final FunctionClassType classType;
+        private final Class<? extends FunctionExpression>[] derivedFunctions;
 
         public BuiltInFunctionInfo(Class<? extends FunctionExpression> f, BuiltInFunction d) {
             this.name = SchemaUtil.normalizeIdentifier(d.name());
@@ -337,6 +339,7 @@ public class FunctionParseNode extends CompoundParseNode {
             this.requiredArgCount = requiredArgCount;
             this.isAggregate = AggregateFunction.class.isAssignableFrom(f);
             this.classType = d.classType();
+            this.derivedFunctions = d.derivedFunctions();
         }
 
         public BuiltInFunctionInfo(PFunction function) {
@@ -355,6 +358,7 @@ public class FunctionParseNode extends CompoundParseNode {
             this.requiredArgCount = requiredArgCount;
             this.isAggregate = AggregateFunction.class.isAssignableFrom(UDFExpression.class);
             this.classType = FunctionClassType.UDF;
+            this.derivedFunctions = null;
         }
 
         public int getRequiredArgCount() {
@@ -387,6 +391,10 @@ public class FunctionParseNode extends CompoundParseNode {
 
         public FunctionClassType getClassType() {
             return classType;
+        }
+
+        public Class<? extends FunctionExpression>[] getDerivedFunctions() {
+            return derivedFunctions;
         }
 
         public List<List<FunctionArgument>> overloadArguments(){

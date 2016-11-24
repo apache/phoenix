@@ -59,7 +59,7 @@ import org.apache.phoenix.schema.types.PVarchar;
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class},defaultValue="null")},
-    classType = FunctionParseNode.FunctionClassType.ALIAS,
+    classType = FunctionParseNode.FunctionClassType.ABSTRACT,
     derivedFunctions = {ByteBasedRegexpReplaceFunction.class, StringBasedRegexpReplaceFunction.class})
 public abstract class RegexpReplaceFunction extends ScalarFunction {
     public static final String NAME = "REGEXP_REPLACE";
@@ -75,19 +75,6 @@ public abstract class RegexpReplaceFunction extends ScalarFunction {
     public RegexpReplaceFunction(List<Expression> children) {
         super(children);
         init();
-    }
-
-    public static Expression create(List<Expression> children, StatementContext context)
-            throws SQLException {
-        QueryServices services = context.getConnection().getQueryServices();
-        boolean useByteBasedRegex =
-                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
-                        QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
-        if (useByteBasedRegex) {
-            return new ByteBasedRegexpReplaceFunction(children);
-        } else {
-            return new StringBasedRegexpReplaceFunction(children);
-        }
     }
 
     protected abstract AbstractBasePattern compilePatternSpec(String value);

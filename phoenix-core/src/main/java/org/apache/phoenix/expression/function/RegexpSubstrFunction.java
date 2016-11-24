@@ -58,7 +58,7 @@ import org.apache.phoenix.schema.types.PVarchar;
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PLong.class}, defaultValue="1")},
-    classType = FunctionParseNode.FunctionClassType.ALIAS,
+    classType = FunctionParseNode.FunctionClassType.ABSTRACT,
     derivedFunctions = {ByteBasedRegexpSubstrFunction.class, StringBasedRegexpSubstrFunction.class})
 public abstract class RegexpSubstrFunction extends PrefixFunction {
     public static final String NAME = "REGEXP_SUBSTR";
@@ -74,19 +74,6 @@ public abstract class RegexpSubstrFunction extends PrefixFunction {
     public RegexpSubstrFunction(List<Expression> children) {
         super(children);
         init();
-    }
-
-    public static Expression create(List<Expression> children, StatementContext context)
-            throws SQLException {
-        QueryServices services = context.getConnection().getQueryServices();
-        boolean useByteBasedRegex =
-                services.getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
-                        QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
-        if (useByteBasedRegex) {
-            return new ByteBasedRegexpSubstrFunction(children);
-        } else {
-            return new StringBasedRegexpSubstrFunction(children);
-        }
     }
 
     protected abstract AbstractBasePattern compilePatternSpec(String value);

@@ -48,7 +48,7 @@ import org.apache.phoenix.schema.types.PVarchar;
                         @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
                         @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
                         },
-                 classType = FunctionParseNode.FunctionClassType.PARENT,
+                 classType = FunctionParseNode.FunctionClassType.ABSTRACT,
                  derivedFunctions = {CeilDateExpression.class, CeilTimestampExpression.class, CeilDecimalExpression.class}
                 )
 public abstract class CeilFunction extends ScalarFunction {
@@ -59,20 +59,6 @@ public abstract class CeilFunction extends ScalarFunction {
     
     public CeilFunction(List<Expression> children) {
         super(children);
-    }
-
-    public static Expression create(List<Expression> children) throws SQLException {
-        final Expression firstChild = children.get(0);
-        final PDataType firstChildDataType = firstChild.getDataType();
-        if(firstChildDataType.isCoercibleTo(PDate.INSTANCE)) {
-            return CeilDateExpression.create(children);
-        } else if (firstChildDataType == PTimestamp.INSTANCE || firstChildDataType == PUnsignedTimestamp.INSTANCE) {
-            return CeilTimestampExpression.create(children);
-        } else if(firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
-            return CeilDecimalExpression.create(children);
-        } else {
-            throw TypeMismatchException.newException(firstChildDataType, "1");
-        }
     }
     
     @Override

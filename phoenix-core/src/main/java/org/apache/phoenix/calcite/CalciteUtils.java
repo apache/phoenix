@@ -1,6 +1,5 @@
 package org.apache.phoenix.calcite;
 
-import java.lang.reflect.Method;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -113,7 +112,6 @@ import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.SequenceValueParseNode;
@@ -776,7 +774,7 @@ public class CalciteUtils {
                         Function func = udf.getFunction();
                         if (func instanceof PhoenixScalarFunction) {
                             PhoenixScalarFunction scalarFunc = (PhoenixScalarFunction) func;
-                            BuiltInFunctionInfo info = scalarFunc.getParseInfo() != null ? scalarFunc.getParseInfo() : new BuiltInFunctionInfo(scalarFunc.getFunctionInfo());
+                            BuiltInFunctionInfo info = scalarFunc.getBuiltInFunction() != null ? scalarFunc.getBuiltInFunction() : new BuiltInFunctionInfo(scalarFunc.getPFunction());
                             if (info.getArgs().length > children.size()) {
                                 List<Expression> moreChildren = new ArrayList<Expression>(children);
                                 for (int i = children.size(); i < info.getArgs().length; i++) {
@@ -789,26 +787,16 @@ public class CalciteUtils {
                             for(int i = 0; i < children.size(); i++) {
                                 FunctionParseNode.validateFunctionArguement(info, i, children.get(i));
                             }
-                            if(scalarFunc.getParseInfo() != null){
-                                BuiltInFunctionInfo parseInfo = scalarFunc.getParseInfo();
+                            if(scalarFunc.getBuiltInFunction() != null){
                                 try {
-                                    if(parseInfo.getClassType() == FunctionClassType.PARENT || parseInfo.getClassType() == FunctionClassType.ALIAS){
-                                        try {
-                                            return (Expression) parseInfo.getFunc().getDeclaredMethod("create", List.class).invoke(null, children);
-                                        } catch (Exception e){
-                                            return (Expression) parseInfo.getFunc().getDeclaredMethod("create", List.class, StatementContext.class).invoke(null, children, implementor.getStatementContext());
-                                        }
+                                    try {
+                                        return (Expression) info.getFunc().getDeclaredConstructor(List.class).newInstance(children);
+                                    } catch (Exception e) {
+                                        return (Expression) info.getFunc().getDeclaredConstructor(List.class, StatementContext.class).newInstance(children, implementor.getStatementContext());
                                     }
-                                    if(parseInfo.getClassType() == FunctionClassType.NONE){
-                                        try {
-                                            return (Expression) parseInfo.getFunc().getDeclaredConstructor(List.class).newInstance(children);
-                                        } catch (Exception e){
-                                            return (Expression) parseInfo.getFunc().getDeclaredConstructor(List.class, StatementContext.class).newInstance(children, implementor.getStatementContext());
-                                        }
-                                    }
-                                } catch (Exception e) {throw new RuntimeException ("Failed to create builtin function " + parseInfo.getName(), e);}
+                                } catch (Exception e) {throw new RuntimeException ("Failed to create builtin function " + info.getName(), e);}
                             }
-                            return new UDFExpression(children, scalarFunc.getFunctionInfo());
+                            return new UDFExpression(children, scalarFunc.getPFunction());
                         }
                     } else if (op == SqlStdOperatorTable.SQRT) {
                         return new SqrtFunction(children);

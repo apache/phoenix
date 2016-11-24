@@ -44,7 +44,7 @@ import org.apache.phoenix.schema.types.PVarchar;
                         @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
                         @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
                         },
-                 classType = FunctionParseNode.FunctionClassType.PARENT,
+                 classType = FunctionParseNode.FunctionClassType.ABSTRACT,
                  derivedFunctions = {FloorDateExpression.class, FloorDecimalExpression.class}
                 )
 public abstract class FloorFunction extends ScalarFunction {
@@ -55,21 +55,6 @@ public abstract class FloorFunction extends ScalarFunction {
     
     public FloorFunction(List<Expression> children) {
         super(children);
-    }
-
-    public static Expression create(List<Expression> children) throws SQLException {
-        final Expression firstChild = children.get(0);
-        final PDataType firstChildDataType = firstChild.getDataType();
-
-        //FLOOR on timestamp doesn't really care about the nanos part i.e. it just sets it to zero.
-        //Which is exactly what FloorDateExpression does too.
-        if(firstChildDataType.isCoercibleTo(PTimestamp.INSTANCE)) {
-            return FloorDateExpression.create(children);
-        } else if(firstChildDataType.isCoercibleTo(PDecimal.INSTANCE)) {
-            return FloorDecimalExpression.create(children);
-        } else {
-            throw TypeMismatchException.newException(firstChildDataType, "1");
-        }
     }
     
     @Override

@@ -45,10 +45,6 @@ public abstract class NowFunction extends ScalarFunction {
         super(children);
     }
 
-    public static FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        return new CurrentDateFunction(context.getCurrentTime());
-    }
-
     @Override
     public String getName() {
         return NAME;
