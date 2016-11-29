@@ -889,9 +889,14 @@ public class MetaDataClient {
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
 
         boolean isAppendOnlySchema = false;
-        Boolean appendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
-        if (appendOnlySchemaProp != null) {
-            isAppendOnlySchema = appendOnlySchemaProp;
+        if (parent==null) {
+	        Boolean appendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
+	        if (appendOnlySchemaProp != null) {
+	            isAppendOnlySchema = appendOnlySchemaProp;
+	        }
+        }
+        else {
+        	isAppendOnlySchema = parent.isAppendOnlySchema();
         }
         long updateCacheFrequency = 0;
         Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
@@ -901,12 +906,6 @@ public class MetaDataClient {
         // updateCacheFrequency cannot be set to ALWAYS if isAppendOnlySchema is true
         if (isAppendOnlySchema && updateCacheFrequency==0) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.UPDATE_CACHE_FREQUENCY_INVALID)
-            .setSchemaName(tableName.getSchemaName()).setTableName(tableName.getTableName())
-            .build().buildException();
-        }
-        // view isAppendOnlySchema property must match the parent table
-        if (parent!=null && isAppendOnlySchema!= parent.isAppendOnlySchema()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_APPEND_ONLY_SCHEMA)
             .setSchemaName(tableName.getSchemaName()).setTableName(tableName.getTableName())
             .build().buildException();
         }
@@ -1424,7 +1423,7 @@ public class MetaDataClient {
                     statement.getProps().put("", new Pair<String,Object>(DEFAULT_COLUMN_FAMILY_NAME,dataTable.getDefaultFamilyName().getString()));
                 }
                 PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
-                CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount());
+                CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount(), null);
                 table = createTableInternal(tableStatement, splits, dataTable, null, null, null, null, allocateIndexId, statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
                 break;
             } catch (ConcurrentTableMutationException e) { // Can happen if parent data table changes while above is in progress
@@ -1725,7 +1724,9 @@ public class MetaDataClient {
             // Although unusual, it's possible to set a mapped VIEW as having immutable rows.
             // This tells Phoenix that you're managing the index maintenance yourself.
             if (tableType != PTableType.INDEX && (tableType != PTableType.VIEW || viewType == ViewType.MAPPED)) {
-                Boolean isImmutableRowsProp = (Boolean) TableProperty.IMMUTABLE_ROWS.getValue(tableProps);
+            	// TODO remove TableProperty.IMMUTABLE_ROWS at the next major release
+            	Boolean isImmutableRowsProp = statement.immutableRows()!=null? statement.immutableRows() :
+            		(Boolean) TableProperty.IMMUTABLE_ROWS.getValue(tableProps);
                 if (isImmutableRowsProp == null) {
                     isImmutableRows = connection.getQueryServices().getProps().getBoolean(QueryServices.IMMUTABLE_ROWS_ATTRIB, QueryServicesOptions.DEFAULT_IMMUTABLE_ROWS);
                 } else {

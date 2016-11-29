@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -32,6 +33,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Properties;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -45,6 +47,8 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -717,6 +721,43 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTrue(phoenixConn.getTable(new PTableKey(null, baseTableName)).isTransactional());
             assertTrue(viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).isTransactional());
         } 
+    }
+    
+    @Test
+    public void testAlterTablePropertyOnView() throws Exception {
+    	try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
+            String baseTableName = "NONTXNTBL_" + generateUniqueName() + (isMultiTenant ? "0":"1");
+            String viewOfTable = baseTableName + "_VIEW";
+            
+	        String ddl = "CREATE TABLE " + baseTableName + " (\n"
+	                +"ID VARCHAR(15) NOT NULL,\n"
+	                +"CREATED_DATE DATE,\n"
+	                +"CONSTRAINT PK PRIMARY KEY (ID))";
+	        conn.createStatement().execute(ddl);
+	        ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
+	        viewConn.createStatement().execute(ddl);
+	        
+	        try {
+	        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET IMMUTABLE_ROWS = true");
+	            fail();
+	        } catch (SQLException e) {
+	            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+	        }
+	        
+        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET UPDATE_CACHE_FREQUENCY = 100");
+        	viewConn.createStatement().execute("SELECT * FROM "+ viewOfTable);
+        	PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+        	assertEquals(100, viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable)).getUpdateCacheFrequency());
+	        
+	        try {
+	        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET APPEND_ONLY_SCHEMA = true");
+	            fail();
+	        } catch (SQLException e) {
+	            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+	        }
+    	}
+    	
     }
     
 }

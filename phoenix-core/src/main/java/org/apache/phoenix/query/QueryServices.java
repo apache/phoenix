@@ -92,6 +92,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String ROW_KEY_ORDER_SALTED_TABLE_ATTRIB  = "phoenix.query.rowKeyOrderSaltedTable";
     
     public static final String USE_INDEXES_ATTRIB  = "phoenix.query.useIndexes";
+    @Deprecated // use the IMMUTABLE keyword while creating the table
     public static final String IMMUTABLE_ROWS_ATTRIB  = "phoenix.mutate.immutableRows";
     public static final String INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB  = "phoenix.index.mutableBatchSizeThreshold";
     public static final String DROP_METADATA_ATTRIB  = "phoenix.schema.dropMetaData";
