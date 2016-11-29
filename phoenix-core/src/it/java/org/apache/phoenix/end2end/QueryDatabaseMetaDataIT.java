@@ -842,7 +842,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         createStmt = "create view " + MDTEST_NAME + 
         "   (id char(1) not null primary key,\n" + 
         "    b.col1 integer,\n" +
-        "    \"c\".col2 bigint) \n";
+        "    \"c\".col2 bigint) IMMUTABLE_ROWS=true \n";
         // should be ok now
         conn1.createStatement().execute(createStmt);
         conn1.close();
@@ -875,7 +875,6 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         } catch (ReadOnlyTableException e) {
             // expected to fail b/c table is read-only
         }
-        conn2.createStatement().execute("ALTER VIEW " + MDTEST_NAME + " SET IMMUTABLE_ROWS=TRUE");
 
         HTableInterface htable = conn2.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
         Put put = new Put(Bytes.toBytes("0"));

@@ -89,7 +89,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                             + viewName + " ( hostName varchar NOT NULL, tagName varChar"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
                             + " AS SELECT * FROM " + metricTableName
-                            + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
+                            + " UPDATE_CACHE_FREQUENCY=300000";
             conn1.createStatement().execute(ddl);
             conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host1', 1.0)");
             conn1.commit();
@@ -201,7 +201,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                             + viewName + "( hostName varchar NOT NULL,"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
                             + " AS SELECT * FROM " + metricTableName
-                            + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
+                            + " UPDATE_CACHE_FREQUENCY=300000";
             conn1.createStatement().execute(ddl);
             
             conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal1) VALUES('host1', 1.0)");
@@ -215,7 +215,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                             + viewName + "( instanceName varchar, hostName varchar, metricVal2 double, metricVal1 double"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (instancename, hostName))"
                             + " AS SELECT * FROM " + metricTableName
-                            + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=300000";
+                            + " UPDATE_CACHE_FREQUENCY=300000";
             conn2.createStatement().execute(ddl);
 
             conn2.createStatement().execute(
@@ -308,16 +308,11 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                         + " col1 integer NOT NULL"
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1))"
                         + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1000");
-            try {
-                conn.createStatement().execute(
-                    "create view IF NOT EXISTS " + viewName + " (val1 integer NOT NULL) AS SELECT * FROM " + tableName
-                            + " UPDATE_CACHE_FREQUENCY=1000");
-                fail("APPEND_ONLY_SCHEMA must be true for a view if it is true for the base table ");
-            }
-            catch (SQLException e) {
-                assertEquals(SQLExceptionCode.VIEW_APPEND_ONLY_SCHEMA.getErrorCode(),
-                    e.getErrorCode());
-            }
+            conn.createStatement().execute(
+                "create view IF NOT EXISTS " + viewName + " (val1 integer) AS SELECT * FROM " + tableName
+                        + " UPDATE_CACHE_FREQUENCY=1000");
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(true, pconn.getTable(new PTableKey(pconn.getTenantId(), viewName)).isAppendOnlySchema());
         }
     }
     
