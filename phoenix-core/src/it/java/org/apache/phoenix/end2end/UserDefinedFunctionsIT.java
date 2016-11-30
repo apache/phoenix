@@ -1050,25 +1050,6 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
         assertEquals(72057594037927936l, rs.getLong(2));
     }
 
-    @Test
-    public void testBuiltinFunctionasUDF() throws Exception {
-        Connection conn = driver.connect(calciteUrl, UDF_PROPS);
-        Statement stmt = conn.createStatement();
-        conn.createStatement().execute("create table t12(k date not null primary key, k1 integer)");
-        String query = "UPSERT INTO t12"
-                + "(k, k1) "
-                + "VALUES(?,?)";
-        PreparedStatement pStmt = conn.prepareStatement(query);
-        pStmt.setDate(1, java.sql.Date.valueOf("2016-06-06"));
-        pStmt.setInt(2, 1);
-        pStmt.execute();
-        conn.commit();
-        stmt.execute("create function TO_DATE(VARCHAR) returns DATE as 'org.apache.phoenix.expression.function.ToDateFunction'");
-        ResultSet rs = stmt.executeQuery("select k from t12");
-        assertTrue(rs.next());
-        assertEquals(java.sql.Date.valueOf("2016-06-06"), rs.getDate(1));
-    }
-
     /**
      * Compiles the test class with bogus code into a .class file.
      */

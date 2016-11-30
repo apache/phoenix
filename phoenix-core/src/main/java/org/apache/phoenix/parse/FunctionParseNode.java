@@ -30,7 +30,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import com.google.common.collect.Lists;
 import org.apache.http.annotation.Immutable;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.StatementContext;
@@ -395,32 +394,6 @@ public class FunctionParseNode extends CompoundParseNode {
 
         public Class<? extends FunctionExpression>[] getDerivedFunctions() {
             return derivedFunctions;
-        }
-
-        public List<List<FunctionArgument>> overloadArguments(){
-            List<List<FunctionArgument>> overloadedArgs = Lists.newArrayList();
-            int solutions = 1;
-            for(int i = 0; i < args.length; solutions *= args[i].getAllowedTypes().length, i++);
-            for(int i = 0; i < solutions; i++) {
-                int j = 1;
-                short k = 0;
-                overloadedArgs.add(new ArrayList<FunctionArgument>());
-                for(BuiltInFunctionArgInfo arg : args) {
-                    Class<? extends PDataType>[] temp = arg.getAllowedTypes();
-                    String inputArg = PDataTypeFactory.getInstance().instanceFromClass(temp[(i/j)%temp.length]).toString();
-                    overloadedArgs.get(i).add( new FunctionArgument(
-                            inputArg,
-                            false,
-                            arg.isConstant(),
-                            arg.getDefaultValue(),
-                            arg.getMinValue(),
-                            arg.getMaxValue(),
-                            k));
-                    k++;
-                    j *= temp.length;
-                }
-            }
-            return overloadedArgs;
         }
     }
 

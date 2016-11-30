@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
@@ -25,9 +24,6 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.RoundParseNode;
-import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
