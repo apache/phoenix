@@ -37,6 +37,7 @@ import org.apache.calcite.rel.logical.LogicalTableModify;
 import org.apache.calcite.rel.logical.LogicalUnion;
 import org.apache.calcite.rel.logical.LogicalValues;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixTable;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
@@ -903,6 +904,9 @@ public class PhoenixConverterRules {
             return false;
         
         for (AggregateCall aggCall : input.getAggCallList()) {
+            if(!SqlKind.COUNT.equals(aggCall.getAggregation().getKind()) && aggCall.isDistinct()) {
+                return false;
+            }
             if (!CalciteUtils.isAggregateFunctionSupported(aggCall.getAggregation())) {
                 return false;
             }
