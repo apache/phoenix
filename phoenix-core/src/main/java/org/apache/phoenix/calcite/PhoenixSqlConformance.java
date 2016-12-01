@@ -55,4 +55,9 @@ public class PhoenixSqlConformance implements SqlConformance {
     public boolean isMinusAllowed() {
         return false;
     }
+
+    @Override
+    public boolean isApplyAllowed() {
+        return false;
+    }
 }
