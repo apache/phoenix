@@ -49,15 +49,18 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.calcite.parse.SqlAlterTable;
 import org.apache.phoenix.calcite.parse.SqlCreateFunction;
 import org.apache.phoenix.calcite.parse.SqlCreateIndex;
+import org.apache.phoenix.calcite.parse.SqlCreateSchema;
 import org.apache.phoenix.calcite.parse.SqlCreateSequence;
 import org.apache.phoenix.calcite.parse.SqlCreateTable;
 import org.apache.phoenix.calcite.parse.SqlDeleteJarNode;
 import org.apache.phoenix.calcite.parse.SqlDropFunction;
 import org.apache.phoenix.calcite.parse.SqlDropIndex;
+import org.apache.phoenix.calcite.parse.SqlDropSchema;
 import org.apache.phoenix.calcite.parse.SqlDropSequence;
 import org.apache.phoenix.calcite.parse.SqlDropTable;
 import org.apache.phoenix.calcite.parse.SqlUpdateStatistics;
 import org.apache.phoenix.calcite.parse.SqlUploadJarsNode;
+import org.apache.phoenix.calcite.parse.SqlUseSchema;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
 import org.apache.phoenix.calcite.rel.PhoenixServerProject;
@@ -87,11 +90,13 @@ import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
+import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
+import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.IndexKeyConstraint;
@@ -107,12 +112,14 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
+import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Function;
 import com.google.common.collect.ArrayListMultimap;
@@ -602,6 +609,29 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                             new PhoenixStatement.ExecutableDeleteJarStatement(jarPath).compilePlan(phoenixStatement,
                                 Sequence.ValueOp.VALIDATE_SEQUENCE);
                     ((BaseMutationPlan) compilePlan).execute();
+                } else if( node instanceof SqlCreateSchema) {
+                    SqlCreateSchema createSchemaNode = (SqlCreateSchema) node;
+                    CreateSchemaStatement createSchema =
+                            nodeFactory.createSchema(createSchemaNode.schemaName.getSimple(),
+                                createSchemaNode.ifNotExists.booleanValue());
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.createSchema(createSchema);
+                } else if( node instanceof SqlDropSchema) {
+                    SqlDropSchema dropSchemaNode = (SqlDropSchema) node;
+                    DropSchemaStatement dropSchema =
+                            nodeFactory.dropSchema(dropSchemaNode.schemaName.getSimple(),
+                                dropSchemaNode.ifExists.booleanValue(),
+                                dropSchemaNode.cascade.booleanValue());
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.dropSchema(dropSchema);
+                } else if( node instanceof SqlUseSchema) {
+                    SqlUseSchema useSchemaNode = (SqlUseSchema) node;
+                    UseSchemaStatement useSchema =
+                            nodeFactory.useSchema(useSchemaNode.schemaName.getSimple().equals(
+                                SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE) ? null
+                                    : useSchemaNode.schemaName.getSimple());
+                    MetaDataClient client = new MetaDataClient(connection);
+                    client.useSchema(useSchema);
                 } else {
                     throw new AssertionError("unknown DDL node " + node.getClass());                    
                 }
@@ -667,7 +697,6 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             } catch (ClassCastException e) {
             }
         }
-
         throw new RuntimeException("Phoenix schema not found.");
     }
 }

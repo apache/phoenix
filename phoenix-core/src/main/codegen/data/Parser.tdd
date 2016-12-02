@@ -53,6 +53,7 @@
     "DEFAULTVALUE"
     "JARS"
     "UPLOAD"
+    "USE"
   ]
 
   # List of keywords from "keywords" section that are not reserved.
@@ -76,6 +77,9 @@
     "SqlUploadJarsNode()"
     "SqlDeleteJarNode()"
     "SqlAlterTable()"
+    "SqlCreateSchema()"
+    "SqlDropSchema()"
+    "SqlUseSchema()"
   ]
 
   # List of methods for parsing custom literals.

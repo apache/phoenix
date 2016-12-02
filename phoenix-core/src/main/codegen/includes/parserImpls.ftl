@@ -457,6 +457,84 @@ SqlNode SqlDropSequence() :
 
 /**
  * Parses statement
+ *   CREATE SCHEMA
+ */
+SqlNode SqlCreateSchema() :
+{
+    SqlParserPos pos;
+    SqlIdentifier schemaName;
+    boolean ifNotExists;
+}
+{
+    <CREATE> { pos = getPos(); } <SCHEMA>
+    (
+        <IF> <NOT> <EXISTS> { ifNotExists = true; }
+        |
+        {
+            ifNotExists = false;
+        }
+    )
+    schemaName = SimpleIdentifier()
+    {
+        return new SqlCreateSchema(pos.plus(getPos()), schemaName,
+            SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO));
+    }
+}
+
+/**
+ * Parses statement
+ *   DROP SCHEMA
+ */
+SqlNode SqlDropSchema() :
+{
+    SqlParserPos pos;
+    SqlIdentifier schemaName;
+    boolean ifExists;
+    boolean cascade;
+}
+{
+    <DROP> { pos = getPos(); } <SCHEMA>
+    (
+        <IF> <EXISTS> { ifExists = true; }
+        |
+        {
+            ifExists = false;
+        }
+    )
+    schemaName = SimpleIdentifier()
+    (
+        <CASCADE> { cascade = true; }
+        |
+        {
+            cascade = false;
+        }
+    )
+    {
+        return new SqlDropSchema(pos.plus(getPos()), schemaName,
+            SqlLiteral.createBoolean(ifExists, SqlParserPos.ZERO), 
+            SqlLiteral.createBoolean(cascade, SqlParserPos.ZERO));
+    }
+}
+
+/**
+ * Parses statement
+ *   USE SCHEMA
+ */
+SqlNode SqlUseSchema() :
+{
+    SqlParserPos pos;
+    SqlIdentifier schemaName;
+}
+{
+    <USE> { pos = getPos(); }
+    schemaName = SimpleIdentifier()
+    {
+        return new SqlUseSchema(pos.plus(getPos()), schemaName);
+    }
+}
+
+/**
+ * Parses statement
  *   UPDATE STATISTICS
  */
 SqlNode SqlUpdateStatistics() :

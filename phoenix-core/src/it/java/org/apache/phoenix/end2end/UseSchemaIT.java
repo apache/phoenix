@@ -75,7 +75,7 @@ public class UseSchemaIT extends ParallelStatsDisabledIT {
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode(), e.getErrorCode());
         }
-        conn.createStatement().execute("use default");
+        conn.createStatement().execute("use " + "\"DEFAULT\"");
         ddl = "create table IF NOT EXISTS " + testTable + "(schema_name varchar primary key)";
         conn.createStatement().execute(ddl);
         conn.createStatement().executeUpdate("upsert into " + testTable + " values('"+SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE+"')");
