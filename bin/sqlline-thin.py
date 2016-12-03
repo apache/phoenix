@@ -25,6 +25,7 @@ import sys
 import phoenix_utils
 import atexit
 import urlparse
+import argparse
 
 global childProc
 childProc = None
@@ -36,10 +37,25 @@ def kill_child():
             os.system("reset")
 atexit.register(kill_child)
 
+parser = argparse.ArgumentParser(description='Launches the Apache Phoenix Thin Client.')
+# Positional argument "url" is optional
+parser.add_argument('url', nargs='?', help='The URL to the Phoenix Query Server.', default='http://localhost:8765')
+# Positional argument "sqlfile" is optional
+parser.add_argument('sqlfile', nargs='?', help='A file of SQL commands to execute.', default='')
+parser.add_argument('-u', '--user', help='Username for database authentication (unsupported).', default='none')
+parser.add_argument('-p', '--password', help='Password for database authentication (unsupported).', default='none')
+parser.add_argument('-a', '--authentication', help='Mechanism for HTTP authentication.', choices=('SPNEGO', 'BASIC', 'DIGEST', 'NONE'), default='')
+parser.add_argument('-s', '--serialization', help='Serialization type for HTTP API.', choices=('PROTOBUF', 'JSON'), default=None)
+parser.add_argument('-au', '--auth-user', help='Username for HTTP authentication.')
+parser.add_argument('-ap', '--auth-password', help='Password for HTTP authentication.')
+parser.add_argument('-v', '--verbose', help='Verbosity on sqlline.', default='true')
+parser.add_argument('-c', '--color', help='Color setting for sqlline.', default='true')
+args=parser.parse_args()
+
 phoenix_utils.setPath()
 
-url = "localhost:8765"
-sqlfile = ""
+url = args.url
+sqlfile = args.sqlfile
 serialization_key = 'phoenix.queryserver.serialization'
 
 def usage_and_exit():
@@ -86,25 +102,12 @@ def get_serialization():
         return default_serialization
     return stdout
 
-if len(sys.argv) == 1:
-    pass
-elif len(sys.argv) == 2:
-    if os.path.isfile(sys.argv[1]):
-        sqlfile = sys.argv[1]
-    else:
-        url = sys.argv[1]
-elif len(sys.argv) == 3:
-    url = sys.argv[1]
-    sqlfile = sys.argv[2]
-else:
-    usage_and_exit()
-
 url = cleanup_url(url)
 
 if sqlfile != "":
     sqlfile = "--run=" + sqlfile
 
-colorSetting = "true"
+colorSetting = args.color
 # disable color setting for windows OS
 if os.name == 'nt':
     colorSetting = "false"
@@ -113,7 +116,7 @@ if os.name == 'nt':
 # HBase/Phoenix client side property override
 hbase_config_path = os.getenv('HBASE_CONF_DIR', phoenix_utils.current_dir)
 
-serialization = get_serialization()
+serialization = args.serialization if args.serialization else get_serialization()
 
 java_home = os.getenv('JAVA_HOME')
 
@@ -145,13 +148,21 @@ if java_home:
 else:
     java = 'java'
 
+jdbc_url = 'jdbc:phoenix:thin:url=' + url + ';serialization=' + serialization
+if args.authentication:
+    jdbc_url += ';authentication=' + args.authentication
+if args.auth_user:
+    jdbc_url += ';avatica_user=' + args.auth_user
+if args.auth_password:
+    jdbc_url += ';avatica_password=' + args.auth_password
+
 java_cmd = java + ' $PHOENIX_OPTS ' + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_utils.phoenix_thin_client_jar + \
     os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.queryserver.client.SqllineWrapper -d org.apache.phoenix.queryserver.client.Driver " + \
-    " -u \"jdbc:phoenix:thin:url=" + url + ";serialization=" + serialization + "\"" + \
-    " -n none -p none --color=" + colorSetting + " --fastConnect=false --verbose=true " + \
+    ' -u "' + jdbc_url + '"' + " -n " + args.user + " -p " + args.password + \
+    " --color=" + colorSetting + " --fastConnect=false --verbose=" + args.verbose + \
     " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
 exitcode = subprocess.call(java_cmd, shell=True)
