@@ -15,8 +15,6 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.phoenix.calcite.CalciteUtils;
-import org.apache.phoenix.calcite.PhoenixSequence;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.SequenceManager;
@@ -25,7 +23,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.Sequence;
 
 import com.google.common.base.Supplier;
@@ -73,13 +70,10 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
         QueryPlan plan = implementor.visitInput(0, (PhoenixQueryRel) getInput());
         implementor.popContext();
         
-        
-        PhoenixSequence sequence = CalciteUtils.findSequence(this);
-        final SequenceManager seqManager = sequence == null ?
-                null : new SequenceManager(new PhoenixStatement(sequence.pc));
-        implementor.setSequenceManager(seqManager);
-        TupleProjector tupleProjector = project(implementor);
-        if (seqManager != null) {
+
+        TupleProjector tupleProjector = super.project(implementor);
+        SequenceManager seqManager = implementor.getStatementContext().getSequenceManager();
+        if (seqManager.getSequenceCount() != 0) {
             try {
                 seqManager.validateSequences(Sequence.ValueOp.VALIDATE_SEQUENCE);
                 StatementContext context = new StatementContext(

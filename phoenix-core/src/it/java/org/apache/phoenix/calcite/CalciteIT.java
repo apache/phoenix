@@ -1343,6 +1343,28 @@ public class CalciteIT extends BaseCalciteIT {
                         {7L, "0000000005", "T5", "0000000005", "S5"},
                         {8L, "0000000006", "T6", "0000000006", "S6"}})
                 .close();
+
+        start(false, 1000f).sql("select NEXT VALUE FOR my.seq1 + 1, entity_id from aTable where a_string = 'a'")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(EXPR$0=[+(NEXT_VALUE('\"MY\".\"SEQ1\"'), 1)], ENTITY_ID=[$1])\n" +
+                        "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                .resultIs(1, new Object[][]{
+                        {11L, "00A123122312312"},
+                        {13L, "00A223122312312"},
+                        {15L, "00A323122312312"},
+                        {17L, "00A423122312312"}})
+                .close();
+
+        start(false, 1000f).sql("select (NEXT VALUE FOR my.seq1 * 2) + 1, entity_id from aTable where a_string = 'a'")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                        "  PhoenixClientProject(EXPR$0=[+(*(NEXT_VALUE('\"MY\".\"SEQ1\"'), 2), 1)], ENTITY_ID=[$1])\n" +
+                        "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                .resultIs(1, new Object[][]{
+                        {37L, "00A123122312312"},
+                        {41L, "00A223122312312"},
+                        {45L, "00A323122312312"},
+                        {49L, "00A423122312312"}})
+                .close();
     }
 
     @Ignore // CALCITE-1045

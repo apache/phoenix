@@ -8,7 +8,6 @@ import java.util.Stack;
 import org.apache.phoenix.calcite.PhoenixSequence;
 import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
@@ -35,7 +34,6 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
     private final StatementContext statementContext;
     private final RuntimeContext runtimeContext;
 	private Stack<ImplementorContext> contextStack;
-	private SequenceManager sequenceManager;
 	private TableMapping tableMapping;
 	
 	public PhoenixRelImplementorImpl(
@@ -73,7 +71,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
         PName tenantName = seq.pc.getTenantId();
         TableName tableName = TableName.create(seq.schemaName, seq.sequenceName);
         try {
-            return sequenceManager.newSequenceReference(tenantName, tableName, null, op);
+            return statementContext.getSequenceManager().newSequenceReference(tenantName, tableName, null, op);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -97,11 +95,6 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
     @Override
     public TableMapping getTableMapping() {
         return this.tableMapping;
-    }
-    
-    @Override
-    public void setSequenceManager(SequenceManager sequenceManager) {
-        this.sequenceManager = sequenceManager;
     }
 
     @Override
