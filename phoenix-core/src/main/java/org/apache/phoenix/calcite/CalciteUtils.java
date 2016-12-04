@@ -790,9 +790,9 @@ public class CalciteUtils {
                             if(scalarFunc.getBuiltInFunction() != null){
                                 try {
                                     try {
-                                        return (Expression) info.getFunc().getDeclaredConstructor(List.class).newInstance(children);
+                                        return info.getFunc().getDeclaredConstructor(List.class).newInstance(children);
                                     } catch (Exception e) {
-                                        return (Expression) info.getFunc().getDeclaredConstructor(List.class, StatementContext.class).newInstance(children, implementor.getStatementContext());
+                                        return info.getFunc().getDeclaredConstructor(List.class, StatementContext.class).newInstance(children, implementor.getStatementContext());
                                     }
                                 } catch (Exception e) {throw new RuntimeException ("Failed to create builtin function " + info.getName(), e);}
                             }

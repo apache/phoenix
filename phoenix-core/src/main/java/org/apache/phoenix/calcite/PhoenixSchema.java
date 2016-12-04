@@ -10,6 +10,8 @@ import com.google.common.collect.ArrayListMultimap;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.materialize.MaterializationService;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.*;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.TableFunctionImpl;
@@ -31,6 +33,7 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionArgInfo;
 import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -130,6 +133,17 @@ public class PhoenixSchema implements Schema {
         }
     }
 
+
+    /**
+     * Registering Phoenix Builtin Functions in Calcite
+     *
+     * Registration of functions is coordinated from registerBuiltinFunctions() which builds the builtinFunctions map.
+     * The helper functions use mechanisms to convert Phoenix function information for use by Calcite.
+     *
+     * The builtinFunctions map is ultimately used by Calcite during validation and planning
+     * PhoenixSchema.getFunctions() - Matches function signatures during validation
+     * CalciteUtils.EXPRESSION_MAP - Maps a RexNode onto a builtin function
+     */
     private static void registerBuiltinFunctions(){
         if(!builtinFunctions.isEmpty()) {
             return;
@@ -143,7 +157,7 @@ public class PhoenixSchema implements Schema {
                     aliasFunctions.add(info);
                     continue;
                 }
-                builtinFunctions.putAll(info.getName(), PhoenixScalarFunction.createBuiltinFunctions(info));
+                builtinFunctions.putAll(info.getName(), convertBuiltinFunction(info));
             }
         }
         // Single depth alias functions only
@@ -156,7 +170,7 @@ public class PhoenixSchema implements Schema {
                 // Target function not implemented
                 if(targetFunction.isEmpty()) {
                     for(BuiltInFunctionInfo derivedInfo : infoMap.get(d.name())) {
-                        targetFunction.addAll(PhoenixScalarFunction.createBuiltinFunctions(derivedInfo));
+                        targetFunction.addAll(convertBuiltinFunction(derivedInfo));
                     }
                 }
                 builtinFunctions.putAll(info.getName(), targetFunction);
@@ -164,6 +178,70 @@ public class PhoenixSchema implements Schema {
         }
     }
 
+    // Converts phoenix function information to a list of Calcite function signatures
+    private static List<PhoenixScalarFunction> convertBuiltinFunction(BuiltInFunctionInfo functionInfo){
+        List<List<FunctionArgument>> overloadedArgs = PhoenixSchema.overloadArguments(functionInfo.getArgs());
+        List<PhoenixScalarFunction> functionList = Lists.newArrayListWithExpectedSize(overloadedArgs.size());
+        Class<? extends FunctionExpression> clazz = functionInfo.getFunc();
+
+        try {
+            for (List<FunctionArgument> argumentList : overloadedArgs) {
+                List<FunctionParameter> parameters = Lists.newArrayListWithExpectedSize(argumentList.size());
+                PDataType returnType = evaluateReturnType(clazz, argumentList);
+
+                for (final FunctionArgument arg : argumentList) {
+                    parameters.add(
+                            new FunctionParameter() {
+                                public int getOrdinal() {
+                                    return arg.getArgPosition();
+                                }
+
+                                public String getName() {
+                                    return "arg" + arg.getArgPosition();
+                                }
+
+                                @SuppressWarnings("rawtypes")
+                                public RelDataType getType(RelDataTypeFactory typeFactory) {
+                                    PDataType dataType =
+                                            arg.isArrayType() ? PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil
+                                                    .normalizeIdentifier(SchemaUtil.normalizeIdentifier(arg
+                                                            .getArgumentType())))) : PDataType.fromSqlTypeName(SchemaUtil
+                                                    .normalizeIdentifier(arg.getArgumentType()));
+                                    return typeFactory.createJavaType(dataType.getJavaClass());
+                                }
+
+                                public boolean isOptional() {
+                                    return arg.getDefaultValue() != null;
+                                }
+                            });
+                }
+                functionList.add(new PhoenixScalarFunction(functionInfo, parameters, returnType));
+            }
+        } catch (Exception e){
+            throw new RuntimeException("Builtin function " + functionInfo.getName() + " could not be registered", e);
+        }
+        return functionList;
+    }
+
+    // Dynamically evaluates the return type of a built in function given a list of input arguments
+    private static PDataType evaluateReturnType(Class<? extends FunctionExpression> f, List<FunctionArgument> argumentList) {
+        BuiltInFunction d = f.getAnnotation(BuiltInFunction.class);
+        try {
+            // Direct evaluation of the return type
+            FunctionExpression func = f.newInstance();
+            return func.getDataType();
+        } catch (Exception e) {
+            if (d.classType() == FunctionClassType.ALIAS || d.classType() == FunctionClassType.ABSTRACT) {
+                // should never happen
+                throw new RuntimeException();
+            }
+            // Grab the primary argument
+            assert(argumentList.size() != 0);
+            return PDataType.fromSqlTypeName(argumentList.get(0).getArgumentType());
+        }
+    }
+
+    // Using Phoenix argument information, determine all possible function signatures
     public static List<List<PFunction.FunctionArgument>> overloadArguments(BuiltInFunctionArgInfo[] args){
         List<List<PFunction.FunctionArgument>> overloadedArgs = Lists.newArrayList();
         int solutions = 1;
