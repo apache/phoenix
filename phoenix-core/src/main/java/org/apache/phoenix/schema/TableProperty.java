@@ -156,4 +156,16 @@ public enum TableProperty {
 		}
 	}
 
+    public String getPropertyName() {
+        return propertyName;
+    }
+
+    public boolean isValidOnView() {
+        return isValidOnView;
+    }
+
+    public boolean isMutable() {
+        return isMutable;
+    }
+
 }
