@@ -42,6 +42,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.junit.Test;
@@ -93,6 +94,45 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4");
             assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 7, 5, "ID", "COL1", "COL2", "COL3", "COL4", "VIEW_COL1", "VIEW_COL2");
+        } 
+    }
+    
+    @Test
+    public void testAlterPropertiesOfParentTable() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
+            String tableName = generateUniqueName();
+            String viewOfTable = tableName + "_VIEW";
+            String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
+                            + " %s ID char(1) NOT NULL,"
+                            + " COL1 integer NOT NULL,"
+                            + " COL2 bigint NOT NULL,"
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
+                            + " ) %s";
+            conn.createStatement().execute(generateDDL(ddlFormat));
+            viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
+            
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            PTable table = phoenixConn.getTable(new PTableKey(null, tableName));
+            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            assertFalse(table.isImmutableRows());
+            assertEquals(0, table.getUpdateCacheFrequency());
+            PTable viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            assertFalse(viewTable.isImmutableRows());
+            assertEquals(0, viewTable.getUpdateCacheFrequency());
+            
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET IMMUTABLE_ROWS=true, UPDATE_CACHE_FREQUENCY=123");
+            // query the view to force the table cache to be updated
+            viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
+            
+            phoenixConn = conn.unwrap(PhoenixConnection.class);
+            table = phoenixConn.getTable(new PTableKey(null, tableName));
+            assertTrue(table.isImmutableRows());
+            assertEquals(123, table.getUpdateCacheFrequency());
+            
+            viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            assertTrue(viewTable.isImmutableRows());
+            assertEquals(123, viewTable.getUpdateCacheFrequency());
         } 
     }
     
