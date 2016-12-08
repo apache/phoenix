@@ -78,7 +78,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 import java.io.IOException;
-import java.sql.DriverManager;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -200,6 +199,7 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PBinary;
@@ -2150,19 +2150,38 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return false;
     }
     
-    private MetaDataMutationResult addColumnsToChildViews(PTable basePhysicalTable, List<Mutation> tableMetadata, List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,
+    private MetaDataMutationResult addColumnsAndTablePropertiesToChildViews(PTable basePhysicalTable, List<Mutation> tableMetadata, List<Mutation> mutationsForAddingColumnsToViews, byte[] schemaName, byte[] tableName,
             List<ImmutableBytesPtr> invalidateList, long clientTimeStamp, TableViewFinderResult childViewsResult,
             Region region, List<RowLock> locks) throws IOException, SQLException {
-        List<PutWithOrdinalPosition> columnPutsForBaseTable = new ArrayList<>(tableMetadata.size());
+        List<PutWithOrdinalPosition> columnPutsForBaseTable = Lists.newArrayListWithExpectedSize(tableMetadata.size());
+        List<Cell> tablePropertyCells = Lists.newArrayListWithExpectedSize(tableMetadata.size());
         // Isolate the puts relevant to adding columns. Also figure out what kind of columns are being added.
         for (Mutation m : tableMetadata) {
             if (m instanceof Put) {
                 byte[][] rkmd = new byte[5][];
                 int pkCount = getVarChars(m.getRow(), rkmd);
+                // check if this put is for adding a column
                 if (pkCount > COLUMN_NAME_INDEX
                         && Bytes.compareTo(schemaName, rkmd[SCHEMA_NAME_INDEX]) == 0
                         && Bytes.compareTo(tableName, rkmd[TABLE_NAME_INDEX]) == 0) {
                     columnPutsForBaseTable.add(new PutWithOrdinalPosition((Put)m, getInteger((Put)m, TABLE_FAMILY_BYTES, ORDINAL_POSITION_BYTES)));
+                }
+                // check if the put is for a table property
+                else if (pkCount <= COLUMN_NAME_INDEX
+                        && Bytes.compareTo(schemaName, rkmd[SCHEMA_NAME_INDEX]) == 0
+                        && Bytes.compareTo(tableName, rkmd[TABLE_NAME_INDEX]) == 0) {
+                    for (Cell cell : m.getFamilyCellMap().get(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES)) {
+                        for (TableProperty tableProp : TableProperty.values()) {
+                            byte[] propNameBytes = Bytes.toBytes(tableProp.getPropertyName());
+                            if (Bytes.compareTo(propNameBytes, 0, propNameBytes.length, cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength())==0
+                                    && tableProp.isValidOnView() && tableProp.isMutable()) {
+                                Cell tablePropCell = CellUtil.createCell(cell.getRow(), CellUtil.cloneFamily(cell),
+                                    CellUtil.cloneQualifier(cell), cell.getTimestamp(), cell.getTypeByte(),
+                                    CellUtil.cloneValue(cell));
+                                tablePropertyCells.add(tablePropCell);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2186,6 +2205,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<PColumn> viewPkCols = new ArrayList<>(view.getPKColumns());
             boolean addingExistingPkCol = false;
             int numCols = view.getColumns().size();
+            // add the new columns to the child view
             for (PutWithOrdinalPosition p : columnPutsForBaseTable) {
                 Put baseTableColumnPut = p.put;
                 PColumn existingViewColumn = null;
@@ -2331,6 +2351,24 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             addViewIndexesHeaderRowMutations(mutationsForAddingColumnsToViews, invalidateList, clientTimeStamp, view,
                     deltaNumPkColsSoFar);
+            
+            // set table properties in child view
+            if (!tablePropertyCells.isEmpty()) {
+                Put viewHeaderRowPut = new Put(viewKey, clientTimeStamp);
+                for (Cell tablePropertyCell : tablePropertyCells) {
+                    viewHeaderRowPut.add(CellUtil.createCell(viewKey, CellUtil.cloneFamily(tablePropertyCell),
+                            CellUtil.cloneQualifier(tablePropertyCell), clientTimeStamp, tablePropertyCell.getTypeByte(),
+                            CellUtil.cloneValue(tablePropertyCell)));
+                }
+                byte[] viewSequencePtr = new byte[PLong.INSTANCE.getByteSize()];
+                PLong.INSTANCE.getCodec().encodeLong(view.getSequenceNumber() + 1, viewSequencePtr, 0);
+                viewHeaderRowPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+                        PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES, clientTimeStamp, viewSequencePtr);
+                // invalidate the view so that it is removed from the cache
+                invalidateList.add(new ImmutableBytesPtr(viewKey));
+
+                mutationsForAddingColumnsToViews.add(viewHeaderRowPut);
+            }
             
             /*
              * Increment the sequence number by 1 if:
@@ -2789,7 +2827,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                         EnvironmentEdgeManager.currentTimeMillis(), null);
                             } else {
                                 mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getResults().size() * tableMetaData.size());
-                                MetaDataMutationResult mutationResult = addColumnsToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
+                                MetaDataMutationResult mutationResult = addColumnsAndTablePropertiesToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
                                         childViewsResult, region, locks);
                                 // return if we were not able to add the column successfully
                                 if (mutationResult!=null)
