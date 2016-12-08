@@ -45,7 +45,6 @@ SqlNode SqlPhoenixExplain() :
     SqlExplainLevel detailLevel = SqlExplainLevel.EXPPLAN_ATTRIBUTES;
     SqlExplain.Depth depth = SqlExplain.Depth.PHYSICAL;
     SqlParserPos pos;
-    boolean asXml = false;
 }
 {
     <EXPLAIN>
@@ -55,7 +54,7 @@ SqlNode SqlPhoenixExplain() :
             stmt,
             detailLevel.symbol(SqlParserPos.ZERO),
             depth.symbol(SqlParserPos.ZERO),
-            SqlLiteral.createBoolean(asXml, SqlParserPos.ZERO),
+            SqlExplainFormat.TEXT.symbol(SqlParserPos.ZERO),
             nDynamicParams);
     }
 }
