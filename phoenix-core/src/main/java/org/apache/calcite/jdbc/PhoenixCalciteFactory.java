@@ -630,6 +630,11 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         }
 
         @Override
+        public <T> T parserFactory(Class<T> parserFactoryClass, T defaultParserFactory) {
+            return delegate.parserFactory(parserFactoryClass, defaultParserFactory);
+        }
+
+        @Override
         public <T> T schemaFactory(Class<T> schemaFactoryClass, T defaultSchemaFactory) {
             return delegate.schemaFactory(schemaFactoryClass, defaultSchemaFactory);
         }

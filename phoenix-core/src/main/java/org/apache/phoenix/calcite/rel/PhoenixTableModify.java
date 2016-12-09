@@ -16,6 +16,7 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.prepare.Prepare.CatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableModify;
+import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.PhoenixTable;
@@ -61,8 +62,10 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
 
     public PhoenixTableModify(RelOptCluster cluster, RelTraitSet traits,
             RelOptTable table, CatalogReader catalogReader, RelNode child,
-            Operation operation, List<String> updateColumnList, boolean flattened) {
-        super(cluster, traits, table, catalogReader, child, operation, updateColumnList, flattened);
+            Operation operation, List<String> updateColumnList, List<RexNode> sourceExpressionList,
+            boolean flattened) {
+        super(cluster, traits, table, catalogReader, child, operation,
+                updateColumnList, sourceExpressionList, flattened);
         assert operation == Operation.INSERT || operation == Operation.DELETE;
     }
 
@@ -75,6 +78,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
           sole(inputs),
           getOperation(),
           getUpdateColumnList(),
+          getSourceExpressionList(),
           isFlattened());
     }
 

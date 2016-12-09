@@ -854,6 +854,7 @@ public class PhoenixConverterRules {
                             modify.getTraitSet().replace(PhoenixConvention.GENERIC)),
                     modify.getOperation(),
                     modify.getUpdateColumnList(),
+                    modify.getSourceExpressionList(),
                     modify.isFlattened());
         }
     }

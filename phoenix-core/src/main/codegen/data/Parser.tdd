@@ -47,7 +47,6 @@
     "ROW_TIMESTAMP"
     "SPLIT"
     "STATISTICS"
-    "REPLACE"
     "JAR"
     "CONSTANT"
     "DEFAULTVALUE"
@@ -95,6 +94,16 @@
   # Each must accept arguments "(SqlParserPos pos, String scope)".
   # Example: "SqlUploadJarNode"
   alterStatementParserMethods: [
+  ]
+
+  # List of methods for parsing extensions to "CREATE [OR REPLACE]" calls.
+  # Each must accept arguments "(SqlParserPos pos, boolean replace)".
+  createStatementParserMethods: [
+  ]
+
+  # List of methods for parsing extensions to "DROP" calls.
+  # Each must accept arguments "(SqlParserPos pos)".
+  dropStatementParserMethods: [
   ]
 
   # List of files in @includes directory that have parser method
