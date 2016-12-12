@@ -6,7 +6,6 @@ import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.PhoenixSequence;
 import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.RuntimeContext;
@@ -29,7 +28,6 @@ public interface PhoenixRelImplementor {
     RuntimeContext getRuntimeContext();
     void setTableMapping(TableMapping tableMapping);
     TableMapping getTableMapping();
-    void setSequenceManager(SequenceManager sequenceManager);
     void pushContext(ImplementorContext context);
     ImplementorContext popContext();
     ImplementorContext getCurrentContext();

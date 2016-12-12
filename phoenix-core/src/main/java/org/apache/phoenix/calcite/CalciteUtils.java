@@ -1085,22 +1085,6 @@ public class CalciteUtils {
 		
 		return false;
 	}
-	
-	public static PhoenixSequence findSequence(Project project) {
-        SequenceValueFinder seqFinder = new SequenceValueFinder();
-        for (RexNode node : project.getProjects()) {
-            node.accept(seqFinder);
-            if (seqFinder.sequenceValueCall != null) {
-                RexLiteral operand =
-                		(RexLiteral) seqFinder.sequenceValueCall.getOperands().get(0);
-                List<String> name = Util.stringToList((String) operand.getValue2());
-                RelOptTable table = Prepare.CatalogReader.THREAD_LOCAL.get().getTable(name);
-                return table.unwrap(PhoenixSequence.class);
-            }
-        }
-        
-        return null;
-	}
     
     private static class SequenceValueFinder extends RexVisitorImpl<Void> {
         private RexCall sequenceValueCall;
@@ -1114,6 +1098,11 @@ public class CalciteUtils {
                     && (call.getKind() == SqlKind.CURRENT_VALUE
                         || call.getKind() == SqlKind.NEXT_VALUE)) {
                 sequenceValueCall = call;
+            }
+            if (sequenceValueCall == null){
+                for(RexNode node : call.getOperands()){
+                    if(node instanceof RexCall) visitCall((RexCall) node);
+                }
             }
             return null;
         }
