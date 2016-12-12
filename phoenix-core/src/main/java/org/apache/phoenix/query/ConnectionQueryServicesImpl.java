@@ -2998,9 +2998,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             byte[] newValue = UPGRADE_MUTEX_LOCKED;
             Put put = new Put(rowToLock);
             put.addColumn(family, qualifier, newValue);
-            boolean acquired = sysMutexTable.checkAndPut(rowToLock, family, qualifier, oldValue, put);
-            if (!acquired) { throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
-                    getVersion(MIN_SYSTEM_TABLE_TIMESTAMP)); }
+            boolean acquired =  sysMutexTable.checkAndPut(rowToLock, family, qualifier, oldValue, put);
+            if (!acquired) {
+                /*
+                 * Because of TTL on the SYSTEM_MUTEX_FAMILY, it is very much possible that the cell
+                 * has gone away. So we need to retry with an old value of null. Note there is a small
+                 * race condition here that between the two checkAndPut calls, it is possible that another
+                 * request would have set the value back to UPGRADE_MUTEX_UNLOCKED. In that scenario this
+                 * following checkAndPut would still return false even though the lock was available.
+                 */
+                acquired =  sysMutexTable.checkAndPut(rowToLock, family, qualifier, null, put);
+                if (!acquired) {
+                    throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
+                        getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
+                }
+            }
             return true;
         }
     }
