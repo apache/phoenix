@@ -35,7 +35,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.gson.Gson;
 
 /**
  * MapReduce mapper that converts REGEX input lines into KeyValues that can be written to HFiles.
@@ -128,10 +127,7 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
 					data.put(colName, upsertValue);
 				}
 			}
-			Gson gson = new Gson(); 
-			String json = gson.toJson(data); 
-		    
-			return mapper.readValue(json, Map.class);
+			return data;
         }
     }
 }
