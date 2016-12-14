@@ -42,8 +42,8 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
       requiredColumns,
       Some(buildFilter(filters)),
       Some(zkUrl),
-      new Configuration(),
-      dateAsTimestamp
+      conf = new Configuration(),
+      dateAsTimestamp = dateAsTimestamp
     ).toDataFrame(sqlContext).rdd
   }
 
@@ -55,8 +55,8 @@ case class PhoenixRelation(tableName: String, zkUrl: String, dateAsTimestamp: Bo
       Seq(),
       None,
       Some(zkUrl),
-      new Configuration(),
-      dateAsTimestamp
+      conf = new Configuration(),
+      dateAsTimestamp = dateAsTimestamp
     ).toDataFrame(sqlContext).schema
   }
 

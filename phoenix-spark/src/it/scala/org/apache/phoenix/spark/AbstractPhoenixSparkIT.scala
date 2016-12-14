@@ -46,11 +46,6 @@ class AbstractPhoenixSparkIT extends FunSuite with Matchers with BeforeAndAfterA
   // A global tenantId we can use across tests
   final val TenantId = "theTenant"
 
-  // TENANT_VIEW schema
-  val OrgId = "ORGANIZATION_ID"
-  val TenantCol = "TENANT_ONLY_COL"
-  val ViewName = "TENANT_VIEW"
-
   var conn: Connection = _
   var sc: SparkContext = _
 

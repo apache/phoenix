@@ -18,7 +18,7 @@ import java.sql.DriverManager
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.hadoop.io.NullWritable
-import org.apache.phoenix.jdbc.{PhoenixDriver, PhoenixEmbeddedDriver}
+import org.apache.phoenix.jdbc.PhoenixDriver
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.types._
@@ -26,13 +26,15 @@ import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 import scala.collection.JavaConverters._
 
 class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
-                 predicate: Option[String] = None, zkUrl: Option[String] = None,
+                 predicate: Option[String] = None,
+                 zkUrl: Option[String] = None,
+                 tenantId: Option[String] = None,
                  @transient conf: Configuration, dateAsTimestamp: Boolean = false)
   extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
 
@@ -95,6 +97,11 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
           )
         }
       }
+    }
+
+    tenantId match {
+      case Some(tid) => ConfigurationUtil.setTenantId(config, tid)
+      case _ =>
     }
 
     config
