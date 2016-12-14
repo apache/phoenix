@@ -36,6 +36,6 @@ class SparkContextFunctions(@transient val sc: SparkContext) extends Serializabl
                         : RDD[Map[String, AnyRef]] = {
 
     // Create a PhoenixRDD, but only return the serializable 'result' map
-    new PhoenixRDD(sc, table, columns, predicate, zkUrl, tenantId, conf).map(_.result)
+    new PhoenixRDD(sc, table, columns, predicate, zkUrl, conf, tenantId = tenantId).map(_.result)
   }
 }

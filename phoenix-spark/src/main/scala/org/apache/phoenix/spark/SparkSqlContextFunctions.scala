@@ -35,7 +35,7 @@ class SparkSqlContextFunctions(@transient val sqlContext: SQLContext) extends Se
                                conf: Configuration = new Configuration): DataFrame = {
 
     // Create the PhoenixRDD and convert it to a DataFrame
-    new PhoenixRDD(sqlContext.sparkContext, table, columns, predicate, zkUrl, tenantId, conf)
+    new PhoenixRDD(sqlContext.sparkContext, table, columns, predicate, zkUrl, conf, tenantId = tenantId)
       .toDataFrame(sqlContext)
   }
 }

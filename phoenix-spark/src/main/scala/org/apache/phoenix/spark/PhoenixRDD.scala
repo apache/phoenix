@@ -34,8 +34,9 @@ import scala.collection.JavaConverters._
 class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
                  predicate: Option[String] = None,
                  zkUrl: Option[String] = None,
-                 tenantId: Option[String] = None,
-                 @transient conf: Configuration, dateAsTimestamp: Boolean = false)
+                 @transient conf: Configuration, dateAsTimestamp: Boolean = false,
+                 tenantId: Option[String] = None
+                )
   extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
 
   // Make sure to register the Phoenix driver
