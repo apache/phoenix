@@ -25,6 +25,7 @@ import java.sql.Types;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+
 import javax.annotation.Nullable;
 
 import org.apache.phoenix.query.QueryServices;
@@ -72,7 +73,7 @@ public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
             }
             for (fieldIndex = 0; fieldIndex < conversionFunctions.size(); fieldIndex++) {
                 colName = CaseFormat.UPPER_UNDERSCORE.to(
-                        CaseFormat.LOWER_UNDERSCORE, columnInfos.get(fieldIndex).getColumnName());
+                        CaseFormat.UPPER_UNDERSCORE, columnInfos.get(fieldIndex).getColumnName());
                 if (colName.contains(".")) {
                     StringBuilder sb = new StringBuilder();
                     String[] parts = colName.split("\\.");
