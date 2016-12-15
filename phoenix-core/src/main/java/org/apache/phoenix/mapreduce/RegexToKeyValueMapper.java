@@ -29,7 +29,6 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.apache.phoenix.util.json.JsonUpsertExecutor;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,15 +55,8 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
     /** Configuration key for the array element delimiter for input arrays */
     public static final String ARRAY_DELIMITER_DEFAULT = ",";
     
-    
     private LineParser<Map<?, ?>> lineParser;
     
-    private String regex;
-    
-    private String arraySeparator;
-    
-    private List<ColumnInfo> columnInfoList;
-
     @Override
     protected  LineParser<Map<?, ?>> getLineParser() {
         return lineParser;
@@ -73,16 +65,6 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
         super.setup(context);
-        Configuration conf = context.getConfiguration();
-        
-        regex = conf.get(REGEX_CONFKEY);
-        Preconditions.checkNotNull(regex, "regex is not configured");
-        
-        columnInfoList = buildColumnInfoList(conf);
-        
-        arraySeparator = conf.get(ARRAY_DELIMITER_CONFKEY, ARRAY_DELIMITER_DEFAULT);
-        
-        lineParser = new RegexLineParser(regex, columnInfoList);
     }
 
     @VisibleForTesting
@@ -91,21 +73,28 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
         String tableName = conf.get(TABLE_NAME_CONFKEY);
         Preconditions.checkNotNull(tableName, "table name is not configured");
         
+        String regex = conf.get(REGEX_CONFKEY);
+        Preconditions.checkNotNull(regex, "regex is not configured");
+        
         List<ColumnInfo> columnInfoList = buildColumnInfoList(conf);
+        
+        String arraySeparator = conf.get(ARRAY_DELIMITER_CONFKEY, ARRAY_DELIMITER_DEFAULT);
+        
+        lineParser = new RegexLineParser(regex, columnInfoList, arraySeparator);
 
         return new JsonUpsertExecutor(conn, tableName, columnInfoList, upsertListener);
     }
 
     @VisibleForTesting
     static class RegexLineParser implements LineParser<Map<?, ?>> {
-    	private final ObjectMapper mapper = new ObjectMapper();
-    	
         private Pattern inputPattern;
         private List<ColumnInfo> columnInfoList;
+        private String arraySeparator;
         
-        public RegexLineParser(String regex, List<ColumnInfo> columnInfo) {
+        public RegexLineParser(String regex, List<ColumnInfo> columnInfo, String arraySep) {
         	inputPattern = Pattern.compile(regex);
         	columnInfoList = columnInfo;
+        	arraySeparator = arraySep;
 		}
 
 		@Override
@@ -120,7 +109,7 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
 			if (m.find( )) {
 				for (int i = 0; i < columnInfoList.size(); i++) {
 					ColumnInfo columnInfo = columnInfoList.get(i);
-					String colName = columnInfo.getDisplayName();
+					String colName = columnInfo.getColumnName();
 					int sqlType = columnInfo.getSqlType();
 					String val = m.group(i + 1);
 					Object upsertValue = PDataType.fromTypeId(sqlType).toObject(val);

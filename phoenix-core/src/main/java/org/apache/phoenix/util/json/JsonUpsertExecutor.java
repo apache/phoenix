@@ -39,7 +39,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.CaseFormat;
 import com.google.common.base.Function;
 
 /** {@link UpsertExecutor} over {@link Map} objects, as parsed from JSON. */
@@ -72,23 +71,7 @@ public class JsonUpsertExecutor extends UpsertExecutor<Map<?, ?>, Object> {
                 throw new IllegalArgumentException(message);
             }
             for (fieldIndex = 0; fieldIndex < conversionFunctions.size(); fieldIndex++) {
-                colName = CaseFormat.UPPER_UNDERSCORE.to(
-                        CaseFormat.UPPER_UNDERSCORE, columnInfos.get(fieldIndex).getColumnName());
-                if (colName.contains(".")) {
-                    StringBuilder sb = new StringBuilder();
-                    String[] parts = colName.split("\\.");
-                    // assume first part is the column family name; omita
-                    for (int i = 1; i < parts.length; i++) {
-                        sb.append(parts[i]);
-                        if (i != parts.length - 1) {
-                            sb.append(".");
-                        }
-                    }
-                    colName = sb.toString();
-                }
-                if (colName.contains("\"")) {
-                    colName = colName.replace("\"", "");
-                }
+                colName = columnInfos.get(fieldIndex).getColumnName();
                 Object sqlValue = conversionFunctions.get(fieldIndex).apply(record.get(colName));
                 if (sqlValue != null) {
                     preparedStatement.setObject(fieldIndex + 1, sqlValue);
