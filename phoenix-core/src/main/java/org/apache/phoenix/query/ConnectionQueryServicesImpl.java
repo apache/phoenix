@@ -2461,7 +2461,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException {
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
-        } catch (TableAlreadyExistsException ignore) {}
+        } catch (TableAlreadyExistsException e) {
+            nSequenceSaltBuckets = getSaltBuckets(e);
+        }
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_STATS_TABLE_METADATA);
         } catch (TableAlreadyExistsException ignore) {}
