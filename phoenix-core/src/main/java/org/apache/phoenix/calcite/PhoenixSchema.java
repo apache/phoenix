@@ -22,6 +22,12 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.UDFExpression;
+import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
+import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpSplitFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpSubstrFunction;
+import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
@@ -34,6 +40,8 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionArgInfo;
 import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -87,7 +95,7 @@ public class PhoenixSchema implements Schema {
     protected final UDFExpression exp = new UDFExpression();
     private final static Function listJarsFunction = TableFunctionImpl
             .create(ListJarsTable.LIST_JARS_TABLE_METHOD);
-    public final static Multimap<String, Function> builtinFunctions = ArrayListMultimap.create();
+    private final Multimap<String, Function> builtinFunctions = ArrayListMultimap.create();
 
     
     protected PhoenixSchema(String name, String schemaName,
@@ -144,10 +152,23 @@ public class PhoenixSchema implements Schema {
      * PhoenixSchema.getFunctions() - Matches function signatures during validation
      * CalciteUtils.EXPRESSION_MAP - Maps a RexNode onto a builtin function
      */
-    private static void registerBuiltinFunctions(){
+    private void registerBuiltinFunctions(){
         if(!builtinFunctions.isEmpty()) {
             return;
         }
+        final boolean useByteBasedRegex =
+                pc.getQueryServices().getProps().getBoolean(QueryServices.USE_BYTE_BASED_REGEX_ATTRIB,
+                QueryServicesOptions.DEFAULT_USE_BYTE_BASED_REGEX);
+        final List<String> ignoredRegexFunctions = useByteBasedRegex ?
+                Lists.newArrayList(
+                        StringBasedRegexpReplaceFunction.class.getName(),
+                        StringBasedRegexpSplitFunction.class.getName(),
+                        StringBasedRegexpSubstrFunction.class.getName()) :
+                Lists.newArrayList(
+                        ByteBasedRegexpReplaceFunction.class.getName(),
+                        ByteBasedRegexpSubstrFunction.class.getName(),
+                        ByteBasedRegexpSplitFunction.class.getName());
+
         Multimap<String, BuiltInFunctionInfo> infoMap = ParseNodeFactory.getBuiltInFunctionMultimap();
         List<BuiltInFunctionInfo> aliasFunctions = Lists.newArrayList();
         for (BuiltInFunctionInfo info : infoMap.values()) {
@@ -155,6 +176,9 @@ public class PhoenixSchema implements Schema {
             if(!CalciteUtils.TRANSLATED_BUILT_IN_FUNCTIONS.contains(info.getName()) && !info.isAggregate()) {
                 if (info.getClassType() == FunctionClassType.ALIAS) {
                     aliasFunctions.add(info);
+                    continue;
+                }
+                if(ignoredRegexFunctions.contains(info.getFunc().getName())){
                     continue;
                 }
                 builtinFunctions.putAll(info.getName(), convertBuiltinFunction(info));
@@ -242,7 +266,7 @@ public class PhoenixSchema implements Schema {
     }
 
     // Using Phoenix argument information, determine all possible function signatures
-    public static List<List<PFunction.FunctionArgument>> overloadArguments(BuiltInFunctionArgInfo[] args){
+    private static List<List<PFunction.FunctionArgument>> overloadArguments(BuiltInFunctionArgInfo[] args){
         List<List<PFunction.FunctionArgument>> overloadedArgs = Lists.newArrayList();
         int solutions = 1;
         for(int i = 0; i < args.length; solutions *= args[i].getAllowedTypes().length, i++);
