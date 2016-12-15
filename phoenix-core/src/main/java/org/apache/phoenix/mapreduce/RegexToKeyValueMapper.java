@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.UpsertExecutor;
-import org.apache.phoenix.util.json.JsonUpsertExecutor;
+import org.apache.phoenix.util.regex.RegexUpsertExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,7 +82,7 @@ public class RegexToKeyValueMapper extends FormatToBytesWritableMapper<Map<?, ?>
         
         lineParser = new RegexLineParser(regex, columnInfoList, arraySeparator);
 
-        return new JsonUpsertExecutor(conn, tableName, columnInfoList, upsertListener);
+        return new RegexUpsertExecutor(conn, tableName, columnInfoList, upsertListener);
     }
 
     @VisibleForTesting
