@@ -17,11 +17,6 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -31,6 +26,11 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 /**
  * Default {@link RecordWriter} implementation from Phoenix
@@ -44,7 +44,7 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
     private final PreparedStatement statement;
     private final long batchSize;
     private long numRecords = 0;
-    
+
     public PhoenixRecordWriter(final Configuration configuration) throws SQLException {
         this.conn = ConnectionUtil.getOutputConnection(configuration);
         this.batchSize = PhoenixConfigurationUtil.getBatchSize(configuration);
