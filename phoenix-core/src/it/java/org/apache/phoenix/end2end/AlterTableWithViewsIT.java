@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -33,7 +32,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Properties;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -47,8 +45,6 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -106,37 +102,52 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {       
             String tableName = generateUniqueName();
-            String viewOfTable = tableName + "_VIEW";
+            String viewOfTable1 = tableName + "_VIEW1";
+            String viewOfTable2 = tableName + "_VIEW2";
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                             + " %s ID char(1) NOT NULL,"
                             + " COL1 integer NOT NULL,"
                             + " COL2 bigint NOT NULL,"
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
-                            + " ) %s";
+                            + " ) UPDATE_CACHE_FREQUENCY=15 "
+                            + (isMultiTenant ? ",%s" : "%s");
             conn.createStatement().execute(generateDDL(ddlFormat));
-            viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
+            viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
+            viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
+            viewConn.createStatement().execute("ALTER VIEW " + viewOfTable2 + " SET UPDATE_CACHE_FREQUENCY = 5");
             
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
             PTable table = phoenixConn.getTable(new PTableKey(null, tableName));
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
             assertFalse(table.isImmutableRows());
-            assertEquals(0, table.getUpdateCacheFrequency());
-            PTable viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
-            assertFalse(viewTable.isImmutableRows());
-            assertEquals(0, viewTable.getUpdateCacheFrequency());
-            
-            conn.createStatement().execute("ALTER TABLE " + tableName + " SET IMMUTABLE_ROWS=true, UPDATE_CACHE_FREQUENCY=123");
+            assertEquals(15, table.getUpdateCacheFrequency());
+            PTable viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
+            assertFalse(viewTable1.isImmutableRows());
+            assertEquals(15, viewTable1.getUpdateCacheFrequency());
             // query the view to force the table cache to be updated
-            viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
+            viewConn.createStatement().execute("SELECT * FROM "+viewOfTable2);
+            PTable viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            assertFalse(viewTable2.isImmutableRows());
+            assertEquals(5, viewTable2.getUpdateCacheFrequency());
+            
+            conn.createStatement().execute("ALTER TABLE " + tableName + " SET IMMUTABLE_ROWS=true, UPDATE_CACHE_FREQUENCY=10");
+            // query the views to force the table cache to be updated
+            viewConn.createStatement().execute("SELECT * FROM "+viewOfTable1);
+            viewConn.createStatement().execute("SELECT * FROM "+viewOfTable2);
             
             phoenixConn = conn.unwrap(PhoenixConnection.class);
             table = phoenixConn.getTable(new PTableKey(null, tableName));
             assertTrue(table.isImmutableRows());
-            assertEquals(123, table.getUpdateCacheFrequency());
+            assertEquals(10, table.getUpdateCacheFrequency());
             
-            viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
-            assertTrue(viewTable.isImmutableRows());
-            assertEquals(123, viewTable.getUpdateCacheFrequency());
+            viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
+            assertTrue(viewTable1.isImmutableRows());
+            assertEquals(10, viewTable1.getUpdateCacheFrequency());
+            
+            viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            assertTrue(viewTable2.isImmutableRows());
+            // update cache frequency is not propagated to the view since it was altered on the view
+            assertEquals(5, viewTable2.getUpdateCacheFrequency());
         } 
     }
     
@@ -731,10 +742,11 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             String viewOfTable = baseTableName + "_VIEW";
             
 	        String ddl = "CREATE TABLE " + baseTableName + " (\n"
-	                +"ID VARCHAR(15) NOT NULL,\n"
+	                +"%s ID VARCHAR(15) NOT NULL,\n"
+	                + " COL1 integer NOT NULL,"
 	                +"CREATED_DATE DATE,\n"
-	                +"CONSTRAINT PK PRIMARY KEY (ID))";
-	        conn.createStatement().execute(ddl);
+	                +"CONSTRAINT PK PRIMARY KEY (%s ID, COL1)) %s";
+	        conn.createStatement().execute(generateDDL(ddl));
 	        ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
 	        viewConn.createStatement().execute(ddl);
 	        
@@ -757,7 +769,48 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
 	            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
 	        }
     	}
-    	
+    }
+    
+    @Test
+    public void testAlterAppendOnlySchema() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {  
+            String baseTableName = "NONTXNTBL_" + generateUniqueName() + (isMultiTenant ? "0":"1");
+            String viewOfTable = baseTableName + "_VIEW";
+            
+            String ddl = "CREATE TABLE " + baseTableName + " (\n"
+                    +"%s ID VARCHAR(15) NOT NULL,\n"
+                    + " COL1 integer NOT NULL,"
+                    +"CREATED_DATE DATE,\n"
+                    +"CONSTRAINT PK PRIMARY KEY (%s ID, COL1)) %s";
+            conn.createStatement().execute(generateDDL(ddl));
+            ddl = "CREATE VIEW " + viewOfTable + " AS SELECT * FROM " + baseTableName;
+            viewConn.createStatement().execute(ddl);
+            
+            PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+            PTable table = phoenixConn.getTable(new PTableKey(null, baseTableName));
+            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            assertFalse(table.isAppendOnlySchema());
+            PTable viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            assertFalse(viewTable.isAppendOnlySchema());
+            
+            try {
+                viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET APPEND_ONLY_SCHEMA = true");
+                fail();
+            }
+            catch(SQLException e){
+                assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+            }
+            
+            conn.createStatement().execute("ALTER TABLE " + baseTableName + " SET APPEND_ONLY_SCHEMA = true");
+            viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
+            
+            phoenixConn = conn.unwrap(PhoenixConnection.class);
+            table = phoenixConn.getTable(new PTableKey(null, baseTableName));
+            assertTrue(table.isAppendOnlySchema());
+            viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            assertTrue(viewTable.isAppendOnlySchema());
+        }
     }
     
 }

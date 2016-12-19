@@ -889,23 +889,30 @@ public class MetaDataClient {
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
 
         boolean isAppendOnlySchema = false;
+        long updateCacheFrequency = 0;
         if (parent==null) {
 	        Boolean appendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
 	        if (appendOnlySchemaProp != null) {
 	            isAppendOnlySchema = appendOnlySchemaProp;
 	        }
+	        Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
+	        if (updateCacheFrequencyProp != null) {
+	            updateCacheFrequency = updateCacheFrequencyProp;
+	        }
         }
         else {
         	isAppendOnlySchema = parent.isAppendOnlySchema();
-        }
-        long updateCacheFrequency = 0;
-        Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
-        if (updateCacheFrequencyProp != null) {
-            updateCacheFrequency = updateCacheFrequencyProp;
+        	updateCacheFrequency = parent.getUpdateCacheFrequency();
         }
         // updateCacheFrequency cannot be set to ALWAYS if isAppendOnlySchema is true
         if (isAppendOnlySchema && updateCacheFrequency==0) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.UPDATE_CACHE_FREQUENCY_INVALID)
+            .setSchemaName(tableName.getSchemaName()).setTableName(tableName.getTableName())
+            .build().buildException();
+        }
+        Boolean immutableProp = (Boolean) TableProperty.IMMUTABLE_ROWS.getValue(tableProps);
+        if (statement.immutableRows()!=null && immutableProp!=null) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.IMMUTABLE_TABLE_PROPERTY_INVALID)
             .setSchemaName(tableName.getSchemaName()).setTableName(tableName.getTableName())
             .build().buildException();
         }
@@ -1660,6 +1667,7 @@ public class MetaDataClient {
                 storeNulls = parent.getStoreNulls();
                 isImmutableRows = parent.isImmutableRows();
                 isAppendOnlySchema = parent.isAppendOnlySchema();
+
                 // Index on view
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
                 // table instead of only a view? We don't have anywhere to put the link
@@ -1733,7 +1741,6 @@ public class MetaDataClient {
                     isImmutableRows = isImmutableRowsProp;
                 }
             }
-
             if (tableType == PTableType.TABLE) {
                 Boolean isAppendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
                 isAppendOnlySchema = isAppendOnlySchemaProp!=null ? isAppendOnlySchemaProp : false;
@@ -1917,6 +1924,10 @@ public class MetaDataClient {
                     saltBucketNum = parent.getBucketNum();
                     isAppendOnlySchema = parent.isAppendOnlySchema();
                     isImmutableRows = parent.isImmutableRows();
+                    if (updateCacheFrequencyProp == null) {
+                        // set to the parent value if the property is not set on the view
+                        updateCacheFrequency = parent.getUpdateCacheFrequency();
+                    }
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
                     List<PColumn> allColumns = parent.getColumns();
@@ -2647,12 +2658,12 @@ public class MetaDataClient {
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional, Long updateCacheFrequency) throws SQLException {
-        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null, -1L);
+        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null, -1L, null);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
             Boolean isTransactional, Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
-            Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth)
+            Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -2692,6 +2703,9 @@ public class MetaDataClient {
         }
         if (guidePostWidth == null || guidePostWidth >= 0) {
             mutateLongProperty(tenantId, schemaName, tableName, GUIDE_POSTS_WIDTH, guidePostWidth);
+        }
+        if (appendOnlySchema !=null) {
+            mutateBooleanProperty(tenantId, schemaName, tableName, APPEND_ONLY_SCHEMA, appendOnlySchema);
         }
         return seqNum;
     }
@@ -2757,6 +2771,7 @@ public class MetaDataClient {
             Boolean storeNullsProp = null;
             Boolean isTransactionalProp = null;
             Long updateCacheFrequencyProp = null;
+            Boolean appendOnlySchemaProp = null;
             Long guidePostWidth = -1L;
 
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
@@ -2818,6 +2833,8 @@ public class MetaDataClient {
                             updateCacheFrequencyProp = (Long)value;
                         } else if (propName.equals(GUIDE_POSTS_WIDTH)) {
                             guidePostWidth = (Long)value;
+                        } else if (propName.equals(APPEND_ONLY_SCHEMA)) {
+                            appendOnlySchemaProp = (Boolean) value;
                         }
                     }
                     // if removeTableProps is true only add the property if it is not a HTable or Phoenix Table property
@@ -2884,6 +2901,14 @@ public class MetaDataClient {
                         changingPhoenixTableProperty = true;
                     }
                 }
+                Boolean appendOnlySchema = null;
+                if (appendOnlySchemaProp !=null) {
+                    if (appendOnlySchemaProp != table.isAppendOnlySchema()) {
+                        appendOnlySchema  = appendOnlySchemaProp;
+                        changingPhoenixTableProperty = true;
+                    }
+                }
+            
                 if (guidePostWidth == null || guidePostWidth >= 0) {
                     changingPhoenixTableProperty = true;
                 }
@@ -3031,7 +3056,7 @@ public class MetaDataClient {
                 long seqNum = table.getSequenceNumber();
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
                     seqNum = incrementTableSeqNum(table, tableType, columnDefs.size(), isTransactional, updateCacheFrequency, isImmutableRows,
-                            disableWAL, multiTenant, storeNulls, guidePostWidth);
+                            disableWAL, multiTenant, storeNulls, guidePostWidth, appendOnlySchema);
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
@@ -3059,7 +3084,7 @@ public class MetaDataClient {
                     }
                 }
 
-                MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table, properties, colFamiliesForPColumnsToBeAdded);
+                MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData, table, properties, colFamiliesForPColumnsToBeAdded, columns);
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
                     if (code == MutationCode.COLUMN_ALREADY_EXISTS) {
@@ -3076,20 +3101,7 @@ public class MetaDataClient {
                     String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
                     long resolvedTimeStamp = TransactionUtil.getResolvedTime(connection, result);
                     if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && !nonTxToTx)) {
-                        connection.addColumn(
-                                tenantId,
-                                fullTableName,
-                                columns,
-                                result.getMutationTime(),
-                                seqNum,
-                                isImmutableRows == null ? table.isImmutableRows() : isImmutableRows,
-                                        disableWAL == null ? table.isWALDisabled() : disableWAL,
-                                                multiTenant == null ? table.isMultiTenant() : multiTenant,
-                                                        storeNulls == null ? table.getStoreNulls() : storeNulls,
-                                                                isTransactional == null ? table.isTransactional() : isTransactional,
-                                                                        updateCacheFrequency == null ? table.getUpdateCacheFrequency() : updateCacheFrequency,
-                                                                                table.isNamespaceMapped(),
-                                                                                resolvedTimeStamp);
+                        connection.addTable(result.getTable(), resolvedTimeStamp);
                     } else if (updateCacheFrequency != null) {
                         // Force removal from cache as the update cache frequency has changed
                         // Note that clients outside this JVM won't be affected.
@@ -3334,7 +3346,7 @@ public class MetaDataClient {
                                     Collections.<Mutation>singletonList(new Put(SchemaUtil.getTableKey
                                             (tenantIdBytes, tableContainingColumnToDrop.getSchemaName().getBytes(),
                                                     tableContainingColumnToDrop.getTableName().getBytes()))),
-                                                    tableContainingColumnToDrop, family, Sets.newHashSet(Bytes.toString(emptyCF)));
+                                                    tableContainingColumnToDrop, family, Sets.newHashSet(Bytes.toString(emptyCF)), Collections.<PColumn>emptyList());
 
                         }
                     }
