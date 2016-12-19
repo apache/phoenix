@@ -19,7 +19,10 @@ import org.apache.spark.sql.SQLContext
 import scala.collection.mutable.ListBuffer
 
 /**
-  * Sub-class of PhoenixSparkIT used for tenant-specific test
+  * Sub-class of PhoenixSparkIT used for tenant-specific tests
+  *
+  * Note: All schema related variables (table name, column names, default data, etc) are coupled with
+  * phoenix-spark/src/it/resources/tenantSetup.sql
   *
   * Note: If running directly from an IDE, these are the recommended VM parameters:
   * -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
@@ -27,10 +30,24 @@ import scala.collection.mutable.ListBuffer
   */
 class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
 
-  val SelectStatement = "SELECT " + OrgId + "," + TenantCol + " FROM " + ViewName
-  val DataSet = List(("testOrg1", "data1"), ("testOrg2", "data2"), ("testOrg3", "data3"))
+  // Tenant-specific schema info
+  val OrgIdCol = "ORGANIZATION_ID"
+  val TenantOnlyCol = "TENANT_ONLY_COL"
+  val TenantTable = "TENANT_VIEW"
 
+  // Data set for tests that write to Phoenix
+  val TestDataSet = List(("testOrg1", "data1"), ("testOrg2", "data2"), ("testOrg3", "data3"))
+
+  /**
+    * Helper method used by write tests to verify content written.
+    * Assumes the caller has written the TestDataSet (defined above) to Phoenix
+    * and that 1 row of default data exists (upserted after table creation in tenantSetup.sql)
+    */
   def verifyResults(): Unit = {
+    // Contains the default data upserted into the tenant-specific table in tenantSetup.sql and the data upserted by tests
+    val VerificationDataSet = List(("defaultOrg", "defaultData")) ::: TestDataSet
+
+    val SelectStatement = "SELECT " + OrgIdCol + "," + TenantOnlyCol + " FROM " + TenantTable
     val stmt = conn.createStatement()
     val rs = stmt.executeQuery(SelectStatement)
 
@@ -39,62 +56,78 @@ class PhoenixSparkITTenantSpecific extends AbstractPhoenixSparkIT {
       results.append((rs.getString(1), rs.getString(2)))
     }
     stmt.close()
-
-    results.toList shouldEqual DataSet
+    results.toList shouldEqual VerificationDataSet
   }
 
-  test("Can persist a dataframe using 'DataFrame.saveToPhoenix' on tenant-specific view") {
+  /*****************/
+  /** Read tests **/
+  /*****************/
+
+  test("Can read from tenant-specific table as DataFrame") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.phoenixTableAsDataFrame(
+      TenantTable,
+      Seq(OrgIdCol, TenantOnlyCol),
+      zkUrl = Some(quorumAddress),
+      tenantId = Some(TenantId),
+      conf = hbaseConfiguration)
+
+    // There should only be 1 row upserted in tenantSetup.sql
+    val count = df.count()
+    count shouldEqual 1L
+  }
+
+  test("Can read from tenant-specific table as RDD") {
+    val rdd = sc.phoenixTableAsRDD(
+      TenantTable,
+      Seq(OrgIdCol, TenantOnlyCol),
+      zkUrl = Some(quorumAddress),
+      tenantId = Some(TenantId),
+      conf = hbaseConfiguration)
+
+    // There should only be 1 row upserted in tenantSetup.sql
+    val count = rdd.count()
+    count shouldEqual 1L
+  }
+
+  /*****************/
+  /** Write tests **/
+  /*****************/
+
+  test("Can write a DataFrame using 'DataFrame.saveToPhoenix' to tenant-specific view") {
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
-    val dataSet = List(("testOrg1", "data1"), ("testOrg2", "data2"), ("testOrg3", "data3"))
-
-    val df = sc.parallelize(dataSet).toDF(OrgId, TenantCol)
-
-    // Save to tenant-specific view
-    df.saveToPhoenix("TENANT_VIEW", zkUrl = Some(quorumAddress), tenantId = Some(TenantId))
+    val df = sc.parallelize(TestDataSet).toDF(OrgIdCol, TenantOnlyCol)
+    df.saveToPhoenix(TenantTable, zkUrl = Some(quorumAddress), tenantId = Some(TenantId))
 
     verifyResults
   }
 
-  test("Can persist a dataframe using 'DataFrame.write' on tenant-specific view") {
-
+  test("Can write a DataFrame using 'DataFrame.write' to tenant-specific view") {
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
 
-    val dataSet = List(("testOrg1", "data1"), ("testOrg2", "data2"), ("testOrg3", "data3"))
-
-    val df = sc.parallelize(dataSet).toDF(OrgId, TenantCol)
+    val df = sc.parallelize(TestDataSet).toDF(OrgIdCol, TenantOnlyCol)
 
     df.write
       .format("org.apache.phoenix.spark")
       .mode("overwrite")
-      .option("table", "TENANT_VIEW")
-      .option(PhoenixRuntime.TENANT_ID_ATTRIB, "theTenant")
+      .option("table", TenantTable)
+      .option(PhoenixRuntime.TENANT_ID_ATTRIB, TenantId)
       .option("zkUrl", PhoenixSparkITHelper.getUrl)
       .save()
 
     verifyResults
   }
 
-  test("Can save to Phoenix tenant-specific view") {
+  test("Can write an RDD to Phoenix tenant-specific view") {
     val sqlContext = new SQLContext(sc)
-
-    // This view name must match the view we create in phoenix-spark/src/it/resources/tenantSetup.sql
-    val ViewName = "TENANT_VIEW"
-
-    // Columns from the TENANT_VIEW schema
-    val OrgId = "ORGANIZATION_ID"
-    val TenantCol = "TENANT_ONLY_COL"
-
-    // Data matching the schema for TENANT_VIEW created in tenantSetup.sql
-    val dataSet = List(("testOrg1", "data1"), ("testOrg2", "data2"), ("testOrg3", "data3"))
-
     sc
-      .parallelize(dataSet)
+      .parallelize(TestDataSet)
       .saveToPhoenix(
-        ViewName,
-        Seq(OrgId, TenantCol),
+        TenantTable,
+        Seq(OrgIdCol, TenantOnlyCol),
         hbaseConfiguration,
         tenantId = Some(TenantId)
       )
