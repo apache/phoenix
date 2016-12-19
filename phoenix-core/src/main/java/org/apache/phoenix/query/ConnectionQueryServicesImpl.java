@@ -640,26 +640,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public void addColumn(final PName tenantId, final String tableName, final List<PColumn> columns,
-            final long tableTimeStamp, final long tableSeqNum, final boolean isImmutableRows,
-            final boolean isWalDisabled, final boolean isMultitenant, final boolean storeNulls,
-            final boolean isTransactional, final long updateCacheFrequency, final boolean isNamespaceMapped,
-            final long resolvedTime) throws SQLException {
-        metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
-            @Override
-            public void mutate(PMetaData metaData) throws SQLException {
-                try {
-                    metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum,
-                            isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional,
-                            updateCacheFrequency, isNamespaceMapped, resolvedTime);
-                } catch (TableNotFoundException e) {
-                    // The DROP TABLE may have been processed first, so just ignore.
-                }
-            }
-        });
-    }
-
-    @Override
     public void removeTable(PName tenantId, final String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
         synchronized (latestMetaDataLock) {
             throwConnectionClosedIfNullMetaData();
@@ -1710,7 +1690,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> stmtProperties, Set<String> colFamiliesForPColumnsToBeAdded) throws SQLException {
+    public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> stmtProperties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns) throws SQLException {
         List<Pair<byte[], Map<String, Object>>> families = new ArrayList<>(stmtProperties.size());
         Map<String, Object> tableProps = new HashMap<String, Object>();
         Set<HTableDescriptor> tableDescriptors = Collections.emptySet();

@@ -133,7 +133,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             
             // if not verify exists is true one call to add column table with empty mutation list (which does not make a rpc) 
             // else verify no add column calls
-            verify(connectionQueryServices, notExists ? times(1) : never() ).addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class), anyMap(), anySetOf(String.class));
+            verify(connectionQueryServices, notExists ? times(1) : never() ).addColumn(eq(Collections.<Mutation>emptyList()), any(PTable.class), anyMap(), anySetOf(String.class), anyListOf(PColumn.class));
 
             // upsert one row
             conn2.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host2', 2.0)");
@@ -309,10 +309,11 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                         + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1))"
                         + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1000");
             conn.createStatement().execute(
-                "create view IF NOT EXISTS " + viewName + " (val1 integer) AS SELECT * FROM " + tableName
-                        + " UPDATE_CACHE_FREQUENCY=1000");
+                "create view IF NOT EXISTS " + viewName + " (val1 integer) AS SELECT * FROM " + tableName);
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            assertEquals(true, pconn.getTable(new PTableKey(pconn.getTenantId(), viewName)).isAppendOnlySchema());
+            PTable view = pconn.getTable(new PTableKey(pconn.getTenantId(), viewName));
+            assertEquals(true, view.isAppendOnlySchema());
+            assertEquals(1000, view.getUpdateCacheFrequency());
         }
     }
     

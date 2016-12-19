@@ -38,7 +38,6 @@ public interface MetaDataMutated {
     void addTable(PTable table, long resolvedTime) throws SQLException;
     void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException;
     void removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException;
-    void addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls, boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime) throws SQLException;
     void removeColumn(PName tenantId, String tableName, List<PColumn> columnsToRemove, long tableTimeStamp, long tableSeqNum, long resolvedTime) throws SQLException;
     void addFunction(PFunction function) throws SQLException;
     void removeFunction(PName tenantId, String function, long functionTimeStamp) throws SQLException;
