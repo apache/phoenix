@@ -87,6 +87,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 
@@ -226,6 +227,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -1899,8 +1901,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         byte[] tenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+        byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
         try {
-            byte[] key = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
             HRegion region = env.getRegion();
             MetaDataMutationResult result = checkTableKeyInRegion(key, region);
             if (result != null) {
@@ -1995,7 +1997,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // mutateRowsWithLocks call
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 // if the update mutation caused tables to be deleted just return the result which will contain the table to be deleted
-                return result != null ? result : new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, currentTime, null);
+                if (result !=null) {
+                    return result;
+                } else {
+                    table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP);
+                    return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, currentTime, table);
+                }
             } finally {
                 region.releaseRowLocks(locks);
             }
@@ -2154,7 +2161,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             List<ImmutableBytesPtr> invalidateList, long clientTimeStamp, TableViewFinderResult childViewsResult,
             HRegion region, List<RowLock> locks) throws IOException, SQLException {
         List<PutWithOrdinalPosition> columnPutsForBaseTable = Lists.newArrayListWithExpectedSize(tableMetadata.size());
-        List<Cell> tablePropertyCells = Lists.newArrayListWithExpectedSize(tableMetadata.size());
+        Map<TableProperty, Cell> tablePropertyCellMap = Maps.newHashMapWithExpectedSize(tableMetadata.size());
         // Isolate the puts relevant to adding columns. Also figure out what kind of columns are being added.
         for (Mutation m : tableMetadata) {
             if (m instanceof Put) {
@@ -2178,7 +2185,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 Cell tablePropCell = CellUtil.createCell(cell.getRow(), CellUtil.cloneFamily(cell),
                                     CellUtil.cloneQualifier(cell), cell.getTimestamp(), cell.getTypeByte(),
                                     CellUtil.cloneValue(cell));
-                                tablePropertyCells.add(tablePropCell);
+                                tablePropertyCellMap.put(tableProp, tablePropCell);
                             }
                         }
                     }
@@ -2353,12 +2360,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     deltaNumPkColsSoFar);
             
             // set table properties in child view
-            if (!tablePropertyCells.isEmpty()) {
+            if (!tablePropertyCellMap.isEmpty()) {
                 Put viewHeaderRowPut = new Put(viewKey, clientTimeStamp);
-                for (Cell tablePropertyCell : tablePropertyCells) {
-                    viewHeaderRowPut.add(CellUtil.createCell(viewKey, CellUtil.cloneFamily(tablePropertyCell),
-                            CellUtil.cloneQualifier(tablePropertyCell), clientTimeStamp, tablePropertyCell.getTypeByte(),
-                            CellUtil.cloneValue(tablePropertyCell)));
+                for (TableProperty tableProp : TableProperty.values()) {
+                    Cell tablePropertyCell = tablePropertyCellMap.get(tableProp);
+                    if ( tablePropertyCell != null) {
+                        // set this table property on the view if it is not mutable on a view (which means the property is always the same as the base table)
+                        // or if it is mutable on a view and the property value is the same as the base table property (which means it wasn't changed on the view)
+                        if (!tableProp.isMutableOnView() || tableProp.getPTableValue(view).equals(tableProp.getPTableValue(basePhysicalTable))) {
+                            viewHeaderRowPut.add(CellUtil.createCell(viewKey, CellUtil.cloneFamily(tablePropertyCell),
+                                CellUtil.cloneQualifier(tablePropertyCell), clientTimeStamp, tablePropertyCell.getTypeByte(),
+                                CellUtil.cloneValue(tablePropertyCell)));
+                        }
+                    }
                 }
                 byte[] viewSequencePtr = new byte[PLong.INSTANCE.getByteSize()];
                 PLong.INSTANCE.getCodec().encodeLong(view.getSequenceNumber() + 1, viewSequencePtr, 0);

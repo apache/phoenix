@@ -35,23 +35,63 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.util.SchemaUtil;
 
 public enum TableProperty {
-
-    @Deprecated // use the IMMUTABLE keyword while creating the table
-	IMMUTABLE_ROWS(PhoenixDatabaseMetaData.IMMUTABLE_ROWS, true, true, false),
-
-	MULTI_TENANT(PhoenixDatabaseMetaData.MULTI_TENANT, true, false, false),
-
-	DISABLE_WAL(PhoenixDatabaseMetaData.DISABLE_WAL, true, false, false),
-
-	SALT_BUCKETS(PhoenixDatabaseMetaData.SALT_BUCKETS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, SALT_ONLY_ON_CREATE_TABLE, false, false),
-
-	DEFAULT_COLUMN_FAMILY(DEFAULT_COLUMN_FAMILY_NAME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE, false, false),
-
-	TTL(HColumnDescriptor.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL, true, CANNOT_ALTER_PROPERTY, false, false),
-
-    STORE_NULLS(PhoenixDatabaseMetaData.STORE_NULLS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false),
     
-    TRANSACTIONAL(PhoenixDatabaseMetaData.TRANSACTIONAL, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false),
+    @Deprecated // use the IMMUTABLE keyword while creating the table
+	IMMUTABLE_ROWS(PhoenixDatabaseMetaData.IMMUTABLE_ROWS, true, true, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isImmutableRows();
+        }
+    },
+
+	MULTI_TENANT(PhoenixDatabaseMetaData.MULTI_TENANT, true, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isMultiTenant();
+        }
+    },
+
+	DISABLE_WAL(PhoenixDatabaseMetaData.DISABLE_WAL, true, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isWALDisabled();
+        }
+    },
+
+	SALT_BUCKETS(PhoenixDatabaseMetaData.SALT_BUCKETS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, SALT_ONLY_ON_CREATE_TABLE, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getBucketNum();
+        }
+    },
+
+	DEFAULT_COLUMN_FAMILY(DEFAULT_COLUMN_FAMILY_NAME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, DEFAULT_COLUMN_FAMILY_ONLY_ON_CREATE_TABLE, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getDefaultFamilyName();
+        }
+    },
+
+	TTL(HColumnDescriptor.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL, true, CANNOT_ALTER_PROPERTY, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return null;
+        }
+    },
+
+    STORE_NULLS(PhoenixDatabaseMetaData.STORE_NULLS, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getStoreNulls();
+        }
+    },
+    
+    TRANSACTIONAL(PhoenixDatabaseMetaData.TRANSACTIONAL, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isTransactional();
+        }
+    },
     
     UPDATE_CACHE_FREQUENCY(PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY, true, true, true) {
 	    @Override
@@ -67,26 +107,46 @@ public enum TableProperty {
 	            return value == null ? null : ((Number) value).longValue();
 	        }
 	        return value;
-	    }	    
+	    }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getUpdateCacheFrequency();
+        }	    
 	},
 	
 	AUTO_PARTITION_SEQ(PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, false, false) {
         @Override
         public Object getValue(Object value) {
             return value == null ? null : SchemaUtil.normalizeIdentifier(value.toString());
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getAutoPartitionSeqName();
         }  
 	},
 	
-	APPEND_ONLY_SCHEMA(PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, true, false),
+	APPEND_ONLY_SCHEMA(PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, true, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.isAppendOnlySchema();
+        }
+    },
     GUIDE_POSTS_WIDTH(PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH, true, false, false) {
         @Override
         public Object getValue(Object value) {
             return value == null ? null : ((Number) value).longValue();
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return null;
         }       
 	    
 	},
     ;
-
+	
 	private final String propertyName;
 	private final SQLExceptionCode colFamSpecifiedException;
 	private final boolean isMutable; // whether or not a property can be changed through statements like ALTER TABLE.
@@ -174,4 +234,10 @@ public enum TableProperty {
         return isMutable;
     }
 
+    public boolean isMutableOnView() {
+        return isMutableOnView;
+    }
+    
+    abstract public Object getPTableValue(PTable table);
+    
 }

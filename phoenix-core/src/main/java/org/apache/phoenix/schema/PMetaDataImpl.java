@@ -144,30 +144,6 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public void addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
-            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
-                    throws SQLException {
-        PTableRef oldTableRef = metaData.get(new PTableKey(tenantId, tableName));
-        if (oldTableRef == null) {
-            return;
-        }
-        List<PColumn> oldColumns = PTableImpl.getColumnsToClone(oldTableRef.getTable());
-        List<PColumn> newColumns;
-        if (columnsToAdd.isEmpty()) {
-            newColumns = oldColumns;
-        } else {
-            newColumns = Lists.newArrayListWithExpectedSize(oldColumns.size() + columnsToAdd.size());
-            newColumns.addAll(oldColumns);
-            newColumns.addAll(columnsToAdd);
-        }
-        PTable newTable = PTableImpl.makePTable(oldTableRef.getTable(), tableTimeStamp, tableSeqNum, newColumns,
-                isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency,
-                isNamespaceMapped);
-        addTable(newTable, resolvedTime);
-    }
-
-    @Override
     public void removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
         PTableRef parentTableRef = null;
         PTableKey key = new PTableKey(tenantId, tableName);
