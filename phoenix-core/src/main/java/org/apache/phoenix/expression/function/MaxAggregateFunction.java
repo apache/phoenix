@@ -43,6 +43,10 @@ public class MaxAggregateFunction extends MinAggregateFunction {
 
     public MaxAggregateFunction() {
     }
+
+    public MaxAggregateFunction(List<Expression> childExpressions) {
+        this(childExpressions, null);
+    }
     
     public MaxAggregateFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {
         super(childExpressions, delegate);

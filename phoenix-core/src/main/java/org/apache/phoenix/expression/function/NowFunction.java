@@ -20,9 +20,12 @@ package org.apache.phoenix.expression.function;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.CurrentDateParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
+
 
 /**
  * 
@@ -31,7 +34,7 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
  *
  */
 @BuiltInFunction(name = NowFunction.NAME,
-nodeClass=CurrentDateParseNode.class, args= {})
+        nodeClass=CurrentDateParseNode.class, args= {}, classType = FunctionClassType.ALIAS, derivedFunctions = {CurrentDateFunction.class})
 public abstract class NowFunction extends ScalarFunction {
     
     public static final String NAME = "NOW";

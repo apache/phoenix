@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.RegexpSubstrParseNode;
@@ -52,7 +53,9 @@ import org.apache.phoenix.schema.types.PVarchar;
     nodeClass = RegexpSubstrParseNode.class, args={
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
-    @Argument(allowedTypes={PLong.class}, defaultValue="1")} )
+    @Argument(allowedTypes={PLong.class}, defaultValue="1")},
+    classType = FunctionParseNode.FunctionClassType.ABSTRACT,
+    derivedFunctions = {ByteBasedRegexpSubstrFunction.class, StringBasedRegexpSubstrFunction.class})
 public abstract class RegexpSubstrFunction extends PrefixFunction {
     public static final String NAME = "REGEXP_SUBSTR";
 

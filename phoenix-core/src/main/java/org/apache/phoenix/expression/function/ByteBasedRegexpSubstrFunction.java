@@ -23,7 +23,23 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.util.regex.JONIPattern;
 import org.joni.Option;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
+import org.apache.phoenix.expression.util.regex.JONIPattern;
+import org.joni.Option;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 
+@BuiltInFunction(name=RegexpSubstrFunction.NAME,
+        args= {
+                @Argument(allowedTypes={PVarchar.class}),
+                @Argument(allowedTypes={PVarchar.class}),
+                @Argument(allowedTypes={PLong.class}, defaultValue="1")},
+        classType = FunctionClassType.DERIVED
+)
 public class ByteBasedRegexpSubstrFunction extends RegexpSubstrFunction {
     public ByteBasedRegexpSubstrFunction() {
     }

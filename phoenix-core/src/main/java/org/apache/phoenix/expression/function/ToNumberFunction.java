@@ -31,10 +31,13 @@ import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.base.Preconditions;
 
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.*;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -60,6 +63,37 @@ public class ToNumberFunction extends ScalarFunction {
 	private FunctionArgumentType type;
     
     public ToNumberFunction() {}
+
+    public ToNumberFunction(List<Expression> children, StatementContext context) throws SQLException {
+        super(children.subList(0, 1));
+        PDataType dataType = children.get(0).getDataType();
+        String formatString = (String)((LiteralExpression)children.get(1)).getValue(); // either date or number format string
+        Format formatter =  null;
+        FunctionArgumentType type;
+
+        if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+            if (formatString == null) {
+                formatString = context.getDateFormat();
+                formatter = context.getDateFormatter();
+            } else {
+                formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
+            }
+            type = FunctionArgumentType.TEMPORAL;
+        }
+        else if (dataType.isCoercibleTo(PChar.INSTANCE)) {
+            if (formatString != null) {
+                formatter = FunctionArgumentType.CHAR.getFormatter(formatString);
+            }
+            type = FunctionArgumentType.CHAR;
+        }
+        else {
+            throw new SQLException(dataType + " type is unsupported for TO_NUMBER().  Numeric and temporal types are supported.");
+        }
+        Preconditions.checkNotNull(type);
+        this.type = type;
+        this.formatString = formatString;
+        this.format = formatter;
+    }
 
     public ToNumberFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter) throws SQLException {
         super(children.subList(0, 1));
