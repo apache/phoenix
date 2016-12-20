@@ -15,6 +15,8 @@ import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.schema.CustomColumnResolvingTable;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.impl.AbstractTable;
@@ -51,7 +53,8 @@ import com.google.common.collect.Lists;
  * Implementation of Calcite {@link org.apache.calcite.schema.Table} SPI for
  * Phoenix.
  */
-public class PhoenixTable extends AbstractTable implements TranslatableTable {
+public class PhoenixTable extends AbstractTable
+    implements TranslatableTable, CustomColumnResolvingTable {
   public final TableMapping tableMapping;
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
@@ -131,7 +134,7 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
             RelDataType type = CalciteUtils.pDataTypeToRelDataType(
                     typeFactory, pColumn.getDataType(), pColumn.getMaxLength(),
                     pColumn.getScale(), pColumn.getArraySize());
-            builder.add(pColumn.getName().getString(), type);
+            builder.add(tableMapping.getColumnNames().get(i), type);
             builder.nullable(pColumn.isNullable());
         }
         return builder.build();
@@ -165,5 +168,11 @@ public class PhoenixTable extends AbstractTable implements TranslatableTable {
                 return RelDistributions.RANDOM_DISTRIBUTED;
             }
         };
+    }
+
+    @Override
+    public List<org.apache.calcite.util.Pair<RelDataTypeField, List<String>>> resolveColumn(
+            RelDataType rowType, RelDataTypeFactory typeFactory, List<String> names) {
+        return tableMapping.resolveColumn(rowType, typeFactory, names);
     }
 }
