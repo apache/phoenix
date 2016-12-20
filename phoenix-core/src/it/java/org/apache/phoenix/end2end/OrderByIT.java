@@ -195,7 +195,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
                     "  (a_string varchar not null, cf1.a integer, cf1.b varchar, col1 integer, cf2.c varchar, cf2.d integer, col2 integer" +
                     "  CONSTRAINT pk PRIMARY KEY (a_string))\n";
             createTestTable(getUrl(), ddl);
-            String dml = "UPSERT INTO " + tableName + "(a_string, a, b, col1, c, d, col2) VALUES(?,?,?,?,?,?,?)";
+            String dml = "UPSERT INTO " + tableName + " VALUES(?,?,?,?,?,?,?)";
             PreparedStatement stmt = conn.prepareStatement(dml);
             stmt.setString(1, "a");
             stmt.setInt(2, 40);
@@ -223,7 +223,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-            String query = "select a_string, a, b, col1, c, d, col2 from " + tableName + " order by 2, 5";
+            String query = "select * from " + tableName + " order by 2, 5";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("c",rs.getString(1));
@@ -251,7 +251,7 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             assertEquals(1,rs.getInt(7));         
             assertFalse(rs.next());  
 
-            query = "select a_string, a, b, col1, c, d, col2 from " + tableName + " order by 7";
+            query = "select * from " + tableName + " order by 7";
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));  
