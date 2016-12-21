@@ -19,6 +19,9 @@ package org.apache.phoenix.end2end;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX;
+import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX_LOCKED;
+import static org.apache.phoenix.query.ConnectionQueryServicesImpl.UPGRADE_MUTEX_UNLOCKED;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.util.UpgradeUtil.SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW;
@@ -694,17 +697,30 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         }
     }
     
+    private void putUnlockKVInSysMutex(byte[] row) throws Exception {
+        try (Connection conn = getConnection(false, null)) {
+            ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            try (HTableInterface sysMutexTable = services.getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+                byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+                byte[] qualifier = UPGRADE_MUTEX;
+                Put put = new Put(row);
+                put.add(family, qualifier, UPGRADE_MUTEX_UNLOCKED);
+                sysMutexTable.put(put);
+                sysMutexTable.flushCommits();
+            }
+        }
+    }
+    
     @Test
     public void testAcquiringAndReleasingUpgradeMutex() throws Exception {
         ConnectionQueryServices services = null;
         byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
                 generateUniqueName());
-        boolean dropSysMutexTable = false;
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            putUnlockKVInSysMutex(mutexRowKey);
             assertTrue(((ConnectionQueryServicesImpl)services)
                     .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey));
-            dropSysMutexTable = true;
             try {
                 ((ConnectionQueryServicesImpl)services)
                         .acquireUpgradeMutex(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_7_0, mutexRowKey);
@@ -714,16 +730,6 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             }
             assertTrue(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
             assertFalse(((ConnectionQueryServicesImpl)services).releaseUpgradeMutex(mutexRowKey));
-        } finally {
-            // We need to drop the SYSTEM.MUTEX table else other tests calling acquireUpgradeMutex will unexpectedly fail because they
-            // won't see the UNLOCKED cell present for their key. This cell is inserted into the table the first time we create the 
-            // SYSTEM.MUTEX table.
-            if (services != null && dropSysMutexTable) {
-                try (HBaseAdmin admin = services.getAdmin()) {
-                    admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
-                    admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
-                }
-            }
         }
     }
     
@@ -735,9 +741,9 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         final AtomicInteger numExceptions = new AtomicInteger(0);
         ConnectionQueryServices services = null;
         final byte[] mutexKey = Bytes.toBytes(generateUniqueName());
-        boolean dropSysMutexTable = false;
         try (Connection conn = getConnection(false, null)) {
             services = conn.unwrap(PhoenixConnection.class).getQueryServices();
+            putUnlockKVInSysMutex(mutexKey);
             FutureTask<Void> task1 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus1, services, latch, numExceptions, mutexKey));
             FutureTask<Void> task2 = new FutureTask<>(new AcquireMutexRunnable(mutexStatus2, services, latch, numExceptions, mutexKey));
             Thread t1 = new Thread(task1);
@@ -751,20 +757,9 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             task1.get();
             task2.get();
             assertTrue("One of the threads should have acquired the mutex", mutexStatus1.get() || mutexStatus2.get());
-            dropSysMutexTable = true;
             assertNotEquals("One and only one thread should have acquired the mutex ", mutexStatus1.get(),
                     mutexStatus2.get());
             assertEquals("One and only one thread should have caught UpgradeRequiredException ", 1, numExceptions.get());
-        } finally {
-            // We need to drop the SYSTEM.MUTEX table else other tests calling acquireUpgradeMutex will unexpectedly fail because they
-            // won't see the UNLOCKED cell present for their key. This cell is inserted into the table the first time we create the 
-            // SYSTEM.MUTEX table.
-            if (services != null && dropSysMutexTable) {
-                try (HBaseAdmin admin = services.getAdmin()) {
-                    admin.disableTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
-                    admin.deleteTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
-                }
-            }
         }
     }
     
