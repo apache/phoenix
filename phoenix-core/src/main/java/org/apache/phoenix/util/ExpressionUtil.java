@@ -15,6 +15,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 
 public class ExpressionUtil {
@@ -42,6 +43,15 @@ public class ExpressionUtil {
 
     public static LiteralExpression getNullExpression(Expression expression) throws SQLException {
         return LiteralExpression.newConstant(null, expression.getDataType(), expression.getDeterminism());
+    }
+    
+    public static boolean evaluatesToTrue(Expression expression) {
+        if (isConstant(expression)) {
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            expression.evaluate(null, ptr);
+            return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
+        }
+        return false;
     }
 
 }
