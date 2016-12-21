@@ -276,9 +276,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final boolean renewLeaseEnabled;
     private final boolean isAutoUpgradeEnabled;
     private final AtomicBoolean upgradeRequired = new AtomicBoolean(false);
-    private static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
-    private static final byte[] UPGRADE_MUTEX_LOCKED = "UPGRADE_MUTEX_LOCKED".getBytes();
-    private static final byte[] UPGRADE_MUTEX_UNLOCKED = "UPGRADE_MUTEX_UNLOCKED".getBytes();
+    public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
+    public static final byte[] UPGRADE_MUTEX_LOCKED = "UPGRADE_MUTEX_LOCKED".getBytes();
+    public static final byte[] UPGRADE_MUTEX_UNLOCKED = "UPGRADE_MUTEX_UNLOCKED".getBytes();
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -2372,6 +2372,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             hConnectionEstablished = true;
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             try (HBaseAdmin admin = getAdmin()) {
+                                createSysMutexTable(admin);
                                 boolean mappedSystemCatalogExists = admin
                                         .tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true));
                                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
@@ -2458,6 +2459,27 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
+    private void createSysMutexTable(HBaseAdmin admin) throws IOException, SQLException {
+        try {
+            HTableDescriptor tableDesc = new HTableDescriptor(
+                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES));
+            HColumnDescriptor columnDesc = new HColumnDescriptor(
+                    PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
+            columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
+            tableDesc.addFamily(columnDesc);
+            admin.createTable(tableDesc);
+            try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+                byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+                Put put = new Put(mutexRowKey);
+                put.add(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
+                sysMutexTable.put(put);
+            }
+        } catch (TableExistsException e) {
+            // Ignore
+        }
+    }
+
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException {
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
@@ -2973,24 +2995,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp, byte[] rowToLock) throws IOException,
             SQLException {
         Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-        try (HBaseAdmin admin = getAdmin()) {
-            try {
-                HTableDescriptor tableDesc = new HTableDescriptor(
-                        TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES));
-                HColumnDescriptor columnDesc = new HColumnDescriptor(
-                        PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
-                columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
-                tableDesc.addFamily(columnDesc);
-                admin.createTable(tableDesc);
-                try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
-                    Put put = new Put(rowToLock);
-                    put.add(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
-                    sysMutexTable.put(put);
-                }
-            } catch (TableExistsException e) {
-                // Ignore
-            }
-        }
         try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
             byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
             byte[] qualifier = UPGRADE_MUTEX;
