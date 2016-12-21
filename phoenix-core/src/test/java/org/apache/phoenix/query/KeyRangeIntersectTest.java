@@ -18,9 +18,9 @@
 
 package org.apache.phoenix.query;
 
+import static org.apache.hadoop.hbase.util.Bytes.toBytes;
 import static org.apache.phoenix.query.KeyRange.EMPTY_RANGE;
 import static org.apache.phoenix.query.KeyRange.EVERYTHING_RANGE;
-import static org.apache.hadoop.hbase.util.Bytes.toBytes;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -28,6 +28,8 @@ import java.util.Collection;
 import junit.framework.TestCase;
 
 import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.util.DateUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -86,6 +88,11 @@ public class KeyRangeIntersectTest extends TestCase {
                     PChar.INSTANCE.getKeyRange(toBytes("E"), false, toBytes("F"), true),
                     EMPTY_RANGE
                 },
+                {
+                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2011-01-01")), true, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-01-01")), true),
+                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2012-10-21")), false, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-10-31")), false),
+                    PDate.INSTANCE.getKeyRange(PDate.INSTANCE.toBytes(DateUtil.parseDate("2012-10-21")), false, PDate.INSTANCE.toBytes(DateUtil.parseDate("2016-01-01")), true)
+                }
         });
     }
     @Test

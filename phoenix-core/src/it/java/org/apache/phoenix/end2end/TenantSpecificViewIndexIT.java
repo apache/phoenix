@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -28,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
@@ -283,5 +285,50 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertTrue(rs.next());
         assertEquals("value1", rs.getString(1));
         assertFalse("No other rows should have been returned for the tenant", rs.next()); // should have just returned one record since for org1 we have only one row.
+    }
+    
+    @Test
+    public void testOverlappingDatesFilter() throws SQLException {
+        String tenantUrl = getUrl() + ';' + TENANT_ID_ATTRIB + "=tenant1" + ";" + QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB + "=true";
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName 
+                + "(ORGANIZATION_ID CHAR(15) NOT NULL, "
+                + "PARENT_TYPE CHAR(3) NOT NULL, "
+                + "PARENT_ID CHAR(15) NOT NULL,"
+                + "CREATED_DATE DATE NOT NULL "
+                + "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID, PARENT_TYPE, PARENT_ID, CREATED_DATE DESC)"
+                + ") VERSIONS=1,MULTI_TENANT=true,REPLICATION_SCOPE=1"; 
+                
+        try (Connection conn = DriverManager.getConnection(getUrl());
+                Connection viewConn = DriverManager.getConnection(tenantUrl) ) {
+            // create table
+            conn.createStatement().execute(ddl);
+            // create index
+            conn.createStatement().execute("CREATE INDEX IF NOT EXISTS IDX ON " + tableName + "(PARENT_TYPE, CREATED_DATE, PARENT_ID)");
+            // create view
+            viewConn.createStatement().execute("CREATE VIEW IF NOT EXISTS " + viewName + " AS SELECT * FROM "+ tableName );
+            
+            String query ="EXPLAIN SELECT PARENT_ID FROM " + viewName
+                    + " WHERE PARENT_TYPE='001' "
+                    + "AND (CREATED_DATE > to_date('2011-01-01') AND CREATED_DATE < to_date('2016-10-31'))"
+                    + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
+            
+            ResultSet rs = viewConn.createStatement().executeQuery(query);
+            String expectedPlanFormat = "CLIENT SERIAL 1-WAY RANGE SCAN OVER IDX ['tenant1        ','001','%s 00:00:00.001'] - ['tenant1        ','001','%s 00:00:00.000']" + "\n" +
+                        "    SERVER FILTER BY FIRST KEY ONLY" + "\n" +
+                        "    SERVER 501 ROW LIMIT" + "\n" +
+                        "CLIENT 501 ROW LIMIT";
+            assertEquals(String.format(expectedPlanFormat, "2011-01-01", "2016-10-31"), QueryUtil.getExplainPlan(rs));
+            
+            query ="EXPLAIN SELECT PARENT_ID FROM " + viewName
+                    + " WHERE PARENT_TYPE='001' "
+                    + " AND (CREATED_DATE >= to_date('2011-01-01') AND CREATED_DATE <= to_date('2016-01-01'))"
+                    + " AND (CREATED_DATE > to_date('2012-10-21') AND CREATED_DATE < to_date('2016-10-31')) "
+                    + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
+            
+            rs = viewConn.createStatement().executeQuery(query);
+            assertEquals(String.format(expectedPlanFormat, "2012-10-21", "2016-01-01"), QueryUtil.getExplainPlan(rs));
+        }
     }
 }
