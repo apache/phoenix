@@ -130,13 +130,14 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       val rowSeq = columns.map { case (name, sqlType) =>
         val res = pr.resultMap(name)
 
-        // Special handling for data types
-        if(dateAsTimestamp && sqlType == 91) { // 91 is the defined type for Date
-          new java.sql.Timestamp(res.asInstanceOf[java.sql.Date].getTime)
-        }
-        else {
-          res
-        }
+          // Special handling for data types
+          if (dateAsTimestamp && sqlType == 91) { // 91 is the defined type for Date
+            new java.sql.Timestamp(res.asInstanceOf[java.sql.Date].getTime)
+          } else if (sqlType == 92) { // 92 is the defined type for Time
+            new java.sql.Timestamp(res.asInstanceOf[java.sql.Time].getTime)
+          } else {
+            res
+          }
       }
 
       // Create a Spark Row from the sequence
