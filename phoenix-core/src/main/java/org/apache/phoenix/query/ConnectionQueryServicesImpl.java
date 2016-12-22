@@ -2375,7 +2375,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             hConnectionEstablished = true;
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             try (HBaseAdmin admin = getAdmin()) {
-                                createSysMutexTable(admin);
                                 boolean mappedSystemCatalogExists = admin
                                         .tableExists(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, true));
                                 if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM,
@@ -2393,6 +2392,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 + " is found but client does not have "
                                                 + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                                                 .build().buildException(); }
+                                createSysMutexTable(admin);
                             }
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
