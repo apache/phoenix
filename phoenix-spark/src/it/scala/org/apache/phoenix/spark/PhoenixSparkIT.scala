@@ -572,4 +572,16 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
     assert(Math.abs(epoch - ts) < 300000)
   }
+
+  test("Can load Phoenix Time columns through DataFrame API") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.read
+      .format("org.apache.phoenix.spark")
+      .options(Map("table" -> "TIME_TEST", "zkUrl" -> quorumAddress))
+      .load
+    val time = df.select("COL1").first().getTimestamp(0).getTime
+    val epoch = new Date().getTime
+    assert(Math.abs(epoch - time) < 86400000)
+  }
+
 }
