@@ -26,7 +26,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 
 import com.google.common.base.Preconditions;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.*;
@@ -55,6 +57,38 @@ public class ToCharFunction extends ScalarFunction {
     private FunctionArgumentType type;
     
     public ToCharFunction() {
+    }
+
+    public ToCharFunction(List<Expression> children, StatementContext context) throws SQLException {
+        super(children.subList(0, 1));
+        PDataType dataType = children.get(0).getDataType();
+        String formatString = (String)((LiteralExpression)children.get(1)).getValue(); // either date or number format string
+        Format formatter;
+        FunctionArgumentType type;
+        if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+            if (formatString == null) {
+                formatString = context.getDateFormat();
+                formatter = context.getDateFormatter();
+            } else {
+                formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
+            }
+            type = FunctionArgumentType.TEMPORAL;
+        }
+        else if (dataType.isCoercibleTo(PDecimal.INSTANCE)) {
+            if (formatString == null)
+                formatString = context.getNumberFormat();
+            formatter = FunctionArgumentType.NUMERIC.getFormatter(formatString);
+            type = FunctionArgumentType.NUMERIC;
+        }
+        else {
+            throw new SQLException(dataType + " type is unsupported for TO_CHAR().  Numeric and temporal types are supported.");
+        }
+        Preconditions.checkNotNull(formatString);
+        Preconditions.checkNotNull(formatter);
+        Preconditions.checkNotNull(type);
+        this.type = type;
+        this.formatString = formatString;
+        this.formatter = formatter;
     }
 
     public ToCharFunction(List<Expression> children, FunctionArgumentType type, String formatString, Format formatter) throws SQLException {

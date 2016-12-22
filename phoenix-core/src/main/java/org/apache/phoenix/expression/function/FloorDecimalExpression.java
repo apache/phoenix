@@ -29,6 +29,11 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PDecimal;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 
 import com.google.common.collect.Lists;
 
@@ -40,6 +45,14 @@ import com.google.common.collect.Lists;
  *
  * @since 3.0.0
  */
+@BuiltInFunction(name = FloorFunction.NAME,
+        args = {
+                @Argument(allowedTypes={PDecimal.class}),
+                @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
+                @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
+        },
+        classType = FunctionClassType.DERIVED
+)
 public class FloorDecimalExpression extends RoundDecimalExpression {
 
     public FloorDecimalExpression() {}
