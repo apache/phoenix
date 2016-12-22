@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.RegexpReplaceParseNode;
@@ -53,7 +54,9 @@ import org.apache.phoenix.schema.types.PVarchar;
     nodeClass = RegexpReplaceParseNode.class, args= {
     @Argument(allowedTypes={PVarchar.class}),
     @Argument(allowedTypes={PVarchar.class}),
-    @Argument(allowedTypes={PVarchar.class},defaultValue="null")} )
+    @Argument(allowedTypes={PVarchar.class},defaultValue="null")},
+    classType = FunctionParseNode.FunctionClassType.ABSTRACT,
+    derivedFunctions = {ByteBasedRegexpReplaceFunction.class, StringBasedRegexpReplaceFunction.class})
 public abstract class RegexpReplaceFunction extends ScalarFunction {
     public static final String NAME = "REGEXP_REPLACE";
 

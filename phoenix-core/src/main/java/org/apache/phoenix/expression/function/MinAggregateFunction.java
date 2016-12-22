@@ -45,6 +45,10 @@ public class MinAggregateFunction extends DelegateConstantToCountAggregateFuncti
 
     public MinAggregateFunction() {
     }
+
+    public MinAggregateFunction(List<Expression> childExpressions) {
+        super(childExpressions, null);
+    }
     
     public MinAggregateFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {
         super(childExpressions, delegate);
