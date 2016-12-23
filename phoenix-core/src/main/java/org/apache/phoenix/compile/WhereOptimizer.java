@@ -439,7 +439,12 @@ public class WhereOptimizer {
                 if (l.size() == 1) {
                     return l.get(0);
                 }
-                return new AndExpression(l);
+                try {
+                    return AndExpression.create(l);
+                } catch (SQLException e) {
+                    //shouldn't happen
+                    throw new RuntimeException(e);
+                }
             }
             return node;
         }
