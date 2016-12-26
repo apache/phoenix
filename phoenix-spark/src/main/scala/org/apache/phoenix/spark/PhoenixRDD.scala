@@ -129,11 +129,10 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       // Create a sequence of column data
       val rowSeq = columns.map { case (name, sqlType) =>
         val res = pr.resultMap(name)
-
           // Special handling for data types
-          if (dateAsTimestamp && sqlType == 91) { // 91 is the defined type for Date
+          if (dateAsTimestamp && (sqlType == 91 || sqlType == 19)) { // 91 is the defined type for Date and 19 for UNSIGNED_DATE
             new java.sql.Timestamp(res.asInstanceOf[java.sql.Date].getTime)
-          } else if (sqlType == 92) { // 92 is the defined type for Time
+          } else if (sqlType == 92 || sqlType == 18) { // 92 is the defined type for Time and 18 for UNSIGNED_TIME
             new java.sql.Timestamp(res.asInstanceOf[java.sql.Time].getTime)
           } else {
             res
