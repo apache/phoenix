@@ -30,7 +30,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
@@ -97,6 +99,12 @@ public final class PhoenixConfigurationUtil {
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
     
     public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
+
+    public static final String INDEX_DISABLED_TIMESTAMP_VALUE = "phoenix.mr.index.disableTimestamp";
+
+    public static final String INDEX_MAINTAINERS = "phoenix.mr.index.maintainers";
+    
+    public static final String DISABLED_INDEXES = "phoenix.mr.index.disabledIndexes";
 
     public enum SchemaType {
         TABLE,
@@ -427,5 +435,28 @@ public final class PhoenixConfigurationUtil {
         }
     
         return ReflectionUtils.newInstance(processorClass, conf);
+    }
+
+    public static byte[] getIndexMaintainers(final Configuration configuration){
+        Preconditions.checkNotNull(configuration);
+        return Base64.decode(configuration.get(INDEX_MAINTAINERS));
+    }
+    
+    public static void setIndexMaintainers(final Configuration configuration,
+            final ImmutableBytesWritable indexMetaDataPtr) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(indexMetaDataPtr);
+        configuration.set(INDEX_MAINTAINERS, Base64.encodeBytes(indexMetaDataPtr.get()));
+    }
+    
+    public static void setDisableIndexes(Configuration configuration, String indexName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(indexName);
+        configuration.set(DISABLED_INDEXES, indexName);
+    }
+    
+    public static String getDisableIndexes(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(DISABLED_INDEXES);
     }
 }
