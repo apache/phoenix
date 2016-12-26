@@ -36,10 +36,10 @@ import com.google.common.collect.Maps;
  * Tests for the {@link IndexToolForPartialBuildWithNamespaceEnabled}
  */
 @RunWith(Parameterized.class)
-public class IndexToolForPartialBuildWithNamespaceEnabled extends IndexToolForPartialBuildIT {
+public class IndexToolForPartialBuildWithNamespaceEnabledIT extends IndexToolForPartialBuildIT {
     
     
-    public IndexToolForPartialBuildWithNamespaceEnabled(boolean localIndex, boolean isNamespaceEnabled) {
+    public IndexToolForPartialBuildWithNamespaceEnabledIT(boolean localIndex, boolean isNamespaceEnabled) {
         super(localIndex);
         this.isNamespaceEnabled=isNamespaceEnabled;
     }
