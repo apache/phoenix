@@ -48,11 +48,13 @@ public class IndexToolUtil {
 	 */
 	public static void updateIndexState(Configuration configuration,PIndexState state) throws SQLException {
 		final String masterTable = PhoenixConfigurationUtil.getInputTableName(configuration);
-		final String indexTable = PhoenixConfigurationUtil.getOutputTableName(configuration);
+		final String[] indexTables = PhoenixConfigurationUtil.getDisableIndexes(configuration).split(",");
 		final Properties overrideProps = new Properties();
 		final Connection connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
 		try {
-			updateIndexState(connection, masterTable, indexTable , state);
+            for (String indexTable : indexTables) {
+                updateIndexState(connection, masterTable, indexTable, state);
+            }
 		} finally {
 			if(connection != null) {
 				connection.close();
