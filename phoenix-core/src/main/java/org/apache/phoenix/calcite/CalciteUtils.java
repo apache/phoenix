@@ -56,6 +56,7 @@ import org.apache.calcite.util.Util;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -87,6 +88,7 @@ import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.AggregateFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
+import org.apache.phoenix.expression.function.CeilFunction;
 import org.apache.phoenix.expression.function.CeilTimestampExpression;
 import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
@@ -95,6 +97,7 @@ import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.ExpFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
+import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.LnFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
@@ -146,7 +149,22 @@ public class CalciteUtils {
             .parserConfig(SqlParser.Config.DEFAULT)
             .defaultSchema(rootSchema).build();
     }
-    
+
+    protected static final List<String> TRANSLATED_BUILT_IN_FUNCTIONS = Lists.newArrayList(
+            SqrtFunction.NAME,
+            PowerFunction.NAME,
+            LnFunction.NAME,
+            ExpFunction.NAME,
+            AbsFunction.NAME,
+            CurrentDateFunction.NAME,
+            CurrentTimeFunction.NAME,
+            LowerFunction.NAME,
+            UpperFunction.NAME,
+            CoalesceFunction.NAME,
+            TrimFunction.NAME,
+            CeilFunction.NAME,
+            FloorFunction.NAME);
+
     public static String createTempAlias() {
         return "$" + tempAliasCounter.incrementAndGet();
     }
@@ -756,7 +774,7 @@ public class CalciteUtils {
                         Function func = udf.getFunction();
                         if (func instanceof PhoenixScalarFunction) {
                             PhoenixScalarFunction scalarFunc = (PhoenixScalarFunction) func;
-                            BuiltInFunctionInfo info = new BuiltInFunctionInfo(scalarFunc.getFunctionInfo());
+                            BuiltInFunctionInfo info = scalarFunc.getBuiltInFunction() != null ? scalarFunc.getBuiltInFunction() : new BuiltInFunctionInfo(scalarFunc.getPFunction());
                             if (info.getArgs().length > children.size()) {
                                 List<Expression> moreChildren = new ArrayList<Expression>(children);
                                 for (int i = children.size(); i < info.getArgs().length; i++) {
@@ -769,7 +787,16 @@ public class CalciteUtils {
                             for(int i = 0; i < children.size(); i++) {
                                 FunctionParseNode.validateFunctionArguement(info, i, children.get(i));
                             }
-                            return new UDFExpression(children, scalarFunc.getFunctionInfo());
+                            if(scalarFunc.getBuiltInFunction() != null){
+                                try {
+                                    try {
+                                        return info.getFunc().getDeclaredConstructor(List.class).newInstance(children);
+                                    } catch (Exception e) {
+                                        return info.getFunc().getDeclaredConstructor(List.class, StatementContext.class).newInstance(children, implementor.getStatementContext());
+                                    }
+                                } catch (Exception e) {throw new RuntimeException ("Failed to create builtin function " + info.getName(), e);}
+                            }
+                            return new UDFExpression(children, scalarFunc.getPFunction());
                         }
                     } else if (op == SqlStdOperatorTable.SQRT) {
                         return new SqrtFunction(children);

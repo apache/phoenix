@@ -30,6 +30,7 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ImplementableFunction;
 import org.apache.calcite.schema.ScalarFunction;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.schema.types.PDataType;
@@ -38,13 +39,14 @@ import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.collect.Lists;
 
 public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunction {
-    private final PFunction functionInfo;
+    private final PFunction pFunction;
     @SuppressWarnings("rawtypes")
     private final PDataType returnType;
     private final List<FunctionParameter> parameters;
-    
+    private final BuiltInFunctionInfo builtInFunction;
+
     public PhoenixScalarFunction(PFunction functionInfo) {
-        this.functionInfo = functionInfo;
+        this.pFunction = functionInfo;
         this.returnType =
                 PDataType.fromSqlTypeName(SchemaUtil.normalizeIdentifier(functionInfo.getReturnType()));
         this.parameters = Lists.newArrayListWithExpectedSize(functionInfo.getFunctionArguments().size());
@@ -74,6 +76,14 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
                         }
                     });
         }
+        this.builtInFunction = null;
+    }
+
+    public PhoenixScalarFunction(BuiltInFunctionInfo info, List<FunctionParameter> parameters, PDataType returnType){
+        this.builtInFunction = info;
+        this.parameters = parameters;
+        this.returnType = returnType;
+        this.pFunction = null;
     }
 
     @Override
@@ -86,8 +96,12 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
         return parameters;
     }
     
-    public PFunction getFunctionInfo() {
-        return functionInfo;
+    public PFunction getPFunction() {
+        return pFunction;
+    }
+
+    public BuiltInFunctionInfo getBuiltInFunction(){
+        return builtInFunction;
     }
 
     private static String getArgumentName(int ordinal) {
