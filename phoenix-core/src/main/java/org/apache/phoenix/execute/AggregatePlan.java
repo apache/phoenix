@@ -133,14 +133,22 @@ public class AggregatePlan extends BaseQueryPlan {
 
     private static class OrderingResultIteratorFactory implements ParallelIteratorFactory {
         private final QueryServices services;
+        private final OrderBy orderBy;
         
-        public OrderingResultIteratorFactory(QueryServices services) {
+        public OrderingResultIteratorFactory(QueryServices services,OrderBy orderBy) {
             this.services = services;
+            this.orderBy=orderBy;
         }
         @Override
         public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String tableName, QueryPlan plan) throws SQLException {
             Expression expression = RowKeyExpression.INSTANCE;
-            OrderByExpression orderByExpression = new OrderByExpression(expression, false, true);
+            boolean isNullsLast=false;
+            boolean isAscending=true;
+            if(this.orderBy==OrderBy.REV_ROW_KEY_ORDER_BY) {
+                isNullsLast=true; //which is needed for the whole rowKey.
+                isAscending=false;
+            }
+            OrderByExpression orderByExpression = new OrderByExpression(expression, isNullsLast, isAscending);
             int threshold = services.getProps().getInt(QueryServices.SPOOL_THRESHOLD_BYTES_ATTRIB, QueryServicesOptions.DEFAULT_SPOOL_THRESHOLD_BYTES);
             return new OrderedResultIterator(scanner, Collections.<OrderByExpression>singletonList(orderByExpression), threshold);
         }
@@ -171,7 +179,7 @@ public class AggregatePlan extends BaseQueryPlan {
                 innerFactory = new SpoolingResultIterator.SpoolingResultIteratorFactory(services);
             }
         } else {
-            innerFactory = new OrderingResultIteratorFactory(services);
+            innerFactory = new OrderingResultIteratorFactory(services,this.getOrderBy());
         }
         if (parallelIteratorFactory == null) {
             return innerFactory;

@@ -18,18 +18,14 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.query.BaseTest;
 import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.experimental.categories.Category;
 
-@Category(NeedsOwnMiniClusterTest.class)
-public class BaseOwnClusterIT extends BaseTest {
-    @AfterClass
-    public static void doTeardown() throws Exception {
-        tearDownMiniCluster();
-    }
-
+/**
+ * Base class for tests that need their own mini cluster. Classes that extend this base class don't necessarily have to
+ * use unique names for tables and sequences. Any new integration tests that need their own mini cluster should be
+ * extending {@link BaseUniqueNamesOwnClusterIT} class directly.
+ */
+public class BaseOwnClusterIT extends BaseUniqueNamesOwnClusterIT {
     @After
     public void cleanUpAfterTest() throws Exception {
         deletePriorMetaData(HConstants.LATEST_TIMESTAMP, getOldUrl());

@@ -56,6 +56,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
@@ -63,9 +64,11 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.TransactionUtil;
@@ -1045,16 +1048,23 @@ public class IndexIT extends ParallelStatsDisabledIT {
         String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         // Check system tables priorities.
-        try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin()) {
-            for (HTableDescriptor htd : admin.listTables()) {
-                if (htd.getTableName().getNameAsString().startsWith(QueryConstants.SYSTEM_SCHEMA_NAME)) {
-                    String val = htd.getValue("PRIORITY");
-                    assertNotNull("PRIORITY is not set for table:" + htd, val);
-                    assertTrue(Integer.parseInt(val)
-                            >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
-                }
+        try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin(); 
+                Connection c = DriverManager.getConnection(getUrl())) {
+            ResultSet rs = c.getMetaData().getTables("", 
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, 
+                    null, 
+                    new String[] {PTableType.SYSTEM.toString()});
+            ReadOnlyProps p = c.unwrap(PhoenixConnection.class).getQueryServices().getProps();
+            while (rs.next()) {
+                String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                String tName = rs.getString(PhoenixDatabaseMetaData.TABLE_NAME);
+                org.apache.hadoop.hbase.TableName hbaseTableName = SchemaUtil.getPhysicalTableName(SchemaUtil.getTableName(schemaName, tName), p);
+                HTableDescriptor htd = admin.getTableDescriptor(hbaseTableName);
+                String val = htd.getValue("PRIORITY");
+                assertNotNull("PRIORITY is not set for table:" + htd, val);
+                assertTrue(Integer.parseInt(val)
+                        >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
             }
-
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions;
             try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -1080,6 +1090,51 @@ public class IndexIT extends ParallelStatsDisabledIT {
                 assertNotNull("PRIORITY is not set for table:" + indexTable, val);
                 assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
             }
+        }
+    }
+
+    @Test
+    public void testQueryBackToDataTableWithDescPKColumn() throws SQLException {
+        doTestQueryBackToDataTableWithDescPKColumn(true);
+        doTestQueryBackToDataTableWithDescPKColumn(false);
+    }
+
+    private void doTestQueryBackToDataTableWithDescPKColumn(boolean isSecondPKDesc) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            // create data table and index table
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            String ddl = "CREATE TABLE " + fullTableName + "(p1 integer not null, p2 integer not null, " +
+                    " a integer, b integer CONSTRAINT PK PRIMARY KEY ";
+            if (isSecondPKDesc) {
+                ddl += "(p1, p2 desc))";
+            } else {
+                ddl += "(p1 desc, p2))";
+            }
+            stmt.executeUpdate(ddl);
+            ddl = "CREATE "+ (localIndex ? "LOCAL " : "") + " INDEX " + fullIndexName + " on " + fullTableName + "(a)";
+            stmt.executeUpdate(ddl);
+
+            // upsert a single row
+            String upsert = "UPSERT INTO " + fullTableName + " VALUES(1,2,3,4)";
+            stmt.executeUpdate(upsert);
+
+            // try select with index
+            // a = 3, should hit index table, but we select column B, so it will query back to data table
+            String query = "SELECT /*+index(" + fullTableName + " " + fullIndexName + "*/ b from " + fullTableName +
+                    " WHERE a = 3";
+            ResultSet rs = stmt.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertFalse(rs.next());
+            rs.close();
+            stmt.close();
         }
     }
 

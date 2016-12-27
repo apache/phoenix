@@ -25,7 +25,6 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -37,8 +36,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
-import org.apache.hadoop.hbase.util.Addressing;
-import org.apache.hadoop.hbase.zookeeper.ZKConfig;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -352,38 +349,11 @@ public final class QueryUtil {
 
     public static String getConnectionUrl(Properties props, Configuration conf, String principal, boolean isCalciteEnabled)
             throws ClassNotFoundException, SQLException {
-        // TODO: props is ignored!
         // read the hbase properties from the configuration
-        String server = ZKConfig.getZKQuorumServersString(conf);
-        // could be a comma-separated list
-        String[] rawServers = server.split(",");
-        List<String> servers = new ArrayList<String>(rawServers.length);
-        int port = -1;
-        for (String serverPort : rawServers) {
-            try {
-                server = Addressing.parseHostname(serverPort);
-                int specifiedPort = Addressing.parsePort(serverPort);
-                // there was a previously specified port and it doesn't match this server
-                if (port > 0 && specifiedPort != port) {
-                    throw new IllegalStateException("Phoenix/HBase only supports connecting to a " +
-                            "single zookeeper client port. Specify servers only as host names in " +
-                            "HBase configuration");
-                }
-                // set the port to the specified port
-                port = specifiedPort;
-                servers.add(server);
-            } catch (IllegalArgumentException e) {
-            }
-        }
-        // port wasn't set, shouldn't ever happen from HBase, but just in case
-        if (port == -1) {
-            port = conf.getInt(QueryServices.ZOOKEEPER_PORT_ATTRIB, -1);
-            if (port == -1) {
-                // TODO: fall back to the default in HConstants#DEFAULT_ZOOKEPER_CLIENT_PORT
-                throw new RuntimeException("Client zk port was not set!");
-            }
-        }
-        server = Joiner.on(',').join(servers);
+        int port = conf.getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
+        // Build the ZK quorum server string with "server:clientport" list, separated by ','
+        final String server =
+                conf.get(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST);
         String znodeParent = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT,
                 HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         String url = getUrl(server, port, znodeParent, principal, isCalciteEnabled);

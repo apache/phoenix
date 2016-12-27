@@ -42,6 +42,7 @@
     "CACHE"
     "COLUMNS"
     "IF"
+    "IMMUTABLE"
     "INCLUDE"
     "INDEX"
     "ROW_TIMESTAMP"
@@ -63,15 +64,15 @@
   statementParserMethods: [
     "SqlCommit()",
     "SqlPhoenixExplain()",
-    "SqlCreateView()",
-    "SqlCreateTable()",
-    "SqlCreateIndex()",
+    "SqlCreateFunction()"
     "SqlCreateSequence()",
+    "SqlCreateView()",
+    "SqlCreateIndex()",
+    "SqlCreateTable()",
     "SqlDropTableOrDropView()",
     "SqlDropIndex()",
     "SqlDropSequence()",
     "SqlUpdateStatistics()",
-    "SqlCreateFunction()"
     "SqlDropFunction()"
     "SqlUploadJarsNode()"
     "SqlDeleteJarNode()"

@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.ByteUtil;
@@ -51,8 +52,10 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -64,13 +67,19 @@ import com.google.common.collect.Maps;
  * Tests for the {@link IndexTool}
  */
 @RunWith(Parameterized.class)
-public class IndexExtendedIT extends BaseOwnClusterIT {
+@Category(NeedsOwnMiniClusterTest.class)
+public class IndexExtendedIT extends BaseTest {
     private final boolean localIndex;
     private final boolean transactional;
     private final boolean directApi;
     private final String tableDDLOptions;
     private final boolean mutable;
     
+    @AfterClass
+    public static void doTeardown() throws Exception {
+        tearDownMiniCluster();
+    }
+
     public IndexExtendedIT(boolean transactional, boolean mutable, boolean localIndex, boolean directApi) {
         this.localIndex = localIndex;
         this.transactional = transactional;
@@ -107,7 +116,7 @@ public class IndexExtendedIT extends BaseOwnClusterIT {
                  { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
                  { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
                  { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
-                 { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true }
+                 { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true } 
            });
     }
     

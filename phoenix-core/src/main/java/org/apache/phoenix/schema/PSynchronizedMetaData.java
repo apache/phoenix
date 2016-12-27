@@ -161,23 +161,6 @@ public class PSynchronizedMetaData implements PMetaData {
     }
 
     @Override
-    public void addColumn(PName tenantId, String tableName, List<PColumn> columns,
-            long tableTimeStamp, long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled,
-            boolean isMultitenant, boolean storeNulls, boolean isTransactional,
-            long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
-            throws SQLException {
-        readWriteLock.writeLock().lock();
-        try {
-            delegate.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum,
-                isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional,
-                updateCacheFrequency, isNamespaceMapped, resolvedTime);
-        }
-        finally {
-            readWriteLock.writeLock().unlock();
-        }
-    }
-
-    @Override
     public PSchema getSchema(PTableKey key) throws SchemaNotFoundException {
         readWriteLock.readLock().lock();
         try {

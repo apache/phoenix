@@ -29,10 +29,12 @@ import org.apache.hadoop.hive.ql.io.AcidOutputFormat.Options;
 import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.DNS;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 
 import javax.naming.NamingException;
 import java.io.ByteArrayInputStream;
@@ -45,7 +47,10 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
@@ -75,7 +80,9 @@ public class PhoenixStorageHandlerUtil {
         DateFormat df = null;
 
         for (int i = 0, limit = values.length; i < limit; i++) {
-            if (serdeConstants.STRING_TYPE_NAME.equals(typeName)) {
+            if (serdeConstants.STRING_TYPE_NAME.equals(typeName) ||
+                    typeName.startsWith(serdeConstants.CHAR_TYPE_NAME) ||
+                    typeName.startsWith(serdeConstants.VARCHAR_TYPE_NAME)) {
                 results[i] = values[i];
             } else if (serdeConstants.INT_TYPE_NAME.equals(typeName)) {
                 results[i] = new Integer(values[i]);
@@ -182,10 +189,8 @@ public class PhoenixStorageHandlerUtil {
     }
 
     public static String getTableKeyOfSession(JobConf jobConf, String tableName) {
-        SessionState sessionState = SessionState.get();
 
-        String sessionId = sessionState.getSessionId();
-
+        String sessionId = jobConf.get(PhoenixConfigurationUtil.SESSION_ID);
         return new StringBuilder("[").append(sessionId).append("]-").append(tableName).toString();
     }
 
@@ -202,6 +207,14 @@ public class PhoenixStorageHandlerUtil {
         }
 
         return columnTypeMap;
+    }
+
+    public static List<String> getReadColumnNames(Configuration conf) {
+        String colNames = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR);
+        if (colNames != null && !colNames.isEmpty()) {
+            return Arrays.asList(colNames.split(PhoenixStorageHandlerConstants.COMMA));
+        }
+        return Collections.EMPTY_LIST;
     }
 
     public static boolean isTransactionalTable(Properties tableProperties) {

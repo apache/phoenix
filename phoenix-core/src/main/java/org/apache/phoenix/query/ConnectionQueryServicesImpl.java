@@ -19,11 +19,11 @@ package org.apache.phoenix.query;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.apache.hadoop.hbase.HColumnDescriptor.TTL;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_8_1;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_NAME;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
@@ -31,11 +31,12 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
-import static org.apache.phoenix.util.UpgradeUtil.getUpgradeSnapshotName;
+import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -228,6 +229,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final Logger logger = LoggerFactory.getLogger(ConnectionQueryServicesImpl.class);
     private static final int INITIAL_CHILD_SERVICES_CAPACITY = 100;
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
+    private static final int TTL_FOR_MUTEX = 15 * 60; // 15min 
     protected final Configuration config;
     private final ConnectionInfo connectionInfo;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
@@ -273,6 +275,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final boolean renewLeaseEnabled;
     private final boolean isAutoUpgradeEnabled;
     private final AtomicBoolean upgradeRequired = new AtomicBoolean(false);
+    public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
+    public static final byte[] UPGRADE_MUTEX_LOCKED = "UPGRADE_MUTEX_LOCKED".getBytes();
+    public static final byte[] UPGRADE_MUTEX_UNLOCKED = "UPGRADE_MUTEX_UNLOCKED".getBytes();
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -293,7 +298,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return hbaseVersion >= PhoenixDatabaseMetaData.MIN_RENEW_LEASE_VERSION;
                 }
             });
-
+    
     private PMetaData newEmptyMetaData() {
         return new PSynchronizedMetaData(new PMetaDataImpl(INITIAL_META_DATA_TABLE_CAPACITY, getProps()));
     }
@@ -632,26 +637,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             latestMetaDataLock.notifyAll();
             return metaData;
         }
-    }
-
-    @Override
-    public void addColumn(final PName tenantId, final String tableName, final List<PColumn> columns,
-            final long tableTimeStamp, final long tableSeqNum, final boolean isImmutableRows,
-            final boolean isWalDisabled, final boolean isMultitenant, final boolean storeNulls,
-            final boolean isTransactional, final long updateCacheFrequency, final boolean isNamespaceMapped,
-            final long resolvedTime) throws SQLException {
-        metaDataMutated(tenantId, tableName, tableSeqNum, new Mutator() {
-            @Override
-            public void mutate(PMetaData metaData) throws SQLException {
-                try {
-                    metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum,
-                            isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional,
-                            updateCacheFrequency, isNamespaceMapped, resolvedTime);
-                } catch (TableNotFoundException e) {
-                    // The DROP TABLE may have been processed first, so just ignore.
-                }
-            }
-        });
     }
 
     @Override
@@ -1064,14 +1049,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                      * brought down.
                      */
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
-                    if (allowOnlineTableSchemaUpdate()) {
-                        // No need to wait/poll for this update
-                        admin.modifyTable(physicalTable, newDesc);
-                    } else {
-                        admin.disableTable(physicalTable);
-                        admin.modifyTable(physicalTable, newDesc);
-                        admin.enableTable(physicalTable);
-                    }
+                    modifyTable(physicalTable, newDesc, true);
                 }
                 return null;
             } else {
@@ -1712,7 +1690,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> stmtProperties, Set<String> colFamiliesForPColumnsToBeAdded) throws SQLException {
+    public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> stmtProperties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns) throws SQLException {
         List<Pair<byte[], Map<String, Object>>> families = new ArrayList<>(stmtProperties.size());
         Map<String, Object> tableProps = new HashMap<String, Object>();
         Set<HTableDescriptor> tableDescriptors = Collections.emptySet();
@@ -2275,12 +2253,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
         SQLException sqlE = null;
         try {
-            metaConnection.createStatement().executeUpdate("UPSERT INTO " + SYSTEM_STATS_NAME + " (" + 
-                    PhoenixDatabaseMetaData.TENANT_ID + "," + PhoenixDatabaseMetaData.TABLE_SCHEM + "," +
-                    PhoenixDatabaseMetaData.TABLE_NAME + "," + PhoenixDatabaseMetaData.COLUMN_NAME + "," +
-                    PhoenixDatabaseMetaData.COLUMN_FAMILY + "," + PhoenixDatabaseMetaData.NULLABLE + ") VALUES (" +
-                    "null," + schemaName + "," + tableName + "," + columnName + "," + QueryConstants.DEFAULT_COLUMN_FAMILY + "," + 
-                    ResultSetMetaData.columnNullable + ")");
+            String dml = "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + PhoenixDatabaseMetaData.TENANT_ID + ","
+                    + PhoenixDatabaseMetaData.TABLE_SCHEM + "," + PhoenixDatabaseMetaData.TABLE_NAME + ","
+                    + PhoenixDatabaseMetaData.COLUMN_NAME + ","
+                    + PhoenixDatabaseMetaData.NULLABLE + ") VALUES (null, ?, ?, ?, ?)";
+            PreparedStatement stmt = metaConnection.prepareStatement(dml);
+            stmt.setString(1, schemaName);
+            stmt.setString(2, tableName);
+            stmt.setString(3, columnName);
+            stmt.setInt(4, ResultSetMetaData.columnNullable);
+            stmt.executeUpdate();
             metaConnection.commit();
         } catch (NewerTableAlreadyExistsException e) {
             logger.warn("Table already modified at this timestamp, so assuming column already nullable: " + columnName);
@@ -2390,6 +2372,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 + " is found but client does not have "
                                                 + IS_NAMESPACE_MAPPING_ENABLED + " enabled")
                                                 .build().buildException(); }
+                                createSysMutexTable(admin);
                             }
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -2442,7 +2425,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     initializationException = ex;
                                 }
                             } finally {
-                                initialized = true;
+                                try {
+                                    if (initializationException != null) { throw initializationException; }
+                                } finally {
+                                    initialized = true;
+                                }
                             }
                         }
                     } 
@@ -2455,10 +2442,33 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
     
+    private void createSysMutexTable(HBaseAdmin admin) throws IOException, SQLException {
+        try {
+            HTableDescriptor tableDesc = new HTableDescriptor(
+                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES));
+            HColumnDescriptor columnDesc = new HColumnDescriptor(
+                    PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
+            columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
+            tableDesc.addFamily(columnDesc);
+            admin.createTable(tableDesc);
+            try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+                byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+                Put put = new Put(mutexRowKey);
+                put.add(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES, UPGRADE_MUTEX, UPGRADE_MUTEX_UNLOCKED);
+                sysMutexTable.put(put);
+            }
+        } catch (TableExistsException e) {
+            // Ignore
+        }
+    }
+
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException {
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
-        } catch (TableAlreadyExistsException ignore) {}
+        } catch (TableAlreadyExistsException e) {
+            nSequenceSaltBuckets = getSaltBuckets(e);
+        }
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_STATS_TABLE_METADATA);
         } catch (TableAlreadyExistsException ignore) {}
@@ -2478,6 +2488,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         String snapshotName = null;
         String sysCatalogTableName = null;
         SQLException toThrow = null;
+        boolean acquiredMutexLock = false;
+        byte[] mutexRowKey = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+                PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
+        boolean snapshotCreated = false;
         try {
             if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
                 throw new UpgradeNotRequiredException();
@@ -2500,11 +2514,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
                 sysCatalogTableName = e.getTable().getPhysicalName().getString();
                 if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP
-                        && acquireUpgradeMutex(currentServerSideTableTimeStamp, e.getTable()
-                                .getPhysicalName().getBytes())) {
-                    snapshotName = getUpgradeSnapshotName(sysCatalogTableName,
-                            currentServerSideTableTimeStamp);
+                        && (acquiredMutexLock = acquireUpgradeMutex(currentServerSideTableTimeStamp, mutexRowKey))) {
+                    snapshotName = getSysCatalogSnapshotName(currentServerSideTableTimeStamp);
                     createSnapshot(snapshotName, sysCatalogTableName);
+                    snapshotCreated = true;
                 }
                 String columnsToAdd = "";
                 // This will occur if we have an older SYSTEM.CATALOG and we need to update it to
@@ -2796,12 +2809,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             } finally {
                 try {
-                    restoreFromSnapshot(sysCatalogTableName, snapshotName, success);
+                    if (snapshotCreated) {
+                        restoreFromSnapshot(sysCatalogTableName, snapshotName, success);
+                    }
                 } catch (SQLException e) {
                     if (toThrow != null) {
                         toThrow.setNextException(e);
                     } else {
                         toThrow = e;
+                    }
+                } finally {
+                    if (acquiredMutexLock) {
+                        releaseUpgradeMutex(mutexRowKey);
                     }
                 }
                 if (toThrow != null) { throw toThrow; }
@@ -2949,39 +2968,56 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     /**
      * Acquire distributed mutex of sorts to make sure only one JVM is able to run the upgrade code by
      * making use of HBase's checkAndPut api.
-     * <p>
-     * This method was added as part of 4.8.1 release. For clients upgrading to 4.8.1, the old value in the
-     * cell will be null i.e. the {@value QueryConstants#UPGRADE_MUTEX} column will be non-existent. For client's
-     * upgrading to a release newer than 4.8.1 the existing cell value will be non-null. The client which
-     * wins the race will end up setting the cell value to the {@value MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP}
-     * for the release.
-     * </p>
      * 
      * @return true if client won the race, false otherwise
      * @throws IOException
      * @throws SQLException
      */
     @VisibleForTesting
-    public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp, byte[] sysCatalogTableName) throws IOException,
+    public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp, byte[] rowToLock) throws IOException,
             SQLException {
         Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
-        try (HTableInterface sysCatalogTable = getTable(sysCatalogTableName)) {
-            byte[] row = SchemaUtil.getTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE);
-            byte[] family = PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-            byte[] qualifier = QueryConstants.UPGRADE_MUTEX;
-            byte[] oldValue = currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP_4_8_1 ? null
-                    : PLong.INSTANCE.toBytes(currentServerSideTableTimestamp);
-            byte[] newValue = PLong.INSTANCE.toBytes(MIN_SYSTEM_TABLE_TIMESTAMP);
-            // Note that the timestamp for this put doesn't really matter since UPGRADE_MUTEX column isn't used
-            // to calculate SYSTEM.CATALOG's server side timestamp.
-            Put put = new Put(row);
+        try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+            byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+            byte[] qualifier = UPGRADE_MUTEX;
+            byte[] oldValue = UPGRADE_MUTEX_UNLOCKED;
+            byte[] newValue = UPGRADE_MUTEX_LOCKED;
+            Put put = new Put(rowToLock);
             put.addColumn(family, qualifier, newValue);
-            boolean acquired = sysCatalogTable.checkAndPut(row, family, qualifier, oldValue, put);
-            if (!acquired) { throw new UpgradeInProgressException(
-                    getVersion(currentServerSideTableTimestamp), getVersion(MIN_SYSTEM_TABLE_TIMESTAMP)); }
+            boolean acquired =  sysMutexTable.checkAndPut(rowToLock, family, qualifier, oldValue, put);
+            if (!acquired) {
+                /*
+                 * Because of TTL on the SYSTEM_MUTEX_FAMILY, it is very much possible that the cell
+                 * has gone away. So we need to retry with an old value of null. Note there is a small
+                 * race condition here that between the two checkAndPut calls, it is possible that another
+                 * request would have set the value back to UPGRADE_MUTEX_UNLOCKED. In that scenario this
+                 * following checkAndPut would still return false even though the lock was available.
+                 */
+                acquired =  sysMutexTable.checkAndPut(rowToLock, family, qualifier, null, put);
+                if (!acquired) {
+                    throw new UpgradeInProgressException(getVersion(currentServerSideTableTimestamp),
+                        getVersion(MIN_SYSTEM_TABLE_TIMESTAMP));
+                }
+            }
             return true;
         }
+    }
+    
+    @VisibleForTesting
+    public boolean releaseUpgradeMutex(byte[] mutexRowKey) {
+        boolean released = false;
+        try (HTableInterface sysMutexTable = getTable(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES)) {
+            byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+            byte[] qualifier = UPGRADE_MUTEX;
+            byte[] expectedValue = UPGRADE_MUTEX_LOCKED;
+            byte[] newValue = UPGRADE_MUTEX_UNLOCKED;
+            Put put = new Put(mutexRowKey);
+            put.addColumn(family, qualifier, newValue);
+            released = sysMutexTable.checkAndPut(mutexRowKey, family, qualifier, expectedValue, put);
+        } catch (Exception e) {
+            logger.warn("Release of upgrade mutex failed", e);
+        }
+        return released;
     }
 
     private List<String> getTableNames(List<HTableDescriptor> tables) {
@@ -3829,6 +3865,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         private void waitForRandomDuration() throws InterruptedException {
             new CountDownLatch(1).await(random.nextInt(MAX_WAIT_TIME), MILLISECONDS);
         }
+        
+        private static class InternalRenewLeaseTaskException extends Exception {
+            public InternalRenewLeaseTaskException(String msg) {
+                super(msg);
+            }
+        }
 
         @Override
         public void run() {
@@ -3850,7 +3892,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     WeakReference<PhoenixConnection> connRef =
                             connectionsQueue.poll(1, TimeUnit.MILLISECONDS);
                     if (connRef == null) {
-                        throw new IllegalStateException(
+                        throw new InternalRenewLeaseTaskException(
                                 "Connection ref found to be null. This is a bug. Some other thread removed items from the connection queue.");
                     }
                     PhoenixConnection conn = connRef.get();
@@ -3869,7 +3911,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             WeakReference<TableResultIterator> ref =
                                     scannerQueue.poll(1, TimeUnit.MILLISECONDS);
                             if (ref == null) {
-                                throw new IllegalStateException(
+                                throw new InternalRenewLeaseTaskException(
                                         "TableResulIterator ref found to be null. This is a bug. Some other thread removed items from the scanner queue.");
                             }
                             TableResultIterator scanningItr = ref.get();
@@ -3906,13 +3948,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     }
                     numConnections--;
                 }
-            } catch (InterruptedException e1) {
+            } catch (InternalRenewLeaseTaskException e) {
+                logger.error("Exception thrown when renewing lease. Draining the queue of scanners ", e);
+                // clear up the queue since the task is about to be unscheduled.
+                connectionsQueue.clear();
+                // throw an exception since we want the task execution to be suppressed because we just encountered an
+                // exception that happened because of a bug.
+                throw new RuntimeException(e);
+            } catch (InterruptedException e) {
                 Thread.currentThread().interrupt(); // restore the interrupt status
-                logger.warn("Thread interrupted when renewing lease ", e1);
-                throw new RuntimeException(e1);
-            } catch (Exception e2) {
-                logger.warn("Exception thrown when renewing lease ", e2);
-                throw new RuntimeException(e2);
+                logger.error("Thread interrupted when renewing lease.", e);
+            } catch (Exception e) {
+                logger.error("Exception thrown when renewing lease ", e);
+                // don't drain the queue and swallow the exception in this case since we don't want the task
+                // execution to be suppressed because renewing lease of a scanner failed.
+            } catch (Throwable e) {
+                logger.error("Exception thrown when renewing lease. Draining the queue of scanners ", e);
+                connectionsQueue.clear(); // clear up the queue since the task is about to be unscheduled.
+                throw new RuntimeException(e);
             }
         }
     }
@@ -4069,5 +4122,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public boolean isUpgradeRequired() {
         return upgradeRequired.get();
+    }
+
+    @Override
+    public Configuration getConfiguration() {
+        return config;
     }
 }

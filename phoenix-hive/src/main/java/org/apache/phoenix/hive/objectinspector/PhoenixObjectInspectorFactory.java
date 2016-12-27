@@ -102,7 +102,7 @@ public class PhoenixObjectInspectorFactory {
                                 serdeParams.getEscapeChar());
                         break;
                     case CHAR:
-                        oi = new PhoenixCharObjectInspector();
+                        oi = new PhoenixCharObjectInspector((PrimitiveTypeInfo)type);
                         break;
                     case DATE:
                         oi = new PhoenixDateObjectInspector();
@@ -111,7 +111,7 @@ public class PhoenixObjectInspectorFactory {
                         oi = new PhoenixTimestampObjectInspector();
                         break;
                     case DECIMAL:
-                        oi = new PhoenixDecimalObjectInspector();
+                        oi = new PhoenixDecimalObjectInspector((PrimitiveTypeInfo) type);
                         break;
                     case BINARY:
                         oi = new PhoenixBinaryObjectInspector();

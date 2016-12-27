@@ -62,7 +62,12 @@ public final class FlumeConstants {
     /** Whether to ignore case when performing regex matches. */
     public static final String IGNORE_CASE_CONFIG = "regexIgnoreCase";
     public static final boolean IGNORE_CASE_DEFAULT = false;
-
+    
+    /** JSON expression used to parse groups from event data. */
+    public static final String CONFIG_COLUMNS_MAPPING = "columnsMapping";
+    public static final String CONFIG_PARTIAL_SCHEMA = "partialSchema";
+    public static final String JSON_DEFAULT = "{}";
+    
     /** Comma separated list of column names . */
     public static final String CONFIG_COLUMN_NAMES = "columns";
 

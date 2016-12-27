@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.util.TestUtil.KEYONLY_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -37,13 +36,22 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
 
-public class QueryWithLimitIT extends BaseOwnClusterIT {
+public class QueryWithLimitIT extends BaseUniqueNamesOwnClusterIT {
+    
+    private String tableName;
+    
+    @Before
+    public void generateTableName() {
+        tableName = generateUniqueName();
+    }
+    
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -62,19 +70,19 @@ public class QueryWithLimitIT extends BaseOwnClusterIT {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         try {
-            conn.createStatement().execute("create table " + KEYONLY_NAME + "\n" +
+            conn.createStatement().execute("create table " + tableName + "\n" +
                 "   (i1 integer not null, i2 integer not null\n" +
                 "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
             initTableValues(conn, 100);
             
-            String query = "SELECT i1 FROM KEYONLY LIMIT 1";
+            String query = "SELECT i1 FROM " + tableName +" LIMIT 1";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(0, rs.getInt(1));
             assertFalse(rs.next());
             
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-            assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER KEYONLY\n" + 
+            assertEquals("CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName + "\n" + 
                     "    SERVER FILTER BY FIRST KEY ONLY\n" + 
                     "    SERVER 1 ROW LIMIT\n" + 
                     "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
@@ -88,13 +96,13 @@ public class QueryWithLimitIT extends BaseOwnClusterIT {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
 
-        conn.createStatement().execute("create table " + KEYONLY_NAME + "\n" +
+        conn.createStatement().execute("create table " + tableName + "\n" +
                 "   (i1 integer not null, i2 integer not null\n" +
                 "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
         initTableValues(conn, 100);
-        conn.createStatement().execute("UPDATE STATISTICS " + KEYONLY_NAME);
+        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
         
-        String query = "SELECT i1 FROM KEYONLY";
+        String query = "SELECT i1 FROM " + tableName;
         try {
             ResultSet rs = conn.createStatement().executeQuery(query);
             rs.next();
@@ -105,10 +113,10 @@ public class QueryWithLimitIT extends BaseOwnClusterIT {
         conn.close();
     }
     
-    protected static void initTableValues(Connection conn, int nRows) throws Exception {
+    protected void initTableValues(Connection conn, int nRows) throws Exception {
         PreparedStatement stmt = conn.prepareStatement(
-            "upsert into " +
-            "KEYONLY VALUES (?, ?)");
+            "upsert into " + tableName + 
+            " VALUES (?, ?)");
         for (int i = 0; i < nRows; i++) {
             stmt.setInt(1, i);
             stmt.setInt(2, i+1);

@@ -27,7 +27,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -121,7 +120,8 @@ class DefaultStatisticsCollector implements StatisticsCollector {
                     env.getRegion().getTableDesc());
         } else {
             // Next check for GUIDE_POST_WIDTH on table
-            HTableInterface htable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES));
+            HTableInterface htable = env.getTable(
+                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
             Get get = new Get(ptableKey);
             get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
             Result result = htable.get(get);
@@ -296,15 +296,15 @@ class DefaultStatisticsCollector implements StatisticsCollector {
 
     @Override
     public void init() throws IOException {
-        this.guidePostsInfoWriterMap.clear();
-        maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
         initGuidepostDepth();
     }
 
     @Override
     public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
         Pair<Long, GuidePostsInfoBuilder> pair = guidePostsInfoWriterMap.get(fam);
-        if (pair != null) { return pair.getSecond().build(); }
+        if (pair != null) {
+            return pair.getSecond().build();
+        }
         return null;
     }
 

@@ -55,6 +55,8 @@ import com.google.common.collect.Lists;
 public final class PhoenixConfigurationUtil {
 
     private static final Log LOG = LogFactory.getLog(PhoenixInputFormat.class);
+
+    public static final String SESSION_ID = "phoenix.sessionid";
     
     public static final String UPSERT_STATEMENT = "phoenix.upsert.stmt";
     

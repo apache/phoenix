@@ -330,7 +330,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 final CreateTableStatement create = nodeFactory.createTable(
                         name, props, columnDefs, pkConstraint,
                         splitNodes, tableType, table.ifNotExists.booleanValue(),
-                        baseTableName, where, 0);
+                        baseTableName, where, 0, table.immutable.booleanValue());
                 try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
                     final CreateTableCompiler compiler = new CreateTableCompiler(stmt, Operation.UPSERT);
                     final MutationPlan plan = compiler.compile(create);

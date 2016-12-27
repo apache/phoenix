@@ -48,7 +48,9 @@ import org.apache.phoenix.util.ByteUtil;
  @FunctionParseNode.BuiltInFunction(name=RegexpSplitFunction.NAME,
         nodeClass = RegexpSplitParseNode.class, args= {
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class}),
-        @FunctionParseNode.Argument(allowedTypes={PVarchar.class})})
+        @FunctionParseNode.Argument(allowedTypes={PVarchar.class})},
+        classType = FunctionParseNode.FunctionClassType.ABSTRACT,
+        derivedFunctions = {ByteBasedRegexpSplitFunction.class, StringBasedRegexpSplitFunction.class})
 public abstract class RegexpSplitFunction extends ScalarFunction {
 
     public static final String NAME = "REGEXP_SPLIT";

@@ -158,7 +158,7 @@ public class HashCacheClient  {
             PDataType type = keyExpression.getDataType();
             keyExpression.reset();
             if (keyExpression.evaluate(tuple, ptr)) {
-                return LiteralExpression.newConstant(type.toObject(ptr), type);
+                return LiteralExpression.newConstant(type.toObject(ptr, keyExpression.getSortOrder()), type);
             }
             
             return LiteralExpression.newConstant(null, type);
@@ -170,7 +170,7 @@ public class HashCacheClient  {
             PDataType type = child.getDataType();
             child.reset();
             if (child.evaluate(tuple, ptr)) {
-                values.add(LiteralExpression.newConstant(type.toObject(ptr), type));
+                values.add(LiteralExpression.newConstant(type.toObject(ptr, child.getSortOrder()), type));
             } else {
                 values.add(LiteralExpression.newConstant(null, type));
             }

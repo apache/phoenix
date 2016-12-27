@@ -262,6 +262,21 @@ public class SchemaUtil {
         return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId), QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName));
     }
 
+    public static byte[] getColumnKey(String tenantId, String schemaName, String tableName, String columnName, String familyName) {
+        Preconditions.checkNotNull(columnName,"Column name cannot be null");
+        if (familyName == null) {
+            return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), 
+                    QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
+                    QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName));
+        }
+        return ByteUtil.concat(tenantId == null  ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(tenantId),
+                QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName), 
+                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(tableName),
+                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(columnName),
+                QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(familyName));
+    }
+
     public static String getTableName(String schemaName, String tableName) {
         return getName(schemaName,tableName, false);
     }
@@ -979,7 +994,7 @@ public class SchemaUtil {
 
     public static TableName getPhysicalTableName(byte[] fullTableName, Configuration conf) {
         return getPhysicalTableName(fullTableName, isNamespaceMappingEnabled(
-                isSystemTable(fullTableName) ? PTableType.SYSTEM : null, new ReadOnlyProps(conf.iterator())));
+                isSystemTable(fullTableName) ? PTableType.SYSTEM : null, conf));
     }
 
     public static TableName getPhysicalName(byte[] fullTableName, ReadOnlyProps readOnlyProps) {
@@ -1003,6 +1018,14 @@ public class SchemaUtil {
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {
         return PTableType.TABLE.equals(tableType) && isNamespaceMappingEnabled(tableType, props);
+    }
+    
+    public static boolean isNamespaceMappingEnabled(PTableType type, Configuration conf) {
+        return conf.getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
+                QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED)
+                && (type == null || !PTableType.SYSTEM.equals(type)
+                        || conf.getBoolean(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE,
+                                QueryServicesOptions.DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE));
     }
 
     public static boolean isNamespaceMappingEnabled(PTableType type, ReadOnlyProps readOnlyProps) {

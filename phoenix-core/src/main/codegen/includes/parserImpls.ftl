@@ -110,6 +110,7 @@ SqlNode SqlCreateView() :
     )
     {
         return new SqlCreateTable(pos.plus(getPos()), tableName,
+            SqlLiteral.createBoolean(false, SqlParserPos.ZERO),        
             SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
             columnDefs, baseTableName, where, tableOptions);
     }
@@ -123,6 +124,7 @@ SqlNode SqlCreateTable() :
 {
     SqlParserPos pos;
     SqlIdentifier tableName;
+    boolean immutable;
     boolean ifNotExists;
     SqlNodeList columnDefs;
     SqlIdentifier pkConstraint;
@@ -131,7 +133,16 @@ SqlNode SqlCreateTable() :
     SqlNodeList splitKeys;
 }
 {
-    <CREATE> { pos = getPos(); } <TABLE>
+    <CREATE>
+    (
+        <IMMUTABLE> { immutable = true; }
+        |
+        {
+            immutable = false;
+        }
+    )
+    { pos = getPos(); }
+    <TABLE>
     (
         <IF> <NOT> <EXISTS> { ifNotExists = true; }
         |
@@ -172,6 +183,7 @@ SqlNode SqlCreateTable() :
     )
     {
         return new SqlCreateTable(pos.plus(getPos()), tableName,
+            SqlLiteral.createBoolean(immutable, SqlParserPos.ZERO),        
             SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
             columnDefs, pkConstraint, pkConstraintColumnDefs,
             tableOptions, splitKeys);

@@ -568,9 +568,29 @@ public class ScanRanges {
     }
 
     public int getBoundPkColumnCount() {
-        return this.useSkipScanFilter ? ScanUtil.getRowKeyPosition(slotSpan, ranges.size()) : getBoundPkSpan(ranges, slotSpan);
+        return this.useSkipScanFilter ? ScanUtil.getRowKeyPosition(slotSpan, ranges.size()) : Math.max(getBoundPkSpan(ranges, slotSpan), getBoundMinMaxSlotCount());
     }
 
+    private int getBoundMinMaxSlotCount() {
+        if (minMaxRange == KeyRange.EMPTY_RANGE || minMaxRange == KeyRange.EVERYTHING_RANGE) {
+            return 0;
+        }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        // We don't track how many slots are bound for the minMaxRange, so we need
+        // to traverse the upper and lower range key and count the slots.
+        int lowerCount = 0;
+        int maxOffset = schema.iterator(minMaxRange.getLowerRange(), ptr);
+        for (int pos = 0; Boolean.TRUE.equals(schema.next(ptr, pos, maxOffset)); pos++) {
+            lowerCount++;
+        }
+        int upperCount = 0;
+        maxOffset = schema.iterator(minMaxRange.getUpperRange(), ptr);
+        for (int pos = 0; Boolean.TRUE.equals(schema.next(ptr, pos, maxOffset)); pos++) {
+            upperCount++;
+        }
+        return Math.max(lowerCount, upperCount);
+    }
+    
     public int getBoundSlotCount() {
         int count = 0;
         boolean hasUnbound = false;

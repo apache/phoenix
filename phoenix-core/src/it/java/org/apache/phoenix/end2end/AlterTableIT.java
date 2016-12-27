@@ -1166,9 +1166,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         assertImmutableRows(conn, dataTableFullName, true);
         ddl = "ALTER TABLE " + dataTableFullName + " SET COMPACTION_ENABLED = FALSE, VERSIONS = 10";
         conn.createStatement().execute(ddl);
-        ddl = "ALTER TABLE " + dataTableFullName + " SET COMPACTION_ENABLED = FALSE, CF1.MIN_VERSIONS = 1, CF2.MIN_VERSIONS = 3, MIN_VERSIONS = 8, IMMUTABLE_ROWS=false, CF1.KEEP_DELETED_CELLS = true, KEEP_DELETED_CELLS = false";
+        ddl = "ALTER TABLE " + dataTableFullName + " SET COMPACTION_ENABLED = FALSE, CF1.MIN_VERSIONS = 1, CF2.MIN_VERSIONS = 3, MIN_VERSIONS = 8, CF1.KEEP_DELETED_CELLS = true, KEEP_DELETED_CELLS = false";
         conn.createStatement().execute(ddl);
-        assertImmutableRows(conn, dataTableFullName, false);
 
         try (HBaseAdmin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
             HTableDescriptor tableDesc = admin.getTableDescriptor(Bytes.toBytes(dataTableFullName));
@@ -1344,11 +1343,16 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String viewFullName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         ddl = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE CREATION_TIME = 1";
         conn1.createStatement().execute(ddl);
-        ddl = "ALTER VIEW " + viewFullName + " SET IMMUTABLE_ROWS = TRUE";
+        ddl = "ALTER VIEW " + viewFullName + " SET UPDATE_CACHE_FREQUENCY = 10";
         conn1.createStatement().execute(ddl);
-        assertImmutableRows(conn1, viewFullName, true);
-        ddl = "ALTER VIEW " + viewFullName + " SET IMMUTABLE_ROWS = FALSE";
+        conn1.createStatement().execute("SELECT * FROM " + viewFullName);
+        PhoenixConnection pconn = conn1.unwrap(PhoenixConnection.class);
+        assertEquals(10, pconn.getTable(new PTableKey(pconn.getTenantId(), viewFullName)).getUpdateCacheFrequency());
+        ddl = "ALTER VIEW " + viewFullName + " SET UPDATE_CACHE_FREQUENCY = 20";
         conn1.createStatement().execute(ddl);
+        conn1.createStatement().execute("SELECT * FROM " + viewFullName);
+        pconn = conn1.unwrap(PhoenixConnection.class);
+        assertEquals(20, pconn.getTable(new PTableKey(pconn.getTenantId(), viewFullName)).getUpdateCacheFrequency());
         assertImmutableRows(conn1, viewFullName, false);
         ddl = "ALTER VIEW " + viewFullName + " SET DISABLE_WAL = TRUE";
         try {

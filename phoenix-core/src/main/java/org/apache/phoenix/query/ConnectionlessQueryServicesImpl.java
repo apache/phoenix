@@ -114,6 +114,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
     private final GuidePostsCache guidePostsCache;
+    private final Configuration config;
     
     public ConnectionlessQueryServicesImpl(QueryServices services, ConnectionInfo connInfo, Properties info) {
         super(services);
@@ -137,7 +138,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
         // Without making a copy of the configuration we cons up, we lose some of our properties
         // on the server side during testing.
-        config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
+        this.config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration(config);
         TransactionManager txnManager = new TransactionManager(config);
         this.txSystemClient = new InMemoryTxSystemClient(txnManager);
         this.guidePostsCache = new GuidePostsCache(this, config);
@@ -176,16 +177,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
         metaData.updateResolvedTimestamp(table, resolvedTimestamp);
-    }
-
-    @Override
-    public void addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
-            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
-                    throws SQLException {
-        metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
-                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
-                resolvedTime);
     }
 
     @Override
@@ -270,8 +261,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
-    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded) throws SQLException {
-        return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, null);
+    public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table, Map<String, List<Pair<String,Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columnsToBeAdded) throws SQLException {
+        List<PColumn> columns = Lists.newArrayList(table.getColumns());
+        columns.addAll(columnsToBeAdded);
+        return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0, PTableImpl.makePTable(table, columns));
     }
 
     @Override
@@ -661,5 +654,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public boolean isUpgradeRequired() {
         return false;
+    }
+
+    @Override
+    public Configuration getConfiguration() {
+        return config;
     }
 }

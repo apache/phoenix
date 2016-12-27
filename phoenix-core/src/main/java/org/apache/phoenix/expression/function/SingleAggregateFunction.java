@@ -30,8 +30,8 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 
 /**
@@ -92,7 +92,7 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
     
     private SingleAggregateFunction(List<Expression> children, boolean isConstant) {
         super(children);
-        this.isConstant = children.get(0) instanceof LiteralExpression;
+        this.isConstant = isConstant;
         this.aggregator = newClientAggregator();
     }
 
@@ -143,7 +143,7 @@ abstract public class SingleAggregateFunction extends AggregateFunction {
         return agg;
     }
     
-    public void readFields(DataInput input, Configuration conf) throws IOException {
+    public final void readFields(DataInput input, Configuration conf) throws IOException {
         super.readFields(input);
         aggregator = newServerAggregator(conf);
     }

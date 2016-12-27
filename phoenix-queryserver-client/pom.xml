@@ -27,7 +27,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.9.0-HBase-1.2-SNAPSHOT</version>
+    <version>4.10.0-HBase-1.2-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-queryserver-client</artifactId>
   <name>Phoenix Query Server Client</name>
@@ -50,6 +50,7 @@
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
     <shaded.package>org.apache.phoenix.shaded</shaded.package>
+    <protobuf-java.version>3.1.0</protobuf-java.version>
   </properties>
 
   <build>
@@ -89,6 +90,7 @@
                   <resource>NOTICE</resource>
                   <file>${project.basedir}/../NOTICE</file>
                 </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
               </transformers>
               <filters>
                 <filter>
@@ -111,6 +113,14 @@
                 <relocation>
                   <pattern>com.fasterxml</pattern>
                   <shadedPattern>${shaded.package}.com.fasterxml</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.google.collect</pattern>
+                  <shadedPattern>${shaded.package}.com.google.collect</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.google.protobuf</pattern>
+                  <shadedPattern>${shaded.package}.com.google.protobuf</shadedPattern>
                 </relocation>
                 <!-- ORG relocation -->
                 <!-- Calcite/Avatica is not relocated because the wire API (as of <=1.8.0) expects
@@ -172,7 +182,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.calcite.avatica</groupId>
-      <artifactId>avatica</artifactId>
+      <artifactId>avatica-core</artifactId>
     </dependency>
     <dependency>
       <!-- a dependency for the thin-client uberjar -->

@@ -141,7 +141,6 @@ public class OrderByCompiler {
                 // since this is the order they actually are in.
                 if (expression.getSortOrder() == SortOrder.DESC) {
                     isAscending = !isAscending;
-                    isNullsLast = !isNullsLast;
                 }
                 OrderByExpression orderByExpression = new OrderByExpression(expression, isNullsLast, isAscending);
                 orderByExpressions.add(orderByExpression);

@@ -37,6 +37,7 @@ public class SqlCreateTable extends SqlCall {
     public final SqlOperator operator;
 
     public final SqlIdentifier tableName;
+    public final SqlLiteral immutable;
     public final SqlLiteral ifNotExists;
     public final SqlNodeList columnDefs;
     public final SqlIdentifier pkConstraint;
@@ -51,6 +52,7 @@ public class SqlCreateTable extends SqlCall {
     public SqlCreateTable(
             SqlParserPos pos,
             SqlIdentifier tableName,
+            SqlLiteral immutable,
             SqlLiteral ifNotExists,
             SqlNodeList columnDefs,
             SqlIdentifier pkConstraint,
@@ -60,6 +62,7 @@ public class SqlCreateTable extends SqlCall {
         super(pos);
         this.operator = new SqlDdlOperator("CREATE TABLE", SqlKind.CREATE_TABLE);
         this.tableName = tableName;
+        this.immutable = immutable;
         this.ifNotExists = ifNotExists;
         this.columnDefs = columnDefs;
         this.pkConstraint = pkConstraint;
@@ -74,6 +77,7 @@ public class SqlCreateTable extends SqlCall {
     public SqlCreateTable(
             SqlParserPos pos,
             SqlIdentifier tableName,
+            SqlLiteral immutable,
             SqlLiteral ifNotExists,
             SqlNodeList columnDefs,
             SqlIdentifier baseTableName,
@@ -82,6 +86,7 @@ public class SqlCreateTable extends SqlCall {
         super(pos);
         this.operator = new SqlDdlOperator("CREATE VIEW", SqlKind.CREATE_VIEW);
         this.tableName = tableName;
+        this.immutable = immutable;
         this.ifNotExists = ifNotExists;
         this.columnDefs = columnDefs;
         this.pkConstraint = null;

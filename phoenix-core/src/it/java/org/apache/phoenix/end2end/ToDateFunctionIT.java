@@ -48,7 +48,7 @@ public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
     private static java.util.Date callToDateFunction(Connection conn, String invocation) throws SQLException {
         Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery(String.format("SELECT %s FROM SYSTEM.CATALOG LIMIT 1", invocation));
+        ResultSet rs = stmt.executeQuery(String.format("SELECT %s FROM \"SYSTEM\".CATALOG LIMIT 1", invocation));
         assertTrue(rs.next());
         java.util.Date returnValue = (java.util.Date)rs.getObject(1);
         rs.close();

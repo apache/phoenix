@@ -519,5 +519,42 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         conn.close();
     }
     
+    @Test
+    public void testDeleteOnSingleLowerCaseVarcharColumn() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String tableName = generateUniqueName();
+        String ddl = " create table " + tableName + "(pk varchar primary key, \"counter1\" varchar, \"counter2\" smallint)";
+        conn.createStatement().execute(ddl);
+        String dml = "UPSERT INTO " + tableName + " VALUES('a','b') ON DUPLICATE KEY UPDATE \"counter1\" = null";
+        conn.createStatement().execute(dml);
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals(null,rs.getString(2));
+        assertFalse(rs.next());
+        
+        dml = "UPSERT INTO " + tableName + " VALUES('a','b',0)";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO " + tableName + " VALUES('a','b', 0) ON DUPLICATE KEY UPDATE \"counter1\" = null, \"counter2\" = \"counter2\" + 1";
+        conn.createStatement().execute(dml);
+        dml = "UPSERT INTO " + tableName + " VALUES('a','b', 0) ON DUPLICATE KEY UPDATE \"counter1\" = 'c', \"counter2\" = \"counter2\" + 1";
+        conn.createStatement().execute(dml);
+        conn.commit();
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+        assertTrue(rs.next());
+        assertEquals("a",rs.getString(1));
+        assertEquals("c",rs.getString(2));
+        assertEquals(2,rs.getInt(3));
+        assertFalse(rs.next());
+
+        conn.close();
+    }
+    
 }
     

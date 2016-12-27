@@ -39,6 +39,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregators;
+import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.iterate.AggregatingResultIterator;
 import org.apache.phoenix.iterate.BaseGroupedAggregatingResultIterator;
@@ -69,9 +70,9 @@ import com.google.common.collect.Lists;
 public class ClientAggregatePlan extends ClientProcessingPlan {
     private final GroupBy groupBy;
     private final Expression having;
-    private final Aggregators serverAggregators;
-    private final Aggregators clientAggregators;
-
+    private final ServerAggregators serverAggregators;
+    private final ClientAggregators clientAggregators;
+    
     public ClientAggregatePlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, Expression where, OrderBy orderBy, GroupBy groupBy, Expression having, QueryPlan delegate) {
         this(context, statement, table, projector, limit, offset, where, orderBy, groupBy, having, delegate, 
@@ -87,8 +88,13 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
         super(context, statement, table, projector, limit, offset, where, orderBy, delegate);
         this.groupBy = groupBy;
         this.having = having;
-        this.serverAggregators = serverAggregators;
-        this.clientAggregators = clientAggregators;
+        this.clientAggregators = context.getAggregationManager().getAggregators();
+        // We must deserialize rather than clone based off of client aggregators because
+        // upon deserialization we create the server-side aggregators instead of the client-side
+        // aggregators. We use the Configuration directly here to avoid the expense of creating
+        // another one.
+        this.serverAggregators = ServerAggregators.deserialize(context.getScan()
+                        .getAttribute(BaseScannerRegionObserver.AGGREGATORS), context.getConnection().getQueryServices().getConfiguration());
     }
 
     @Override

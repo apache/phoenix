@@ -162,6 +162,28 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         assertEquals("a", rs.getString(1));
         assertEquals("2013-06-08 00:00:00.000", rs.getString(2));
     }
+    
+    @Test
+    public void testUpsertValuesWithDescDecimal() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("create table UpsertDecimalDescTest (k DECIMAL(12,3) NOT NULL PRIMARY KEY DESC)");
+        conn.close();
+
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+5));
+        conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute("upsert into UpsertDecimalDescTest values (0.0)");
+        conn.commit();
+        conn.close();
+        
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts+10));
+        conn = DriverManager.getConnection(getUrl(), props);
+        ResultSet rs = conn.createStatement().executeQuery("select k from UpsertDecimalDescTest");
+        assertTrue(rs.next());
+        assertEquals(0.0, rs.getDouble(1), 0.001);
+    }
 
     @Test
     public void testUpsertRandomValues() throws Exception {
