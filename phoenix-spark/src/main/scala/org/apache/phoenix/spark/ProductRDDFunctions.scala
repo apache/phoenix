@@ -17,12 +17,11 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
-import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 
 import scala.collection.JavaConversions._
 
-class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Logging with Serializable {
+class ProductRDDFunctions[A <: Product](data: RDD[A]) extends Serializable {
 
   def saveToPhoenix(tableName: String, cols: Seq[String],
                     conf: Configuration = new Configuration, zkUrl: Option[String] = None, tenantId: Option[String] = None)
