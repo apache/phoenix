@@ -198,6 +198,11 @@ def shell_quote(args):
         import pipes
         return " ".join([pipes.quote(v) for v in args])
 
+def common_sqlline_args(parser):
+    parser.add_argument('-v', '--verbose', help='Verbosity on sqlline.', default='true')
+    parser.add_argument('-c', '--color', help='Color setting for sqlline.', default='true')
+    parser.add_argument('-fc', '--fastconnect', help='Fetch all schemas on initial connection', default='false')
+
 if __name__ == "__main__":
     setPath()
     print "phoenix_class_path:", phoenix_class_path
