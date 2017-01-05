@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.hadoop.hbase.ClassFinder;
@@ -38,6 +39,8 @@ import org.junit.runner.Description;
 import org.junit.runner.JUnitCore;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class drives the End2End tests suite execution against an
@@ -45,6 +48,7 @@ import org.junit.runner.notification.Failure;
  */
 public class End2EndTestDriver extends AbstractHBaseTool {
     
+    private static final Logger LOG = LoggerFactory.getLogger(End2EndTestDriver.class);
     private static final String SHORT_REGEX_ARG = "r";
     private static final String SKIP_TESTS = "n";
     
@@ -73,7 +77,13 @@ public class End2EndTestDriver extends AbstractHBaseTool {
       }
 
       public void setPattern(String pattern) {
-        testFilterRe = Pattern.compile(pattern);
+        try {
+          testFilterRe = Pattern.compile(pattern);
+        } catch (PatternSyntaxException e) {
+          LOG.error("Failed to find tests using pattern '" + pattern
+              + "'. Is it a valid Java regular expression?", e);
+          throw e;
+        }
       }
 
       @Override
