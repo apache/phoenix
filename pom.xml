@@ -119,6 +119,8 @@
     <!-- Plugin options -->
     <numForkedUT>6</numForkedUT>
     <numForkedIT>6</numForkedIT>
+    <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
+    <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
