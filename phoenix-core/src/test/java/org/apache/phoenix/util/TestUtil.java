@@ -566,6 +566,7 @@ public class TestUtil {
                               + (upperRange != null ? (pkCol + " < ?") : "" )));
         String whereClause = whereClauseSuffix == null ? whereClauseStart : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
         String query = "SELECT /*+ NO_INDEX */ "+selectClause+" FROM " + tableName + whereClause;
+        conn = conn.unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
         if (lowerRange != null) {
             pstmt.setBytes(1, lowerRange);
@@ -596,6 +597,7 @@ public class TestUtil {
         String whereClause = whereClauseSuffix == null ? whereClauseStart
                 : whereClauseStart.length() == 0 ? (" WHERE " + whereClauseSuffix) : (" AND " + whereClauseSuffix);
         String query = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + whereClause;
+        conn = conn.unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
         if (lowerRange != null) {
             pstmt.setBytes(1, lowerRange);
