@@ -41,7 +41,9 @@ public enum MetricType {
     CACHE_REFRESH_SPLITS_COUNTER("Number of times cache was refreshed because of splits"),
     WALL_CLOCK_TIME_MS("Wall clock time elapsed for the overall query execution"),
     RESULT_SET_TIME_MS("Wall clock time elapsed for reading all records using resultSet.next()"),
-    OPEN_PHOENIX_CONNECTIONS_COUNTER("Number of open phoenix connections");
+    OPEN_PHOENIX_CONNECTIONS_COUNTER("Number of open phoenix connections"),
+    QUERY_SERVICES_COUNTER("Number of ConnectionQueryServicesImpl instantiated"),
+    HCONNECTIONS_COUNTER("Number of HConnections created by phoenix driver");
     
     private final String description;
 
