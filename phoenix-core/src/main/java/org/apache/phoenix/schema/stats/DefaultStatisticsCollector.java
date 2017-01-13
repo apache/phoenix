@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -70,6 +72,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
 
     private long guidePostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
+    private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
 
     DefaultStatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family,
             byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
@@ -119,16 +122,27 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             this.guidePostDepth = StatisticsUtil.getGuidePostDepth(guidepostPerRegion, guidepostWidth,
                     env.getRegion().getTableDesc());
         } else {
-            // Next check for GUIDE_POST_WIDTH on table
-            HTableInterface htable = env.getTable(
-                    SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-            Get get = new Get(ptableKey);
-            get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
-            Result result = htable.get(get);
             long guidepostWidth = -1;
-            if (!result.isEmpty()) {
-                Cell cell = result.listCells().get(0);
-                guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
+            HTableInterface htable = null;
+            try {
+                // Next check for GUIDE_POST_WIDTH on table
+                htable = env.getTable(
+                        SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
+                Get get = new Get(ptableKey);
+                get.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH_BYTES);
+                Result result = htable.get(get);
+                if (!result.isEmpty()) {
+                    Cell cell = result.listCells().get(0);
+                    guidepostWidth = PLong.INSTANCE.getCodec().decodeLong(cell.getValueArray(), cell.getValueOffset(), SortOrder.getDefault());
+                }
+            } finally {
+                if (htable != null) {
+                    try {
+                        htable.close();
+                    } catch (IOException e) {
+                        LOG.warn("Failed to close " + htable.getName(), e);
+                    }
+                }
             }
             if (guidepostWidth >= 0) {
                 this.guidePostDepth = guidepostWidth;
