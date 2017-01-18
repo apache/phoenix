@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.mapreduce;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -28,9 +31,6 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-
 public class CsvBulkImportUtilTest {
 
     @Test
@@ -41,7 +41,7 @@ public class CsvBulkImportUtilTest {
         char quote = '\002';
         char escape = '!';
 
-        CsvBulkImportUtil.initCsvImportJob(conf, delimiter, quote, escape, null);
+        CsvBulkImportUtil.initCsvImportJob(conf, delimiter, quote, escape, null, null);
 
         // Serialize and deserialize the config to ensure that there aren't any issues
         // with non-printable characters as delimiters

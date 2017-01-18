@@ -22,7 +22,6 @@ import java.text.Format;
 import java.util.Arrays;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.query.QueryConstants;
@@ -182,10 +181,7 @@ public class PBinary extends PBinaryBase {
 
     @Override
     public Object toObject(String value) {
-        if (value == null || value.length() == 0) {
-            return null;
-        }
-        return Base64.decode(value);
+        return PVarbinary.INSTANCE.toObject(value);
     }
 
     @Override
