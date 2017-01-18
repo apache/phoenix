@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -38,14 +39,18 @@ public class CsvBulkImportUtil {
      * @param quoteChar quote character for the CSV input
      * @param escapeChar escape character for the CSV input
      * @param arrayDelimiter array delimiter character, can be null
+     * @param binaryEncoding 
      */
     public static void initCsvImportJob(Configuration conf, char fieldDelimiter, char quoteChar,
-            char escapeChar, String arrayDelimiter) {
+            char escapeChar, String arrayDelimiter, String binaryEncoding) {
         setChar(conf, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY, fieldDelimiter);
         setChar(conf, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY, quoteChar);
         setChar(conf, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY, escapeChar);
         if (arrayDelimiter != null) {
             conf.set(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY, arrayDelimiter);
+        }
+        if(binaryEncoding!=null){
+            conf.set(QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING, binaryEncoding);
         }
     }
 
