@@ -213,6 +213,9 @@ public class PhoenixRuntime {
             if (execCmd.isLocalIndexUpgrade()) {
                 props.setProperty(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, "false");
             }
+            if (execCmd.binaryEncoding != null) {
+                props.setProperty(QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING, execCmd.binaryEncoding);
+            }
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
             conn.setRunningUpgrade(true);
             if (execCmd.isMapNamespace()) {
@@ -532,6 +535,7 @@ public class PhoenixRuntime {
         private boolean mapNamespace;
         private String srcTable;
         private boolean localIndexUpgrade;
+        private String binaryEncoding;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -539,6 +543,8 @@ public class PhoenixRuntime {
         public static ExecutionCommand parseArgs(String[] args) {
             Option tableOption = new Option("t", "table", true,
                     "Overrides the table into which the CSV data is loaded and is case sensitive");
+            Option binaryEncodingOption = new Option("b", "binaryEncoding", true,
+                    "Specifies binary encoding");
             Option headerOption = new Option("h", "header", true, "Overrides the column names to" +
                     " which the CSV data maps and is case sensitive. A special value of " +
                     "in-line indicating that the first line of the CSV file determines the " +
@@ -588,6 +594,7 @@ public class PhoenixRuntime {
             options.addOption(bypassUpgradeOption);
             options.addOption(mapNamespaceOption);
             options.addOption(localIndexUpgradeOption);
+            options.addOption(binaryEncodingOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -605,6 +612,10 @@ public class PhoenixRuntime {
             }
             if (cmdLine.hasOption(tableOption.getOpt())) {
                 execCmd.tableName = cmdLine.getOptionValue(tableOption.getOpt());
+            }
+            
+            if (cmdLine.hasOption(binaryEncodingOption.getOpt())) {
+                execCmd.binaryEncoding = cmdLine.getOptionValue(binaryEncodingOption.getOpt());
             }
 
             if (cmdLine.hasOption(headerOption.getOpt())) {

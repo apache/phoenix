@@ -18,6 +18,7 @@
 package org.apache.phoenix.util.json;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
@@ -49,5 +50,10 @@ public class JsonUpsertExecutorTest extends AbstractUpsertExecutorTest<Map<?, ?>
     public void setUp() throws SQLException {
         super.setUp();
         upsertExecutor = new JsonUpsertExecutor(conn, columnInfoList, preparedStatement, upsertListener);
+    }
+
+    @Override
+    protected UpsertExecutor<Map<?, ?>, Object> getUpsertExecutor(Connection conn) {
+        return new JsonUpsertExecutor(conn, columnInfoList, preparedStatement, upsertListener);
     }
 }
