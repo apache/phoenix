@@ -57,7 +57,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TestUtil.PTSDB_NAME + " (inst,host,date) VALUES(?,'b',CURRENT_DATE())");
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + TestUtil.PTSDB_NAME + " (inst,host,\"DATE\") VALUES(?,'b',CURRENT_DATE())");
         stmt.setString(1, "a");
         stmt.execute();
         stmt.execute();
@@ -316,8 +316,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            stmt = conn.prepareStatement("create table UpsertTimestamp (a integer NOT NULL, t timestamp NOT NULL CONSTRAINT pk PRIMARY KEY (a, t))");
-            stmt.execute();
+            conn.createStatement().execute("create table UpsertTimestamp (a integer NOT NULL, t timestamp NOT NULL CONSTRAINT pk PRIMARY KEY (a, t))");
         } finally {
             closeStmtAndConn(stmt, conn);
         }
@@ -357,8 +356,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            stmt = conn.prepareStatement("create table UpsertTimestamp (a integer NOT NULL, t timestamp NOT NULL CONSTRAINT pk PRIMARY KEY (a, t))");
-            stmt.execute();
+            conn.createStatement().execute("create table UpsertTimestamp (a integer NOT NULL, t timestamp NOT NULL CONSTRAINT pk PRIMARY KEY (a, t))");
         } finally {
             closeStmtAndConn(stmt, conn);
         }
@@ -455,8 +453,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            stmt = conn.prepareStatement("create table UpsertFloat (k varchar primary key, v float)");
-            stmt.execute();
+            conn.createStatement().execute("create table UpsertFloat (k varchar primary key, v float)");
         } finally {
             closeStmtAndConn(stmt, conn);
         }
@@ -496,8 +493,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         String tableName = BaseTest.generateUniqueName();
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            pstmt = conn.prepareStatement("create table " + tableName + " (k varchar primary key, v integer)");
-            pstmt.execute();
+            conn.createStatement().execute("create table " + tableName + " (k varchar primary key, v integer)");
         } finally {
             closeStmtAndConn(pstmt, conn);
         }
@@ -587,8 +583,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            stmt = conn.prepareStatement("create table UpsertTimestamp (k varchar, v unsigned_date not null, constraint pk primary key (k,v desc))");
-            stmt.execute();
+            conn.createStatement().execute("create table UpsertTimestamp (k varchar, v unsigned_date not null, constraint pk primary key (k,v desc))");
         } finally {
             closeStmtAndConn(stmt, conn);
         }
@@ -629,9 +624,8 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
         PreparedStatement stmt = null;
         try {
             conn = DriverManager.getConnection(getUrl(), props);
-            stmt = conn.prepareStatement("create table UpsertDateVal (k varchar, v date not null, t timestamp" +
+            conn.createStatement().execute("create table UpsertDateVal (k varchar, v date not null, t timestamp" +
                     ", tt time constraint pk primary key (k,v desc))");
-            stmt.execute();
         } finally {
             closeStmtAndConn(stmt, conn);
         }

@@ -585,7 +585,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     public static String getSystemCatalogEntriesForTable(Connection conn, String tableName, String message) throws Exception {
         StringBuilder sb = new StringBuilder(message);
         sb.append("\n\n\n");
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM SYSTEM.CATALOG WHERE TABLE_NAME='"+ tableName +"'");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM \"SYSTEM\".\"CATALOG\" WHERE TABLE_NAME='"+ tableName +"'");
         ResultSetMetaData metaData = rs.getMetaData();
         int rowNum = 0;
         while (rs.next()) {

@@ -152,7 +152,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     public void testCreationOfParentTableFailsOnTenantSpecificConnection() throws Exception {
         try {
             createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE TABLE " + generateUniqueName() + "( \n" + 
-                    "                user VARCHAR ,\n" + 
+                    "                \"user\" VARCHAR ,\n" + 
                     "                id INTEGER not null primary key desc\n" + 
                     "                ) ");
             fail();
@@ -178,7 +178,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         }
         String newDDL =
         "CREATE TABLE DIFFSCHEMA." + PARENT_TABLE_NAME + " ( \n" + 
-        "                user VARCHAR ,\n" + 
+        "                \"user\" VARCHAR ,\n" + 
         "                tenant_id VARCHAR(5) NOT NULL,\n" + 
         "                tenant_type_id VARCHAR(3) NOT NULL, \n" + 
         "                id INTEGER NOT NULL\n" + 
@@ -199,7 +199,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
     @Test(expected=ColumnAlreadyExistsException.class)
     public void testTenantSpecificTableCannotOverrideParentCol() throws SQLException {
         createTestTable(PHOENIX_JDBC_TENANT_SPECIFIC_URL, "CREATE VIEW " + generateUniqueName() + " ( \n" + 
-                "                user INTEGER) AS SELECT *\n" + 
+                "                \"user\" INTEGER) AS SELECT *\n" + 
                 "                FROM " + PARENT_TABLE_NAME);
     }
     
@@ -285,7 +285,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             
             // try removing a non-PK col, which is allowed
             try {
-                conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " drop column user");
+                conn.createStatement().execute("alter table " + PARENT_TABLE_NAME + " drop column \"user\"");
             }
             catch (SQLException expected) {
                 fail("We should be able to drop a non pk base table column");
@@ -525,7 +525,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             // make sure tenants see parent table's columns and their own
             rs = meta.getColumns(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME), null);
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "user", 1);
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "\"user\"", 1);
             assertTrue(rs.next());
             // (tenant_id column is not visible in tenant-specific connection)
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_type_id", 2);
@@ -538,7 +538,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             
             rs = meta.getColumns(null, null, StringUtil.escapeLike(TENANT_TABLE_NAME_NO_TENANT_TYPE_ID), null);
             assertTrue(rs.next());
-            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "user", 1);
+            assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "\"user\"", 1);
             assertTrue(rs.next());
             // (tenant_id column is not visible in tenant-specific connection)
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME_NO_TENANT_TYPE_ID, "id", 2);

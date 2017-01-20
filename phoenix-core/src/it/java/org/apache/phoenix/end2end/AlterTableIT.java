@@ -996,7 +996,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         assertEquals("COL3",rs.getString(4));
         assertFalse(rs.next());
         
-        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM \"SYSTEM\".\"CATALOG\"\n"
                 + "WHERE TENANT_ID IS NULL AND\n"
                 + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
                 + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
@@ -1004,7 +1004,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         assertEquals(4,rs.getInt(1));
         assertFalse(rs.next());
 
-        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM \"SYSTEM\".\"CATALOG\"\n"
                 + "WHERE TENANT_ID IS NULL AND\n"
                 + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ indexTableName + "') AND\n"
                 + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
@@ -1051,7 +1051,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         assertEquals("COL4",rs.getString(4));
         assertFalse(rs.next());
         
-        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM \"SYSTEM\".\"CATALOG\"\n"
                 + "WHERE TENANT_ID IS NULL AND\n"
                 + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
                 + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
@@ -1059,7 +1059,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         assertEquals(3,rs.getInt(1));
         assertFalse(rs.next());
 
-        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM SYSTEM.CATALOG\n"
+        rs = conn1.createStatement().executeQuery("SELECT COLUMN_COUNT FROM \"SYSTEM\".\"CATALOG\"\n"
                 + "WHERE TENANT_ID IS NULL AND\n"
                 + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ indexTableName + "') AND\n"
                 + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
@@ -1977,7 +1977,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + dataTableFullName + " (id SMALLINT PRIMARY KEY, name VARCHAR)");
 
-        ResultSet rs = stmt.executeQuery("SELECT STORE_NULLS FROM SYSTEM.CATALOG " +
+        ResultSet rs = stmt.executeQuery("SELECT STORE_NULLS FROM \"SYSTEM\".\"CATALOG\" " +
  "WHERE table_name = '"
                 + dataTableFullName + "' AND STORE_NULLS IS NOT NULL");
         assertTrue(rs.next());
@@ -1987,7 +1987,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
         stmt.execute("ALTER TABLE " + dataTableFullName + " SET STORE_NULLS = true");
 
-        rs = stmt.executeQuery("SELECT STORE_NULLS FROM SYSTEM.CATALOG " +
+        rs = stmt.executeQuery("SELECT STORE_NULLS FROM \"SYSTEM\".\"CATALOG\" " +
  "WHERE table_name = '" + dataTableFullName
                 + "' AND STORE_NULLS IS NOT NULL");
         assertTrue(rs.next());
@@ -2102,7 +2102,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             assertTrue(t.isMultiTenant());
             
             // check table metadata updated server side
-            ResultSet rs = conn.createStatement().executeQuery("SELECT DISABLE_WAL, MULTI_TENANT FROM SYSTEM.CATALOG "
+            ResultSet rs = conn.createStatement().executeQuery("SELECT DISABLE_WAL, MULTI_TENANT FROM \"SYSTEM\".\"CATALOG\""
                             + "WHERE table_name = '"
                             + dataTableFullName + "' AND DISABLE_WAL IS NOT NULL AND MULTI_TENANT IS NOT NULL");
             assertTrue(rs.next());
@@ -2162,7 +2162,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
     
     private void assertIsRowTimestampSet(String schemaName, String tableName, String columnName) throws SQLException {
-        String sql = "SELECT IS_ROW_TIMESTAMP FROM SYSTEM.CATALOG WHERE "
+        String sql = "SELECT IS_ROW_TIMESTAMP FROM \"SYSTEM\".\"CATALOG\" WHERE "
                 + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ tableName + "') AND\n"
                 + "COLUMN_FAMILY IS NULL AND COLUMN_NAME = ?";
         try(Connection conn = DriverManager.getConnection(getUrl())) {
