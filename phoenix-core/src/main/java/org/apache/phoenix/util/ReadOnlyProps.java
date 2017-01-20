@@ -290,16 +290,19 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
      * @return Map<String,String> 
      */
     public Map<String,String> asMap() {
-        return props;
+        Map<String, String> mergedMap = new HashMap<String, String>();
+        mergedMap.putAll(props);
+        mergedMap.putAll(overrideProps);
+        return mergedMap;
     }
     
     @Override
     public Iterator<Entry<String, String>> iterator() {
-        return props.entrySet().iterator();
+        return this.asMap().entrySet().iterator();
     }
     
     public boolean isEmpty() {
-        return props.isEmpty();
+        return props.isEmpty() && overrideProps.isEmpty();
     }
 
     /**

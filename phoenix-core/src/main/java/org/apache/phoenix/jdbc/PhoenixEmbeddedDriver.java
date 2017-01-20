@@ -95,7 +95,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         return DEFFAULT_PROPS;
     }
     
-    abstract public QueryServices getQueryServices() throws SQLException;
+    abstract public QueryServices getQueryServices(Properties properties) throws SQLException;
      
     @Override
     public boolean acceptsURL(String url) throws SQLException {

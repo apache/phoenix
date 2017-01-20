@@ -163,7 +163,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     
 
     @Override
-    public QueryServices getQueryServices() throws SQLException {
+    public QueryServices getQueryServices(Properties properties) throws SQLException {
         try {
             lockInterruptibly(LockMode.READ);
             checkClosed();
@@ -175,7 +175,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 synchronized(this) {
                     result = services;
                     if(result == null) {
-                        services = result = new QueryServicesImpl(getDefaultProps());
+                        services = result = new QueryServicesImpl( getDefaultProps().addAll(properties) );
                     }
                 }
             }
@@ -211,7 +211,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             lockInterruptibly(LockMode.READ);
             checkClosed();
             ConnectionInfo connInfo = ConnectionInfo.create(url);
-            QueryServices services = getQueryServices();
+            QueryServices services = getQueryServices(info);
             // Also performs the Kerberos login if the URL/properties request this
             ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
             ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(normalizedConnInfo);
