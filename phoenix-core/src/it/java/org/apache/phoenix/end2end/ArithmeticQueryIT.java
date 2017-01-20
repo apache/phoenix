@@ -1050,7 +1050,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT 1.2E3 FROM SYSTEM.CATALOG LIMIT 1");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT 1.2E3 FROM \"SYSTEM\".\"CATALOG\" LIMIT 1");
         assertTrue(rs.next());
         assertTrue(rs.getObject(1) instanceof Double);
     }

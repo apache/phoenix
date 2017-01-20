@@ -56,7 +56,7 @@ public abstract class BaseTenantSpecificTablesIT extends ParallelStatsEnabledIT 
         PARENT_TABLE_NAME_NO_TENANT_TYPE_ID = "P_" + BaseTest.generateUniqueName();
         TENANT_TABLE_NAME_NO_TENANT_TYPE_ID = "V_" + BaseTest.generateUniqueName();
         PARENT_TABLE_DDL = "CREATE TABLE " + PARENT_TABLE_NAME + " ( \n" + 
-                "                user VARCHAR ,\n" + 
+                "                \"user\" VARCHAR ,\n" + 
                 "                tenant_id VARCHAR NOT NULL,\n" + 
                 "                tenant_type_id VARCHAR(3) NOT NULL, \n" + 
                 "                id INTEGER NOT NULL\n" + 
@@ -65,7 +65,7 @@ public abstract class BaseTenantSpecificTablesIT extends ParallelStatsEnabledIT 
                 "                tenant_col VARCHAR) AS SELECT *\n" + 
                 "                FROM " + PARENT_TABLE_NAME + " WHERE tenant_type_id= '" + TENANT_TYPE_ID + "'";
         PARENT_TABLE_DDL_NO_TENANT_TYPE_ID = "CREATE TABLE " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " ( \n" + 
-                "                user VARCHAR ,\n" + 
+                "                \"user\" VARCHAR ,\n" + 
                 "                tenant_id VARCHAR NOT NULL,\n" + 
                 "                id INTEGER NOT NULL,\n" + 
                 "                CONSTRAINT pk PRIMARY KEY (tenant_id, id)) MULTI_TENANT=true, IMMUTABLE_ROWS=true";

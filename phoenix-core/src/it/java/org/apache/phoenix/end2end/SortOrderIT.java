@@ -370,7 +370,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void queryDescDateWithExplicitOrderBy() throws Exception {
         String table = generateUniqueName();
-        String ddl = "CREATE table " + table + " (c1 CHAR(1) NOT NULL, c2 CHAR(1) NOT NULL, d1 DATE NOT NULL, c3 CHAR(1) NOT NULL " +
+        String ddl = "CREATE table " + table + " (c1 CHAR(1) NOT NULL, c2 CHAR(1) NOT NULL, d1 \"DATE\" NOT NULL, c3 CHAR(1) NOT NULL " +
             "constraint pk primary key (c1, c2, d1 DESC, c3))";
         Object[] row1 = {"1", "2", date(10, 11, 2001), "3"};
         Object[] row2 = {"1", "2", date(10, 11, 2003), "3"};
@@ -408,7 +408,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void lessThanLeadingDescCompositePK() throws Exception {
         String table = generateUniqueName();
-        String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, \"DATE\" DATE NOT NULL constraint pk primary key (id DESC, date))";
+        String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, \"DATE\" DATE NOT NULL constraint pk primary key (id DESC, \"DATE\"))";
         Object[][] insertedRows = new Object[][]{{1, date(1, 1, 2012)}, {3, date(1, 1, 2013)}, {2, date(1, 1, 2011)}};
         Object[][] expectedRows = new Object[][]{{1, date(1, 1, 2012)}};
         runQueryTest(ddl, upsert("id", "date"), insertedRows, expectedRows, new WhereCondition("id", "<", "2"),
@@ -418,10 +418,10 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void lessThanTrailingDescCompositePK() throws Exception {
         String table = generateUniqueName();
-        String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, \"DATE\" DATE NOT NULL constraint pk primary key (id DESC, date))";
+        String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, \"DATE\" DATE NOT NULL constraint pk primary key (id DESC, \"DATE\"))";
         Object[][] insertedRows = new Object[][]{{1, date(1, 1, 2002)}, {3, date(1, 1, 2003)}, {2, date(1, 1, 2001)}};
         Object[][] expectedRows = new Object[][]{{2, date(1, 1, 2001)}};
-        runQueryTest(ddl, upsert("id", "DATE"), insertedRows, expectedRows, new WhereCondition("DATE", "<", "TO_DATE('02-02-2001','mm-dd-yyyy')"),
+        runQueryTest(ddl, upsert("id", "\"DATE\""), insertedRows, expectedRows, new WhereCondition("\"DATE\"", "<", "TO_DATE('02-02-2001','mm-dd-yyyy')"),
             table);
     }
     

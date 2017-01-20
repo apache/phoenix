@@ -656,7 +656,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     }
 
     public static void assertTableDefinition(Connection conn, String tableName, PTableType tableType, String parentTableName, int sequenceNumber, int columnCount, int baseColumnCount, String... columnName) throws Exception {
-        PreparedStatement p = conn.prepareStatement("SELECT * FROM SYSTEM.CATALOG WHERE TABLE_NAME=? AND TABLE_TYPE=?");
+        PreparedStatement p = conn.prepareStatement("SELECT * FROM \"SYSTEM\".\"CATALOG\" WHERE TABLE_NAME=? AND TABLE_TYPE=?");
         p.setString(1, tableName);
         p.setString(2, tableType.getSerializedValue());
         ResultSet rs = p.executeQuery();

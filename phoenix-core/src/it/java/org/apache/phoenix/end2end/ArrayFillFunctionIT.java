@@ -44,10 +44,10 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
         tableName = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE " + tableName
-            + " (region_name VARCHAR PRIMARY KEY,length1 INTEGER, length2 INTEGER,\"DATE\" DATE,time TIME,timestamp TIMESTAMP,varchar VARCHAR,integer INTEGER,double DOUBLE,bigint BIGINT,char CHAR(15),double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], varchars2 VARCHAR[])";
+            + " (region_name VARCHAR PRIMARY KEY,length1 INTEGER, length2 INTEGER,\"DATE\" DATE,\"time\" TIME,\"timestamp\" TIMESTAMP,\"varchar\" VARCHAR,\"integer\" INTEGER,\"double\" DOUBLE,\"bigint\" BIGINT,\"char\" CHAR(15),double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], varchars2 VARCHAR[])";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName
-            + "(region_name,length1,length2,\"DATE\",time,timestamp,varchar,integer,double,bigint,char,double1,char1,nullcheck,chars2,varchars2) VALUES('SF Bay Area',"
+            + "(region_name,length1,length2,\"DATE\",\"time\",\"timestamp\",\"varchar\",\"integer\",\"double\",\"bigint\",\"char\",double1,char1,nullcheck,chars2,varchars2) VALUES('SF Bay Area',"
             +
                 "0," +
                 "-3," +
@@ -76,7 +76,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(varchar,5) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"varchar\",5) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String[] strings = new String[]{"foo", "foo", "foo", "foo", "foo"};
@@ -93,7 +93,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(integer,4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"integer\",4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{34, 34, 34, 34};
@@ -111,7 +111,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(double,4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"double\",4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{23.45, 23.45, 23.45, 23.45};
@@ -129,7 +129,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(bigint,4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"bigint\",4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{34567l, 34567l, 34567l, 34567l};
@@ -147,7 +147,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(char,4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"char\",4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{"foo", "foo", "foo", "foo"};
@@ -164,7 +164,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(varchar,4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"varchar\",4) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{"foo", "foo", "foo", "foo"};
@@ -198,7 +198,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(time,3) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"time\",3) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Time(1432102334184l), new Time(1432102334184l), new Time(1432102334184l)};
@@ -215,7 +215,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(timestamp,3) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT ARRAY_FILL(\"timestamp\",3) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         Object[] objects = new Object[]{new Timestamp(1432102334184l), new Timestamp(1432102334184l), new Timestamp(1432102334184l)};
@@ -232,7 +232,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(timestamp,length2) FROM " + tableName
+            "SELECT ARRAY_FILL(\"timestamp\",length2) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -250,7 +250,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT ARRAY_FILL(timestamp,length1) FROM " + tableName
+            "SELECT ARRAY_FILL(\"timestamp\",length1) FROM " + tableName
                 + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
@@ -513,7 +513,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT region_name FROM " + tableName + " WHERE varchar=ANY(ARRAY_FILL('foo',3))");
+            "SELECT region_name FROM " + tableName + " WHERE \"varchar\"=ANY(ARRAY_FILL('foo',3))");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
@@ -555,7 +555,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT region_name FROM " + tableName
-            + " WHERE ARRAY['foo','foo','foo','foo','foo']=ARRAY_FILL(varchar,5)");
+            + " WHERE ARRAY['foo','foo','foo','foo','foo']=ARRAY_FILL(\"varchar\",5)");
         assertTrue(rs.next());
 
         assertEquals("SF Bay Area", rs.getString(1));
