@@ -356,10 +356,9 @@ public class KeyRange implements Writable {
         boolean newUpperInclusive;
         // Special case for null, is it is never included another range
         // except for null itself.
-        if (this == IS_NULL_RANGE) {
-            if (range == IS_NULL_RANGE) {
+        if (this == IS_NULL_RANGE && range == IS_NULL_RANGE) {
                 return IS_NULL_RANGE;
-            }
+        } else if(this == IS_NULL_RANGE || range == IS_NULL_RANGE) {
             return EMPTY_RANGE;
         }
         if (lowerUnbound()) {
