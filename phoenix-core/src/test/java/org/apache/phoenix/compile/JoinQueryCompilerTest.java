@@ -58,14 +58,14 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
                     "    \"item_id\" varchar(10), " +
                     "    price integer, " +
                     "    quantity integer, " +
-                    "    date timestamp)");
+                    "    \"date\" timestamp)");
             conn.createStatement().execute("create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
                     "   (\"customer_id\" varchar(10) not null primary key, " +
                     "    name varchar, " +
                     "    phone varchar(12), " +
                     "    address varchar, " +
                     "    loc_id varchar(5), " +
-                    "    date date)");
+                    "    \"date\" date)");
             conn.createStatement().execute("create table " + JOIN_ITEM_TABLE_FULL_NAME +
                     "   (\"item_id\" varchar(10) not null primary key, " +
                     "    name varchar, " +
@@ -86,7 +86,7 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testExplainPlan() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.\"DATE\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN "
+        String query = "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.\"date\" FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN "
     	+ JOIN_CUSTOMER_TABLE_FULL_NAME + " c ON o.\"customer_id\" = c.\"customer_id\" AND c.name LIKE 'C%' LEFT JOIN " 
     	+ JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN " 
     	+ JOIN_SUPPLIER_TABLE_FULL_NAME + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";

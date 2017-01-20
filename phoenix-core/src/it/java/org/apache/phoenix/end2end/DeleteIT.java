@@ -299,11 +299,11 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                     "HOST CHAR(2) NOT NULL," +
                     "DOMAIN VARCHAR NOT NULL, " +
                     "FEATURE VARCHAR NOT NULL, " +
-                    "DATE DATE NOT NULL, \n" + 
+                    "\"DATE\" DATE NOT NULL, \n" + 
                     "USAGE.CORE BIGINT," +
                     "USAGE.DB BIGINT," +
                     "STATS.ACTIVE_VISITOR INTEGER " +
-                    "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE))" + (isSalted ? " SALT_BUCKETS=3" : "");
+                    "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, \"DATE\"))" + (isSalted ? " SALT_BUCKETS=3" : "");
             stm.execute(s);
             String localIndexName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -315,7 +315,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             stm.close();
 
             PreparedStatement psInsert = con
-                    .prepareStatement("UPSERT INTO " + tableName + "(HOST, DOMAIN, FEATURE, DATE, CORE, DB, ACTIVE_VISITOR) VALUES(?,?, ? , ?, ?, ?, ?)");
+                    .prepareStatement("UPSERT INTO " + tableName + "(HOST, DOMAIN, FEATURE, \"DATE\", CORE, DB, ACTIVE_VISITOR) VALUES(?,?, ? , ?, ?, ?, ?)");
             psInsert.setString(1, "AA");
             psInsert.setString(2, "BB");
             psInsert.setString(3, "CC");
@@ -380,18 +380,18 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                     "HOST CHAR(2) NOT NULL," +
                     "DOMAIN VARCHAR NOT NULL, " +
                     "FEATURE VARCHAR NOT NULL, " +
-                    "DATE DATE NOT NULL, \n" + 
+                    "\"DATE\" DATE NOT NULL, \n" + 
                     "USAGE.CORE BIGINT," +
                     "USAGE.DB BIGINT," +
                     "STATS.ACTIVE_VISITOR INTEGER " +
-                    "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE)) IMMUTABLE_ROWS=true");
-            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName1 + " ON " + tableName + " (DATE, FEATURE)");
-            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName2 + " ON " + tableName + " (DATE, FEATURE, USAGE.DB)");
+                    "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, \"DATE\")) IMMUTABLE_ROWS=true");
+            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName1 + " ON " + tableName + " (\"DATE\", FEATURE)");
+            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName2 + " ON " + tableName + " (\"DATE\", FEATURE, USAGE.DB)");
             stm.close();
 
             Date date = new Date(0);
             PreparedStatement psInsert = con
-                    .prepareStatement("UPSERT INTO " + tableName + "(HOST, DOMAIN, FEATURE, DATE, CORE, DB, ACTIVE_VISITOR) VALUES(?,?, ? , ?, ?, ?, ?)");
+                    .prepareStatement("UPSERT INTO " + tableName + "(HOST, DOMAIN, FEATURE, \"DATE\", CORE, DB, ACTIVE_VISITOR) VALUES(?,?, ? , ?, ?, ?, ?)");
             psInsert.setString(1, "AA");
             psInsert.setString(2, "BB");
             psInsert.setString(3, "CC");
@@ -405,7 +405,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                 con.commit();
             }
             
-            psInsert = con.prepareStatement("DELETE FROM " + tableName + " WHERE (HOST, DOMAIN, FEATURE, DATE) = (?,?,?,?)");
+            psInsert = con.prepareStatement("DELETE FROM " + tableName + " WHERE (HOST, DOMAIN, FEATURE, \"DATE\") = (?,?,?,?)");
             psInsert.setString(1, "AA");
             psInsert.setString(2, "BB");
             psInsert.setString(3, "CC");
@@ -427,7 +427,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             stm.execute("DROP INDEX " + indexName2 + " ON " + tableName);
 
             stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName1 + " ON " + tableName + " (USAGE.DB)");
-            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName2 + " ON " + tableName + " (USAGE.DB, DATE)");
+            stm.execute("CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName2 + " ON " + tableName + " (USAGE.DB, \"DATE\")");
             try{
                 psInsert = con.prepareStatement("DELETE FROM " + tableName + " WHERE  USAGE.DB=2");
             } catch(Exception e) {
@@ -465,15 +465,15 @@ public class DeleteIT extends ParallelStatsDisabledIT {
                     " HOST CHAR(2) NOT NULL," +
                     "DOMAIN VARCHAR NOT NULL, " +
                     "FEATURE VARCHAR NOT NULL, " +
-                    "DATE DATE NOT NULL, \n" + 
+                    "\"DATE\" DATE NOT NULL, \n" + 
                     "USAGE.CORE BIGINT," +
                     "USAGE.DB BIGINT," +
                     "STATS.ACTIVE_VISITOR INTEGER " +
-                    "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE))");
+                    "CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, \"DATE\"))");
             stm.close();
 
             PreparedStatement psInsert = con
-                    .prepareStatement("UPSERT INTO " + tableName + "(HOST, DOMAIN, FEATURE, DATE, CORE, DB, ACTIVE_VISITOR) VALUES(?,?, ? , ?, ?, ?, ?)");
+                    .prepareStatement("UPSERT INTO " + tableName + "(HOST, DOMAIN, FEATURE, \"DATE\", CORE, DB, ACTIVE_VISITOR) VALUES(?,?, ? , ?, ?, ?, ?)");
             psInsert.setString(1, "AA");
             psInsert.setString(2, "BB");
             psInsert.setString(3, "CC");

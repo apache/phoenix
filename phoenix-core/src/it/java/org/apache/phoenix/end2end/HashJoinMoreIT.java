@@ -236,13 +236,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                     + "        colA2 VARCHAR " + "CONSTRAINT PK PRIMARY KEY" + "(pkA)" + ")";
 
             String ddlB = "CREATE TABLE " + tableB + "   (pkB INTEGER NOT NULL PRIMARY KEY, " + "    colB INTEGER)";
-            stmt = conn.prepareStatement(ddlA);
-            stmt.execute();
-            stmt.close();
-
-            stmt = conn.prepareStatement(ddlB);
-            stmt.execute();
-            stmt.close();
+            conn.createStatement().execute(ddlA);
+            conn.createStatement().execute(ddlB);
 
             String upsertA = "UPSERT INTO " + tableA + " (pkA, colA1, colA2) VALUES(?, ?, ?)";
             stmt = conn.prepareStatement(upsertA);
@@ -498,15 +493,15 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                             " TENANTID UNSIGNED_INT NOT NULL" +
                             ",ID UNSIGNED_INT NOT NULL" +
                             ",FOO UNSIGNED_INT NOT NULL" +
-                            ",TIMESTAMP UNSIGNED_LONG NOT NULL" +
+                            ",\"TIMESTAMP\"  UNSIGNED_LONG NOT NULL" +
                             ",CODES INTEGER ARRAY[] NOT NULL" +
                             ",V UNSIGNED_LONG" +
-                            " CONSTRAINT pk PRIMARY KEY (TENANTID, ID, FOO, TIMESTAMP, CODES))" +
+                            " CONSTRAINT pk PRIMARY KEY (TENANTID, ID, FOO, \"TIMESTAMP\" , CODES))" +
                             " DEFAULT_COLUMN_FAMILY ='E'," +
                             " MULTI_TENANT=true");
             PreparedStatement upsertStmt = conn.prepareStatement(
                     "upsert into INVENTORY "
-                    + "(tenantid, id, foo, timestamp, codes) "
+                    + "(tenantid, id, foo, \"TIMESTAMP\" , codes) "
                     + "values (?, ?, ?, ?, ?)");
             upsertStmt.setInt(1, 15);
             upsertStmt.setInt(2, 5);
@@ -672,16 +667,16 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                     "CREATE TABLE IF NOT EXISTS EVENT_COUNT (\n" +
                     "        BUCKET VARCHAR,\n" +
                     "        TIMESTAMP_DATE TIMESTAMP,\n" +
-                    "        TIMESTAMP UNSIGNED_LONG NOT NULL,\n" +
+                    "        \"TIMESTAMP\" UNSIGNED_LONG NOT NULL,\n" +
                     "        LOCATION VARCHAR,\n" +
                     "        A VARCHAR,\n" +
                     "        B VARCHAR,\n" +
                     "        C VARCHAR,\n" +
                     "        D UNSIGNED_LONG,\n" +
                     "        E FLOAT\n" +
-                    "    CONSTRAINT pk PRIMARY KEY (BUCKET, TIMESTAMP DESC, LOCATION, A, B, C)\n" +
+                    "    CONSTRAINT pk PRIMARY KEY (BUCKET, \"TIMESTAMP\" DESC, LOCATION, A, B, C)\n" +
                     ") SALT_BUCKETS=2, COMPRESSION='GZ', TTL=31622400");
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO EVENT_COUNT(BUCKET, TIMESTAMP, LOCATION, A, B, C) VALUES(?,?,?,?,?,?)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO EVENT_COUNT(BUCKET, \"TIMESTAMP\", LOCATION, A, B, C) VALUES(?,?,?,?,?,?)");
             stmt.setString(1, "5SEC");
             stmt.setString(3, "Tr/Bal");
             stmt.setString(4, "A1");
@@ -733,7 +728,7 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                         "CREATE TABLE IF NOT EXISTS " + t[i] + " (\n" +
                                 "        BUCKET VARCHAR,\n" +
                                 "        TIMESTAMP_DATE TIMESTAMP,\n" +
-                                "        TIMESTAMP UNSIGNED_LONG NOT NULL,\n" +
+                                "        \"TIMESTAMP\" UNSIGNED_LONG NOT NULL,\n" +
                                 "        SRC_LOCATION VARCHAR,\n" +
                                 "        DST_LOCATION VARCHAR,\n" +
                                 "        B VARCHAR,\n" +
@@ -742,9 +737,9 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                                 "        G UNSIGNED_LONG,\n" +
                                 "        H UNSIGNED_LONG,\n" +
                                 "        I UNSIGNED_LONG\n" +
-                                "    CONSTRAINT pk PRIMARY KEY (BUCKET, TIMESTAMP" + (i == 0 ? " DESC" : "") + ", SRC_LOCATION, DST_LOCATION, B, C)\n" +
+                                "    CONSTRAINT pk PRIMARY KEY (BUCKET, \"TIMESTAMP\"" + (i == 0 ? " DESC" : "") + ", SRC_LOCATION, DST_LOCATION, B, C)\n" +
                         ") SALT_BUCKETS=2, COMPRESSION='GZ', TTL=31622400");
-                stmt = conn.prepareStatement("UPSERT INTO " + t[i] + "(BUCKET, TIMESTAMP, SRC_LOCATION, DST_LOCATION, B, C) VALUES(?,?,?,?,?,?)");
+                stmt = conn.prepareStatement("UPSERT INTO " + t[i] + "(BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION, B, C) VALUES(?,?,?,?,?,?)");
                 stmt.setString(1, "5SEC");
                 stmt.setString(3, "Tr/Bal");
                 stmt.setString(4, "Tr/Bal");
@@ -772,25 +767,25 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                 stmt.execute();
                 
                 String q =
-                        "SELECT C.BUCKET, C.TIMESTAMP FROM (\n" +
-                        "     SELECT E.BUCKET as BUCKET, L.BUCKET as LBUCKET, E.TIMESTAMP as TIMESTAMP, L.TIMESTAMP as LTIMESTAMP FROM\n" +
-                        "        (SELECT BUCKET, TIMESTAMP FROM EVENT_COUNT\n" +
+                        "SELECT C.BUCKET, C.\"TIMESTAMP\" FROM (\n" +
+                        "     SELECT E.BUCKET as BUCKET, L.BUCKET as LBUCKET, E.\"TIMESTAMP\" as TIMESTAMP, L.\"TIMESTAMP\" as LTIMESTAMP FROM\n" +
+                        "        (SELECT BUCKET, \"TIMESTAMP\"  FROM EVENT_COUNT\n" +
                         "             WHERE BUCKET = '5SEC' AND LOCATION = 'Tr/Bal'\n" +
-                        "                 AND TIMESTAMP <= 1462993520000000000 AND TIMESTAMP > 1462993420000000000\n" +
+                        "                 AND \"TIMESTAMP\"  <= 1462993520000000000 AND \"TIMESTAMP\"  > 1462993420000000000\n" +
                         "        ) E\n" +
                         "        JOIN\n" +
-                        "         (SELECT BUCKET, TIMESTAMP FROM "+ t[i] +"\n" +
+                        "         (SELECT BUCKET, \"TIMESTAMP\"  FROM "+ t[i] +"\n" +
                         "             WHERE BUCKET = '5SEC' AND SRC_LOCATION = 'Tr/Bal' AND SRC_LOCATION = DST_LOCATION\n" +
-                        "                 AND TIMESTAMP <= 1462993520000000000 AND TIMESTAMP > 1462993420000000000\n" +
+                        "                 AND \"TIMESTAMP\"  <= 1462993520000000000 AND \"TIMESTAMP\"  > 1462993420000000000\n" +
                         "         ) L\n" +
-                        "     ON L.BUCKET = E.BUCKET AND L.TIMESTAMP = E.TIMESTAMP\n" +
+                        "     ON L.BUCKET = E.BUCKET AND L.\"TIMESTAMP\"  = E.\"TIMESTAMP\"\n" +
                         " ) C\n" +
-                        " GROUP BY C.BUCKET, C.TIMESTAMP";
+                        " GROUP BY C.BUCKET, C.\"TIMESTAMP\"";
                     
                 String p = i == 0 ?
                         "CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER EVENT_COUNT [0,'5SEC',~1462993520000000000,'Tr/Bal'] - [1,'5SEC',~1462993420000000000,'Tr/Bal']\n" +
                         "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                        "    SERVER AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]\n" +
+                        "    SERVER AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, \"E.TIMESTAMP\"]\n" +
                         "CLIENT MERGE SORT\n" +
                         "    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i] + " [0,'5SEC',~1462993520000000000,'Tr/Bal'] - [1,'5SEC',~1462993420000000000,'Tr/Bal']\n" +
@@ -799,7 +794,7 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
                         :
                         "CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER EVENT_COUNT [0,'5SEC',~1462993520000000000,'Tr/Bal'] - [1,'5SEC',~1462993420000000000,'Tr/Bal']\n" +
                         "    SERVER FILTER BY FIRST KEY ONLY\n" +
-                        "    SERVER AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]\n" +
+                        "    SERVER AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, \"E.TIMESTAMP\"]\n" +
                         "CLIENT MERGE SORT\n" +
                         "    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n" +
                         "        CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i] + " [0,'5SEC',1462993420000000001,'Tr/Bal'] - [1,'5SEC',1462993520000000000,'Tr/Bal']\n" +

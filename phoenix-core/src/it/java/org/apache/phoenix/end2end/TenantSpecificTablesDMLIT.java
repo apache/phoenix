@@ -174,12 +174,12 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('AC/DC', 'abc', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('AC/DC', 'abc', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
             
             conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
-            ResultSet rs = conn.createStatement().executeQuery("select user from " + TENANT_TABLE_NAME);
+            ResultSet rs = conn.createStatement().executeQuery("select \"user\" from " + TENANT_TABLE_NAME);
             assertTrue("Expected 1 row in result set", rs.next());
             assertEquals("Billy Gibbons", rs.getString(1));
             assertFalse("Expected 1 row in result set", rs.next());
@@ -202,9 +202,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('AC/DC', 'abc', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('AC/DC', 'abc', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
             
             conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
             conn.setAutoCommit(true);
@@ -231,14 +231,14 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('AC/DC', 'abc', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('AC/DC', 'abc', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
             
             Connection tsConn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
             tsConn.setAutoCommit(true);
-            tsConn.createStatement().executeUpdate("create index idx1 on " + TENANT_TABLE_NAME + "(user)");
-            int count = tsConn.createStatement().executeUpdate("delete from " + TENANT_TABLE_NAME + " where user='Billy Gibbons'");
+            tsConn.createStatement().executeUpdate("create index idx1 on " + TENANT_TABLE_NAME + "(\"user\")");
+            int count = tsConn.createStatement().executeUpdate("delete from " + TENANT_TABLE_NAME + " where \"user\"='Billy Gibbons'");
             assertEquals("Expected 1 row have been deleted", 1, count);
             ResultSet rs = tsConn.createStatement().executeQuery("select * from " + TENANT_TABLE_NAME);
             assertFalse("Expected no rows in result set", rs.next());
@@ -261,9 +261,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('AC/DC', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('" + TENANT_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('" + TENANT_ID + "', 2, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, \"user\") values ('AC/DC', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, \"user\") values ('" + TENANT_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, \"user\") values ('" + TENANT_ID + "', 2, 'Billy Gibbons')");
             
             Connection tsConn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
             tsConn.setAutoCommit(true);
@@ -289,9 +289,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('AC/DC', 'abc', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('AC/DC', 'abc', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', 'def', 1, 'Billy Gibbons')");
             
             analyzeTable(tsConn, PARENT_TABLE_NAME);
             tsConn.createStatement().execute("delete from " + TENANT_TABLE_NAME);
@@ -315,9 +315,9 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('AC/DC', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('" + TENANT_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, user) values ('" + TENANT_ID + "', 2, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, \"user\") values ('AC/DC', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, \"user\") values ('" + TENANT_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME_NO_TENANT_TYPE_ID + " (tenant_id, id, \"user\") values ('" + TENANT_ID + "', 2, 'Billy Gibbons')");
             
             tsConn.createStatement().execute("drop view " + TENANT_TABLE_NAME_NO_TENANT_TYPE_ID);
             
@@ -340,12 +340,12 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('AC/DC', 'aaa', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', 'def', 2, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('AC/DC', 'aaa', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', 'def', 2, 'Billy Gibbons')");
             
             analyzeTable(tsConn, TENANT_TABLE_NAME);
-            int count = tsConn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + "(id, user) select id+100, user from " + TENANT_TABLE_NAME);
+            int count = tsConn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + "(id, \"user\") select id+100, \"user\" from " + TENANT_TABLE_NAME);
             tsConn.commit();
             assertEquals("Expected 1 row to have been inserted", 1, count);
             
@@ -371,14 +371,14 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             conn.setAutoCommit(true);
             conn.createStatement().executeUpdate("delete from " + PARENT_TABLE_NAME);
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('AC/DC', 'aaa', 1, 'Bon Scott')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, user) values ('" + TENANT_ID + "', 'def', 2, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('AC/DC', 'aaa', 1, 'Bon Scott')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', '" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_id, tenant_type_id, id, \"user\") values ('" + TENANT_ID + "', 'def', 2, 'Billy Gibbons')");
             
             analyzeTable(tsConn, TENANT_TABLE_NAME);
             tsConn.setAutoCommit(true);
-            int count = tsConn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + "(id, user)"
-                    + "select id+100, user from " + anotherTableName + " where id=2");
+            int count = tsConn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + "(id, \"user\")"
+                    + "select id+100, \"user\" from " + anotherTableName + " where id=2");
             assertEquals("Expected 1 row to have been inserted", 1, count);
             ResultSet rs = tsConn.createStatement().executeQuery("select count(*) from " + TENANT_TABLE_NAME);
             rs.next();
@@ -395,7 +395,7 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(PHOENIX_JDBC_TENANT_SPECIFIC_URL, props);
         try {
-            int count = conn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " (id, user) values (1, 'Bon Scott')");
+            int count = conn.createStatement().executeUpdate("upsert into " + TENANT_TABLE_NAME + " (id, \"user\") values (1, 'Bon Scott')");
             conn.commit();
             assertEquals("Expected 1 row to have been inserted", 1, count);
             ResultSet rs = conn.createStatement().executeQuery("select count(*) from " + TENANT_TABLE_NAME);
@@ -414,10 +414,10 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         try {
             ResultSet rs = conn.createStatement().executeQuery("select * from " + PARENT_TABLE_NAME);
             assertFalse(rs.next());
-            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_type_id, id, user) values ('" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
+            conn.createStatement().executeUpdate("upsert into " + PARENT_TABLE_NAME + " (tenant_type_id, id, \"user\") values ('" + TENANT_TYPE_ID + "', 1, 'Billy Gibbons')");
             conn.commit();
             analyzeTable(conn, PARENT_TABLE_NAME);
-            rs = conn.createStatement().executeQuery("select user from " + PARENT_TABLE_NAME);
+            rs = conn.createStatement().executeQuery("select \"user\" from " + PARENT_TABLE_NAME);
             assertTrue(rs.next());
             assertEquals(rs.getString(1),"Billy Gibbons");
             assertFalse(rs.next());

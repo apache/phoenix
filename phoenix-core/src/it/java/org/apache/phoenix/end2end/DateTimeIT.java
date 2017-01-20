@@ -395,7 +395,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         ResultSet rs =
                 stmt.executeQuery(String
-                    .format("SELECT %s FROM SYSTEM.CATALOG LIMIT 1", invocation));
+                    .format("SELECT %s FROM \"SYSTEM\".\"CATALOG\" LIMIT 1", invocation));
         assertTrue(rs.next());
         int returnValue = rs.getInt(1);
         assertFalse(rs.next());
@@ -815,7 +815,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     public void testLiteralDateTimestampComparison() throws Exception {
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "select DATE '2016-05-10 00:00:00' > TIMESTAMP '2016-05-11 00:00:00'");
+                    "select \"DATE\" '2016-05-10 00:00:00' > \"TIMESTAMP\" '2016-05-11 00:00:00'");
 
         assertTrue(rs.next());
         assertEquals(false, rs.getBoolean(1));
@@ -826,7 +826,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     public void testLiteralDateTimestampComparison2() throws Exception {
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "select TIMESTAMP '2016-05-10 00:00:00' > DATE '2016-05-11 00:00:00'");
+                    "select \"TIMESTAMP\" '2016-05-10 00:00:00' > \"DATE\" '2016-05-11 00:00:00'");
 
         assertTrue(rs.next());
         assertEquals(false, rs.getBoolean(1));
