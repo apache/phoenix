@@ -233,7 +233,10 @@ public interface QueryServices extends SQLCloseable {
     
     public static final String CLIENT_CACHE_ENCODING = "phoenix.table.client.cache.encoding";
     public static final String AUTO_UPGRADE_ENABLED = "phoenix.autoupgrade.enabled";
-	
+
+    public static final String CLIENT_CONNECTION_CACHE_MAX_SIZE = "phoenix.client.connection.cache.max.size";
+    public static final String CLIENT_CONNECTION_CACHE_MAX_DURATION_MILLISECONDS =
+        "phoenix.client.connection.max.duration";
     /**
      * Get executor service used for parallel scans
      */
