@@ -500,14 +500,12 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-            String query = "SELECT col1+col2, col4, a_string FROM " + tableName + " ORDER BY 1, 2";
+            String query = "SELECT col1+col2, col4 FROM " + tableName + " ORDER BY 1, 2";
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a", rs.getString(3));
             assertTrue(rs.next());
             assertEquals("c", rs.getString(3));
-            assertTrue(rs.next());
-            assertEquals("b", rs.getString(3));
             assertFalse(rs.next());
         } catch (SQLException e) {
         } finally {
