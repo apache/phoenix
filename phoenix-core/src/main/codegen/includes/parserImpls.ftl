@@ -124,7 +124,7 @@ SqlNode SqlCreateTable() :
 {
     SqlParserPos pos;
     SqlIdentifier tableName;
-    boolean immutable;
+    boolean immutable = false;
     boolean ifNotExists;
     SqlNodeList columnDefs;
     SqlIdentifier pkConstraint;
@@ -133,15 +133,10 @@ SqlNode SqlCreateTable() :
     SqlNodeList splitKeys;
 }
 {
-    <CREATE>
-    (
+    <CREATE>  { pos = getPos(); }
+    [
         <IMMUTABLE> { immutable = true; }
-        |
-        {
-            immutable = false;
-        }
-    )
-    { pos = getPos(); }
+    ]
     <TABLE>
     (
         <IF> <NOT> <EXISTS> { ifNotExists = true; }
@@ -474,17 +469,13 @@ SqlNode SqlCreateSchema() :
 {
     SqlParserPos pos;
     SqlIdentifier schemaName;
-    boolean ifNotExists;
+    boolean ifNotExists = false;
 }
 {
     <CREATE> { pos = getPos(); } <SCHEMA>
-    (
+    [
         <IF> <NOT> <EXISTS> { ifNotExists = true; }
-        |
-        {
-            ifNotExists = false;
-        }
-    )
+    ]
     schemaName = SimpleIdentifier()
     {
         return new SqlCreateSchema(pos.plus(getPos()), schemaName,

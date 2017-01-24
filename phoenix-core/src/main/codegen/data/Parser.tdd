@@ -73,12 +73,12 @@
     "SqlDropIndex()",
     "SqlDropSequence()",
     "SqlUpdateStatistics()",
-    "SqlDropFunction()"
-    "SqlUploadJarsNode()"
-    "SqlDeleteJarNode()"
-    "SqlAlterTable()"
-    "SqlCreateSchema()"
-    "SqlDropSchema()"
+    "SqlDropFunction()",
+    "SqlUploadJarsNode()",
+    "SqlDeleteJarNode()",
+    "SqlAlterTable()",
+    "SqlCreateSchema()",
+    "SqlDropSchema()",
     "SqlUseSchema()"
   ]
 
