@@ -663,5 +663,15 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         public SqlConformance conformance() {
             return delegate.conformance();
         }
+
+        @Override
+        public boolean approximateDistinctCount() {
+            return delegate.approximateDistinctCount();
+        }
+
+        @Override
+        public boolean approximateTopN() {
+            return delegate.approximateTopN();
+        }
     }
 }

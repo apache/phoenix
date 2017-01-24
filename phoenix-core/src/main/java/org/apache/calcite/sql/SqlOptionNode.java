@@ -47,6 +47,18 @@ public class SqlOptionNode extends SqlNode {
         this.value = CalciteUtils.convertSqlLiteral(literal, implementor);
     }
 
+    public SqlOptionNode(SqlParserPos pos, SqlIdentifier key, SqlIdentifier identifier) {
+        super(pos);
+        if (key.isSimple()) {
+            familyName = "";
+            propertyName = key.getSimple();
+        } else {
+            familyName = key.names.get(0);
+            propertyName = key.names.get(1);
+        }
+        this.value = identifier.names.get(0);
+    }
+
     @Override
     public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
         // TODO Auto-generated method stub

@@ -956,11 +956,19 @@ SqlOptionNode FamilyOption() :
 {
     key = DualIdentifier()
     <EQ>
-    value = Literal()
-    {
-        pos = key.getParserPosition().plus(getPos());
-        return new SqlOptionNode(pos, key, (SqlLiteral) value);
-    }
+    (
+        value = Literal()
+        {
+            pos = key.getParserPosition().plus(getPos());
+            return new SqlOptionNode(pos, key, (SqlLiteral) value);
+        }
+        |
+        value = SimpleIdentifier()
+        {
+            pos = key.getParserPosition().plus(getPos());
+            return new SqlOptionNode(pos, key, (SqlIdentifier)value);
+        }
+    )
 }
 
 SqlOptionNode GeneralOption() :
