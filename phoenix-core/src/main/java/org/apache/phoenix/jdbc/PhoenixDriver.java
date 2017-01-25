@@ -149,8 +149,6 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
     private Cache<ConnectionInfo, ConnectionQueryServices> initializeConnectionCache() {
         Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        int maxCacheSize = config.getInt(QueryServices.CLIENT_CONNECTION_CACHE_MAX_SIZE,
-            QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_SIZE);
         int maxCacheDuration = config.getInt(QueryServices.CLIENT_CONNECTION_CACHE_MAX_DURATION_MILLISECONDS,
             QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION);
         RemovalListener<ConnectionInfo, ConnectionQueryServices> cacheRemovalListener =
@@ -170,7 +168,6 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 }
             };
         return CacheBuilder.newBuilder()
-            .maximumSize(maxCacheSize)
             .expireAfterAccess(maxCacheDuration, TimeUnit.MILLISECONDS)
             .removalListener(cacheRemovalListener)
             .build();

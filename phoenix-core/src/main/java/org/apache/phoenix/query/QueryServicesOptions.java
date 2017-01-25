@@ -259,7 +259,6 @@ public class QueryServicesOptions {
     
     public static final String DEFAULT_CLIENT_CACHE_ENCODING = PTableRefFactory.Encoding.OBJECT.toString();
     public static final boolean DEFAULT_AUTO_UPGRADE_ENABLED = true;
-    public static final int DEFAULT_CLIENT_CONNECTION_CACHE_MAX_SIZE = 100;
     public static final int DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION = 86400000;
 
     @SuppressWarnings("serial")
