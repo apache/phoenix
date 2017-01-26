@@ -77,6 +77,15 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
             fail("Upsert should have failed since the number of upserts (200) is greater than the MAX_MUTATION_SIZE_ATTRIB (100)");
         } catch (IllegalArgumentException expected) {}
     }
+
+    @Test
+    public void testMaxMutationSizeInBytesSetCorrectly() throws Exception {
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB,"100");
+        PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        assertEquals(100L, connection.getMutateBatchSizeBytes());
+        assertEquals(100L, connection.getMutationState().getMaxSizeBytes());
+    }
     
     @Test
     public void testDisallowNegativeScn() {
