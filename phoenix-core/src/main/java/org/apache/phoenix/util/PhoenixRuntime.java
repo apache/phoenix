@@ -147,6 +147,16 @@ public class PhoenixRuntime {
     public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
 
     /**
+     * Use this connection property to control the number of bytes that are
+     * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
+     * It's only used when autoCommit is true and your source table is
+     * different than your target table or your SELECT statement has a
+     * GROUP BY clause. Overrides the value of UpsertBatchSize.
+     */
+    public final static String UPSERT_BATCH_SIZE_BYTES_ATTRIB = "UpsertBatchSizeBytes";
+
+
+    /**
      * Use this connection property to explicitly enable or disable auto-commit on a new connection.
      */
     public static final String AUTO_COMMIT_ATTRIB = "AutoCommit";
@@ -874,7 +884,7 @@ public class PhoenixRuntime {
      * Column names and family names are enclosed in double quotes to allow for case sensitivity and for presence of 
      * special characters. Salting column and view index id column are not included. If the connection is tenant specific 
      * and the table used by the query plan is multi-tenant, then the tenant id column is not included as well.
-     * @param datatypes - Initialized empty list to be filled with the corresponding data type for the columns in @param columns. 
+     * @param dataTypes - Initialized empty list to be filled with the corresponding data type for the columns in @param columns.
      * @param plan - query plan to get info for
      * @param conn - phoenix connection used to generate the query plan. Caller should take care of closing the connection appropriately.
      * @param forDataTable - if true, then column names and data types correspond to the data table even if the query plan uses

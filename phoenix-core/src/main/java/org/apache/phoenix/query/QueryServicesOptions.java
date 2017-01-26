@@ -128,7 +128,10 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_DROP_METADATA = true; // Drop meta data also.
     public static final long DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS = 5  * 1000; // Time to wait in ShutdownHook to exit gracefully.
 
-    public final static int DEFAULT_MUTATE_BATCH_SIZE = 1000; // Batch size for UPSERT SELECT and DELETE
+    @Deprecated //use DEFAULT_MUTATE_BATCH_SIZE_BYTES
+    public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
+    //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 10MB
+    public final static long DEFAULT_MUTATE_BATCH_SIZE_BYTES = 134217728;
 	// The only downside of it being out-of-sync is that the parallelization of the scan won't be as balanced as it could be.
     public static final int DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS = 30000; // 30 sec (with no activity)
     public static final int DEFAULT_SCAN_CACHE_SIZE = 1000;
@@ -449,6 +452,7 @@ public class QueryServicesOptions {
         return set(MAX_MUTATION_SIZE_ATTRIB, maxMutateSize);
     }
 
+    @Deprecated
     public QueryServicesOptions setMutateBatchSize(int mutateBatchSize) {
         return set(MUTATE_BATCH_SIZE_ATTRIB, mutateBatchSize);
     }
@@ -513,6 +517,7 @@ public class QueryServicesOptions {
         return config.getInt(MAX_MUTATION_SIZE_ATTRIB, DEFAULT_MAX_MUTATION_SIZE);
     }
 
+    @Deprecated
     public int getMutateBatchSize() {
         return config.getInt(MUTATE_BATCH_SIZE_ATTRIB, DEFAULT_MUTATE_BATCH_SIZE);
     }
