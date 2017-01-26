@@ -115,6 +115,16 @@ public class PhoenixRpcScheduler extends RpcScheduler {
         return this.delegate.getActiveRpcHandlerCount() + this.indexCallExecutor.getActiveHandlerCount() + this.metadataCallExecutor.getActiveHandlerCount();
     }
 
+    @Override
+    public long getNumGeneralCallsDropped() {
+        return delegate.getNumGeneralCallsDropped();
+    }
+
+    @Override
+    public long getNumLifoModeSwitches() {
+        return delegate.getNumLifoModeSwitches();
+    }
+
     @VisibleForTesting
     public void setIndexExecutorForTesting(RpcExecutor executor) {
         this.indexCallExecutor = executor;
