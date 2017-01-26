@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
 
@@ -70,6 +71,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -342,6 +344,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         
         int batchSize = 0;
+        long batchSizeBytes = 0L;
         List<Mutation> mutations = Collections.emptyList();
         boolean needToWrite = false;
         Configuration conf = c.getEnvironment().getConfiguration();
@@ -368,6 +371,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             // TODO: size better
             mutations = Lists.newArrayListWithExpectedSize(1024);
             batchSize = env.getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+            batchSizeBytes = env.getConfiguration().getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         }
         Aggregators aggregators = ServerAggregators.deserialize(
                 scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), env.getConfiguration());
@@ -595,19 +600,23 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     mutations.add(put);
                                 }
                             }
-                            // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
-                            if (!mutations.isEmpty() && batchSize > 0 &&
-                                    mutations.size() % batchSize == 0) {
-                                commitBatch(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
-                                        txState);
-                                mutations.clear();
+                            // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
+                            List<List<Mutation>> batchMutationList =
+                                MutationState.getMutationBatchList(batchSize, batchSizeBytes, mutations);
+                            for (List<Mutation> batchMutations : batchMutationList) {
+                                commitBatch(region, batchMutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
+                                    txState);
+                                batchMutations.clear();
                             }
-                            // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
-                            if (!indexMutations.isEmpty() && batchSize > 0 &&
-                                    indexMutations.size() % batchSize == 0) {
-                                commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState);
-                                indexMutations.clear();
+                            mutations.clear();
+                            // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
+                            List<List<Mutation>> batchIndexMutationList =
+                                MutationState.getMutationBatchList(batchSize, batchSizeBytes, indexMutations);
+                            for (List<Mutation> batchIndexMutations : batchIndexMutationList) {
+                                commitBatch(region, batchIndexMutations, null, blockingMemStoreSize, null, txState);
+                                batchIndexMutations.clear();
                             }
+                            indexMutations.clear();
                         }
                         aggregators.aggregate(rowAggregators, result);
                         hasAny = true;

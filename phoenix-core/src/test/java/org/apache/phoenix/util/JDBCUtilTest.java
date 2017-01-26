@@ -27,7 +27,10 @@ import static org.junit.Assert.assertTrue;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.phoenix.query.QueryServices;
 import org.junit.Test;
+
+import com.google.common.collect.Maps;
 
 public class JDBCUtilTest {
     
@@ -109,4 +112,20 @@ public class JDBCUtilTest {
         props.setProperty("AutoCommit", "false");
         assertFalse(JDBCUtil.getAutoCommit("localhost", props, false));
     }
+
+    @Test
+    public void testGetMaxMutateBytes() throws Exception {
+        assertEquals(1000L, JDBCUtil.getMutateBatchSizeBytes("localhost;" + PhoenixRuntime.UPSERT_BATCH_SIZE_BYTES_ATTRIB +
+            "=1000", new Properties(), ReadOnlyProps.EMPTY_PROPS));
+
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.UPSERT_BATCH_SIZE_BYTES_ATTRIB, "2000");
+        assertEquals(2000L, JDBCUtil.getMutateBatchSizeBytes("localhost", props, ReadOnlyProps.EMPTY_PROPS));
+
+        Map<String, String> propMap = Maps.newHashMap();
+        propMap.put(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "3000");
+        ReadOnlyProps readOnlyProps = new ReadOnlyProps(propMap);
+        assertEquals(3000L, JDBCUtil.getMutateBatchSizeBytes("localhost", new Properties(), readOnlyProps));
+    }
+
 }

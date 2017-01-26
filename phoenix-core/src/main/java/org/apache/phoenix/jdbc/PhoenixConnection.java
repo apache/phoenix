@@ -140,6 +140,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final Properties info;
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
     private final int mutateBatchSize;
+    private final long mutateBatchSizeBytes;
     private final Long scn;
     private MutationState mutationState;
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
@@ -249,6 +250,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                 this.services.getProps().get(QueryServices.SCHEMA_ATTRIB, QueryServicesOptions.DEFAULT_SCHEMA));
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
+        this.mutateBatchSizeBytes = JDBCUtil.getMutateBatchSizeBytes(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
         timePattern = this.services.getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
         timestampPattern = this.services.getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
@@ -437,7 +439,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     public int getMutateBatchSize() {
         return mutateBatchSize;
     }
-    
+
+    public long getMutateBatchSizeBytes(){
+        return mutateBatchSizeBytes;
+    }
+
     public PMetaData getMetaDataCache() {
         return metaData;
     }
@@ -451,7 +457,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     protected MutationState newMutationState(int maxSize) {
-        return new MutationState(maxSize, this); 
+        return new MutationState(maxSize, this);
     }
     
     public MutationState getMutationState() {

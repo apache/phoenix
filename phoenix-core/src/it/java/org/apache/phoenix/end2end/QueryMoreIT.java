@@ -37,6 +37,8 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Base64;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -470,5 +472,38 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
             assertEquals(3.0, rs.getDouble(2), 0.001);
             assertFalse(rs.next());
         }
+    }
+
+    @Test
+    public void testMutationBatch() throws Exception {
+        Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "1024");
+        PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        String fullTableName = generateUniqueName();
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("CREATE TABLE " + fullTableName + "(\n" +
+                "    ORGANIZATION_ID CHAR(15) NOT NULL,\n" +
+                "    SCORE DOUBLE NOT NULL,\n" +
+                "    ENTITY_ID CHAR(15) NOT NULL\n" +
+                "    CONSTRAINT PAGE_SNAPSHOT_PK PRIMARY KEY (\n" +
+                "        ORGANIZATION_ID,\n" +
+                "        SCORE DESC,\n" +
+                "        ENTITY_ID DESC\n" +
+                "    )\n" +
+                ") MULTI_TENANT=TRUE");
+        }
+        PreparedStatement stmt = connection.prepareStatement("upsert into " + fullTableName +
+            " (organization_id, entity_id, score) values (?,?,?)");
+        try {
+            for (int i = 0; i < 4; i++) {
+                stmt.setString(1, "AAAA" + i);
+                stmt.setString(2, "BBBB" + i);
+                stmt.setInt(3, 1);
+                stmt.execute();
+            }
+            connection.commit();
+        } catch (IllegalArgumentException expected) {}
+
+        assertEquals(2L, connection.getMutationState().getBatchCount());
     }
 }
