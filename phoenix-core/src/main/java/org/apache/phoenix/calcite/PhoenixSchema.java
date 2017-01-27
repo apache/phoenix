@@ -404,7 +404,12 @@ public class PhoenixSchema implements Schema {
         if (schema != null) {
             return schema;
         }
-        
+
+        //TODO We should call FromCompiler.getResolverForSchema() here after
+        // all schemas are required to be explicitly created.
+        if (getTable(name) != null || !getFunctions(name).isEmpty()) {
+            return null;
+        }
         schema = new PhoenixSchema(name, name, parentSchema.getSubSchema(this.name), pc);
         subSchemas.put(name, schema);
         return schema;
