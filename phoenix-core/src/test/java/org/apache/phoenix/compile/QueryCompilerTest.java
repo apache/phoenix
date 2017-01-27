@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.junit.Assert.assertArrayEquals;
@@ -500,7 +502,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             "SELECT count(1) FROM atable GROUP BY organization_id,substr(entity_id,1,3),entity_id",
             "SELECT count(1) FROM atable GROUP BY entity_id,organization_id",
             "SELECT count(1) FROM atable GROUP BY substr(entity_id,1,3),organization_id",
-            "SELECT count(1) FROM ptsdb GROUP BY host,inst,round(date,'HOUR')",
+            "SELECT count(1) FROM ptsdb GROUP BY host,inst,round(\"DATE\",'HOUR')",
             "SELECT count(1) FROM atable GROUP BY organization_id",
         };
         List<Object> binds = Collections.emptyList();
@@ -1539,7 +1541,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try{
             Statement statement = conn1.createStatement();
             statement.execute("create table example (id integer not null,fn varchar,"
-                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+                    + "\"ln\" varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
             try {
                 statement.execute("create local index my_idx on example (fn) DEFAULT_COLUMN_FAMILY='F'");
                 fail();
@@ -1701,7 +1703,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             Integer.MAX_VALUE + "," + Long.MAX_VALUE + "," +
             (Integer.MAX_VALUE - 1) + "," + (Long.MAX_VALUE - 1) + "," +
             ((long)Integer.MAX_VALUE + 1) + "," + oneMoreThanMaxLong +
-        " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " LIMIT 1";
+        " FROM " + "\""+ SYSTEM_CATALOG_SCHEMA + "\".\"" + SYSTEM_STATS_TABLE + "\"" + " LIMIT 1";
         List<Object> binds = Collections.emptyList();
         QueryPlan plan = getQueryPlan(query, binds);
         RowProjector p = plan.getProjector();

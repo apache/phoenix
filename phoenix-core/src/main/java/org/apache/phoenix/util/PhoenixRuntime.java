@@ -151,6 +151,16 @@ public class PhoenixRuntime {
     public final static String UPSERT_BATCH_SIZE_ATTRIB = "UpsertBatchSize";
 
     /**
+     * Use this connection property to control the number of bytes that are
+     * batched together on an UPSERT INTO table1... SELECT ... FROM table2.
+     * It's only used when autoCommit is true and your source table is
+     * different than your target table or your SELECT statement has a
+     * GROUP BY clause. Overrides the value of UpsertBatchSize.
+     */
+    public final static String UPSERT_BATCH_SIZE_BYTES_ATTRIB = "UpsertBatchSizeBytes";
+
+
+    /**
      * Use this connection property to explicitly enable or disable auto-commit on a new connection.
      */
     public static final String AUTO_COMMIT_ATTRIB = "AutoCommit";
@@ -216,6 +226,9 @@ public class PhoenixRuntime {
             Properties props = new Properties();
             if (execCmd.isLocalIndexUpgrade()) {
                 props.setProperty(QueryServices.LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, "false");
+            }
+            if (execCmd.binaryEncoding != null) {
+                props.setProperty(QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING, execCmd.binaryEncoding);
             }
             conn = DriverManager.getConnection(jdbcUrl, props).unwrap(PhoenixConnection.class);
             conn.setRunningUpgrade(true);
@@ -536,6 +549,7 @@ public class PhoenixRuntime {
         private boolean mapNamespace;
         private String srcTable;
         private boolean localIndexUpgrade;
+        private String binaryEncoding;
 
         /**
          * Factory method to build up an {@code ExecutionCommand} based on supplied parameters.
@@ -543,6 +557,8 @@ public class PhoenixRuntime {
         public static ExecutionCommand parseArgs(String[] args) {
             Option tableOption = new Option("t", "table", true,
                     "Overrides the table into which the CSV data is loaded and is case sensitive");
+            Option binaryEncodingOption = new Option("b", "binaryEncoding", true,
+                    "Specifies binary encoding");
             Option headerOption = new Option("h", "header", true, "Overrides the column names to" +
                     " which the CSV data maps and is case sensitive. A special value of " +
                     "in-line indicating that the first line of the CSV file determines the " +
@@ -592,6 +608,7 @@ public class PhoenixRuntime {
             options.addOption(bypassUpgradeOption);
             options.addOption(mapNamespaceOption);
             options.addOption(localIndexUpgradeOption);
+            options.addOption(binaryEncodingOption);
 
             CommandLineParser parser = new PosixParser();
             CommandLine cmdLine = null;
@@ -609,6 +626,10 @@ public class PhoenixRuntime {
             }
             if (cmdLine.hasOption(tableOption.getOpt())) {
                 execCmd.tableName = cmdLine.getOptionValue(tableOption.getOpt());
+            }
+            
+            if (cmdLine.hasOption(binaryEncodingOption.getOpt())) {
+                execCmd.binaryEncoding = cmdLine.getOptionValue(binaryEncodingOption.getOpt());
             }
 
             if (cmdLine.hasOption(headerOption.getOpt())) {
@@ -867,7 +888,7 @@ public class PhoenixRuntime {
      * Column names and family names are enclosed in double quotes to allow for case sensitivity and for presence of 
      * special characters. Salting column and view index id column are not included. If the connection is tenant specific 
      * and the table used by the query plan is multi-tenant, then the tenant id column is not included as well.
-     * @param datatypes - Initialized empty list to be filled with the corresponding data type for the columns in @param columns. 
+     * @param dataTypes - Initialized empty list to be filled with the corresponding data type for the columns in @param columns.
      * @param plan - query plan to get info for
      * @param conn - phoenix connection used to generate the query plan. Caller should take care of closing the connection appropriately.
      * @param forDataTable - if true, then column names and data types correspond to the data table even if the query plan uses

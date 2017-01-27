@@ -42,14 +42,16 @@ parser = argparse.ArgumentParser(description='Launches the Apache Phoenix Thin C
 parser.add_argument('url', nargs='?', help='The URL to the Phoenix Query Server.', default='http://localhost:8765')
 # Positional argument "sqlfile" is optional
 parser.add_argument('sqlfile', nargs='?', help='A file of SQL commands to execute.', default='')
-parser.add_argument('-u', '--user', help='Username for database authentication (unsupported).', default='none')
-parser.add_argument('-p', '--password', help='Password for database authentication (unsupported).', default='none')
+# Avatica wire authentication
 parser.add_argument('-a', '--authentication', help='Mechanism for HTTP authentication.', choices=('SPNEGO', 'BASIC', 'DIGEST', 'NONE'), default='')
+# Avatica wire serialization
 parser.add_argument('-s', '--serialization', help='Serialization type for HTTP API.', choices=('PROTOBUF', 'JSON'), default=None)
+# Avatica authentication
 parser.add_argument('-au', '--auth-user', help='Username for HTTP authentication.')
 parser.add_argument('-ap', '--auth-password', help='Password for HTTP authentication.')
-parser.add_argument('-v', '--verbose', help='Verbosity on sqlline.', default='true')
-parser.add_argument('-c', '--color', help='Color setting for sqlline.', default='true')
+# Common arguments across sqlline.py and sqlline-thin.py
+phoenix_utils.common_sqlline_args(parser)
+# Parse the args
 args=parser.parse_args()
 
 phoenix_utils.setPath()
@@ -57,9 +59,6 @@ phoenix_utils.setPath()
 url = args.url
 sqlfile = args.sqlfile
 serialization_key = 'phoenix.queryserver.serialization'
-
-def usage_and_exit():
-    sys.exit("usage: sqlline-thin.py [host[:port]] [sql_file]")
 
 def cleanup_url(url):
     parsed = urlparse.urlparse(url)
@@ -161,8 +160,8 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     os.pathsep + phoenix_utils.hadoop_conf + os.pathsep + phoenix_utils.hadoop_classpath + '" -Dlog4j.configuration=file:' + \
     os.path.join(phoenix_utils.current_dir, "log4j.properties") + \
     " org.apache.phoenix.queryserver.client.SqllineWrapper -d org.apache.phoenix.queryserver.client.Driver " + \
-    ' -u "' + jdbc_url + '"' + " -n " + args.user + " -p " + args.password + \
-    " --color=" + colorSetting + " --fastConnect=false --verbose=" + args.verbose + \
+    ' -u "' + jdbc_url + '"' + " -n none -p none " + \
+    " --color=" + colorSetting + " --fastConnect=" + args.fastconnect + " --verbose=" + args.verbose + \
     " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
 exitcode = subprocess.call(java_cmd, shell=True)

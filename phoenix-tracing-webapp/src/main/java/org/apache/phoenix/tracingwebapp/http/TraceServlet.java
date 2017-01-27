@@ -25,7 +25,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.codehaus.jackson.map.ObjectMapper;
-
+import org.apache.phoenix.metrics.MetricInfo;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
@@ -82,6 +82,11 @@ public class TraceServlet extends HttpServlet {
     if(limit == null) {
       limit = DEFAULT_LIMIT;
     }
+    try{
+        Long.parseLong(limit);
+    } catch (NumberFormatException e) {
+    	throw new RuntimeException("The LIMIT passed to the query is not a number.", e);
+    }
     String sqlQuery = "SELECT * FROM " + TRACING_TABLE + " LIMIT "+limit;
     json = getResults(sqlQuery);
     return getJson(json);
@@ -93,6 +98,8 @@ public class TraceServlet extends HttpServlet {
     if(countby == null) {
       countby = DEFAULT_COUNTBY;
     }
+    // Throws exception if the column not present in the trace table.
+    MetricInfo.getColumnName(countby.toLowerCase());
     String sqlQuery = "SELECT "+countby+", COUNT(*) AS count FROM " + TRACING_TABLE + " GROUP BY "+countby+" HAVING COUNT(*) > 1 ";
     json = getResults(sqlQuery);
     return json;
@@ -102,6 +109,16 @@ public class TraceServlet extends HttpServlet {
   protected String searchTrace(String parentId, String traceId,String logic) {
     String json = null;
     String query = null;
+    // Check the parent Id, trace id type or long or not.
+    try {
+        Long.parseLong(parentId);
+        Long.parseLong(traceId);
+    } catch (NumberFormatException e) {
+    	throw new RuntimeException("The passed parentId/traceId is not a number.", e);
+    }
+    if(!logic.equals(LOGIC_AND) || !logic.equals(LOGIC_OR)) {
+    	throw new RuntimeException("Wrong logical operator passed to the query. Only "+ LOGIC_AND+","+LOGIC_OR+" are allowed.") ;
+    }
     if(parentId != null && traceId != null) {
       query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id="+parentId+" "+logic+" trace_id="+traceId;
     }else if (parentId != null && traceId == null) {
@@ -132,7 +149,7 @@ public class TraceServlet extends HttpServlet {
       con = ConnectionFactory.getConnection();
       EntityFactory nutrientEntityFactory = new EntityFactory(con,sqlQuery);
       List<Map<String, Object>> nutrients = nutrientEntityFactory
-          .findMultiple(new Object[] {});
+          .findMultiple();
       ObjectMapper mapper = new ObjectMapper();
       json = mapper.writeValueAsString(nutrients);
     } catch (Exception e) {

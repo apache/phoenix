@@ -20,5 +20,7 @@ package org.apache.phoenix.expression.function;
 public enum EncodeFormat {
 
 	HEX, //format for encoding HEX value to bytes
-	BASE62 //format for encoding a base 10 long value to base 62 string
+	BASE62, //format for encoding a base 10 long value to base 62 string
+	BASE64, //format for encoding a base 10 long value to base 64 string
+	ASCII // Plain Text
 };

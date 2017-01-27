@@ -131,7 +131,10 @@ public class PVarbinary extends PBinaryBase {
         if (value == null || value.length() == 0) {
             return null;
         }
-        return Base64.decode(value);
+        Object object = Base64.decode(value);
+        if (object == null) { throw newIllegalDataException(
+                "Input: [" + value + "]  is not base64 encoded"); }
+        return object;
     }
 
     @Override

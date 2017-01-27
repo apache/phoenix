@@ -126,6 +126,8 @@ public class MutationState implements SQLCloseable {
     
     private final PhoenixConnection connection;
     private final long maxSize;
+    private final long maxSizeBytes;
+    private long batchCount = 0L;
     private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations;
     private final List<TransactionAware> txAwares;
     private final TransactionContext txContext;
@@ -140,7 +142,7 @@ public class MutationState implements SQLCloseable {
     
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
-    
+
     public MutationState(long maxSize, PhoenixConnection connection) {
         this(maxSize,connection, null, null);
     }
@@ -171,6 +173,7 @@ public class MutationState implements SQLCloseable {
             Transaction tx, TransactionContext txContext) {
         this.maxSize = maxSize;
         this.connection = connection;
+        this.maxSizeBytes = connection.getMutateBatchSizeBytes();
         this.mutations = mutations;
         boolean isMetricsEnabled = connection.isRequestLevelMetricsEnabled();
         this.mutationMetricQueue = isMetricsEnabled ? new MutationMetricQueue()
@@ -743,12 +746,11 @@ public class MutationState implements SQLCloseable {
     public static long getMutationTimestamp(final Long tableTimestamp, Long scn) {
         return (tableTimestamp!=null && tableTimestamp!=QueryConstants.UNSET_TIMESTAMP) ? tableTimestamp : (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
     }
-        
+
     /**
      * Validates that the meta data is valid against the server meta data if we haven't yet done so.
      * Otherwise, for every UPSERT VALUES call, we'd need to hit the server to see if the meta data
      * has changed.
-     * @param connection
      * @return the server time to use for the upsert
      * @throws SQLException if the table or any columns no longer exist
      */
@@ -842,6 +844,15 @@ public class MutationState implements SQLCloseable {
             }
         }
     }
+
+    public long getMaxSizeBytes() {
+        return maxSizeBytes;
+    }
+
+    public long getBatchCount() {
+        return batchCount;
+    }
+
     private class MetaDataAwareHTable extends DelegateHTable {
         private final TableRef tableRef;
         
@@ -1068,7 +1079,11 @@ public class MutationState implements SQLCloseable {
                         
                         long startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
-                        hTable.batch(mutationList);
+                        List<List<Mutation>> mutationBatchList = getMutationBatchList(maxSize, maxSizeBytes, mutationList);
+                        for (List<Mutation> mutationBatch : mutationBatchList) {
+                            hTable.batch(mutationBatch);
+                            batchCount++;
+                        }
                         if (logger.isDebugEnabled()) logger.debug("Sent batch of " + numMutations + " for " + Bytes.toString(htableName));
                         child.stop();
                         child.stop();
@@ -1130,6 +1145,34 @@ public class MutationState implements SQLCloseable {
                 } while (shouldRetry && retryCount++ < 1);
             }
         }
+    }
+
+    /**
+     * Split the list of mutations into multiple lists that don't exceed row and byte thresholds
+     * @param allMutationList List of HBase mutations
+     * @return List of lists of mutations
+     */
+    public static List<List<Mutation>> getMutationBatchList(long maxSize, long maxSizeBytes, List<Mutation> allMutationList) {
+        List<List<Mutation>> mutationBatchList = Lists.newArrayList();
+        List<Mutation> currentList = Lists.newArrayList();
+        long currentBatchSizeBytes = 0L;
+        for (Mutation mutation : allMutationList) {
+            long mutationSizeBytes = mutation.heapSize();
+            if (currentList.size() == maxSize || currentBatchSizeBytes + mutationSizeBytes > maxSizeBytes) {
+                if (currentList.size() > 0) {
+                    mutationBatchList.add(currentList);
+                    currentList = Lists.newArrayList();
+                    currentBatchSizeBytes = 0L;
+                }
+            }
+            currentList.add(mutation);
+            currentBatchSizeBytes += mutationSizeBytes;
+        }
+        if (currentList.size() > 0) {
+            mutationBatchList.add(currentList);
+        }
+        return mutationBatchList;
+
     }
 
     public byte[] encodeTransaction() throws SQLException {

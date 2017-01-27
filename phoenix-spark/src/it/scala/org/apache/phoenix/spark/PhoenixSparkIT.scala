@@ -302,11 +302,21 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
     // Load TABLE1, save as TABLE1_COPY
     val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
-      "zkUrl" -> quorumAddress))
+    val df = sqlContext
+      .read
+      .format("org.apache.phoenix.spark")
+      .option("table", "TABLE1")
+      .option("zkUrl", quorumAddress)
+      .load()
 
     // Save to TABLE21_COPY
-    df.save("org.apache.phoenix.spark", SaveMode.Overwrite, Map("table" -> "TABLE1_COPY", "zkUrl" -> quorumAddress))
+    df
+      .write
+      .format("org.apache.phoenix.spark")
+      .mode(SaveMode.Overwrite)
+      .option("table", "TABLE1_COPY")
+      .option("zkUrl", quorumAddress)
+      .save()
 
     // Verify results
     stmt = conn.createStatement()
@@ -621,4 +631,30 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
     assert(Math.abs(epoch - ts) < 300000)
   }
+
+  test("Can load Phoenix Time columns through DataFrame API") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.read
+      .format("org.apache.phoenix.spark")
+      .options(Map("table" -> "TIME_TEST", "zkUrl" -> quorumAddress))
+      .load
+    val time = df.select("COL1").first().getTimestamp(0).getTime
+    val epoch = new Date().getTime
+    assert(Math.abs(epoch - time) < 86400000)
+  }
+
+  test("can read all Phoenix data types") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "GIGANTIC_TABLE",
+      "zkUrl" -> quorumAddress))
+
+    df.write
+      .format("org.apache.phoenix.spark")
+      .options(Map("table" -> "OUTPUT_GIGANTIC_TABLE", "zkUrl" -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    df.count() shouldEqual 1
+  }
+
 }
