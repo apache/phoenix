@@ -67,4 +67,10 @@ public class SqlColumnDefInPkConstraintNode extends SqlNode{
         // TODO Auto-generated method stub
         return false;
     }
+
+    @Override
+    public SqlNode clone(SqlParserPos pos) {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }

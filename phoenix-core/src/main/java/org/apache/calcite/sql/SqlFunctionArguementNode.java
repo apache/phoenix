@@ -65,4 +65,10 @@ public class SqlFunctionArguementNode extends SqlNode {
 
     }
 
+    @Override
+    public SqlNode clone(SqlParserPos pos) {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
 }
