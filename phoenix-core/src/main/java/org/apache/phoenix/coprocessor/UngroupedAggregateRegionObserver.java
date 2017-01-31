@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
@@ -88,12 +89,14 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker;
 import org.apache.phoenix.schema.stats.StatisticsCollector;
@@ -132,8 +135,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     // TODO: move all constants into a single class
     public static final String UNGROUPED_AGG = "UngroupedAgg";
     public static final String DELETE_AGG = "DeleteAgg";
-    public static final String UPSERT_SELECT_TABLE = "UpsertSelectTable";
-    public static final String UPSERT_SELECT_EXPRS = "UpsertSelectExprs";
     public static final String DELETE_CQ = "DeleteCQ";
     public static final String DELETE_CF = "DeleteCF";
     public static final String EMPTY_CF = "EmptyCF";
@@ -208,6 +209,40 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
       // TODO: should we use the one that is all or none?
       logger.debug("Committing bactch of " + mutations.size() + " mutations for " + region.getRegionInfo().getTable().getNameAsString());
       region.batchMutate(mutations.toArray(mutationArray), HConstants.NO_NONCE, HConstants.NO_NONCE);
+    }
+    
+    private void commitBatchWithHTable(HTable table, HRegion region, List<Mutation> mutations, byte[] indexUUID,
+            long blockingMemstoreSize, byte[] indexMaintainersPtr, byte[] txState) throws IOException {
+
+        if (indexUUID != null) {
+            // Need to add indexMaintainers for each mutation as table.batch can be distributed across servers
+            for (Mutation m : mutations) {
+                if (indexMaintainersPtr != null) {
+                    m.setAttribute(PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+                }
+                if (txState != null) {
+                    m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                }
+                m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+            }
+        }
+        // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
+        // flush happen which decrease the memstore size and then writes allowed on the region.
+        for (int i = 0; region.getMemstoreSize().get() > blockingMemstoreSize && i < 30; i++) {
+            try {
+                checkForRegionClosing();
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException(e);
+            }
+        }
+        logger.debug("Committing batch of " + mutations.size() + " mutations for " + table);
+        try {
+            table.batch(mutations);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -307,12 +342,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] deleteCQ = null;
         byte[] deleteCF = null;
         byte[] emptyCF = null;
+        HTable targetHTable = null;
+        boolean areMutationInSameRegion = true;
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         if (upsertSelectTable != null) {
             isUpsert = true;
             projectedTable = deserializeTable(upsertSelectTable);
+            targetHTable = new HTable(env.getConfiguration(), projectedTable.getPhysicalName().getBytes());
             selectExpressions = deserializeExpressions(scan.getAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS));
             values = new byte[projectedTable.getPKColumns().size()][];
+            areMutationInSameRegion = Bytes.compareTo(targetHTable.getTableName(),
+                    region.getTableDesc().getTableName().getName()) == 0
+                    && !isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
             
         } else {
             byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
@@ -521,10 +562,15 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                         } else if (isUpsert) {
                             Arrays.fill(values, null);
-                            int i = 0;
+                            int bucketNumOffset = 0;
+                            if (projectedTable.getBucketNum() != null) {
+                                values[0] = new byte[] { 0 };
+                                bucketNumOffset = 1;
+                            }
+                            int i = bucketNumOffset;
                             List<PColumn> projectedColumns = projectedTable.getColumns();
                             for (; i < projectedTable.getPKColumns().size(); i++) {
-                                Expression expression = selectExpressions.get(i);
+                                Expression expression = selectExpressions.get(i - bucketNumOffset);
                                 if (expression.evaluate(result, ptr)) {
                                     values[i] = ptr.copyBytes();
                                     // If SortOrder from expression in SELECT doesn't match the
@@ -534,12 +580,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                         SortOrder.invert(values[i], 0, values[i], 0,
                                             values[i].length);
                                     }
+                                }else{
+                                    values[i] = ByteUtil.EMPTY_BYTE_ARRAY;
                                 }
                             }
                             projectedTable.newKey(ptr, values);
                             PRow row = projectedTable.newRow(kvBuilder, ts, ptr, false);
                             for (; i < projectedColumns.size(); i++) {
-                                Expression expression = selectExpressions.get(i);
+                                Expression expression = selectExpressions.get(i - bucketNumOffset);
                                 if (expression.evaluate(result, ptr)) {
                                     PColumn column = projectedColumns.get(i);
                                     if (!column.getDataType().isSizeCompatible(ptr, null,
@@ -604,8 +652,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             List<List<Mutation>> batchMutationList =
                                 MutationState.getMutationBatchList(batchSize, batchSizeBytes, mutations);
                             for (List<Mutation> batchMutations : batchMutationList) {
-                                commitBatch(region, batchMutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
-                                    txState);
+                                commit(region, batchMutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
+                                        txState, areMutationInSameRegion, targetHTable);
                                 batchMutations.clear();
                             }
                             mutations.clear();
@@ -623,7 +671,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     }
                 } while (hasMore);
                 if (!mutations.isEmpty()) {
-                    commitBatch(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState);
+                    commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
+                            areMutationInSameRegion, targetHTable);
+                    mutations.clear();
                 }
 
                 if (!indexMutations.isEmpty()) {
@@ -636,6 +686,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 synchronized (lock) {
                     scansReferenceCount--;
                 }
+            }
+            if (targetHTable != null) {
+                targetHTable.close();
             }
             try {
                 innerScanner.close();
@@ -677,8 +730,36 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         };
         return scanner;
+
     }
 
+    private void commit(HRegion region, List<Mutation> mutations, byte[] indexUUID, long blockingMemstoreSize,
+            byte[] indexMaintainersPtr, byte[] txState, boolean areMutationsForSameRegion, HTable hTable)
+            throws IOException {
+        if (!areMutationsForSameRegion) {
+            assert hTable != null;// table cannot be null
+            commitBatchWithHTable(hTable, region, mutations, indexUUID, blockingMemstoreSize, indexMaintainersPtr,
+                    txState);
+        } else {
+            commitBatch(region, mutations, indexUUID, blockingMemstoreSize, indexMaintainersPtr, txState);
+        }
+    }
+
+    private boolean isPkPositionChanging(TableRef tableRef, List<Expression> projectedExpressions) throws SQLException {
+        // If the row ends up living in a different region, we'll get an error otherwise.
+        for (int i = 0; i < tableRef.getTable().getPKColumns().size(); i++) {
+            PColumn column = tableRef.getTable().getPKColumns().get(i);
+            Expression source = projectedExpressions.get(i);
+            if (source == null || !source
+                    .equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) { return true; }
+        }
+        return false;
+    }
+
+    private boolean readyToCommit(List<Mutation> mutations,int batchSize){
+        return !mutations.isEmpty() && batchSize > 0 &&
+        mutations.size() > batchSize;
+    }
     @Override
     public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c,
             final Store store, final InternalScanner scanner, final ScanType scanType)

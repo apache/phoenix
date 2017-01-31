@@ -439,17 +439,30 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
     public void testMetricsForUpsertSelectWithAutoCommit() throws Exception {
         String tableName1 = generateUniqueName();
         long table1SaltBuckets = 6;
-        String ddl = "CREATE TABLE " + tableName1 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
-                + table1SaltBuckets;
+        String ddl = "CREATE TABLE " + tableName1 + " (K BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, V VARCHAR)"
+                + " SALT_BUCKETS = " + table1SaltBuckets + ", IMMUTABLE_ROWS = true";
         Connection ddlConn = DriverManager.getConnection(getUrl());
         ddlConn.createStatement().execute(ddl);
         ddlConn.close();
         int numRows = 10;
-        insertRowsInTable(tableName1, numRows);
+        String dml = "UPSERT INTO " + tableName1 + " VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            for (int i = 1; i <= numRows; i++) {
+                stmt.setLong(1, i);
+                stmt.setString(2, "value" + i);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+        }
 
         String tableName2 = generateUniqueName();
-        ddl = "CREATE TABLE " + tableName2 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = 10";
+        ddl = "CREATE TABLE " + tableName2 + " (K BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, V VARCHAR)"
+                + " SALT_BUCKETS = 10" + ", IMMUTABLE_ROWS = true";
         ddlConn = DriverManager.getConnection(getUrl());
+        ddlConn.createStatement().execute(ddl);
+        String indexName = generateUniqueName();
+        ddl = "CREATE INDEX " + indexName + " ON " + tableName2 + " (V)";
         ddlConn.createStatement().execute(ddl);
         ddlConn.close();
 
@@ -599,41 +612,6 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(metrics.get(index3).size() > 0);
             assertMetricsHaveSameValues(metrics.get(index1), metrics.get(index3), mutationMetricsToSkip);
         }
-    }
-    
-    @Test
-    public void testMetricsForUpsertSelectSameTable() throws Exception {
-        String tableName = generateUniqueName();
-        long table1SaltBuckets = 6;
-        String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
-                + table1SaltBuckets;
-        Connection ddlConn = DriverManager.getConnection(getUrl());
-        ddlConn.createStatement().execute(ddl);
-        ddlConn.close();
-        int numRows = 10;
-        insertRowsInTable(tableName, numRows);
-
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.setAutoCommit(false);
-        String upsertSelect = "UPSERT INTO " + tableName + " SELECT * FROM " + tableName;
-        conn.createStatement().executeUpdate(upsertSelect);
-        conn.commit();
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-        
-        Map<String, Map<String, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(pConn);
-        // Because auto-commit is off, upsert select into the same table will run on the client.
-        // So we should have client side read and write metrics available.
-        assertMutationMetrics(tableName, numRows, mutationMetrics);
-        Map<String, Map<String, Long>> readMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(pConn);
-        assertReadMetricsForMutatingSql(tableName, table1SaltBuckets, readMetrics);
-        PhoenixRuntime.resetMetrics(pConn);
-        // With autocommit on, still, this upsert select runs on the client side.
-        conn.setAutoCommit(true);
-        conn.createStatement().executeUpdate(upsertSelect);
-        Map<String, Map<String, Long>> autoCommitMutationMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(pConn);
-        Map<String, Map<String, Long>> autoCommitReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(pConn);
-        assertMetricsAreSame(mutationMetrics, autoCommitMutationMetrics, mutationMetricsToSkip);
-        assertMetricsAreSame(readMetrics, autoCommitReadMetrics, readMetricsToSkip);
     }
     
     @Test

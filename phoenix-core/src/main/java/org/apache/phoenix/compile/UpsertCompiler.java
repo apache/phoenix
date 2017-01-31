@@ -85,6 +85,7 @@ import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
@@ -506,7 +507,7 @@ public class UpsertCompiler {
                         && tableRefToBe.equals(selectResolver.getTables().get(0));
                     tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
                     /* We can run the upsert in a coprocessor if:
-                     * 1) from has only 1 table and the into table matches from table
+                     * 1) from has only 1 table
                      * 2) the select query isn't doing aggregation (which requires a client-side final merge)
                      * 3) autoCommit is on
                      * 4) the table is not immutable with indexes, as the client is the one that figures out the additional
@@ -523,9 +524,10 @@ public class UpsertCompiler {
                         parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe, useServerTimestampToBe);
                         // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
                         // so we might be able to run it entirely on the server side.
-                        // For a table with row timestamp column, we can't guarantee that the row key will reside in the
                         // region space managed by region servers. So we bail out on executing on server side.
-                        runOnServer = sameTable && isAutoCommit && !table.isTransactional() && !(table.isImmutableRows() && !table.getIndexes().isEmpty()) && table.getRowTimestampColPos() == -1;
+                        runOnServer = isAutoCommit && !table.isTransactional()
+                                && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
+                                && !select.isJoin() && table.getRowTimestampColPos() == -1;
                     }
                     // If we may be able to run on the server, add a hint that favors using the data table
                     // if all else is equal.
@@ -599,7 +601,6 @@ public class UpsertCompiler {
         if (valueNodes == null) {
             queryPlanToBe = new QueryOptimizer(services).optimize(queryPlanToBe, statement, targetColumns, parallelIteratorFactoryToBe);
             projectorToBe = queryPlanToBe.getProjector();
-            runOnServer &= queryPlanToBe.getTableRef().equals(tableRefToBe);
         }
         final List<PColumn> allColumns = allColumnsToBe;
         final RowProjector projector = projectorToBe;
@@ -657,41 +658,34 @@ public class UpsertCompiler {
                         Expression literalNull = LiteralExpression.newConstant(null, column.getDataType(), Determinism.ALWAYS);
                         projectedExpressions.add(literalNull);
                         allColumnsIndexes[pos] = column.getPosition();
-                    } 
+                    }
                     // Swap select expression at pos with i
                     Collections.swap(projectedExpressions, i, pos);
                     // Swap column indexes and reverse column indexes too
                     int tempPos = allColumnsIndexes[i];
                     allColumnsIndexes[i] = allColumnsIndexes[pos];
                     allColumnsIndexes[pos] = tempPos;
-                    reverseColumnIndexes[tempPos] = reverseColumnIndexes[i];
+                    reverseColumnIndexes[tempPos] = pos;
                     reverseColumnIndexes[i] = i;
                 }
-                // If any pk slots are changing, be conservative and don't run this server side.
-                // If the row ends up living in a different region, we'll get an error otherwise.
-                for (int i = 0; i < table.getPKColumns().size(); i++) {
-                    PColumn column = table.getPKColumns().get(i);
-                    Expression source = projectedExpressions.get(i);
-                    if (source == null || !source.equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) {
-                        // TODO: we could check the region boundaries to see if the pk will still be in it.
-                        runOnServer = false; // bail on running server side, since PK may be changing
-                        break;
-                    }
-                }
-                
+
                 ////////////////////////////////////////////////////////////////////
                 // UPSERT SELECT run server-side
                 /////////////////////////////////////////////////////////////////////
                 if (runOnServer) {
                     // Iterate through columns being projected
                     List<PColumn> projectedColumns = Lists.newArrayListWithExpectedSize(projectedExpressions.size());
-                    for (int i = 0; i < projectedExpressions.size(); i++) {
+                    int posOff = table.getBucketNum() != null ? 1 : 0;
+                    for (int i = 0 ; i < projectedExpressions.size(); i++) {
                         // Must make new column if position has changed
                         PColumn column = allColumns.get(allColumnsIndexes[i]);
-                        projectedColumns.add(column.getPosition() == i ? column : new PColumnImpl(column, i));
+                        projectedColumns.add(column.getPosition() == i + posOff ? column : new PColumnImpl(column, i));
                     }
                     // Build table from projectedColumns
-                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns);
+                    // Hack to add default column family to be used on server in case no value column is projected.
+                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns,
+                            PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)));  
+                    
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
                     StatementContext statementContext = queryPlan.getContext();
@@ -717,7 +711,7 @@ public class UpsertCompiler {
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
                     
                     // Ignore order by - it has no impact
-                    final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
+                    final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                     return new MutationPlan() {
                         @Override
                         public ParameterMetaData getParameterMetaData() {
