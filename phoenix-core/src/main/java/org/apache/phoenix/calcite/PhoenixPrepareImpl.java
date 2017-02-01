@@ -16,7 +16,6 @@ import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
-import org.apache.calcite.prepare.Prepare.Materialization;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
 import org.apache.calcite.rel.logical.LogicalSort;
@@ -270,11 +269,10 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             }
         }));
 
-        hooks.add(Hook.PROGRAM.add(new Function<org.apache.calcite.util.Pair<List<Materialization>, Holder<Program>>, Object>() {
+        hooks.add(Hook.PROGRAM.add(new Function<Holder<Program>, Object>() {
             @Override
-            public Object apply(
-                    org.apache.calcite.util.Pair<List<Materialization>, Holder<Program>> input) {
-                input.getValue().set(Programs.standard(PhoenixRel.METADATA_PROVIDER));
+            public Object apply(Holder<Program> input) {
+                input.set(Programs.standard(PhoenixRel.METADATA_PROVIDER));
                 return null;
             }
         }));
