@@ -108,17 +108,27 @@ public class TableMapping {
     }
 
     private void init() {
+        Set<String> nameSet = Sets.newHashSet();
+        boolean dup = false;
         for (int i = 0; i < mappedColumns.size(); i++) {
             PColumn column = mappedColumns.get(i);
             String familyName = column.getFamilyName() == null ? "" : column.getFamilyName().getString();
-            String translatedName = SchemaUtil.getCaseSensitiveColumnDisplayName(familyName, column.getName().getString());
-            names.add(translatedName);
+            String name = column.getName().getString();
             Map<String, Integer> subMap = groupMap.get(familyName);
             if (subMap == null) {
               subMap = Maps.newHashMap();
               groupMap.put(familyName, subMap);
             }
-            subMap.put(column.getName().getString(), i);            
+            subMap.put(name, i);
+            dup = dup || !nameSet.add(name);
+        }
+        for (int i = 0; i < mappedColumns.size(); i++) {
+            PColumn column = mappedColumns.get(i);
+            String familyName = column.getFamilyName() == null ? "" : column.getFamilyName().getString();
+            String name = column.getName().getString();
+            String translatedName = !dup ? name
+                    : SchemaUtil.getCaseSensitiveColumnDisplayName(familyName, column.getName().getString());
+            names.add(translatedName);
         }
     }
 

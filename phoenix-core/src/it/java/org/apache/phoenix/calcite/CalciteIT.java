@@ -144,7 +144,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "  PhoenixClientProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT1=[$3], DISCOUNT2=[$4], supplier_id=[$5], DESCRIPTION=[$6], supplier_id0=[$7], NAME0=[$8], PHONE=[$9], ADDRESS=[$10], LOC_ID=[$11])\n" +
                            "    PhoenixServerJoin(condition=[=($5, $7)], joinType=[inner])\n" +
                            "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                           "      PhoenixServerProject(supplier_id=[$0], NAME=[$1], PHONE=[$2], ADDRESS=[$3], LOC_ID=[$4], NAME5=[CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\"])\n" +
+                           "      PhoenixServerProject(supplier_id=[$0], NAME=[$1], PHONE=[$2], ADDRESS=[$3], LOC_ID=[$4], NAME0=[CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\"])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, SupplierTable]], filter=[=(CAST($1):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\", 'S5')])\n")
                 .resultIs(0, new Object[][] {
                           {"0000000005", "T5", 500, 8, 15, "0000000005", "Item T5", "0000000005", "S5", "888-888-5555", "505 YYY Street", "10005"}})
@@ -157,7 +157,7 @@ public class CalciteIT extends BaseCalciteIT {
                            "    PhoenixServerJoin(condition=[AND(=($6, $0), =($8, $4))], joinType=[inner])\n" +
                            "      PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4], $f7=[/(*($2, -(100, $4)), 100.0)])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                           "      PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], PRICE6=[CAST($3):DECIMAL(17, 6)])\n" +
+                           "      PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4], PRICE0=[CAST($3):DECIMAL(17, 6)])\n" +
                            "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[<($4, 5000)])\n")
                 .resultIs(0, new Object[][] {
                           {"000000000000004", "T6", 600, 15, 4000}})
@@ -230,10 +230,10 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 100000f).sql("select t1.k0, t1.k1, t2.k0, t2.k1 from " + KEY_ORDERING_TABLE_1_NAME + " t1 join " + KEY_ORDERING_TABLE_2_NAME + " t2 on t1.k0 = t2.k0 and t1.k1 = t2.k1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(K0=[$0], K1=[$1], K00=[$3], K10=[$4])\n" +
+                           "  PhoenixClientProject(K0=[$0], K1=[$1], K00=[$3], K11=[$4])\n" +
                            "    PhoenixClientJoin(condition=[AND(=($0, $3), =($2, $4))], joinType=[inner])\n" +
                            "      PhoenixServerSort(sort0=[$0], sort1=[$2], dir0=[ASC], dir1=[ASC])\n" +
-                           "        PhoenixServerProject(K0=[$0], K1=[$1], K14=[CAST($1):BIGINT NOT NULL])\n" +
+                           "        PhoenixServerProject(K0=[$0], K1=[$1], K10=[CAST($1):BIGINT NOT NULL])\n" +
                            "          PhoenixTableScan(table=[[phoenix, KEY_ORDERING_TEST_TABLE_1]])\n" +
                            "      PhoenixServerProject(K0=[$0], K1=[$1])\n" +
                            "        PhoenixTableScan(table=[[phoenix, KEY_ORDERING_TEST_TABLE_2]], scanOrder=[REVERSE])\n")
