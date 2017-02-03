@@ -80,6 +80,8 @@ public class SqlCreateTable extends SqlCall {
             SqlLiteral immutable,
             SqlLiteral ifNotExists,
             SqlNodeList columnDefs,
+            SqlIdentifier pkConstraint,
+            SqlNodeList pkConstraintColumnDefs,
             SqlIdentifier baseTableName,
             SqlNode whereNode,
             SqlNodeList tableOptions) {
@@ -89,8 +91,8 @@ public class SqlCreateTable extends SqlCall {
         this.immutable = immutable;
         this.ifNotExists = ifNotExists;
         this.columnDefs = columnDefs;
-        this.pkConstraint = null;
-        this.pkConstraintColumnDefs = SqlNodeList.EMPTY;
+        this.pkConstraint = pkConstraint;
+        this.pkConstraintColumnDefs = pkConstraintColumnDefs;
         this.baseTableName = baseTableName;
         this.whereNode = whereNode;
         this.tableOptions = tableOptions;

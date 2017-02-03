@@ -71,6 +71,8 @@ SqlNode SqlCreateView() :
     SqlNodeList columnDefs;
     SqlIdentifier baseTableName;
     SqlNode where;
+    SqlIdentifier pkConstraint = null;
+    SqlNodeList pkConstraintColumnDefs = SqlNodeList.EMPTY;
     SqlNodeList tableOptions;
 }
 {
@@ -86,11 +88,23 @@ SqlNode SqlCreateView() :
     (
         <LPAREN>
         columnDefs = ColumnDefList()
-        <RPAREN>
+        (
+            (
+                <COMMA>
+            )?
+            <CONSTRAINT> pkConstraint = SimpleIdentifier() <PRIMARY> <KEY>
+            <LPAREN> pkConstraintColumnDefs = PkConstraintColumnDefList() <RPAREN>
+            |
+            {
+                pkConstraint = null;
+                pkConstraintColumnDefs = SqlNodeList.EMPTY;
+            }
+        )
         |
         {
             columnDefs = SqlNodeList.EMPTY;
         }
+	<RPAREN>
     )
     (
         <AS> <SELECT> <STAR> <FROM> baseTableName = DualIdentifier()
@@ -112,7 +126,8 @@ SqlNode SqlCreateView() :
         return new SqlCreateTable(pos.plus(getPos()), tableName,
             SqlLiteral.createBoolean(false, SqlParserPos.ZERO),        
             SqlLiteral.createBoolean(ifNotExists, SqlParserPos.ZERO),
-            columnDefs, baseTableName, where, tableOptions);
+            columnDefs, pkConstraint, pkConstraintColumnDefs, baseTableName,
+            where, tableOptions);
     }
 }
 
