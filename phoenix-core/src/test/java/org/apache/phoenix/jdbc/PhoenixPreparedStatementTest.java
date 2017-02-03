@@ -178,28 +178,4 @@ public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
         assertEquals(0, phoenixStmt.getQueryTimeoutInMillis());
     }
 
-    @Test
-    public void testPreparedStatementWithGeneratedKeys() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        PreparedStatement statement = conn.prepareStatement("CREATE TABLE T (pk1 CHAR(15) not null, pk2 VARCHAR not null,  v1 VARCHAR(15), v2 DATE, " +
-            "v3 VARCHAR CONSTRAINT pk PRIMARY KEY (pk1, pk2))", PreparedStatement.RETURN_GENERATED_KEYS);
-        statement.execute();
-    }
-
-    @Test
-    public void testPreparedStatementWithColumnIndexes() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        PreparedStatement statement = conn.prepareStatement("CREATE TABLE T (pk1 CHAR(15) not null, pk2 VARCHAR not null,  v1 VARCHAR(15), v2 DATE, " +
-            "v3 VARCHAR CONSTRAINT pk PRIMARY KEY (pk1, pk2))", new int[0]);
-        statement.execute();
-    }
-
-    @Test
-    public void testPreparedStatementWithColumnNames() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        PreparedStatement statement = conn.prepareStatement("CREATE TABLE T (pk1 CHAR(15) not null, pk2 VARCHAR not null,  v1 VARCHAR(15), v2 DATE, " +
-            "v3 VARCHAR CONSTRAINT pk PRIMARY KEY (pk1, pk2))", new String[0]);
-        statement.execute();
-    }
-
 }
