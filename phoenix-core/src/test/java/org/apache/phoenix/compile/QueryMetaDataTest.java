@@ -441,15 +441,4 @@ public class QueryMetaDataTest extends BaseConnectionlessQueryTest {
         assertEquals(String.class.getName(), pmd.getParameterClassName(2));
         assertEquals(String.class.getName(), pmd.getParameterClassName(3));
     }
-    
-    @Test
-    public void testBindParamMetaDataForCreateTable() throws Exception {
-        String ddl = "CREATE TABLE foo (k VARCHAR PRIMARY KEY) SPLIT ON (?, ?)";
-        Connection conn = DriverManager.getConnection(PHOENIX_JDBC_URL, PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES));
-        PreparedStatement statement = conn.prepareStatement(ddl);
-        ParameterMetaData pmd = statement.getParameterMetaData();
-        assertEquals(2, pmd.getParameterCount());
-        assertEquals(byte[].class.getName(), pmd.getParameterClassName(1));
-        assertEquals(byte[].class.getName(), pmd.getParameterClassName(2));
-    }
 }

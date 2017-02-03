@@ -1023,15 +1023,13 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Connection conn = DriverManager.getConnection(url);
         try {
-            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
-            statement.execute();
+            conn.createStatement().execute("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
             fail();
         } catch (SQLException e) { // expected
             assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         try {
-            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable SET SALT_BUCKETS=4");
-            statement.execute();
+            conn.createStatement().execute("ALTER TABLE atable SET SALT_BUCKETS=4");
             fail();
         } catch (SQLException e) { // expected
             assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
