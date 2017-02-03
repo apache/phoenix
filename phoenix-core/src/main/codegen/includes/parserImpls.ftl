@@ -100,11 +100,11 @@ SqlNode SqlCreateView() :
                 pkConstraintColumnDefs = SqlNodeList.EMPTY;
             }
         )
+        <RPAREN>
         |
         {
             columnDefs = SqlNodeList.EMPTY;
         }
-	<RPAREN>
     )
     (
         <AS> <SELECT> <STAR> <FROM> baseTableName = DualIdentifier()
