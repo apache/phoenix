@@ -820,12 +820,29 @@ SqlNodeList SplitKeyList() :
 }
 {
     { pos = getPos(); }
-    e = StringLiteral() { splitKeyList = startList(e); }
+    e = SplitKeyLiteral() { splitKeyList = startList(e); }
     (
-        <COMMA> e = StringLiteral() { splitKeyList.add(e); }
+        <COMMA> e = SplitKeyLiteral() { splitKeyList.add(e); }
     ) *
     {
         return new SqlNodeList(splitKeyList, pos.plus(getPos()));
+    }
+}
+
+SqlNode SplitKeyLiteral():
+{
+    SqlParserPos pos=null;
+    SqlNode e;
+}
+{
+    { pos = getPos(); }
+    (
+    e = StringLiteral() 
+    |
+    e = NumericLiteral()
+    )
+    {
+        return e.clone(pos);
     }
 }
 

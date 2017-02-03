@@ -123,6 +123,7 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -791,7 +792,7 @@ public abstract class BaseTest {
         if (splits != null) {
             buf.append(" SPLIT ON (");
             for (int i = 0; i < splits.length; i++) {
-                buf.append("?,");
+                buf.append("'").append(Bytes.toString(splits[i])).append("'").append(",");
             }
             buf.setCharAt(buf.length()-1, ')');
         }

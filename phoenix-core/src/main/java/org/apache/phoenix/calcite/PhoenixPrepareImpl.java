@@ -679,7 +679,12 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             splits = Lists.newArrayList();
             for (SqlNode splitKey : splitKeyList) {
                 final SqlLiteral key = (SqlLiteral) splitKey;
-                splits.add(nodeFactory.literal(((NlsString) key.getValue()).toString()));
+                Object value = key.getValue();
+                if(key.getValue() instanceof NlsString) {
+                    String quotedValue = ((NlsString) key.getValue()).toString();
+                    value = quotedValue.substring(1, quotedValue.length() - 1);
+                }
+                splits.add(nodeFactory.literal(value));
             }
         }
 
