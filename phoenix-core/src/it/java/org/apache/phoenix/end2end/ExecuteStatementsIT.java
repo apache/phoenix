@@ -68,7 +68,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
             "    \"DATE\" date not null,\n" +
             "    val decimal\n" +
             "    CONSTRAINT pk PRIMARY KEY (inst,host,\"DATE\"))\n" +
-            "    split on (?,?,?);\n" +
+            "    split on ('a','j','s');\n" +
             "alter table " + ptsdbTableName + " add if not exists val decimal;\n" +  // Shouldn't error out b/c of if not exists clause
             "alter table " + ptsdbTableName + " drop column if exists blah;\n" +  // Shouldn't error out b/c of if exists clause
             "drop table if exists FOO.BAR;\n" + // Shouldn't error out b/c of if exists clause
@@ -80,7 +80,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
         Date now = new Date(System.currentTimeMillis());
         Connection conn = DriverManager.getConnection(getUrl());
         conn.setAutoCommit(true);
-        List<Object> binds = Arrays.<Object>asList("a","j","s", 6);
+        List<Object> binds = Arrays.<Object>asList(6);
         int nStatements = PhoenixRuntime.executeStatements(conn, new StringReader(statements), binds);
         assertEquals(7, nStatements);
 

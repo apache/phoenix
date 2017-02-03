@@ -421,8 +421,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
             ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName + " (int_col2)";
-            PreparedStatement pstmt = conn.prepareStatement(ddl);
-            pstmt.execute();
+            conn.createStatement().execute(ddl);
             ResultSet rs = conn.createStatement().executeQuery("SELECT distinct int_col2 FROM " + fullTableName + " where int_col2 > 0");
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
@@ -516,8 +515,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
             String ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (date_col)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             String query = "SELECT int_pk from " + fullTableName ;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -1011,8 +1009,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             populateMultiCFTestTable(fullTableName, date);
             String ddl = null;
             ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (decimal_pk) INCLUDE (decimal_col1, decimal_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             query = "SELECT decimal_pk, decimal_col1, decimal_col2 from " + fullTableName ;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);

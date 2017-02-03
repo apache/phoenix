@@ -803,13 +803,7 @@ public abstract class BaseTest {
         }
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            Statement stmt = conn.createStatement();
-//            if (splits != null) {
-//                for (int i = 0; i < splits.length; i++) {
-//                    stmt.setBytes(i+1, splits[i]);
-//                }
-//            }
-            stmt.execute(ddl);
+            conn.createStatement().execute(ddl);
         } catch (TableAlreadyExistsException e) {
             if (! swallowTableAlreadyExistsException) {
                 throw e;

@@ -31,11 +31,12 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -216,12 +217,12 @@ public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
     }
     
     private void createTable (Connection conn, byte[][] splits) throws SQLException {
-        PreparedStatement stmt = conn.prepareStatement("create table " + tableName +
-                "   (id char(1) not null primary key,\n" +
-                "    \"value\" integer) SPLIT ON (" + Joiner.on(',').join(Collections.nCopies(splits.length, "?")) + ")");
-        for (int i = 0; i < splits.length; i++) {
-            stmt.setBytes(i+1, splits[i]);
+        List<String> splitsList = new ArrayList<String>(splits.length);
+        for(byte[] split : splits) {
+            splitsList.add("'" + Bytes.toString(split) + "'");
         }
-        stmt.execute();
+        conn.createStatement().execute("create table " + tableName +
+                "   (id char(1) not null primary key,\n" +
+                "    \"value\" integer) SPLIT ON (" + Joiner.on(',').join(splitsList) + ")");
     }
 }

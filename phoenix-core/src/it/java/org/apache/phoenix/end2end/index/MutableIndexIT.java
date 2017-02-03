@@ -104,9 +104,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 
 			TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName);
-            PreparedStatement stmt = conn.prepareStatement("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName 
+            conn.createStatement().execute("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName 
             		+ " (char_col1 ASC, int_col1 ASC) INCLUDE (long_col1, long_col2)");
-            stmt.execute();
             
             String query = "SELECT char_col1, int_col1, long_col2 from " + fullTableName;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -131,7 +130,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             assertEquals(5L, rs.getLong(3));
             assertFalse(rs.next());
             
-            stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
                     + "(varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2) SELECT varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2*2 FROM "
                     + fullTableName + " WHERE long_col2=?");
             stmt.setLong(1,4L);
