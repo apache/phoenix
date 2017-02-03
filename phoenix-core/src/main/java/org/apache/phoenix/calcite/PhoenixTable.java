@@ -96,8 +96,16 @@ public class PhoenixTable extends AbstractTable
           StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
           Pair<Long, Long> estimatedCount = BaseResultIterators.getEstimatedCount(context, pTable);
           if (estimatedCount.getFirst() != null) {
-              rowCount = estimatedCount.getFirst();
-              byteCount = estimatedCount.getSecond();
+              // FIXME Right now the row count for local index is not correct.
+              if (dataTable == null) {
+                  rowCount = estimatedCount.getFirst();
+                  byteCount = estimatedCount.getSecond();
+              } else {
+                  Pair<Long, Long> dataTableEstimatedCount =
+                          BaseResultIterators.getEstimatedCount(context, dataTable.getTable());
+                  rowCount = dataTableEstimatedCount.getFirst();
+                  byteCount = dataTableEstimatedCount.getSecond();
+              }
           } else {
               // TODO The props might not be the same as server props.
               int guidepostPerRegion = pc.getQueryServices().getProps().getInt(

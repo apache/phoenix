@@ -3,7 +3,6 @@ package org.apache.phoenix.calcite.rules;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.RelCollation;
-import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.phoenix.calcite.CalciteUtils;
@@ -17,7 +16,8 @@ public class PhoenixReverseTableScanRule extends RelOptRule {
             new Predicate<Sort>() {
         @Override
         public boolean apply(Sort input) {
-            return !input.getCollation().getFieldCollations().isEmpty();
+            return !input.getCollation().getFieldCollations().isEmpty()
+                    && input.offset == null && input.fetch == null;
         }
     };
     
@@ -49,11 +49,6 @@ public class PhoenixReverseTableScanRule extends RelOptRule {
                 RelNode newRel = PhoenixTableScan.create(
                         scan.getCluster(), scan.getTable(), scan.filter,
                         ScanOrder.REVERSE, scan.extendedColumnRef);
-                if (sort.offset != null || sort.fetch != null) {
-                    newRel = sort.copy(
-                            sort.getTraitSet().replace(RelCollations.EMPTY),
-                            newRel, RelCollations.EMPTY, sort.offset, sort.fetch);
-                }
                 call.transformTo(newRel);
                 break;
             }

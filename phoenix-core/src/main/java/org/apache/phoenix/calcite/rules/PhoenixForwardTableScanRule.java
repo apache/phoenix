@@ -3,7 +3,6 @@ package org.apache.phoenix.calcite.rules;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.RelCollation;
-import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
@@ -12,11 +11,12 @@ import org.apache.phoenix.calcite.rel.PhoenixTableScan.ScanOrder;
 import com.google.common.base.Predicate;
 
 public class PhoenixForwardTableScanRule extends RelOptRule {
-    private static final Predicate<Sort> NON_EMPTY_COLLATION =
+    private static final Predicate<Sort> APPLICABLE_SORT =
             new Predicate<Sort>() {
         @Override
         public boolean apply(Sort input) {
-            return !input.getCollation().getFieldCollations().isEmpty();
+            return !input.getCollation().getFieldCollations().isEmpty()
+                    && input.offset == null && input.fetch == null;
         }
     };
     
@@ -29,7 +29,7 @@ public class PhoenixForwardTableScanRule extends RelOptRule {
     };
 
     public PhoenixForwardTableScanRule(Class<? extends Sort> sortClass) {
-        super(operand(sortClass, null, NON_EMPTY_COLLATION,
+        super(operand(sortClass, null, APPLICABLE_SORT,
                 operand(PhoenixTableScan.class, null, APPLICABLE_TABLE_SCAN, any())),
             PhoenixForwardTableScanRule.class.getName() + ":" + sortClass.getName());
     }
@@ -45,11 +45,6 @@ public class PhoenixForwardTableScanRule extends RelOptRule {
                 RelNode newRel = PhoenixTableScan.create(
                         scan.getCluster(), scan.getTable(), scan.filter,
                         ScanOrder.FORWARD, scan.extendedColumnRef);
-                if (sort.offset != null || sort.fetch != null) {
-                    newRel = sort.copy(
-                            sort.getTraitSet().replace(RelCollations.EMPTY),
-                            newRel, RelCollations.EMPTY, sort.offset, sort.fetch);
-                }
                 call.transformTo(newRel);
                 break;
             }

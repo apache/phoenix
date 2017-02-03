@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
+import org.apache.calcite.rel.logical.LogicalAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractJoin;
 import org.apache.phoenix.calcite.rel.PhoenixConvention;
@@ -14,10 +15,10 @@ import com.google.common.base.Predicate;
 public class PhoenixJoinSingleValueAggregateMergeRule extends RelOptRule {
 
     /** Predicate that returns true if the Aggregate is solely SINGLE_VALUE check. */
-    private static final Predicate<PhoenixAbstractAggregate> IS_SINGLE_VALUE_CHECK_AGGREGATE =
-            new Predicate<PhoenixAbstractAggregate>() {
+    private static final Predicate<LogicalAggregate> IS_SINGLE_VALUE_CHECK_AGGREGATE =
+            new Predicate<LogicalAggregate>() {
         @Override
-        public boolean apply(PhoenixAbstractAggregate phoenixAggregate) {
+        public boolean apply(LogicalAggregate phoenixAggregate) {
             if (!PhoenixAbstractAggregate.isSingleValueCheckAggregate(phoenixAggregate))
                 return false;
             
@@ -44,7 +45,7 @@ public class PhoenixJoinSingleValueAggregateMergeRule extends RelOptRule {
                     operand(
                             PhoenixRel.class, any()),
                     operand(
-                            PhoenixAbstractAggregate.class, null, IS_SINGLE_VALUE_CHECK_AGGREGATE, any())), 
+                            LogicalAggregate.class, null, IS_SINGLE_VALUE_CHECK_AGGREGATE, any())),
             "PhoenixJoinSingleValueAggregateMergeRule");
     }
 
@@ -52,7 +53,7 @@ public class PhoenixJoinSingleValueAggregateMergeRule extends RelOptRule {
     public void onMatch(RelOptRuleCall call) {
         PhoenixAbstractJoin join = call.rel(0);
         PhoenixRel left = call.rel(1);
-        PhoenixAbstractAggregate right = call.rel(2);
+        LogicalAggregate right = call.rel(2);
         int groupCount = right.getGroupCount();
         for (Integer key : join.joinInfo.rightKeys) {
             if (key >= groupCount) {

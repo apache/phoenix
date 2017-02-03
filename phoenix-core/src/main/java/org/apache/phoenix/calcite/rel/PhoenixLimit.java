@@ -9,8 +9,6 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelWriter;
-import org.apache.calcite.rel.SingleRel;
 import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexLiteral;
@@ -22,9 +20,7 @@ import org.apache.phoenix.execute.ClientScanPlan;
 
 import com.google.common.base.Supplier;
 
-public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
-    public final RexNode offset;
-    public final RexNode fetch;
+public class PhoenixLimit extends Limit implements PhoenixQueryRel {
     
     public static PhoenixLimit create(final RelNode input, RexNode offset, RexNode fetch) {
         final RelOptCluster cluster = input.getCluster();
@@ -41,9 +37,7 @@ public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
     }
 
     private PhoenixLimit(RelOptCluster cluster, RelTraitSet traits, RelNode input, RexNode offset, RexNode fetch) {
-        super(cluster, traits, input);
-        this.offset = offset;
-        this.fetch = fetch;
+        super(cluster, traits, input, offset, fetch);
     }
     
     @Override
@@ -57,13 +51,6 @@ public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
     }
 
     @Override 
-    public RelWriter explainTerms(RelWriter pw) {
-        return super.explainTerms(pw)
-                .itemIf("offset", offset, offset != null)
-                .itemIf("fetch", fetch, fetch != null);
-    }
-
-    @Override 
     public RelOptCost computeSelfCost(RelOptPlanner planner, RelMetadataQuery mq) {
         if (!getInput().getConvention().satisfies(PhoenixConvention.GENERIC))
             return planner.getCostFactory().makeInfiniteCost();
@@ -71,14 +58,6 @@ public class PhoenixLimit extends SingleRel implements PhoenixQueryRel {
         return planner.getCostFactory()
                 .makeCost(rowCount, 0, 0)
                 .multiplyBy(PHOENIX_FACTOR);
-    }
-    
-    @Override 
-    public double estimateRowCount(RelMetadataQuery mq) {
-        double rows = super.estimateRowCount(mq);
-        int offset = this.offset == null ? 0 : RexLiteral.intValue(this.offset);
-        int fetch = this.fetch == null ? Integer.MAX_VALUE : RexLiteral.intValue(this.fetch);
-        return Math.max(0, Math.min(fetch, rows - offset));
     }
 
     @Override

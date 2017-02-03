@@ -38,12 +38,12 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
             .close();
         start(true, 1000f).sql("select x_integer from aTable")
             .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixServerProject(X_INTEGER=[$4])\n" +
+                       "  PhoenixServerProject(0:X_INTEGER=[$4])\n" +
                        "    PhoenixTableScan(table=[[phoenix, IDX1]])\n")
             .close();
         start(true, 1000f).sql("select a_string from aTable order by a_string")
             .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixServerProject(A_STRING=[$0])\n" +
+                       "  PhoenixServerProject(0:A_STRING=[$0])\n" +
                        "    PhoenixTableScan(table=[[phoenix, IDX1]], scanOrder=[FORWARD])\n")
             .close();
         start(true, 1000000f).sql("select a_string from aTable order by organization_id")
@@ -59,7 +59,7 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
             .close();
         start(true, 1000f).sql("select a_string, b_string from aTable where a_string = 'a'")
             .explainIs("PhoenixToEnumerableConverter\n" +
-                       "  PhoenixServerProject(A_STRING=[$0], B_STRING=[$3])\n" +
+                       "  PhoenixServerProject(0:A_STRING=[$0], 0:B_STRING=[$3])\n" +
                        "    PhoenixTableScan(table=[[phoenix, IDX1]], filter=[=($0, 'a')])\n")
             .close();
         start(true, 1000f).sql("select a_string, b_string from aTable where b_string = 'b'")
@@ -129,9 +129,9 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
                         {1, 2, 3, 4},
                         {2, 3, 4, 5}})
                 .close();
-        start(true, 1f).sql("select * from " + SALTED_TABLE_NAME + " s1, " + SALTED_TABLE_NAME + " s2 where s1.mypk0 = s2.mypk0 and s1.mypk1 = s2.mypk1 and s1.mypk0 > 500 and s2.col1 < 505")
+        start(true, 1f).sql("select * from " + SALTED_TABLE_NAME + " s1, " + SALTED_TABLE_NAME + " s2 where s1.mypk1 = s2.mypk1 and s1.mypk0 > 500 and s2.col1 < 505")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerJoin(condition=[AND(=($0, $4), =($1, $5))], joinType=[inner])\n" +
+                           "  PhoenixServerJoin(condition=[=($1, $5)], joinType=[inner])\n" +
                            "    PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], filter=[>($0, 500)])\n" +
                            "    PhoenixServerProject(MYPK0=[$1], MYPK1=[$2], COL0=[$3], COL1=[CAST($0):INTEGER])\n" +
                            "      PhoenixTableScan(table=[[phoenix, IDXSALTED_SALTED_TEST_TABLE]], filter=[<(CAST($0):INTEGER, 505)])\n")

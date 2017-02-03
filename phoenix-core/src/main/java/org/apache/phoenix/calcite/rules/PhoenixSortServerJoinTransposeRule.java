@@ -6,11 +6,11 @@ import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.metadata.RelMdUtil;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.phoenix.calcite.rel.PhoenixConvention;
 import org.apache.phoenix.calcite.rel.PhoenixServerJoin;
-import org.apache.phoenix.calcite.rel.PhoenixServerSort;
 import org.apache.phoenix.calcite.rel.PhoenixTemporarySort;
 
 import com.google.common.base.Predicate;
@@ -23,17 +23,17 @@ public class PhoenixSortServerJoinTransposeRule extends RelOptRule {
                     || input.getJoinType() == JoinRelType.LEFT;
         }        
     };
-    
-    public static final PhoenixSortServerJoinTransposeRule INSTANCE =
-            new PhoenixSortServerJoinTransposeRule();
 
-    public PhoenixSortServerJoinTransposeRule() {
-        super(operand(PhoenixServerSort.class,
-                operand(PhoenixServerJoin.class, null, INNER_OR_LEFT, any())));
+    public PhoenixSortServerJoinTransposeRule(
+            Class<? extends Sort> sortClass, String description) {
+        super(
+                operand(sortClass,
+                        operand(PhoenixServerJoin.class, null, INNER_OR_LEFT, any())),
+                description);
     }
 
     @Override public boolean matches(RelOptRuleCall call) {
-        final PhoenixServerSort sort = call.rel(0);
+        final Sort sort = call.rel(0);
         final PhoenixServerJoin join = call.rel(1);
         if (!join.getLeft().getConvention().satisfies(PhoenixConvention.SERVER)) {
             return false;
@@ -55,7 +55,7 @@ public class PhoenixSortServerJoinTransposeRule extends RelOptRule {
     }
 
     @Override public void onMatch(RelOptRuleCall call) {
-      final PhoenixServerSort sort = call.rel(0);
+      final Sort sort = call.rel(0);
       final PhoenixServerJoin join = call.rel(1);
       final RelNode newLeftInput = PhoenixTemporarySort.create(
               join.getLeft(), sort.getCollation());

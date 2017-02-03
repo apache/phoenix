@@ -7,7 +7,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Queryable;
@@ -18,11 +17,6 @@ import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
-import org.apache.calcite.rel.logical.LogicalSort;
-import org.apache.calcite.rel.rules.AggregateExpandDistinctAggregatesRule;
-import org.apache.calcite.rel.rules.JoinCommuteRule;
-import org.apache.calcite.rel.rules.SortProjectTransposeRule;
-import org.apache.calcite.rel.rules.SortUnionTransposeRule;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.runtime.Hook.Closeable;
@@ -41,7 +35,6 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.parser.SqlParserUtil;
 import org.apache.calcite.tools.Program;
-import org.apache.calcite.tools.Programs;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
 import org.apache.hadoop.hbase.util.Pair;
@@ -62,17 +55,7 @@ import org.apache.phoenix.calcite.parse.SqlUploadJarsNode;
 import org.apache.phoenix.calcite.parse.SqlUseSchema;
 import org.apache.phoenix.calcite.parser.PhoenixParserImpl;
 import org.apache.phoenix.calcite.rel.PhoenixRel;
-import org.apache.phoenix.calcite.rel.PhoenixServerProject;
-import org.apache.phoenix.calcite.rel.PhoenixTemporarySort;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules.PhoenixToEnumerableConverterRule;
-import org.apache.phoenix.calcite.rules.PhoenixFilterScanMergeRule;
-import org.apache.phoenix.calcite.rules.PhoenixForwardTableScanRule;
-import org.apache.phoenix.calcite.rules.PhoenixJoinSingleValueAggregateMergeRule;
-import org.apache.phoenix.calcite.rules.PhoenixMergeSortUnionRule;
-import org.apache.phoenix.calcite.rules.PhoenixOrderedAggregateRule;
-import org.apache.phoenix.calcite.rules.PhoenixReverseTableScanRule;
-import org.apache.phoenix.calcite.rules.PhoenixSortServerJoinTransposeRule;
-import org.apache.phoenix.calcite.rules.PhoenixTableScanColumnRefRule;
 import org.apache.phoenix.compile.BaseMutationPlan;
 import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
@@ -162,17 +145,12 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             org.apache.calcite.plan.Context externalContext,
             RelOptCostFactory costFactory) {
         RelOptPlanner planner = super.createPlanner(prepareContext, externalContext, costFactory);
-        
-        planner.removeRule(EnumerableRules.ENUMERABLE_SEMI_JOIN_RULE);
-        planner.removeRule(JoinCommuteRule.INSTANCE);
-        planner.removeRule(AggregateExpandDistinctAggregatesRule.INSTANCE);
-        planner.addRule(JoinCommuteRule.SWAP_OUTER);
-        planner.removeRule(SortUnionTransposeRule.INSTANCE);
-        planner.addRule(SortUnionTransposeRule.MATCH_NULL_FETCH);
-        planner.addRule(new SortProjectTransposeRule(
-                PhoenixTemporarySort.class,
-                PhoenixServerProject.class,
-                "PhoenixSortProjectTransposeRule"));
+        for (RelOptRule rule : PhoenixPrograms.EXCLUDED_VOLCANO_RULES) {
+            planner.removeRule(rule);
+        }
+        for (RelOptRule rule : ENUMERABLE_RULES) {
+            //planner.removeRule(rule);
+        }
 
         final PhoenixConnection pc =
                 getPhoenixConnection(prepareContext.getRootSchema().plus());
@@ -190,16 +168,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         for (RelOptRule rule : this.defaultConverterRules) {
             planner.addRule(rule);
         }
-        planner.addRule(PhoenixFilterScanMergeRule.INSTANCE);
-        planner.addRule(PhoenixTableScanColumnRefRule.INSTANCE);
-        planner.addRule(PhoenixJoinSingleValueAggregateMergeRule.INSTANCE);
-        planner.addRule(PhoenixMergeSortUnionRule.INSTANCE);
-        planner.addRule(PhoenixOrderedAggregateRule.INSTANCE);
-        planner.addRule(PhoenixSortServerJoinTransposeRule.INSTANCE);
-        planner.addRule(new PhoenixForwardTableScanRule(LogicalSort.class));
-        planner.addRule(new PhoenixForwardTableScanRule(PhoenixTemporarySort.class));
-        planner.addRule(new PhoenixReverseTableScanRule(LogicalSort.class));
-        planner.addRule(new PhoenixReverseTableScanRule(PhoenixTemporarySort.class));
+        for (RelOptRule rule : PhoenixPrograms.ADDITIONAL_VOLCANO_RULES) {
+            planner.addRule(rule);
+        }
 
         return planner;
     }
@@ -209,7 +180,8 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             Queryable<T> queryable) {
         List<Closeable> hooks = addHooks(
                 context.getRootSchema(),
-                context.config().materializationsEnabled());
+                context.config().materializationsEnabled(),
+                context.config().forceDecorrelate());
         try {
             return super.prepareQueryable(context, queryable);
         } finally {
@@ -226,7 +198,8 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             long maxRowCount) {
         List<Closeable> hooks = addHooks(
                 context.getRootSchema(),
-                context.config().materializationsEnabled());
+                context.config().materializationsEnabled(),
+                context.config().forceDecorrelate());
         try {
             return super.prepareSql(context, query, elementType, maxRowCount);
         } finally {
@@ -236,7 +209,8 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         }
     }
     
-    private List<Closeable> addHooks(final CalciteSchema rootSchema, boolean materializationEnabled) {
+    private List<Closeable> addHooks(final CalciteSchema rootSchema,
+            boolean materializationEnabled, final boolean forceDecorrelate) {
         final List<Closeable> hooks = Lists.newArrayList();
 
         hooks.add(Hook.PARSE_TREE.add(new Function<Object[], Object>() {
@@ -272,7 +246,10 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         hooks.add(Hook.PROGRAM.add(new Function<Holder<Program>, Object>() {
             @Override
             public Object apply(Holder<Program> input) {
-                input.set(Programs.standard(PhoenixRel.METADATA_PROVIDER));
+                input.set(
+                        PhoenixPrograms.standard(
+                                PhoenixRel.METADATA_PROVIDER,
+                                forceDecorrelate));
                 return null;
             }
         }));

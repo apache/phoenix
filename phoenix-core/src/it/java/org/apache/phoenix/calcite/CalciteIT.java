@@ -282,13 +282,13 @@ public class CalciteIT extends BaseCalciteIT {
                 .close();
 
         start(false, 1000f).sql("SELECT \"order_id\", i.name, i.price, discount2, quantity FROM " + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN "
-                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" limit 2 offset 1")
+                + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" limit 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(order_id=[$0], NAME=[$4], PRICE=[$5], DISCOUNT2=[$6], QUANTITY=[$2])\n" +
-                           "    PhoenixLimit(offset=[1], fetch=[2])\n" +
+                           "  PhoenixLimit(fetch=[2])\n" +
+                           "    PhoenixClientProject(order_id=[$0], NAME=[$4], PRICE=[$5], DISCOUNT2=[$6], QUANTITY=[$2])\n" +
                            "      PhoenixClientJoin(condition=[=($1, $3)], joinType=[left])\n" +
                            "        PhoenixClientSort(sort0=[$1], dir0=[ASC])\n" +
-                           "          PhoenixLimit(offset=[1], fetch=[2])\n" +
+                           "          PhoenixLimit(fetch=[2])\n" +
                            "            PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4])\n" +
                            "              PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2], DISCOUNT2=[$4])\n" +
@@ -318,8 +318,8 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("select t1.entity_id, t2.a_string, t3.organization_id from aTable t1 join aTable t2 on t1.entity_id = t2.entity_id and t1.organization_id = t2.organization_id join atable t3 on t1.entity_id = t3.entity_id and t1.organization_id = t3.organization_id limit 8 offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$6], ORGANIZATION_ID=[$2])\n" +
-                           "    PhoenixLimit(offset=[1], fetch=[8])\n" +
+                           "  PhoenixLimit(offset=[1], fetch=[8])\n" +
+                           "    PhoenixClientProject(ENTITY_ID=[$1], A_STRING=[$6], ORGANIZATION_ID=[$2])\n" +
                            "      PhoenixClientJoin(condition=[AND(=($1, $5), =($0, $4))], joinType=[inner])\n" +
                            "        PhoenixClientJoin(condition=[AND(=($1, $3), =($0, $2))], joinType=[inner])\n" +
                            "          PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[ASC])\n" +
@@ -679,8 +679,8 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string order by count(entity_id), a_string desc limit 2 offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
-                           "    PhoenixLimit(offset=[1], fetch=[2])\n" +
+                           "  PhoenixLimit(offset=[1], fetch=[2])\n" +
+                           "    PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "      PhoenixServerSort(sort0=[$1], sort1=[$0], dir0=[ASC], dir1=[DESC])\n" +
                            "        PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "          PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
@@ -707,8 +707,8 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" order by item.name desc limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
-                           "    PhoenixLimit(fetch=[3])\n" +
+                           "  PhoenixLimit(fetch=[3])\n" +
+                           "    PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "      PhoenixServerSort(sort0=[$1], dir0=[DESC])\n" +
                            "        PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "          PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
@@ -742,8 +742,8 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string limit 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
-                           "    PhoenixLimit(fetch=[2])\n" +
+                           "  PhoenixLimit(fetch=[2])\n" +
+                           "    PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                            "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                            "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIsSomeOf(2, new Object[][] {
@@ -770,8 +770,8 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
-                           "    PhoenixLimit(fetch=[3])\n" +
+                           "  PhoenixLimit(fetch=[3])\n" +
+                           "    PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                            "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                            "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                            "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -788,8 +788,8 @@ public class CalciteIT extends BaseCalciteIT {
         
         start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(X=[$0])\n" +
-                           "    PhoenixLimit(fetch=[2])\n" +
+                           "  PhoenixLimit(fetch=[2])\n" +
+                           "    PhoenixClientProject(X=[$0])\n" +
                            "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
                 .resultIsSomeOf(2, new Object[][] {{1}, {2}, {3}})
                 .close();
@@ -822,8 +822,8 @@ public class CalciteIT extends BaseCalciteIT {
 
         start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string limit 2 offset 0")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                        "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
-                        "    PhoenixLimit(fetch=[2])\n" +
+                        "  PhoenixLimit(fetch=[2])\n" +
+                        "    PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                         "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                         "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIsSomeOf(2, new Object[][] {
@@ -834,8 +834,8 @@ public class CalciteIT extends BaseCalciteIT {
 
         start(false, 1000f).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" limit 3 offset 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                        "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
-                        "    PhoenixLimit(offset=[3], fetch=[3])\n" +
+                        "  PhoenixLimit(offset=[3], fetch=[3])\n" +
+                        "    PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                         "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                         "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                         "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -852,16 +852,16 @@ public class CalciteIT extends BaseCalciteIT {
 
         start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 2 offset 2")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                        "  PhoenixClientProject(X=[$0])\n" +
-                        "    PhoenixLimit(offset=[2], fetch=[2])\n" +
+                        "  PhoenixLimit(offset=[2], fetch=[2])\n" +
+                        "    PhoenixClientProject(X=[$0])\n" +
                         "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
                 .resultIs(new Object[][] {{3}})
                 .close();
 
         start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) limit 3 offset 4")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                        "  PhoenixClientProject(X=[$0])\n" +
-                        "    PhoenixLimit(offset=[4], fetch=[3])\n" +
+                        "  PhoenixLimit(offset=[4], fetch=[3])\n" +
+                        "    PhoenixClientProject(X=[$0])\n" +
                         "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
                 .resultIs(new Object[][] {})
                 .close();
@@ -931,8 +931,8 @@ public class CalciteIT extends BaseCalciteIT {
 
         start(false, 1000f).sql("select count(entity_id), a_string from atable group by a_string offset 1")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                        "  PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
-                        "    PhoenixLimit(offset=[1])\n" +
+                        "  PhoenixLimit(offset=[1])\n" +
+                        "    PhoenixClientProject(EXPR$0=[$1], A_STRING=[$0])\n" +
                         "      PhoenixServerAggregate(group=[{2}], EXPR$0=[COUNT()], isOrdered=[false])\n" +
                         "        PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
                 .resultIsSomeOf(2, new Object[][] {
@@ -943,8 +943,8 @@ public class CalciteIT extends BaseCalciteIT {
 
         start(false, 1000f).sql("SELECT item.\"item_id\", item.name, supp.\"supplier_id\", supp.name FROM " + JOIN_ITEM_TABLE_FULL_NAME + " item JOIN " + JOIN_SUPPLIER_TABLE_FULL_NAME + " supp ON item.\"supplier_id\" = supp.\"supplier_id\" offset 7")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                        "  PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
-                        "    PhoenixLimit(offset=[7])\n" +
+                        "  PhoenixLimit(offset=[7])\n" +
+                        "    PhoenixClientProject(item_id=[$0], NAME=[$1], supplier_id=[$3], NAME0=[$4])\n" +
                         "      PhoenixServerJoin(condition=[=($2, $3)], joinType=[inner])\n" +
                         "        PhoenixServerProject(item_id=[$0], NAME=[$1], supplier_id=[$5])\n" +
                         "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -962,8 +962,8 @@ public class CalciteIT extends BaseCalciteIT {
 
         start(false, 1000f).sql("SELECT x from (values (1, 2), (2, 4), (3, 6)) as t(x, y) offset 3")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                        "  PhoenixClientProject(X=[$0])\n" +
-                        "    PhoenixLimit(offset=[3])\n" +
+                        "  PhoenixLimit(offset=[3])\n" +
+                        "    PhoenixClientProject(X=[$0])\n" +
                         "      PhoenixValues(tuples=[[{ 1, 2 }, { 2, 4 }, { 3, 6 }]])\n")
                 .resultIs(new Object[][] {})
                 .close();
@@ -1213,14 +1213,15 @@ public class CalciteIT extends BaseCalciteIT {
                 "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]], filter=[=($cor0.item_id, $2)])\n";
         String p3Decorrelated = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixClientSemiJoin(condition=[=($0, $2)], joinType=[inner])\n" +
+                "  PhoenixClientSemiJoin(condition=[=($0, $3)], joinType=[inner])\n" +
                 "    PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
                 "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
-                "    PhoenixServerJoin(condition=[=($0, $1)], joinType=[inner])\n" +
-                "      PhoenixServerProject(item_id=[$0])\n" +
-                "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
-                "      PhoenixServerProject(item_id=[$2])\n" +
-                "        PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
+                "    PhoenixClientProject(item_id=[$1], item_id0=[$0])\n" +
+                "      PhoenixServerJoin(condition=[=($0, $1)], joinType=[inner])\n" +
+                "        PhoenixServerProject(item_id=[$0])\n" +
+                "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]], scanOrder=[FORWARD])\n" +
+                "        PhoenixServerProject(item_id=[$2])\n" +
+                "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(correlProps).sql(q3).explainIs(p3Correlate).resultIs(0, r3).close();
         start(decorrelProps).sql(q3).explainIs(p3Decorrelated).resultIs(0, r3).close();
         
@@ -1232,11 +1233,10 @@ public class CalciteIT extends BaseCalciteIT {
                 {"0000000006", "T6"}};
         String p4Decorrelated = 
                 "PhoenixToEnumerableConverter\n" +
-                "  PhoenixServerSemiJoin(condition=[=($0, $2)], joinType=[inner])\n" +
+                "  PhoenixServerSemiJoin(condition=[=($0, $4)], joinType=[inner])\n" +
                 "    PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
                 "      PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
-                "    PhoenixServerProject(item_id=[$2])\n" +
-                "      PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
+                "    PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n";
         start(decorrelProps).sql(q4).explainIs(p4Decorrelated).resultIs(0, r4).close();
         
         String q5 = "select \"order_id\" from " + JOIN_ITEM_TABLE_FULL_NAME + " i JOIN " + JOIN_ORDER_TABLE_FULL_NAME + " o on o.\"item_id\" = i.\"item_id\" where quantity = (select max(quantity) from " + JOIN_ORDER_TABLE_FULL_NAME + " o2 JOIN " + JOIN_ITEM_TABLE_FULL_NAME + " i2 on o2.\"item_id\" = i2.\"item_id\" where i.\"supplier_id\" = i2.\"supplier_id\")";

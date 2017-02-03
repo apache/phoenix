@@ -2,6 +2,7 @@ package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptCost;
@@ -199,6 +200,26 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
             .itemIf("filter", filter, filter != null)
             .itemIf("scanOrder", scanOrder, scanOrder != ScanOrder.NONE)
             .itemIf("extendedColumns", extendedColumnRef, !extendedColumnRef.isEmpty());
+    }
+
+    @Override public boolean equals(Object obj) {
+        if (obj == this) {
+            return true;
+        }
+
+        if (!(obj instanceof PhoenixTableScan)) {
+            return false;
+        }
+
+        PhoenixTableScan other = (PhoenixTableScan) obj;
+        return this.table.equals(other.table)
+                && Objects.equals(this.filter, other.filter)
+                && this.scanOrder == other.scanOrder
+                && this.extendedColumnRef.equals(other.extendedColumnRef);
+    }
+
+    @Override public int hashCode() {
+        return table.hashCode();
     }
 
     @Override

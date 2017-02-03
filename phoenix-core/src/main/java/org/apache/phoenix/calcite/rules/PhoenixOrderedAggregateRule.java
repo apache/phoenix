@@ -10,6 +10,8 @@ import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.logical.LogicalSort;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
+import org.apache.phoenix.calcite.rel.PhoenixConvention;
+import org.apache.phoenix.calcite.rel.PhoenixTemporarySort;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
@@ -48,9 +50,10 @@ public class PhoenixOrderedAggregateRule extends RelOptRule {
             fieldCollations.add(new RelFieldCollation(ordinal));
         }
         RelCollation collation = RelCollations.of(fieldCollations);
-        RelNode newInput = convert(
-                LogicalSort.create(agg.getInput(), collation, null, null),
-                agg.getInput().getConvention());
+        RelNode input = agg.getInput();
+        RelNode newInput = input.getConvention() == PhoenixConvention.SERVER
+                ? PhoenixTemporarySort.create(input, collation)
+                : convert(LogicalSort.create(input, collation, null, null), input.getConvention());
         call.transformTo(agg.copy(agg.getTraitSet(), newInput, agg.indicator, agg.getGroupSet(), agg.groupSets, agg.getAggCallList()));
     }
 

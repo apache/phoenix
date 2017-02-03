@@ -40,6 +40,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.calcite.rel.LogicalLimit;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientAggregate;
 import org.apache.phoenix.calcite.rel.PhoenixClientJoin;
@@ -221,37 +222,22 @@ public class PhoenixConverterRules {
      */
     public static class PhoenixLimitRule extends PhoenixConverterRule {
         
-        private static Predicate<LogicalSort> HAS_FETCH = new Predicate<LogicalSort>() {
-            @Override
-            public boolean apply(LogicalSort input) {
-                return input.fetch != null || input.offset != null;
-            }
-        };
-        
         public static final PhoenixLimitRule INSTANCE = new PhoenixLimitRule();
 
         private PhoenixLimitRule() {
-            super(LogicalSort.class, 
-                    HAS_FETCH, 
+            super(LogicalLimit.class, 
                     Convention.NONE, PhoenixConvention.CLIENT, "PhoenixLimitRule");
         }
 
         public RelNode convert(RelNode rel) {
-            final LogicalSort sort = (LogicalSort) rel;
-            RelNode input = sort.getInput();
-            if (!sort.getCollation().getFieldCollations().isEmpty()) {
-                input = sort.copy(
-                            sort.getTraitSet(), 
-                            sort.getInput(), 
-                            sort.getCollation(), 
-                            null, null);
-            }
+            final LogicalLimit limit = (LogicalLimit) rel;
+            RelNode input = limit.getInput();
             return PhoenixLimit.create(
                 convert(
                         input, 
                         input.getTraitSet().replace(PhoenixConvention.GENERIC)),
-                sort.offset, 
-                sort.fetch);
+                limit.offset, 
+                limit.fetch);
         }
     }
 

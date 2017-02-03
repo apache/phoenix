@@ -9,8 +9,8 @@ import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.phoenix.calcite.rel.Limit;
 import org.apache.phoenix.calcite.rel.PhoenixAbstractAggregate;
-import org.apache.phoenix.calcite.rel.PhoenixLimit;
 
 public class PhoenixRelMdRowCount implements MetadataHandler<BuiltInMetadata.RowCount> {
     public static final RelMetadataProvider SOURCE =
@@ -43,7 +43,7 @@ public class PhoenixRelMdRowCount implements MetadataHandler<BuiltInMetadata.Row
         }
     }
     
-    public Double getRowCount(PhoenixLimit rel, RelMetadataQuery mq) {
+    public Double getRowCount(Limit rel, RelMetadataQuery mq) {
         return rel.estimateRowCount(mq);
     }
 }

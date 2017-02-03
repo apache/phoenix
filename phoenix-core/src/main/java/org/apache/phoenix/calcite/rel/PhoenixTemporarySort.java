@@ -17,7 +17,7 @@ public class PhoenixTemporarySort extends PhoenixAbstractSort {
         RelOptCluster cluster = input.getCluster();
         collation = RelCollationTraitDef.INSTANCE.canonize(collation);
         RelTraitSet traits =
-                input.getTraitSet().replace(PhoenixConvention.SERVER).replace(collation);
+                input.getTraitSet().replace(input.getConvention()).replace(collation);
         return new PhoenixTemporarySort(cluster, traits, input, collation);
     }
 

@@ -10,7 +10,6 @@ import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelCollation;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.metadata.RelMdCollation;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexNode;
@@ -18,6 +17,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.SequenceManager;
+import org.apache.phoenix.calcite.metadata.PhoenixRelMdCollation;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.ClientScanPlan;
@@ -38,7 +38,7 @@ public class PhoenixClientProject extends PhoenixAbstractProject {
                 .replaceIfs(RelCollationTraitDef.INSTANCE,
                         new Supplier<List<RelCollation>>() {
                     public List<RelCollation> get() {
-                        return RelMdCollation.project(mq, input, projects);
+                        return PhoenixRelMdCollation.project(mq, input, projects);
                     }
                 });
         return new PhoenixClientProject(cluster, traits, input, projects, rowType);
