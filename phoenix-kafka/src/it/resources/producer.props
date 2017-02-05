@@ -1,0 +1,4 @@
+bootstrap.servers=localhost:9092
+auto.commit.interval.ms=1000
+key.serializer=org.apache.kafka.common.serialization.StringSerializer
+value.serializer=org.apache.kafka.common.serialization.StringSerializer

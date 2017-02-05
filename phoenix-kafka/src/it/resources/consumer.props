@@ -1,0 +1,12 @@
+serializer=regex
+serializer.rowkeyType=uuid
+serializer.regex=([^\,]*),([^\,]*),([^\,]*)
+serializer.columns=c1,c2,c3
+
+jdbcUrl=jdbc:phoenix:localhost
+table=SAMPLE1
+ddl=CREATE TABLE IF NOT EXISTS SAMPLE1(uid VARCHAR NOT NULL,c1 VARCHAR,c2 VARCHAR,c3 VARCHAR CONSTRAINT pk PRIMARY KEY(uid))
+
+bootstrap.servers=localhost:9092
+topics=topic1,topic2
+poll.timeout.ms=100
