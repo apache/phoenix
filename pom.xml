@@ -25,6 +25,7 @@
   <modules>
     <module>phoenix-core</module>
     <module>phoenix-flume</module>
+    <module>phoenix-kafka</module>
     <module>phoenix-pig</module>
     <module>phoenix-queryserver-client</module>
     <module>phoenix-queryserver</module>
@@ -85,6 +86,7 @@
     <sqlline.version>1.2.0</sqlline.version>
     <guava.version>13.0.1</guava.version>
     <flume.version>1.4.0</flume.version>
+    <kafka.version>0.9.0.0</kafka.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jline.version>2.11</jline.version>
@@ -541,6 +543,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-flume</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-kafka</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
