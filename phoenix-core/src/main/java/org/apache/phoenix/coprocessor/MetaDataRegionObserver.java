@@ -219,12 +219,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             // separately, all updating the same data.
             RegionScanner scanner = null;
             PhoenixConnection conn = null;
-            if (inProgress.get() > 0) {
+            if (inProgress.getAndIncrement() > 0) {
+                inProgress.decrementAndGet();
                 LOG.debug("New ScheduledBuildIndexTask skipped as there is already one running");
                 return;
             }
             try {
-                inProgress.incrementAndGet();
                 Scan scan = new Scan();
                 SingleColumnValueFilter filter = new SingleColumnValueFilter(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES, CompareFilter.CompareOp.GREATER,
@@ -258,7 +258,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     if (disabledTimeStamp == null || disabledTimeStamp.length == 0 || (indexState != null
                             && PIndexState.BUILDING == PIndexState.fromSerializedValue(Bytes.toString(indexState)))) {
-
                         // Don't rebuild the building index , because they are marked for aysnc
                         continue;
                     }
@@ -284,7 +283,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     // validity check
                     if (indexTable == null || indexTable.length == 0) {
-                        LOG.debug("Index rebuild has been skipped for row=" + r);
+                        LOG.debug("We find IndexTable empty during rebuild scan:" + scan
+                                + "so, Index rebuild has been skipped for row=" + r);
                         continue;
                     }
 
@@ -331,6 +331,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(dataPTable.getIndexes().size());
                         dataTableToIndexesMap.put(dataPTable, indexesToPartiallyRebuild);
                     }
+                    LOG.debug("We have found " + indexPTable.getIndexState() + " Index:" + indexPTable.getName()
+                            + " on data table:" + dataPTable.getName() + " which was disabled at "
+                            + indexPTable.getIndexDisableTimestamp());
                     indexesToPartiallyRebuild.add(indexPTable);
                 } while (hasMore);
                 if (dataTableToIndexesMap != null) {
