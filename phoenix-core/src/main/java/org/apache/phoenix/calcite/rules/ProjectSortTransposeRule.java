@@ -39,7 +39,7 @@ public class ProjectSortTransposeRule extends RelOptRule {
         Map<Integer, Integer> targets = Maps.newHashMap();
         for (Ord<? extends RexNode> exp : Ord.zip(project.getProjects())) {
             if (exp.e instanceof RexInputRef) {
-              targets.putIfAbsent(((RexInputRef) exp.e).getIndex(), exp.i);
+              targets.put(((RexInputRef) exp.e).getIndex(), exp.i);
             }
         }
         ImmutableList.Builder<RelFieldCollation> builder = ImmutableList.builder();
