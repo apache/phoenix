@@ -1518,8 +1518,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 dropTables(result.getTableNamesToDelete());
             }
             invalidateTables(result.getTableNamesToDelete());
-            long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
             if (tableType == PTableType.TABLE) {
+                long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
                 byte[] physicalName = table.getPhysicalName().getBytes();
                 ensureViewIndexTableDropped(physicalName, timestamp);
                 ensureLocalIndexTableDropped(physicalName, timestamp);
@@ -2733,9 +2733,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     HTableInterface metatable = null;
                     try (HBaseAdmin admin = getAdmin()) {
                         ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
-                        List<HTableDescriptor> tables = Arrays
-                                .asList(admin.listTables(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
-                        List<String> tableNames = getTableNames(tables);
+                        List<TableName> tableNames = Arrays
+                                .asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
                         if (tableNames.size() == 0) { return; }
                         if (tableNames.size() > 4) { throw new IllegalArgumentException(
                                 "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
@@ -2753,10 +2752,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
                         }
-                        for (String table : tableNames) {
-                            UpgradeUtil.mapTableToNamespace(admin, metatable, table, props, null, PTableType.SYSTEM,
+                        for (TableName table : tableNames) {
+                            UpgradeUtil.mapTableToNamespace(admin, metatable, table.getNameAsString(), props, null, PTableType.SYSTEM,
                                     null);
-                            ConnectionQueryServicesImpl.this.removeTable(null, table, null,
+                            ConnectionQueryServicesImpl.this.removeTable(null, table.getNameAsString(), null,
                                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_1_0);
                         }
                         if (!tableNames.isEmpty()) {
@@ -2842,14 +2841,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     + ". Please retry establishing connection.", SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS
                     .getSQLState(), SQLExceptionCode.CONCURRENT_UPGRADE_IN_PROGRESS.getErrorCode());
         }
-    }
-
-    private List<String> getTableNames(List<HTableDescriptor> tables) {
-        List<String> tableNames = new ArrayList<String>(4);
-        for (HTableDescriptor desc : tables) {
-            tableNames.add(desc.getNameAsString());
-        }
-        return tableNames;
     }
 
     private String addColumn(String columnsToAddSoFar, String columns) {
