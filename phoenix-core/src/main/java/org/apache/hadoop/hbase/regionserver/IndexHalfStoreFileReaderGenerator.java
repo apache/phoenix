@@ -61,13 +61,10 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.RepairUtil;
 
 import com.google.common.collect.Lists;
-
-import jline.internal.Log;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     
@@ -149,7 +146,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             try {
                 conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
                             PhoenixConnection.class);
-                PTable dataTable = PhoenixRuntime.getTableNoCache(conn, tableName.getNameAsString());
+                PTable dataTable = IndexUtil.getPDataTable(conn, ctx.getEnvironment().getRegion().getTableDesc());
                 List<PTable> indexes = dataTable.getIndexes();
                 Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();
@@ -272,14 +269,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         try {
             PhoenixConnection conn = QueryUtil.getConnection(env.getConfiguration())
                     .unwrap(PhoenixConnection.class);
-            String dataTableName = MetaDataUtil.getPhoenixTableNameFromDesc(env.getRegion().getTableDesc());
-            if (dataTableName == null) {
-                Log.warn("Found corrupted local index for region:" + env.getRegion().getRegionInfo().toString()
-                        + " but data table attribute is not set in tableDescriptor "
-                        + "so automatic repair will not succeed" + ", local index created are may be from old client");
-                return null;
-            }
-            PTable dataPTable = PhoenixRuntime.getTable(conn, dataTableName);
+            PTable dataPTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDesc());
             final List<IndexMaintainer> maintainers = Lists
                     .newArrayListWithExpectedSize(dataPTable.getIndexes().size());
             for (PTable index : dataPTable.getIndexes()) {
