@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,6 +32,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -738,5 +740,27 @@ public class IndexUtil {
 
     public static boolean isLocalIndexStore(Store store) {
         return store.getFamily().getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
+    }
+    
+    public static PTable getPDataTable(Connection conn, HTableDescriptor tableDesc) throws SQLException {
+        String dataTableName = Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
+        String physicalTableName = tableDesc.getTableName().getNameAsString();
+        PTable pDataTable = null;
+        if (dataTableName == null) {
+            if (physicalTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
+                try {
+                    pDataTable = PhoenixRuntime.getTable(conn, physicalTableName
+                            .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR));
+                } catch (TableNotFoundException e) {
+                    // could be a table mapped to external table
+                    pDataTable = PhoenixRuntime.getTable(conn, physicalTableName);
+                }
+            }else{
+                pDataTable = PhoenixRuntime.getTable(conn, physicalTableName);
+            }
+        } else {
+            pDataTable = PhoenixRuntime.getTable(conn, dataTableName);
+        }
+        return pDataTable;
     }
 }
