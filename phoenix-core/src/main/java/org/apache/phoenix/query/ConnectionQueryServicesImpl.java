@@ -2946,7 +2946,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
             
              List<TableName> tableNames = Arrays
-                    .asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
+                    .asList(admin.listTableNamesByNamespace(QueryConstants.SYSTEM_SCHEMA_NAME));
             if (tableNames.size() == 0) { return; }
             if (tableNames.size() > 4) { throw new IllegalArgumentException(
                     "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
