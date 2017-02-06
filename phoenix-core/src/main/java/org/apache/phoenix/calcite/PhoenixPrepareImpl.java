@@ -149,7 +149,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             planner.removeRule(rule);
         }
         for (RelOptRule rule : ENUMERABLE_RULES) {
-            //planner.removeRule(rule);
+            planner.removeRule(rule);
         }
 
         final PhoenixConnection pc =
