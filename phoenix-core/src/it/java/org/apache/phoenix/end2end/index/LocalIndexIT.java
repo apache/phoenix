@@ -26,22 +26,32 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -563,5 +573,74 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             conn1.close();
         }
     }
+    
+    @Test
+    public void testLocalIndexAutomaticRepair() throws Exception {
+        if (isNamespaceMapped) { return; }
+        PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+        try (HTableInterface metaTable = conn.getQueryServices().getTable(TableName.META_TABLE_NAME.getName());
+                HBaseAdmin admin = conn.getQueryServices().getAdmin();) {
+            Statement statement = conn.createStatement();
+            final String tableName = "T_AUTO_MATIC_REPAIR";
+            String indexName = "IDX_T_AUTO_MATIC_REPAIR";
+            String indexName1 = "IDX_T_AUTO_MATIC_REPAIR_1";
+            statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
+                    + "cf1.ln varchar constraint pk primary key(id)) split on (1,2,3,4,5)");
+            statement.execute("create local index " + indexName + " on " + tableName + "  (fn,cf1.ln)");
+            statement.execute("create local index " + indexName1 + " on " + tableName + "  (fn)");
+            for (int i = 0; i < 7; i++) {
+                statement.execute("upsert into " + tableName + "  values(" + i + ",'fn" + i + "','ln" + i + "')");
+            }
+            conn.commit();
+            ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName);
+            assertTrue(rs.next());
+            assertEquals(7, rs.getLong(1));
+            List<HRegionInfo> tableRegions = admin.getTableRegions(TableName.valueOf(tableName));
+            admin.disableTable(tableName);
+            copyLocalIndexHFiles(config, tableRegions.get(0), tableRegions.get(1), false);
+            copyLocalIndexHFiles(config, tableRegions.get(3), tableRegions.get(0), false);
+
+            admin.enableTable(tableName);
+
+            int count=getCount(conn, tableName, "L#0");
+            assertTrue(count > 14);
+            admin.majorCompact(tableName);
+            int tryCount = 5;// need to wait for rebuilding of corrupted local index region
+            while (tryCount-- > 0 && count != 14) {
+                Thread.sleep(30000);
+                count = getCount(conn, tableName, "L#0");
+            }
+            assertEquals(14, count);
+            rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName1);
+            assertTrue(rs.next());
+            assertEquals(7, rs.getLong(1));
+        }
+    }
+
+    private void copyLocalIndexHFiles(Configuration conf, HRegionInfo fromRegion, HRegionInfo toRegion, boolean move)
+            throws IOException {
+        Path root = FSUtils.getRootDir(conf);
+
+        Path seondRegion = new Path(HTableDescriptor.getTableDir(root, fromRegion.getTableName()) + Path.SEPARATOR
+                + fromRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
+        Path hfilePath = FSUtils.getCurrentFileSystem(conf).listFiles(seondRegion, true).next().getPath();
+        Path firstRegionPath = new Path(HTableDescriptor.getTableDir(root, toRegion.getTableName()) + Path.SEPARATOR
+                + toRegion.getEncodedName() + Path.SEPARATOR + "L#0/");
+        FileSystem currentFileSystem = FSUtils.getCurrentFileSystem(conf);
+        assertTrue(FileUtil.copy(currentFileSystem, hfilePath, currentFileSystem, firstRegionPath, move, conf));
+    }
+
+    private int getCount(PhoenixConnection conn, String tableName, String columnFamily)
+            throws IOException, SQLException {
+        Iterator<Result> iterator = conn.getQueryServices().getTable(Bytes.toBytes(tableName))
+                .getScanner(Bytes.toBytes(columnFamily)).iterator();
+        int count = 0;
+        while (iterator.hasNext()) {
+            iterator.next();
+            count++;
+        }
+        return count;
+    }
+
 
 }

@@ -805,7 +805,7 @@ public class SchemaUtil {
     public static boolean hasHTableDescriptorProps(Map<String, Object> tableProps) {
         int pTablePropCount = 0;
         for (String prop : tableProps.keySet()) {
-            if (TableProperty.isPhoenixTableProperty(prop)) {
+            if (TableProperty.isPhoenixTableProperty(prop) || prop.equals(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME)) {
                 pTablePropCount++;
             }
         }

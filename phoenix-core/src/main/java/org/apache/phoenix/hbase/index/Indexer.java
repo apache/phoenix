@@ -529,7 +529,8 @@ public class Indexer extends BaseRegionObserver {
     try {
         writer.writeAndKillYourselfOnFailure(updates, true);
     } catch (IOException e) {
-        LOG.error("Exception thrown instead of killing server during index writing", e);
+            LOG.error("During WAL replay of outstanding index updates, "
+                    + "Exception is thrown instead of killing server during index writing", e);
     }
   }
 
