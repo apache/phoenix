@@ -1518,8 +1518,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 dropTables(result.getTableNamesToDelete());
             }
             invalidateTables(result.getTableNamesToDelete());
+            long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
             if (tableType == PTableType.TABLE) {
-                long timestamp = MetaDataUtil.getClientTimeStamp(tableMetaData);
                 byte[] physicalName = table.getPhysicalName().getBytes();
                 ensureViewIndexTableDropped(physicalName, timestamp);
                 ensureLocalIndexTableDropped(physicalName, timestamp);
