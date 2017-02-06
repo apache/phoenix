@@ -26,7 +26,7 @@
 	<parent>
 		<groupId>org.apache.phoenix</groupId>
 		<artifactId>phoenix</artifactId>
-		<version>4.10.0-HBase-1.2-SNAPSHOT</version>
+		<version>4.10.0-HBase-0.98-SNAPSHOT</version>
 	</parent>
 	<artifactId>phoenix-kafka</artifactId>
 	<name>Phoenix - Kafka</name>
@@ -67,7 +67,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.apache.tephra</groupId>
-			<artifactId>tephra-hbase-compat-1.1</artifactId>
+			<artifactId>tephra-hbase-compat-0.98</artifactId>
 		</dependency>
 
 		<!-- Make sure we have all the antlr dependencies -->
@@ -169,12 +169,12 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.htrace</groupId>
+			<groupId>org.cloudera.htrace</groupId>
 			<artifactId>htrace-core</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>io.netty</groupId>
-			<artifactId>netty-all</artifactId>
+			<artifactId>netty</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>
@@ -206,17 +206,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.apache.hbase</groupId>
-			<artifactId>hbase-annotations</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.hbase</groupId>
 			<artifactId>hbase-common</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.hbase</groupId>
-			<artifactId>hbase-common</artifactId>
-			<scope>test</scope>
-			<type>test-jar</type>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.hbase</groupId>
@@ -238,28 +228,11 @@
 		</dependency>
 		<dependency>
 			<groupId>org.apache.hbase</groupId>
-			<artifactId>hbase-server</artifactId>
-			<type>test-jar</type>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.hbase</groupId>
 			<artifactId>hbase-hadoop-compat</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.hbase</groupId>
 			<artifactId>hbase-hadoop-compat</artifactId>
-			<type>test-jar</type>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.hbase</groupId>
-			<artifactId>hbase-hadoop2-compat</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.hbase</groupId>
-			<artifactId>hbase-hadoop2-compat</artifactId>
 			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
