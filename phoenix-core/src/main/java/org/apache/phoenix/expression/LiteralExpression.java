@@ -184,6 +184,7 @@ public class LiteralExpression extends BaseTerminalExpression {
             return getBooleanLiteralExpression((Boolean)value, determinism);
         }
         PDataType actualType = PDataType.fromLiteral(value);
+        type = type == null ? actualType : type;
         try {
             value = type.toObject(value, actualType);
         } catch (IllegalDataException e) {
@@ -208,7 +209,7 @@ public class LiteralExpression extends BaseTerminalExpression {
             return getTypedNullLiteralExpression(type, determinism);
         }
         if (maxLength == null) {
-            maxLength = type == null || !type.isFixedWidth() ? null : type.getMaxLength(value);
+            maxLength = type.isFixedWidth() ? type.getMaxLength(value) : null;
         }
         return new LiteralExpression(value, type, b, maxLength, scale, sortOrder, determinism);
     }
