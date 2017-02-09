@@ -65,7 +65,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.2.0</hbase.version>
+    <hbase.version>1.2.4</hbase.version>
     <hadoop-two.version>2.7.1</hadoop-two.version>
 
     <!-- Dependency versions -->
