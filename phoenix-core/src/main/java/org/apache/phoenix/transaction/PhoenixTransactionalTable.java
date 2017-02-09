@@ -19,7 +19,7 @@ public interface PhoenixTransactionalTable {
     /**
      * Transaction version of {@link HTableInterface#get(Get get)}
      * @param get
-     * @return 
+     * @return
      * @throws IOException
      */
     public Result get(Get get) throws IOException;
@@ -34,25 +34,25 @@ public interface PhoenixTransactionalTable {
     /**
      * Transactional version of {@link HTableInterface#delete(Delete delete)}
      *
-     * @param delete 
-     * @throws IOException 
+     * @param delete
+     * @throws IOException
      */
     public void delete(Delete delete) throws IOException;
-    
+
     /**
      * Transactional version of {@link HTableInterface#getScanner(Scan scan)}
      *
-     * @param scan 
+     * @param scan
      * @return ResultScanner
      * @throws IOException
      */
     public ResultScanner getScanner(Scan scan) throws IOException;
-    
+
     /**
      * Returns Htable name
      */
     public byte[] getTableName();
-    
+
     /**
      * Returns Htable configuration object
      */
@@ -60,7 +60,7 @@ public interface PhoenixTransactionalTable {
 
     /**
      * Returns HTableDescriptor of Htable
-     * @throws IOException 
+     * @throws IOException
      */
     public HTableDescriptor getTableDescriptor() throws IOException;
 
@@ -69,28 +69,28 @@ public interface PhoenixTransactionalTable {
      * @throws IOException
      */
     public boolean exists(Get get) throws IOException;
-    
+
     /**
      * Transactional version of {@link HTableInterface#get(List gets)}
-     * @throws IOException 
+     * @throws IOException
      */
     public Result[] get(List<Get> gets) throws IOException;
-    
+
     /**
      * Transactional version of {@link HTableInterface#getScanner(byte[] family)}
-     * @throws IOException 
+     * @throws IOException
      */
     public ResultScanner getScanner(byte[] family) throws IOException;
 
     /**
      * Transactional version of {@link HTableInterface#getScanner(byte[] family, byte[] qualifier)}
-     * @throws IOException 
+     * @throws IOException
      */
     public ResultScanner getScanner(byte[] family, byte[] qualifier) throws IOException;
 
     /**
      * Transactional version of {@link HTableInterface#put(List puts)}
-     * @throws IOException 
+     * @throws IOException
      */
     public void put(List<Put> puts) throws IOException;
 
@@ -99,7 +99,7 @@ public interface PhoenixTransactionalTable {
      * @throws IOException
      */
     public void delete(List<Delete> deletes) throws IOException;
-    
+
     /**
      * Return the underling htable
      */
@@ -129,10 +129,10 @@ public interface PhoenixTransactionalTable {
      * Delegates to see HTable.flushCommits()
      */
     public void flushCommits() throws IOException;
-    
+
     /**
      * Releases resources
-     * @throws IOException 
+     * @throws IOException
      */
     public void close() throws IOException;
 }
