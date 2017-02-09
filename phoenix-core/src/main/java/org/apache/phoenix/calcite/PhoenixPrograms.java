@@ -80,7 +80,8 @@ public class PhoenixPrograms {
                     JoinCommuteRule.INSTANCE,
                     JoinPushExpressionsRule.INSTANCE,
                     ProjectRemoveRule.INSTANCE,
-                    SemiJoinRule.INSTANCE,
+                    SemiJoinRule.PROJECT,
+                    SemiJoinRule.JOIN,
                     SortJoinTransposeRule.INSTANCE,
                     SortUnionTransposeRule.INSTANCE,
                     UnionToDistinctRule.INSTANCE,
@@ -335,7 +336,8 @@ public class PhoenixPrograms {
                 true, metadataProvider);
         final Program misc2 = Programs.hep(
                 ImmutableList.of(
-                        SemiJoinRule.INSTANCE),
+                        SemiJoinRule.PROJECT,
+                        SemiJoinRule.JOIN),
                 true, metadataProvider);
         return Programs.sequence(
                 misc1,

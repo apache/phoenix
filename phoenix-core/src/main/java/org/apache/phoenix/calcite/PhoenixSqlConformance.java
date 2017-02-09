@@ -60,4 +60,9 @@ public class PhoenixSqlConformance implements SqlConformance {
     public boolean isApplyAllowed() {
         return false;
     }
+
+    @Override
+    public boolean isInsertSubsetColumnsAllowed() {
+        return true;
+    }
 }
