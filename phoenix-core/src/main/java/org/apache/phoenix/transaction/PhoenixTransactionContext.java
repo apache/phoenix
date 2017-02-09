@@ -51,7 +51,7 @@ public interface PhoenixTransactionContext {
      * @throws InterruptedException
      * @throws TimeoutException
      */
-    public void commitDDL(PTable dataTable)
+    public void commitDDLFence(PTable dataTable)
             throws SQLException, InterruptedException, TimeoutException;
     
     /**
@@ -60,7 +60,7 @@ public interface PhoenixTransactionContext {
      * 
      * @param table  the table that the DML command works on
      */
-    public void markDML(PTable table);
+    public void markDMLFence(PTable table);
     
     /**
      * Augment the current context with ctx modified keys
@@ -68,21 +68,6 @@ public interface PhoenixTransactionContext {
      * @param ctx
      */
     public void join(PhoenixTransactionContext ctx);
-    
-    /** 
-     * Add transaction table to the context.
-     * Will be mostly used by Tephra, since Omid keeps the changeset inside the transaction while 
-     * Tephra keeps it distributed at the different awares.
-     * 
-     * @param table
-     */
-    public void addTransactionTable(PhoenixTransactionalTable table);
-    
-    /**
-     * Add transaction to the table. 
-     * @param table
-     */
-    public void addTransactionToTable(PhoenixTransactionalTable table);
     
     /**
      * Is there a transaction in flight?

@@ -38,32 +38,20 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void commitDDL(PTable dataTable) throws SQLException,
+    public void commitDDLFence(PTable dataTable) throws SQLException,
             InterruptedException, TimeoutException {
         // TODO Auto-generated method stub
 
     }
 
     @Override
-    public void markDML(PTable table) {
+    public void markDMLFence(PTable table) {
         // TODO Auto-generated method stub
 
     }
 
     @Override
     public void join(PhoenixTransactionContext ctx) {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
-    public void addTransactionTable(PhoenixTransactionalTable table) {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
-    public void addTransactionToTable(PhoenixTransactionalTable table) {
         // TODO Auto-generated method stub
 
     }

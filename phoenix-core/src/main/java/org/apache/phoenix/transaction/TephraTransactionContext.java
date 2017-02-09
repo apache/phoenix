@@ -38,14 +38,14 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void commitDDL(PTable dataTable) throws SQLException,
+    public void commitDDLFence(PTable dataTable) throws SQLException,
             InterruptedException, TimeoutException {
         // TODO Auto-generated method stub
 
     }
 
     @Override
-    public void markDML(PTable table) {
+    public void markDMLFence(PTable table) {
         // TODO Auto-generated method stub
 
     }
@@ -56,19 +56,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
 
     }
 
-    @Override
-    public void addTransactionTable(PhoenixTransactionalTable table) {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
-    public void addTransactionToTable(PhoenixTransactionalTable table) {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
+       @Override
     public boolean isTransactionRunning() {
         // TODO Auto-generated method stub
         return false;

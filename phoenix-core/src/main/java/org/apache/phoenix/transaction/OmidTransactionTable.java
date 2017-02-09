@@ -15,6 +15,10 @@ import org.apache.hadoop.hbase.client.Scan;
 
 public class OmidTransactionTable implements PhoenixTransactionalTable {
 
+    public OmidTransactionTable(PhoenixTransactionContext ctx) {
+        // TODO Auto-generated constructor stub
+    }
+    
     @Override
     public Result get(Get get) throws IOException {
         // TODO Auto-generated method stub
