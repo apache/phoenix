@@ -184,10 +184,14 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
             Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
             long earliestPutTs, InternalScanner s, CompactionRequest request) throws IOException {
-
-        if (!IndexUtil.isLocalIndexStore(store) || s != null) { return s; }
-        Scan scan = new Scan();
-        scan.setMaxVersions(store.getFamily().getMaxVersions());
+        if (!IndexUtil.isLocalIndexStore(store)) { return s; }
+        Scan scan = null;
+        if (s!=null) {
+        	scan = ((StoreScanner)s).scan;
+        } else  {
+        	scan = new Scan();
+        	scan.setMaxVersions(store.getFamily().getMaxVersions());
+        }
         if (!store.hasReferences()) {
             InternalScanner repairScanner = null;
             if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
