@@ -55,6 +55,10 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     phoenixRDD.partitions
   }
 
+  override protected def getPreferredLocations(split: Partition): Seq[String] = {
+    phoenixRDD.preferredLocations(split)
+  }
+
   @DeveloperApi
   override def compute(split: Partition, context: TaskContext) = {
     phoenixRDD.compute(split, context).map(r => r._2)
