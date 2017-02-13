@@ -49,6 +49,7 @@ public final class CursorUtil {
         private boolean islastCallNext;
         private CursorFetchPlan fetchPlan;
         private int offset = -1;
+        private boolean isAggregate;
 
         private CursorWrapper(String cursorName, String selectSQL, QueryPlan queryPlan){
             this.cursorName = cursorName;
@@ -56,6 +57,7 @@ public final class CursorUtil {
             this.queryPlan = queryPlan;
             this.islastCallNext = true;
             this.fetchPlan = new CursorFetchPlan(queryPlan);
+            isAggregate = fetchPlan.isAggregate();
         }
 
         private synchronized void openCursor(Connection conn) throws SQLException {
@@ -79,26 +81,10 @@ public final class CursorUtil {
             if (!isOpen)
                 throw new SQLException("Fetch call on closed cursor '" + this.cursorName + "'!");
             ((CursorResultIterator)fetchPlan.iterator()).setFetchSize(fetchSize);
-            if (!queryPlan.getStatement().isAggregate() || !queryPlan.getStatement().isDistinct()) { 
-            	if (islastCallNext != isNext) {
-                    if (islastCallNext && !isReversed){
-                       ScanUtil.setReversed(scan);
-                } else {
-                       ScanUtil.unsetReversed(scan);
+            if (!isAggregate) { 
+                if (row!=null){
+                    scan.setStartRow(row.get());
                 }
-                    isReversed = !isReversed;
-            	}
-
-            	if (!isReversed) {
-                    if (row!=null){
-                        scan.setStartRow(row.get());
-                    }
-                } else {
-                    if(previousRow!=null){
-                       scan.setStopRow(previousRow.get());
-                    }
-                }
-            	islastCallNext = isNext;
             }
             return this.fetchPlan;
         }
