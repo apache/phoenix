@@ -328,7 +328,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             LOG.info("Loading HFiles from {}", outputPath);
             completebulkload(conf,outputPath,tablesToBeLoaded);
             LOG.info("Removing output directory {}", outputPath);
-            if(!FileSystem.get(conf).delete(outputPath, true)) {
+            if(!outputPath.getFileSystem(conf).delete(outputPath, true)) {
                 LOG.error("Failed to delete the output directory {}", outputPath);
             }
             return 0;

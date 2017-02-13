@@ -194,6 +194,7 @@ public class IndexTool extends Configured implements Tool {
         Connection connection;
         Configuration configuration;
         private Path outputPath;
+        private FileSystem fs;
 
         public JobFactory(Connection connection, Configuration configuration, Path outputPath) {
             this.connection = connection;
@@ -357,8 +358,9 @@ public class IndexTool extends Configured implements Tool {
             final List<ColumnInfo> columnMetadataList =
                     PhoenixRuntime.generateColumnInfo(connection, qIndexTable, indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
-            FileSystem.get(configuration).delete(outputPath, true);
-            
+            fs = outputPath.getFileSystem(configuration);
+            fs.delete(outputPath, true);           
+ 
             final String jobName = String.format(INDEX_JOB_NAME_TEMPLATE, pdataTable.getName().toString(), indexTable);
             final Job job = Job.getInstance(configuration, jobName);
             job.setJarByClass(IndexTool.class);
@@ -475,10 +477,12 @@ public class IndexTool extends Configured implements Tool {
             
             PTable pdataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
 			Path outputPath = null;
+			FileSystem fs = null;
 			if (basePath != null) {
 				outputPath = CsvBulkImportUtil.getOutputPath(new Path(basePath), pindexTable == null
 						? pdataTable.getPhysicalName().getString() : pindexTable.getPhysicalName().getString());
-				FileSystem.get(configuration).delete(outputPath, true);
+				fs = outputPath.getFileSystem(configuration);
+				fs.delete(outputPath, true);
 			}
             
             Job job = new JobFactory(connection, configuration, outputPath).getJob(schemaName, indexTable, dataTable,
@@ -502,7 +506,7 @@ public class IndexTool extends Configured implements Tool {
                     htable.close();
                     // Without direct API, we need to update the index state to ACTIVE from client.
                     IndexToolUtil.updateIndexState(connection, qDataTable, indexTable, PIndexState.ACTIVE);
-                    FileSystem.get(configuration).delete(outputPath, true);
+                    fs.delete(outputPath, true);
                 }
                 return 0;
             } else {
