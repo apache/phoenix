@@ -418,11 +418,6 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
             }
 
             @Override
-            public String getCursorName() {
-                return null;
-            }
-
-            @Override
             public Integer getLimit() {
                 return null;
             }

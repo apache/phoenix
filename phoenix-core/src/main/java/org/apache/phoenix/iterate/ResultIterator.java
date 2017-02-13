@@ -49,5 +49,4 @@ public interface ResultIterator extends SQLCloseable {
     public Tuple next() throws SQLException;
     
     public void explain(List<String> planSteps);
-
 }

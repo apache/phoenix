@@ -17,12 +17,7 @@
  */
 package org.apache.phoenix.parse;
 
-import org.apache.phoenix.compile.ColumnResolver;
-import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
-
 import java.util.*;
 
 public class DeclareCursorStatement implements BindableStatement {
@@ -47,9 +42,9 @@ public class DeclareCursorStatement implements BindableStatement {
         return select.toString();
     }
 
-    //public SelectStatement getSelect(){
-    //return select;
-    //}
+    public SelectStatement getSelect(){
+    	return select;
+    }
 
     public List<OrderByNode> getSelectOrderBy() {
         return select.getOrderBy();

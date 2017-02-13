@@ -99,7 +99,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final StatementContext context;
     protected final FilterableStatement statement;
     protected final RowProjector projection;
-    protected String cursorName;
     protected final ParameterMetaData paramMetaData;
     protected final Integer limit;
     protected final Integer offset;
@@ -114,12 +113,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
     protected final Expression dynamicFilter;
     protected Long estimatedRows;
     protected Long estimatedSize;
-    protected int fetchSize;
     
 
     protected BaseQueryPlan(
             StatementContext context, FilterableStatement statement, TableRef table,
-            RowProjector projection, String cursorName, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
+            RowProjector projection, ParameterMetaData paramMetaData, Integer limit, Integer offset, OrderBy orderBy,
             GroupBy groupBy, ParallelIteratorFactory parallelIteratorFactory,
             Expression dynamicFilter) {
         this.context = context;
@@ -127,7 +125,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
         this.tableRef = table;
         this.tableRefs = ImmutableSet.of(table);
         this.projection = projection;
-        this.cursorName = cursorName;
         this.paramMetaData = paramMetaData;
         this.limit = limit;
         this.offset = offset;
@@ -193,11 +190,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
         return projection;
     }
     
-	@Override
-    public String getCursorName(){
-        return cursorName;
-    }
-	
     public Expression getDynamicFilter() {
         return dynamicFilter;
     }

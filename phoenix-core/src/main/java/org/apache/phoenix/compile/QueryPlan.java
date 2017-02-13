@@ -26,7 +26,6 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.parse.CursorName;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
@@ -60,8 +59,6 @@ public interface QueryPlan extends StatementPlan {
      * Returns projector used to formulate resultSet row
      */
     RowProjector getProjector();
-
-    String getCursorName();
     
     Integer getLimit();
 

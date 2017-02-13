@@ -56,7 +56,7 @@ public final class CursorUtil {
             this.selectSQL = selectSQL;
             this.queryPlan = queryPlan;
             this.islastCallNext = true;
-            this.fetchPlan = new CursorFetchPlan(queryPlan);
+            this.fetchPlan = new CursorFetchPlan(queryPlan,cursorName);
             isAggregate = fetchPlan.isAggregate();
         }
 

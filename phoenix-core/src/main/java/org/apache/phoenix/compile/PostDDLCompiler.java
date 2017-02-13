@@ -282,7 +282,7 @@ public class PostDDLCompiler {
                             } catch (AmbiguousColumnException e) {
                                 continue;
                             }
-                            QueryPlan plan = new AggregatePlan(context, select, tableRef, projector, (select.getCursorName() == null ? null : select.getCursorName().getName()), null, null,
+                            QueryPlan plan = new AggregatePlan(context, select, tableRef, projector, null, null,
                                     OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                             try {
                                 ResultIterator iterator = plan.iterator();

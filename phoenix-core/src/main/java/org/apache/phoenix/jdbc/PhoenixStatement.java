@@ -84,9 +84,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.execute.CursorFetchPlan;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
-import org.apache.phoenix.iterate.CursorResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -156,7 +154,6 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.Sequence;
-import org.apache.phoenix.schema.Sequence.ValueOp;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
@@ -256,7 +253,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     protected List<PhoenixResultSet> getResultSets() {
         return resultSets;
     }
-
+    
     public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
         return new PhoenixResultSet(iterator, projector, context);
     }
@@ -412,20 +409,15 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
                 List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit,OffsetNode offset, int bindCount, boolean isAggregate,
                 boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
-            this(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, offset, bindCount, isAggregate, hasSequence, null, selects, udfParseNodes);
+            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects, udfParseNodes);
         }
-		
-		private ExecutableSelectStatement(ExecutableSelectStatement select, CursorName cursorName) {
+        
+        private ExecutableSelectStatement(ExecutableSelectStatement select) {
             this(select.getFrom(), select.getHint(), select.isDistinct(), select.getSelect(), select.getWhere(),
                     select.getGroupBy(), select.getHaving(), select.getOrderBy(), select.getLimit(), select.getOffset(), select.getBindCount(),
-                    select.isAggregate(), select.hasSequence(), cursorName, select.getSelects(), select.getUdfParseNodes());
+                    select.isAggregate(), select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
         }
-
-        private ExecutableSelectStatement(TableNode from, HintNode hint, boolean isDistinct, List<AliasedNode> select, ParseNode where,
-                List<ParseNode> groupBy, ParseNode having, List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount, boolean isAggregate,
-                boolean hasSequence, CursorName cursorName, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes){
-            super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, offset, bindCount, isAggregate, hasSequence, cursorName, selects, udfParseNodes);
-        }
+		
         
         @SuppressWarnings("unchecked")
         @Override
@@ -441,9 +433,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 resolver = FromCompiler.getResolverForQuery(transformedSelect, stmt.getConnection());
                 select = StatementNormalizer.normalize(transformedSelect, resolver);
             }
-			if (this.getCursorName() != null){
-                select = create(select, this.getCursorName());
-            }
+
             QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.<PDatum>emptyList(), stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt), true).compile();
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
@@ -557,11 +547,6 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 public RowProjector getProjector() {
                     return EXPLAIN_PLAN_ROW_PROJECTOR;
                 }
-				
-				@Override
-                public String getCursorName() {
-                    return null;
-                }
 
                 @Override
                 public Integer getLimit() {
@@ -621,6 +606,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
                 }
+                
             };
         }
     }
@@ -804,7 +790,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
         @Override
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             ExecutableSelectStatement wrappedSelect = new ExecutableSelectStatement(
-		(ExecutableSelectStatement) stmt.parseStatement(this.getQuerySQL()),new CursorName(this.getCursorName()));
+            		(ExecutableSelectStatement) stmt.parseStatement(this.getQuerySQL()));
             DeclareCursorCompiler compiler = new DeclareCursorCompiler(stmt, this.getOperation(),wrappedSelect.compilePlan(stmt, seqAction));
             return compiler.compile(this);
         }

@@ -545,7 +545,7 @@ public class DeleteCompiler {
                     projectorToBe = new RowProjector(projectorToBe,true);
                 }
                 final RowProjector projector = projectorToBe;
-                final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, projector, (select.getCursorName() == null ? null : select.getCursorName().getName()), null, null,
+                final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, projector, null, null,
                         OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                 mutationPlans.add(new MutationPlan() {
                     @Override

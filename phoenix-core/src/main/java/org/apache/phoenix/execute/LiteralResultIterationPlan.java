@@ -28,8 +28,6 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.iterate.CursorResultIterator;
-import org.apache.phoenix.iterate.LookAheadResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -44,16 +42,16 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
     protected final Iterable<Tuple> tuples;
 
     public LiteralResultIterationPlan(StatementContext context, 
-            FilterableStatement statement, TableRef tableRef, RowProjector projection, String cursorName,
+            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
             Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
         this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)), 
-                context, statement, tableRef, projection, cursorName, limit, offset, orderBy, parallelIteratorFactory);
+                context, statement, tableRef, projection, limit, offset, orderBy, parallelIteratorFactory);
     }
 
     public LiteralResultIterationPlan(Iterable<Tuple> tuples, StatementContext context, 
-            FilterableStatement statement, TableRef tableRef, RowProjector projection, String cursorName,
+            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
             Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
-        super(context, statement, tableRef, projection, cursorName, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
+        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
         this.tuples = tuples;
     }
 
@@ -109,11 +107,7 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
         if (context.getSequenceManager().getSequenceCount() > 0) {
             scanner = new SequenceResultIterator(scanner, context.getSequenceManager());
         }
-
-        if (cursorName != null){
-            scanner = new CursorResultIterator(LookAheadResultIterator.wrap(scanner), cursorName);
-        }
-
+        
         return scanner;
     }
 }

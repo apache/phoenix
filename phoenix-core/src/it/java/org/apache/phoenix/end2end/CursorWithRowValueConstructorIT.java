@@ -34,7 +34,7 @@ import static org.apache.phoenix.util.TestUtil.*;
 import static org.junit.Assert.*;
 
 
-public class CursorWithRowValueConstructorIT extends BaseClientManagedTimeIT {
+public class CursorWithRowValueConstructorIT extends ParallelStatsDisabledIT {
     private static final String TABLE_NAME = "CursorRVCTestTable";
     protected static final Log LOG = LogFactory.getLog(CursorWithRowValueConstructorIT.class);
 

@@ -1,34 +1,26 @@
 package org.apache.phoenix.execute;
 
-import java.sql.ParameterMetaData;
 import java.sql.SQLException;
-import java.util.List;
-import java.util.Set;
-
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.iterate.CursorResultIterator;
+import org.apache.phoenix.iterate.LookAheadResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
-import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
-import org.apache.phoenix.parse.FilterableStatement;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.TableRef;
 
 public class CursorFetchPlan extends DelegateQueryPlan {
 
-	private CursorResultIterator resultIterator;
-	private int fetchSize;
-        private boolean isAggregate;
+    private CursorResultIterator resultIterator;
+    private int fetchSize;
+    private boolean isAggregate;
+    private String cursorName;
 
-	public CursorFetchPlan(QueryPlan cursorQueryPlan) {
+	public CursorFetchPlan(QueryPlan cursorQueryPlan,String cursorName) {
 		super(cursorQueryPlan);
-                this.isAggregate = delegate.getStatement().isAggregate() || delegate.getStatement().isDistinct();
+        this.isAggregate = delegate.getStatement().isAggregate() || delegate.getStatement().isDistinct();
+        this.cursorName = cursorName;
 	}
 
 	@Override
@@ -36,16 +28,15 @@ public class CursorFetchPlan extends DelegateQueryPlan {
 		StatementContext context = delegate.getContext();
 		if (resultIterator == null) {
 			context.getOverallQueryMetrics().startQuery();
-			resultIterator = (CursorResultIterator) delegate.iterator(scanGrouper, scan);
+			resultIterator = new CursorResultIterator(LookAheadResultIterator.wrap(delegate.iterator(scanGrouper, scan)),cursorName);
 		}
-	        return resultIterator;
+	    return resultIterator;
 	}
 
 
 	@Override
 	public ExplainPlan getExplainPlan() throws SQLException {
-		// TODO Auto-generated method stub
-		return null;
+		return delegate.getExplainPlan();
 	}
 	
 	public void setFetchSize(int fetchSize){

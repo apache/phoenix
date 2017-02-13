@@ -74,11 +74,6 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     }
 
     @Override
-    public String getCursorName() {
-        return delegate.getCursorName();
-    }
-
-    @Override
     public Integer getLimit() {
         return delegate.getLimit();
     }

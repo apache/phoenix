@@ -208,16 +208,11 @@ public class TraceQueryPlan implements QueryPlan {
     }
 
     @Override
-    public String getCursorName() {
+    public Integer getLimit() {
         return null;
     }
 
     @Override
-    public Integer getLimit() {
-        return null;
-    }
-	
-	@Override
     public Integer getOffset() {
         return null;
     }
@@ -266,5 +261,4 @@ public class TraceQueryPlan implements QueryPlan {
     public boolean useRoundRobinIterator() {
         return false;
     }
-
 }

@@ -721,7 +721,7 @@ public class ParseNodeFactory {
             boolean hasSequence, List<SelectStatement> selects, Map<String, UDFParseNode> udfParseNodes) {
 
         return new SelectStatement(from, hint, isDistinct, select, where, groupBy == null ? Collections.<ParseNode>emptyList() : groupBy, having,
-                orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, offset, bindCount, isAggregate, hasSequence, null, selects == null ? Collections.<SelectStatement>emptyList() : selects, udfParseNodes);
+                orderBy == null ? Collections.<OrderByNode>emptyList() : orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects == null ? Collections.<SelectStatement>emptyList() : selects, udfParseNodes);
     } 
     
     public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns, List<ParseNode> values,
