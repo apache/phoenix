@@ -455,8 +455,8 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
         
         Configuration conf = job.getConfiguration();
         // create the partitions file
-        FileSystem fs = FileSystem.get(conf);
         Path partitionsPath = new Path(conf.get("hadoop.tmp.dir"), "partitions_" + UUID.randomUUID());
+        FileSystem fs = partitionsPath.getFileSystem(conf);
         fs.makeQualified(partitionsPath);
         writePartitions(conf, partitionsPath, tablesStartKeys);
         fs.deleteOnExit(partitionsPath);
