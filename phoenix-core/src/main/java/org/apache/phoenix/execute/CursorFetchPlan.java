@@ -22,52 +22,23 @@ import org.apache.phoenix.schema.TableRef;
 
 public class CursorFetchPlan extends DelegateQueryPlan {
 
-	//QueryPlan cursorQueryPlan;
 	private CursorResultIterator resultIterator;
 	private int fetchSize;
+        private boolean isAggregate;
 
 	public CursorFetchPlan(QueryPlan cursorQueryPlan) {
 		super(cursorQueryPlan);
-	}
-
-
-	@Override
-	public ResultIterator iterator() throws SQLException {
-		// TODO Auto-generated method stub
-		StatementContext context = delegate.getContext();
-		if (resultIterator != null) {
-			return resultIterator;
-		} else {
-			context.getOverallQueryMetrics().startQuery();
-			resultIterator = (CursorResultIterator) delegate.iterator();
-			return resultIterator;
-		}
-	}
-
-	@Override
-	public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
-		// TODO Auto-generated method stub
-		StatementContext context = delegate.getContext();
-		if (resultIterator != null) {
-			return resultIterator;
-		} else {
-			context.getOverallQueryMetrics().startQuery();
-			resultIterator = (CursorResultIterator) delegate.iterator(scanGrouper);
-			return resultIterator;
-		}
+                this.isAggregate = delegate.getStatement().isAggregate() || delegate.getStatement().isDistinct();
 	}
 
 	@Override
 	public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
-		// TODO Auto-generated method stub
 		StatementContext context = delegate.getContext();
-		if (resultIterator != null) {
-			return resultIterator;
-		} else {
+		if (resultIterator == null) {
 			context.getOverallQueryMetrics().startQuery();
 			resultIterator = (CursorResultIterator) delegate.iterator(scanGrouper, scan);
-			return resultIterator;
 		}
+	        return resultIterator;
 	}
 
 
@@ -84,4 +55,8 @@ public class CursorFetchPlan extends DelegateQueryPlan {
 	public int getFetchSize() {
 		return fetchSize;
 	}
+
+        public boolean isAggregate(){
+            return this.isAggregate;
+        }
 }
