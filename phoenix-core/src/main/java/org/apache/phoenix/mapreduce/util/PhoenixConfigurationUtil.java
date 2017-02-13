@@ -106,6 +106,11 @@ public final class PhoenixConfigurationUtil {
     
     public static final String DISABLED_INDEXES = "phoenix.mr.index.disabledIndexes";
 
+    // Generate splits based on scans from stats, or just from region splits
+    public static final String MAPREDUCE_SPLIT_BY_STATS = "phoenix.mapreduce.split.by.stats";
+
+    public static final boolean DEFAULT_SPLIT_BY_STATS = true;
+
     public enum SchemaType {
         TABLE,
         QUERY;
@@ -458,5 +463,11 @@ public final class PhoenixConfigurationUtil {
     public static String getDisableIndexes(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(DISABLED_INDEXES);
+    }
+
+    public static boolean getSplitByStats(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        boolean split = configuration.getBoolean(MAPREDUCE_SPLIT_BY_STATS, DEFAULT_SPLIT_BY_STATS);
+        return split;
     }
 }
