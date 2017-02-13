@@ -94,17 +94,18 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         Preconditions.checkNotNull(splits);
 
         // Get the RegionSizeCalculator
-        org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(config);
-        RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
-                .getTableRef().getTable().getPhysicalName().toString()));
-        RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
-                .getAdmin());
+        HConnection connection = HConnectionManager.createConnection(config);
+        String tableName = qplan
+                .getTableRef().getTable().getPhysicalName().toString();
+        HTable table = new HTable(config, tableName);
+        RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(table);
 
 
         final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
         for (List<Scan> scans : qplan.getScans()) {
             // Get the region location
-            HRegionLocation location = regionLocator.getRegionLocation(
+            HRegionLocation location = connection.getRegionLocation(
+                    TableName.valueOf(tableName),
                     scans.get(0).getStartRow(),
                     false
             );
