@@ -25,7 +25,6 @@ import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -41,6 +40,8 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
 
     private List<Scan> scans;
     private KeyRange keyRange;
+    private String regionLocation = null;
+    private long regionSize = 0;
    
     /**
      * No Arg constructor
@@ -53,9 +54,15 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     * @param keyRange
     */
     public PhoenixInputSplit(final List<Scan> scans) {
+        this(scans, 0, null);
+    }
+
+    public PhoenixInputSplit(final List<Scan> scans, long regionSize, String regionLocation) {
         Preconditions.checkNotNull(scans);
         Preconditions.checkState(!scans.isEmpty());
         this.scans = scans;
+        this.regionSize = regionSize;
+        this.regionLocation = regionLocation;
         init();
     }
     
@@ -73,6 +80,8 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     
     @Override
     public void readFields(DataInput input) throws IOException {
+        regionLocation = WritableUtils.readString(input);
+        regionSize = WritableUtils.readVLong(input);
         int count = WritableUtils.readVInt(input);
         scans = Lists.newArrayListWithExpectedSize(count);
         for (int i = 0; i < count; i++) {
@@ -87,6 +96,9 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     
     @Override
     public void write(DataOutput output) throws IOException {
+        WritableUtils.writeString(output, regionLocation);
+        WritableUtils.writeVLong(output, regionSize);
+
         Preconditions.checkNotNull(scans);
         WritableUtils.writeVInt(output, scans.size());
         for (Scan scan : scans) {
@@ -99,12 +111,17 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
 
     @Override
     public long getLength() throws IOException, InterruptedException {
-         return 0;
+         return regionSize;
     }
 
     @Override
     public String[] getLocations() throws IOException, InterruptedException {
-        return new String[]{};
+        if(regionLocation == null) {
+            return new String[]{};
+        }
+        else {
+            return new String[]{regionLocation};
+        }
     }
 
     @Override
