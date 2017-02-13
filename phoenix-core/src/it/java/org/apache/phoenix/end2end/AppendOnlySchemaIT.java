@@ -81,23 +81,37 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             // create sequence for auto partition
             conn1.createStatement().execute("CREATE SEQUENCE " + metricIdSeqTableName + " CACHE 1");
             // create base table
-            conn1.createStatement().execute("CREATE TABLE "+ metricTableName + "(metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))"
-                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=" + metricIdSeqTableName);
+            String ddl = "CREATE TABLE " + (notExists ? "IF NOT EXISTS " : "") + metricTableName + "(metricId INTEGER NOT NULL, metricVal DOUBLE, CONSTRAINT PK PRIMARY KEY(metricId))"
+                    + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=1, AUTO_PARTITION_SEQ=" + metricIdSeqTableName;
+			conn1.createStatement().execute(ddl);
+			// execute same create ddl
+            try {
+                conn2.createStatement().execute(ddl);
+                if (!notExists) {
+                    fail("Create Table should fail");
+                }
+            }
+            catch (TableAlreadyExistsException e) {
+                if (notExists) {
+                    fail("Create Table should not fail");
+                }
+            }
+			
             // create view
-            String ddl =
+            String viewDDL =
                     "CREATE VIEW " + (notExists ? "IF NOT EXISTS " : "")
                             + viewName + " ( hostName varchar NOT NULL, tagName varChar"
                             + " CONSTRAINT HOSTNAME_PK PRIMARY KEY (hostName))"
                             + " AS SELECT * FROM " + metricTableName
                             + " UPDATE_CACHE_FREQUENCY=300000";
-            conn1.createStatement().execute(ddl);
+            conn1.createStatement().execute(viewDDL);
             conn1.createStatement().execute("UPSERT INTO " + viewName + "(hostName, metricVal) VALUES('host1', 1.0)");
             conn1.commit();
             reset(connectionQueryServices);
 
             // execute same create ddl
             try {
-                conn2.createStatement().execute(ddl);
+                conn2.createStatement().execute(viewDDL);
                 if (!notExists) {
                     fail("Create Table should fail");
                 }
@@ -118,9 +132,9 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
             reset(connectionQueryServices);
             
             // execute alter table ddl that adds the same column
-            ddl = "ALTER VIEW " + viewName + " ADD " + (notExists ? "IF NOT EXISTS" : "") + " tagName varchar";
+            viewDDL = "ALTER VIEW " + viewName + " ADD " + (notExists ? "IF NOT EXISTS" : "") + " tagName varchar";
             try {
-                conn2.createStatement().execute(ddl);
+                conn2.createStatement().execute(viewDDL);
                 if (!notExists) {
                     fail("Alter Table should fail");
                 }

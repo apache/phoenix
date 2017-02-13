@@ -215,6 +215,7 @@ import org.apache.tephra.TxConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
@@ -950,7 +951,7 @@ public class MetaDataClient {
                     }
                 }
                 // if there are new columns to add
-                return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(),
+                return addColumn(table, columnDefs, ImmutableListMultimap.<String,Pair<String,Object>>of(), statement.ifNotExists(),
                         true, NamedTableNode.create(statement.getTableName()), statement.getTableType());
             }
         }
