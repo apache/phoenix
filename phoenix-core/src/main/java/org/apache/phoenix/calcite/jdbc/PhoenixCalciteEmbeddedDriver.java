@@ -58,7 +58,7 @@ public abstract class PhoenixCalciteEmbeddedDriver extends Driver implements SQL
         return new Function0<CalcitePrepare>() {
             @Override
             public CalcitePrepare apply() {
-                return new PhoenixPrepareImpl(PhoenixConverterRules.CONVERTIBLE_RULES);
+                return new PhoenixPrepareImpl(PhoenixConverterRules.RULES);
             }          
         };
     }

@@ -295,7 +295,7 @@ public class CalciteUtils {
 		ExpressionFactory eFactory = EXPRESSION_MAP.get(node.getKind());
 		if (eFactory == null) {
 			throw new UnsupportedOperationException("Unsupported RexNode: "
-					+ node);
+					+ node.getKind());
 		}
 		return eFactory;
 	}
@@ -1169,7 +1169,7 @@ public class CalciteUtils {
 
     public static SQLException unwrapSqlException(SQLException root){
         Exception e = root;
-        while(e.getCause() != null){
+        while(e.getCause() instanceof Exception){
             e = (Exception) e.getCause();
             if(e instanceof RuntimeException && e.getCause() instanceof SQLException) {
                 return (SQLException) e.getCause();

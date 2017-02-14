@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.Reader;
 import java.sql.DatabaseMetaData;
+import java.sql.Date;
 import java.sql.NClob;
 import java.sql.ResultSetMetaData;
 import java.sql.RowId;
@@ -11,6 +12,8 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 import java.sql.Savepoint;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.sql.ResultSet;
 import java.util.Calendar;
 import java.util.List;
@@ -379,6 +382,34 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             } catch (SQLException e) {
                 throw CalciteUtils.unwrapSqlException(e);
             }
+        }
+
+        public void setTimestamp(int parameterIndex, Timestamp x, Calendar calendar)
+                throws SQLException {
+            if (x != null) {
+                x = new Timestamp(getAdjustedTime(x.getTime(), calendar));
+            }
+            super.setTimestamp(parameterIndex, x, calendar);
+        }
+
+        public void setDate(int parameterIndex, Date x, Calendar calendar)
+                throws SQLException {
+            if (x != null) {
+                x = new Date(getAdjustedTime(x.getTime(), calendar));
+            }
+            super.setDate(parameterIndex, x, calendar);
+        }
+
+        public void setTime(int parameterIndex, Time x, Calendar calendar)
+                throws SQLException {
+            if (x != null) {
+                x = new Time(getAdjustedTime(x.getTime(), calendar));
+            }
+            super.setTime(parameterIndex, x, calendar);
+        }
+
+        private long getAdjustedTime(long v, Calendar calendar) {
+            return (v - calendar.getTimeZone().getOffset(v));
         }
 
         public void setRowId(
