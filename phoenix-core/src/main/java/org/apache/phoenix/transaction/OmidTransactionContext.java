@@ -26,13 +26,7 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void abort(SQLException e) throws SQLException {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
-    public void checkpoint() throws SQLException {
+    public void checkpoint(boolean hasUncommittedData) throws SQLException {
         // TODO Auto-generated method stub
 
     }

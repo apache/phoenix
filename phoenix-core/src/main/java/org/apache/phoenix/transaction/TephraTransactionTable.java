@@ -12,132 +12,119 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.tephra.hbase.TransactionAwareHTable;
 
 public class TephraTransactionTable implements PhoenixTransactionalTable {
 
-    public TephraTransactionTable(PhoenixTransactionContext ctx) {
-        // TODO Auto-generated constructor stub
+    private TransactionAwareHTable transactionAwareHTable;
+    
+    private TephraTransactionContext tephraTransactionContext;
+    
+    public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
+
+        assert(ctx instanceof TephraTransactionContext);
+
+        tephraTransactionContext = (TephraTransactionContext) ctx;
+
+        transactionAwareHTable = new TransactionAwareHTable(hTable);
+
+        tephraTransactionContext.addTransactionAware(transactionAwareHTable);
     }
 
     @Override
     public Result get(Get get) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.get(get);
     }
 
     @Override
     public void put(Put put) throws IOException {
-        // TODO Auto-generated method stub
-
+        transactionAwareHTable.put(put);
     }
 
     @Override
     public void delete(Delete delete) throws IOException {
-        // TODO Auto-generated method stub
-
+        transactionAwareHTable.delete(delete);
     }
 
     @Override
     public ResultScanner getScanner(Scan scan) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.getScanner(scan);
     }
 
     @Override
     public byte[] getTableName() {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.getTableName();
     }
 
     @Override
     public Configuration getConfiguration() {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.getConfiguration();
     }
 
     @Override
     public HTableDescriptor getTableDescriptor() throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.getTableDescriptor();
     }
 
     @Override
     public boolean exists(Get get) throws IOException {
-        // TODO Auto-generated method stub
-        return false;
+        return transactionAwareHTable.exists(get);
     }
 
     @Override
     public Result[] get(List<Get> gets) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.get(gets);
     }
 
     @Override
     public ResultScanner getScanner(byte[] family) throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.getScanner(family);
     }
 
     @Override
     public ResultScanner getScanner(byte[] family, byte[] qualifier)
             throws IOException {
-        // TODO Auto-generated method stub
-        return null;
+        return transactionAwareHTable.getScanner(family, qualifier);
     }
 
     @Override
     public void put(List<Put> puts) throws IOException {
-        // TODO Auto-generated method stub
-
+        transactionAwareHTable.put(puts);
     }
 
     @Override
     public void delete(List<Delete> deletes) throws IOException {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
-    public HTableInterface getHTable() {
-        // TODO Auto-generated method stub
-        return null;
+        transactionAwareHTable.delete(deletes);
     }
 
     @Override
     public void setAutoFlush(boolean autoFlush) {
-        // TODO Auto-generated method stub
-
+        transactionAwareHTable.setAutoFlush(autoFlush);
     }
 
     @Override
     public boolean isAutoFlush() {
-        // TODO Auto-generated method stub
-        return false;
+        return transactionAwareHTable.isAutoFlush();
     }
 
     @Override
     public long getWriteBufferSize() {
-        // TODO Auto-generated method stub
-        return 0;
+        return transactionAwareHTable.getWriteBufferSize();
     }
 
     @Override
     public void setWriteBufferSize(long writeBufferSize) throws IOException {
-        // TODO Auto-generated method stub
-
+        transactionAwareHTable.setWriteBufferSize(writeBufferSize);
     }
 
     @Override
     public void flushCommits() throws IOException {
-        // TODO Auto-generated method stub
-
+        transactionAwareHTable.flushCommits();
     }
 
     @Override
     public void close() throws IOException {
-        // TODO Auto-generated method stub
-
+        transactionAwareHTable.close();
     }
 
 }

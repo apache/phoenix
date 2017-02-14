@@ -15,7 +15,7 @@ import org.apache.hadoop.hbase.client.Scan;
 
 public class OmidTransactionTable implements PhoenixTransactionalTable {
 
-    public OmidTransactionTable(PhoenixTransactionContext ctx) {
+    public OmidTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
         // TODO Auto-generated constructor stub
     }
 
@@ -96,12 +96,6 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
     public void delete(List<Delete> deletes) throws IOException {
         // TODO Auto-generated method stub
 
-    }
-
-    @Override
-    public HTableInterface getHTable() {
-        // TODO Auto-generated method stub
-        return null;
     }
 
     @Override

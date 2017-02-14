@@ -29,18 +29,10 @@ public interface PhoenixTransactionContext {
     public void abort() throws SQLException;
 
     /**
-     * Rollback a transaction
-     *
-     * @param e
-     * @throws SQLException
-     */
-    public void abort(SQLException e) throws SQLException;
-
-    /**
      * Create a checkpoint in a transaction as defined in [TEPHRA-96]
      * @throws SQLException
      */
-    public void checkpoint() throws SQLException;
+    public void checkpoint(boolean hasUncommittedData) throws SQLException;
 
     /**
      * Commit DDL to guarantee that no transaction started before create index
