@@ -37,7 +37,9 @@ public class SqlAlterTable extends SqlCall {
             SqlNodeList newColumnDefs,
             SqlNodeList tableOptions) {
         super(pos);
-        this.operator = new SqlDdlOperator("ALTER TABLE", SqlKind.ALTER_TABLE);
+        this.operator =
+                isView.booleanValue() ? new SqlDdlOperator("ALTER VIEW", SqlKind.ALTER_VIEW)
+                        : new SqlDdlOperator("ALTER TABLE", SqlKind.ALTER_TABLE);
         this.tableName = tableName;
         this.isView = isView;
         this.ifExists = ifExists;

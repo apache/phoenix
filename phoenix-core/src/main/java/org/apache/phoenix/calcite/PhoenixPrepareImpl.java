@@ -38,6 +38,7 @@ import org.apache.calcite.tools.Program;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.calcite.parse.SqlAlterIndex;
 import org.apache.phoenix.calcite.parse.SqlAlterTable;
 import org.apache.phoenix.calcite.parse.SqlCreateFunction;
 import org.apache.phoenix.calcite.parse.SqlCreateIndex;
@@ -67,6 +68,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.AddColumnStatement;
+import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
@@ -97,6 +99,7 @@ import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
@@ -426,7 +429,8 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 client.dropSequence(drop);
                 break;                
             }
-            case ALTER_TABLE: {
+            case ALTER_TABLE: 
+            case ALTER_VIEW: {
                 final SqlAlterTable alterTable = (SqlAlterTable) node;
                 final TableName name;
                 if (alterTable.tableName.isSimple()) {
@@ -484,6 +488,32 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                     MetaDataClient client = new MetaDataClient(connection);
                     client.dropColumn(dropColumn);
                 }
+                break;
+            }
+            case ALTER_INDEX: {
+                final SqlAlterIndex index = (SqlAlterIndex) node;
+                NamedTableNode namedTable =
+                        nodeFactory.namedTable(null, TableName.create(!index.dataTableName
+                                .isSimple() ? index.dataTableName.names.get(0) : null,
+                            index.indexName.getSimple()));
+                final String dataTableName;
+                if (index.dataTableName.isSimple()) {
+                    dataTableName = index.dataTableName.getSimple();
+                } else {
+                    dataTableName = index.dataTableName.names.get(1);
+                }
+                String indexState = index.indexState.names.get(0);
+                PIndexState state = null;
+                try {
+                    state = PIndexState.valueOf(indexState.toUpperCase());
+                } catch(IllegalArgumentException e) {
+                    throw new SQLException(indexState+" is not a valid index state.");
+                }
+                boolean ifExists = index.ifExists.booleanValue();
+                boolean async = index.async.booleanValue();
+                AlterIndexStatement alterIndex = new AlterIndexStatement(namedTable, dataTableName, ifExists, state, async);
+                MetaDataClient client = new MetaDataClient(connection);
+                client.alterIndex(alterIndex);
                 break;
             }
             case OTHER_DDL: {

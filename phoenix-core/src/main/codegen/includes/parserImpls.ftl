@@ -328,6 +328,38 @@ SqlNode SqlCreateIndex() :
 
 /**
  * Parses statement
+ *   ALTER INDEX
+ */
+SqlNode SqlAlterIndex() :
+{
+    SqlParserPos pos;
+    SqlIdentifier indexName;
+    SqlIdentifier dataTableName;
+    boolean ifExists = false;
+    SqlIdentifier indexState;
+    boolean async = false;
+}
+{
+    <ALTER> { pos = getPos(); } <INDEX>
+    [
+        <IF> <EXISTS> { ifExists = true; }
+    ]
+    indexName = SimpleIdentifier()
+    <ON> dataTableName = DualIdentifier()
+    indexState = SimpleIdentifier()
+    (
+        <ASYNC> {async = true;}
+    )?
+    {
+        return new SqlAlterIndex(pos.plus(getPos()), indexName,
+            dataTableName, indexState,
+            SqlLiteral.createBoolean(ifExists, SqlParserPos.ZERO),
+            SqlLiteral.createBoolean(async, SqlParserPos.ZERO));
+    }
+}
+
+/**
+ * Parses statement
  *   CREATE SEQUENCE
  */
 SqlNode SqlCreateSequence() :
