@@ -166,7 +166,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
             ExpressionVisitor<Void> visitor = new StatelessTraverseAllExpressionVisitor<Void>() {
                 @Override
                 public Void visit(KeyValueColumnExpression expression) {
-                    get.addColumn(expression.getColumnFamily(), expression.getColumnName());
+                    get.addColumn(expression.getColumnFamily(), expression.getColumnQualifier());
                     estimatedSizeHolder[0]++;
                     return null;
                 }

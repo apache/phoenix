@@ -511,9 +511,9 @@ public class PercentileIT extends ParallelStatsDisabledIT {
             Date date, Long ts) throws Exception {
         String tableName = generateUniqueName();
         if (ts == null) {
-            ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits);
+            ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits, null);
         } else {
-            ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits, ts - 2);
+            ensureTableCreated(getUrl(), tableName, ATABLE_NAME, splits, ts - 2, null);
         }
 
         Properties props = new Properties();

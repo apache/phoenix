@@ -74,6 +74,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -108,6 +109,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PLongColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -610,7 +612,7 @@ public class TestUtil {
     }
 
     public static void analyzeTable(Connection conn, String tableName) throws IOException, SQLException {
-    	analyzeTable(conn, tableName, false);
+        analyzeTable(conn, tableName, false);
     }
     
     public static void analyzeTable(Connection conn, String tableName, boolean transactional) throws IOException, SQLException {
@@ -652,17 +654,17 @@ public class TestUtil {
         Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
         stmt.setDate(6, date);
     }
-	
+    
     public static void validateRowKeyColumns(ResultSet rs, int i) throws SQLException {
-		assertTrue(rs.next());
-		assertEquals(rs.getString(1), "varchar" + String.valueOf(i));
-		assertEquals(rs.getString(2), "char" + String.valueOf(i));
-		assertEquals(rs.getInt(3), i);
-		assertEquals(rs.getInt(4), i);
-		assertEquals(rs.getBigDecimal(5), new BigDecimal(i*0.5d));
-		Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
-		assertEquals(rs.getDate(6), date);
-	}
+        assertTrue(rs.next());
+        assertEquals(rs.getString(1), "varchar" + String.valueOf(i));
+        assertEquals(rs.getString(2), "char" + String.valueOf(i));
+        assertEquals(rs.getInt(3), i);
+        assertEquals(rs.getInt(4), i);
+        assertEquals(rs.getBigDecimal(5), new BigDecimal(i*0.5d));
+        Date date = new Date(DateUtil.parseDate("2015-01-01 00:00:00").getTime() + (i - 1) * MILLIS_IN_DAY);
+        assertEquals(rs.getDate(6), date);
+    }
     
     public static String getTableName(Boolean mutable, Boolean transactional) {
         StringBuilder tableNameBuilder = new StringBuilder(DEFAULT_DATA_TABLE_NAME);
@@ -694,7 +696,7 @@ public class TestUtil {
                 
                 @Override
                 public SortOrder getSortOrder() {
-                	return SortOrder.getDefault();
+                    return SortOrder.getDefault();
                 }
                 
                 @Override
@@ -720,10 +722,14 @@ public class TestUtil {
                 public boolean isRowTimestamp() {
                     return false;
                 }
-    			@Override
-    			public boolean isDynamic() {
-    				return false;
-    			}
+                @Override
+                public boolean isDynamic() {
+                    return false;
+                }
+                @Override
+                public byte[] getColumnQualifierBytes() {
+                    return SINGLE_COLUMN_NAME.getBytes();
+                }
             })), null);
             aggregationManager.setAggregators(new ClientAggregators(Collections.<SingleAggregateFunction>singletonList(func), 1));
             ClientAggregators aggregators = aggregationManager.getAggregators();
@@ -765,15 +771,26 @@ public class TestUtil {
     
         // We simply write a marker row, request a major compaction, and then wait until the marker
         // row is gone
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), tableName));
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        try (HTableInterface htable = services.getTable(Bytes.toBytes(tableName))) {
+        MutationState mutationState = pconn.getMutationState();
+        if (table.isTransactional()) {
+            mutationState.startTransaction();
+        }
+        try (HTableInterface htable = mutationState.getHTable(table)) {
             byte[] markerRowKey = Bytes.toBytes("TO_DELETE");
-        
+           
             Put put = new Put(markerRowKey);
-            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, HConstants.EMPTY_BYTE_ARRAY,
-                    HConstants.EMPTY_BYTE_ARRAY);
+            put.add(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             htable.put(put);
-            htable.delete(new Delete(markerRowKey));
+            Delete delete = new Delete(markerRowKey);
+            delete.deleteColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+            htable.delete(delete);
+            htable.close();
+            if (table.isTransactional()) {
+                mutationState.commit();
+            }
         
             HBaseAdmin hbaseAdmin = services.getAdmin();
             hbaseAdmin.flush(tableName);
@@ -782,19 +799,28 @@ public class TestUtil {
         
             boolean compactionDone = false;
             while (!compactionDone) {
-                Thread.sleep(2000L);
+                Thread.sleep(6000L);
                 Scan scan = new Scan();
                 scan.setStartRow(markerRowKey);
                 scan.setStopRow(Bytes.add(markerRowKey, new byte[] { 0 }));
                 scan.setRaw(true);
         
-                ResultScanner scanner = htable.getScanner(scan);
-                List<Result> results = Lists.newArrayList(scanner);
-                LOG.info("Results: " + results);
-                compactionDone = results.isEmpty();
-                scanner.close();
-        
+                try (HTableInterface htableForRawScan = services.getTable(Bytes.toBytes(tableName))) {
+                    ResultScanner scanner = htableForRawScan.getScanner(scan);
+                    List<Result> results = Lists.newArrayList(scanner);
+                    LOG.info("Results: " + results);
+                    compactionDone = results.isEmpty();
+                    scanner.close();
+                }
                 LOG.info("Compaction done: " + compactionDone);
+                
+                // need to run compaction after the next txn snapshot has been written so that compaction can remove deleted rows
+                if (!compactionDone && table.isTransactional()) {
+                    hbaseAdmin = services.getAdmin();
+                    hbaseAdmin.flush(tableName);
+                    hbaseAdmin.majorCompact(tableName);
+                    hbaseAdmin.close();
+                }
             }
         }
     }
@@ -821,4 +847,3 @@ public class TestUtil {
     }
 
 }
-

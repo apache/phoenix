@@ -502,4 +502,9 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             fail();
         }
     }
+    
+    @Test
+    public void testCreateTableIfNotExistsForEncodedColumnNames() throws Exception {
+        
+    }
 }

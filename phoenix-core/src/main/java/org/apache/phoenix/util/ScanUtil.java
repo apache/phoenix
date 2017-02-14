@@ -63,6 +63,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -893,6 +894,15 @@ public class ScanUtil {
             return false;
         }
         return true;
+    }
+    
+    public static boolean hasDynamicColumns(PTable table) {
+        for (PColumn col : table.getColumns()) {
+            if (col.isDynamic()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean isIndexRebuild(Scan scan) {

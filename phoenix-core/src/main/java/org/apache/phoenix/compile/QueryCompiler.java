@@ -94,7 +94,7 @@ public class QueryCompiler {
      */
     private static final String LOAD_COLUMN_FAMILIES_ON_DEMAND_ATTR = "_ondemand_";
     private final PhoenixStatement statement;
-    private final Scan scan;
+	private final Scan scan;
     private final Scan originalScan;
     private final ColumnResolver resolver;
     private final SelectStatement select;

@@ -42,6 +42,7 @@ import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.ValueBitSet;
+import org.apache.phoenix.schema.tuple.PositionBasedResultTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ServerUtil;
@@ -61,9 +62,10 @@ public class HashJoinRegionScanner implements RegionScanner {
     private List<Tuple>[] tempTuples;
     private ValueBitSet tempDestBitSet;
     private ValueBitSet[] tempSrcBitSet;
+    private final boolean useQualifierAsListIndex;
     
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env) throws IOException {
+    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env, boolean useQualifierAsIndex) throws IOException {
         this.env = env;
         this.scanner = scanner;
         this.projector = projector;
@@ -104,13 +106,13 @@ public class HashJoinRegionScanner implements RegionScanner {
             this.tempDestBitSet = ValueBitSet.newInstance(joinInfo.getJoinedSchema());
             this.projector.setValueBitSet(tempDestBitSet);
         }
+        this.useQualifierAsListIndex = useQualifierAsIndex;
     }
     
     private void processResults(List<Cell> result, boolean hasBatchLimit) throws IOException {
         if (result.isEmpty())
             return;
-        
-        Tuple tuple = new ResultTuple(Result.create(result));
+        Tuple tuple = useQualifierAsListIndex ? new PositionBasedResultTuple(result) : new ResultTuple(Result.create(result));
         // For backward compatibility. In new versions, HashJoinInfo.forceProjection()
         // always returns true.
         if (joinInfo.forceProjection()) {
@@ -314,7 +316,6 @@ public class HashJoinRegionScanner implements RegionScanner {
                 processResults(result, limit >= 0);
                 result.clear();
             }
-            
             return nextInQueue(result);
         } catch (Throwable t) {
             ServerUtil.throwIOException(env.getRegion().getRegionNameAsString(), t);

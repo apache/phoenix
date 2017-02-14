@@ -125,4 +125,5 @@ public abstract class KeyValueBuilder {
   public abstract KVComparator getKeyValueComparator();
   
   public abstract List<Mutation> cloneIfNecessary(List<Mutation> mutations);
+  
 }

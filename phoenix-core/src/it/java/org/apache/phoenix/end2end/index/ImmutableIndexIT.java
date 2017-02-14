@@ -52,6 +52,7 @@ import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -70,6 +71,7 @@ import com.google.common.collect.Maps;
 public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
 
     private final boolean localIndex;
+    private final boolean columnEncoded;
     private final String tableDDLOptions;
 
     private volatile boolean stopThreads = false;
@@ -78,9 +80,15 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
     private static String INDEX_DDL;
     public static final AtomicInteger NUM_ROWS = new AtomicInteger(0);
 
-    public ImmutableIndexIT(boolean localIndex, boolean transactional) {
-        this.localIndex = localIndex;
+    public ImmutableIndexIT(boolean localIndex, boolean transactional, boolean columnEncoded) {
         StringBuilder optionBuilder = new StringBuilder("IMMUTABLE_ROWS=true");
+        this.localIndex = localIndex;
+        this.columnEncoded = columnEncoded;
+        if (!columnEncoded) {
+            if (optionBuilder.length()!=0)
+                optionBuilder.append(",");
+            optionBuilder.append("COLUMN_ENCODED_BYTES=0,IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+        }
         if (transactional) {
             optionBuilder.append(", TRANSACTIONAL=true");
         }
@@ -98,11 +106,13 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
 
-    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1}") // name is used by failsafe as file name in reports
+    @Parameters(name="ImmutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
 		return Arrays.asList(new Boolean[][] { 
-				{ false, false }, { false, true },
-				{ true, false }, { true, true } });
+				{ false, false, false }, { false, false, true },
+				{ false, true, false }, { false, true, true },
+				{ true, false, false }, { true, false, true },
+                { true, true, false }, { true, true, true } });
     }
 
     @Test

@@ -100,4 +100,8 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     public boolean equals(Object o) {
 	    return getDelegate().equals(o);
 	}
+    @Override
+    public byte[] getColumnQualifierBytes() {
+        return getDelegate().getColumnQualifierBytes();
+    }
 }
