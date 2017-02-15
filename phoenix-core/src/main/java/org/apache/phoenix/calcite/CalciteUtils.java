@@ -107,6 +107,8 @@ import org.apache.phoenix.expression.function.PowerFunction;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SqrtFunction;
+import org.apache.phoenix.expression.function.StddevPopFunction;
+import org.apache.phoenix.expression.function.StddevSampFunction;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
@@ -1007,6 +1009,20 @@ public class CalciteUtils {
             public FunctionExpression newFunction(SqlFunction sqlFunc,
                     List<Expression> args) {
                 return new MinAggregateFunction(args, null);
+            }
+        });
+        FUNCTION_MAP.put("STDDEV_POP", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                return new StddevPopFunction(args);
+            }
+        });
+        FUNCTION_MAP.put("STDDEV_SAMP", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args) {
+                return new StddevSampFunction(args);
             }
         });
     }
