@@ -187,7 +187,11 @@
       <artifactId>json-path</artifactId>
       <version>2.2.0</version>
     </dependency>
-
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>${commons-csv.version}</version>
+    </dependency>
     <!-- Main dependency on flume. The last to avoid using old commons-io in IT -->
     <dependency>
       <groupId>org.apache.flume</groupId>
