@@ -99,7 +99,7 @@ public class PhoenixSinkIT extends BaseHBaseManagedTimeIT {
         sinkContext = new Context ();
         sinkContext.put(FlumeConstants.CONFIG_TABLE, "test");
         sinkContext.put(FlumeConstants.CONFIG_JDBC_URL, getUrl());
-        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER,"csv");
+        sinkContext.put(FlumeConstants.CONFIG_SERIALIZER,"unknown");
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_COLUMN_NAMES,"col1,col2");
         sinkContext.put(FlumeConstants.CONFIG_SERIALIZER_PREFIX + FlumeConstants.CONFIG_ROWKEY_TYPE_GENERATOR,DefaultKeyGenerator.TIMESTAMP.name());
 
