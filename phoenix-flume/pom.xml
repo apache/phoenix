@@ -178,9 +178,9 @@
 
     <!-- to work with json data using flume -->
     <dependency>
-      <groupId>org.json</groupId>
+      <groupId>com.tdunning</groupId>
       <artifactId>json</artifactId>
-      <version>20160212</version>
+      <version>1.8</version>
     </dependency>
     <dependency>
       <groupId>com.jayway.jsonpath</groupId>
