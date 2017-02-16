@@ -62,6 +62,7 @@ public class SecureUserConnectionsTest {
     private static final File KEYTAB_DIR = new File(TEMP_DIR, "keytabs");
     private static final File KDC_DIR = new File(TEMP_DIR, "kdc");
     private static final List<File> USER_KEYTAB_FILES = new ArrayList<>();
+    private static final List<File> SERVICE_KEYTAB_FILES = new ArrayList<>();
     private static final int NUM_USERS = 3;
     private static final Properties EMPTY_PROPERTIES = new Properties();
     private static final String BASE_URL = PhoenixRuntime.JDBC_PROTOCOL + ":localhost:2181";
@@ -90,6 +91,7 @@ public class SecureUserConnectionsTest {
                 + " attempts.", started);
 
         createUsers(NUM_USERS);
+        createServiceUsers(NUM_USERS);
 
         final Configuration conf = new Configuration(false);
         conf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
@@ -163,6 +165,16 @@ public class SecureUserConnectionsTest {
         }
     }
 
+    private static void createServiceUsers(int numUsers) throws Exception {
+        assertNotNull("KDC is null, was setup method called?", KDC);
+        for (int i = 1; i <= numUsers; i++) {
+            String principal = "user" + i + "/localhost";
+            File keytabFile = new File(KEYTAB_DIR, "user" + i + ".service.keytab");
+            KDC.createPrincipal(keytabFile, principal);
+            SERVICE_KEYTAB_FILES.add(keytabFile);
+        }
+    }
+
     /**
      * Returns the principal for a user.
      *
@@ -172,6 +184,10 @@ public class SecureUserConnectionsTest {
         return "user" + offset + "@" + KDC.getRealm();
     }
 
+    private static String getServicePrincipal(int offset) {
+        return "user" + offset + "/localhost@" + KDC.getRealm();
+    }
+
     /**
      * Returns the keytab file for the corresponding principal with the same {@code offset}.
      * Requires {@link #createUsers(int)} to have been called with a value greater than {@code offset}.
@@ -179,8 +195,16 @@ public class SecureUserConnectionsTest {
      * @param offset The "number" for the principal whose keytab should be returned. One-based, not zero-based.
      */
     public static File getUserKeytabFile(int offset) {
-        assertTrue("Invalid offset: " + offset, (offset - 1) >= 0 && (offset - 1) < USER_KEYTAB_FILES.size());
-        return USER_KEYTAB_FILES.get(offset - 1);
+        return getKeytabFile(offset, USER_KEYTAB_FILES);
+    }
+
+    public static File getServiceKeytabFile(int offset) {
+        return getKeytabFile(offset, SERVICE_KEYTAB_FILES);
+    }
+
+    private static File getKeytabFile(int offset, List<File> keytabs) {
+        assertTrue("Invalid offset: " + offset, (offset - 1) >= 0 && (offset - 1) < keytabs.size());
+        return keytabs.get(offset - 1);
     }
 
     private String joinUserAuthentication(String origUrl, String principal, File keytab) {
@@ -386,6 +410,44 @@ public class SecureUserConnectionsTest {
         connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(3, connections.size());
         // Sanity check
+        verifyAllConnectionsAreKerberosBased(connections);
+    }
+
+    @Test
+    public void testHostSubstitutionInUrl() throws Exception {
+        final HashSet<ConnectionInfo> connections = new HashSet<>();
+        final String princ1 = getServicePrincipal(1);
+        final File keytab1 = getServiceKeytabFile(1);
+        final String princ2 = getServicePrincipal(2);
+        final File keytab2 = getServiceKeytabFile(2);
+        final String url1 = joinUserAuthentication(BASE_URL, princ1, keytab1);
+        final String url2 = joinUserAuthentication(BASE_URL, princ2, keytab2);
+
+        // Using the same UGI should result in two equivalent ConnectionInfo objects
+        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        assertEquals(1, connections.size());
+        // Sanity check
+        verifyAllConnectionsAreKerberosBased(connections);
+
+        // Logging in as the same user again should not duplicate connections
+        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        assertEquals(1, connections.size());
+        // Sanity check
+        verifyAllConnectionsAreKerberosBased(connections);
+
+        // Add a second one.
+        connections.add(ConnectionInfo.create(url2).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        assertEquals(2, connections.size());
+        verifyAllConnectionsAreKerberosBased(connections);
+
+        // Again, verify this user is not duplicated
+        connections.add(ConnectionInfo.create(url2).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        assertEquals(2, connections.size());
+        verifyAllConnectionsAreKerberosBased(connections);
+
+        // Because the UGI instances are unique, so are the connections
+        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        assertEquals(3, connections.size());
         verifyAllConnectionsAreKerberosBased(connections);
     }
 
