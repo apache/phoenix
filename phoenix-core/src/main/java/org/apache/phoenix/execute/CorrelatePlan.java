@@ -159,7 +159,7 @@ public class CorrelatePlan extends DelegateQueryPlan {
                     joined = rhsBitSet == ValueBitSet.EMPTY_VALUE_BITSET ?
                             current : TupleProjector.mergeProjectedValue(
                                     convertLhs(current), joinedSchema, destBitSet,
-                                    rhsCurrent, rhsSchema, rhsBitSet, rhsFieldPosition, true);
+                                    rhsCurrent, rhsSchema, rhsBitSet, rhsFieldPosition);
                 } catch (IOException e) {
                     throw new SQLException(e);
                 }

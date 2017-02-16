@@ -243,7 +243,7 @@ public class TupleProjector {
         }
     }
     
-    public static class OldProjectedValueTuple extends ProjectedValueTuple {
+    public class OldProjectedValueTuple extends ProjectedValueTuple {
 
         public OldProjectedValueTuple(byte[] keyBuffer, int keyOffset, int keyLength, long timestamp,
                 byte[] projectedValue, int valueOffset, int valueLength, int bitSetLen) {
@@ -299,7 +299,7 @@ public class TupleProjector {
     }
     
     public static ProjectedValueTuple mergeProjectedValue(ProjectedValueTuple dest, KeyValueSchema destSchema, ValueBitSet destBitSet,
-    		Tuple src, KeyValueSchema srcSchema, ValueBitSet srcBitSet, int offset, boolean useNewValueColumnQualifier) throws IOException {
+    		Tuple src, KeyValueSchema srcSchema, ValueBitSet srcBitSet, int offset) throws IOException {
     	ImmutableBytesWritable destValue = dest.getProjectedValue();
         int origDestBitSetLen = dest.getBitSetLength();
     	destBitSet.clear();
@@ -326,8 +326,7 @@ public class TupleProjector {
     	    o = Bytes.putBytes(merged, o, srcValue.get(), srcValue.getOffset(), srcValueLen);
     	}
     	destBitSet.toBytes(merged, o);
-        return useNewValueColumnQualifier ? new ProjectedValueTuple(dest, dest.getTimestamp(), merged, 0, merged.length, destBitSetLen) : 
-            new OldProjectedValueTuple(dest, dest.getTimestamp(), merged, 0, merged.length, destBitSetLen);
+        return new ProjectedValueTuple(dest, dest.getTimestamp(), merged, 0, merged.length, destBitSetLen);
     }
 
     public KeyValueSchema getSchema() {
