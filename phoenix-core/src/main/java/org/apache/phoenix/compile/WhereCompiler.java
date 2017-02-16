@@ -20,6 +20,7 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -51,15 +52,14 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -210,27 +210,13 @@ public class WhereCompiler {
     }
 
     private static final class Counter {
-        public enum Count {NONE, SINGLE, MULTIPLE};
-        private Count count = Count.NONE;
-        private KeyValueColumnExpression column;
-
-        public void increment(KeyValueColumnExpression column) {
-            switch (count) {
-                case NONE:
-                    count = Count.SINGLE;
-                    this.column = column;
-                    break;
-                case SINGLE:
-                    count = column.equals(this.column) ? Count.SINGLE : Count.MULTIPLE;
-                    break;
-                case MULTIPLE:
-                    break;
-
-            }
+        private Set<KeyValueColumnExpression> columns = new HashSet<>();
+        public void addColumn(KeyValueColumnExpression column) {
+            columns.add(column);
         }
         
-        public Count getCount() {
-            return count;
+        public int getUniqueKeyValueColumnCount() {
+            return columns.size();
         }
     }
 
@@ -248,36 +234,23 @@ public class WhereCompiler {
             Filter filter = null;
             final Counter counter = new Counter();
             whereClause.accept(new KeyValueExpressionVisitor() {
-
-                @Override
-                public Iterator<Expression> defaultIterator(Expression node) {
-                    // Stop traversal once we've found multiple KeyValue columns
-                    if (counter.getCount() == Counter.Count.MULTIPLE) {
-                        return Iterators.emptyIterator();
-                    }
-                    return super.defaultIterator(node);
-                }
-
                 @Override
                 public Void visit(KeyValueColumnExpression expression) {
-                    counter.increment(expression);
+                    counter.addColumn(expression);
                     return null;
                 }
             });
-            switch (counter.getCount()) {
-            case NONE:
+            int uniqueKeyValueExpressionsCount = counter.getUniqueKeyValueColumnCount();
+            if (uniqueKeyValueExpressionsCount == 0) {
                 PTable table = context.getResolver().getTables().get(0).getTable();
                 byte[] essentialCF = table.getType() == PTableType.VIEW 
                         ? ByteUtil.EMPTY_BYTE_ARRAY 
                         : SchemaUtil.getEmptyColumnFamily(table);
                 filter = new RowKeyComparisonFilter(whereClause, essentialCF);
-                break;
-            case SINGLE:
+            } else if (uniqueKeyValueExpressionsCount == 1) {
                 filter = disambiguateWithFamily ? new SingleCFCQKeyValueComparisonFilter(whereClause) : new SingleCQKeyValueComparisonFilter(whereClause);
-                break;
-            case MULTIPLE:
-                filter = disambiguateWithFamily ? new MultiCFCQKeyValueComparisonFilter(whereClause) : new MultiCQKeyValueComparisonFilter(whereClause);
-                break;
+            } else {
+                filter = disambiguateWithFamily ? new MultiCFCQKeyValueComparisonFilter(whereClause, counter.getUniqueKeyValueColumnCount()) : new MultiCQKeyValueComparisonFilter(whereClause, counter.getUniqueKeyValueColumnCount());
             }
             scan.setFilter(filter);
         }
