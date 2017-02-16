@@ -114,6 +114,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SCAN_STOP_ROW_SUFFIX = "_ScanStopRowSuffix";
     public final static String MIN_QUALIFIER = "_MinQualifier";
     public final static String MAX_QUALIFIER = "_MaxQualifier";
+    public final static String USE_NEW_VALUE_COLUMN_QUALIFIER = "_UseNewValueColumnQualifier";
     public final static String QUALIFIER_ENCODING_SCHEME = "_QualifierEncodingScheme";
     public final static String IMMUTABLE_STORAGE_ENCODING_SCHEME = "_ImmutableStorageEncodingScheme";
     public final static String USE_ENCODED_COLUMN_QUALIFIER_LIST = "_UseEncodedColumnQualifierList";
@@ -128,6 +129,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
     public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
     protected Configuration rawConf;
     protected QualifierEncodingScheme encodingScheme;
+    protected boolean useNewValueColumnQualifier;
 
     @Override
     public void start(CoprocessorEnvironment e) throws IOException {
@@ -201,6 +203,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             ScanUtil.setupReverseScan(scan);
         }
         this.encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+        this.useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);
         return s;
     }
 
@@ -456,7 +459,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     }
                     if (projector != null) {
                         Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) : new ResultTuple(Result.create(result));
-                        Tuple tuple = projector.projectResults(toProject);
+                        Tuple tuple = projector.projectResults(toProject, useNewValueColumnQualifier);
                         result.clear();
                         result.add(tuple.getValue(0));
                         if (arrayElementCell != null) {
@@ -496,7 +499,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                     }
                     if (projector != null) {
                         Tuple toProject = useQualifierAsListIndex ? new PositionBasedMultiKeyValueTuple(result) : new ResultTuple(Result.create(result));
-                        Tuple tuple = projector.projectResults(toProject);
+                        Tuple tuple = projector.projectResults(toProject, useNewValueColumnQualifier);
                         result.clear();
                         result.add(tuple.getValue(0));
                         if(arrayElementCell != null)

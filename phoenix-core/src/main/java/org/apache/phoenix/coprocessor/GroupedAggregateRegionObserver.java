@@ -156,7 +156,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver {
         if (j != null) {
             innerScanner =
                     new HashJoinRegionScanner(innerScanner, p, j, ScanUtil.getTenantId(scan),
-                            c.getEnvironment(), useQualifierAsIndex);
+                            c.getEnvironment(), useQualifierAsIndex, useNewValueColumnQualifier);
         }
 
         long limit = Long.MAX_VALUE;

@@ -67,6 +67,11 @@ public class EncodedColumnsUtil {
         }
     }
     
+    public static final boolean useNewValueColumnQualifier(Scan s) {
+        // null check for backward compatibility
+        return s.getAttribute(BaseScannerRegionObserver.USE_NEW_VALUE_COLUMN_QUALIFIER) == null ? false : true;
+    }
+    
     public static QualifierEncodingScheme getQualifierEncodingScheme(Scan s) {
         // null check for backward compatibility
         return s.getAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME) == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : QualifierEncodingScheme.fromSerializedValue(s.getAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME)[0]);

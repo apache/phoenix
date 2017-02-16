@@ -63,9 +63,10 @@ public class HashJoinRegionScanner implements RegionScanner {
     private ValueBitSet tempDestBitSet;
     private ValueBitSet[] tempSrcBitSet;
     private final boolean useQualifierAsListIndex;
+    private final boolean useNewValueColumnQualifier;
     
     @SuppressWarnings("unchecked")
-    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env, boolean useQualifierAsIndex) throws IOException {
+    public HashJoinRegionScanner(RegionScanner scanner, TupleProjector projector, HashJoinInfo joinInfo, ImmutableBytesPtr tenantId, RegionCoprocessorEnvironment env, boolean useQualifierAsIndex, boolean useNewValueColumnQualifier) throws IOException {
         this.env = env;
         this.scanner = scanner;
         this.projector = projector;
@@ -107,6 +108,7 @@ public class HashJoinRegionScanner implements RegionScanner {
             this.projector.setValueBitSet(tempDestBitSet);
         }
         this.useQualifierAsListIndex = useQualifierAsIndex;
+        this.useNewValueColumnQualifier = useNewValueColumnQualifier;
     }
     
     private void processResults(List<Cell> result, boolean hasBatchLimit) throws IOException {
@@ -116,7 +118,7 @@ public class HashJoinRegionScanner implements RegionScanner {
         // For backward compatibility. In new versions, HashJoinInfo.forceProjection()
         // always returns true.
         if (joinInfo.forceProjection()) {
-            tuple = projector.projectResults(tuple);
+            tuple = projector.projectResults(tuple, useNewValueColumnQualifier);
         }
         
         if (hasBatchLimit)
@@ -148,7 +150,7 @@ public class HashJoinRegionScanner implements RegionScanner {
             } else {
                 KeyValueSchema schema = joinInfo.getJoinedSchema();
                 if (!joinInfo.forceProjection()) { // backward compatibility
-                    tuple = projector.projectResults(tuple);
+                    tuple = projector.projectResults(tuple, useNewValueColumnQualifier);
                 }
                 resultQueue.offer(tuple);
                 for (int i = 0; i < count; i++) {
