@@ -177,10 +177,5 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     protected static int nextRunCount() {
         return runCount.getAndAdd(1);
     }
-    
-    @AfterClass
-    public static void doTeardown() throws Exception {
-        // Don't do anything as tests extending BaseQueryIT use unique table names and sequences for each combination of parameters
-    }
 
 }
