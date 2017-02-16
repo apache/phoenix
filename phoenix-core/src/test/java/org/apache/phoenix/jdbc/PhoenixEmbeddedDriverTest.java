@@ -158,4 +158,14 @@ public class PhoenixEmbeddedDriverTest {
         assertTrue(driver.acceptsURL("jdbc:phoenix:localhost:123;untest=true;foo=bar"));
         DriverManager.deregisterDriver(driver);
     }
+
+    @Test
+    public void testPrincipalsMatching() throws Exception {
+        assertTrue(ConnectionInfo.isSameName("user@EXAMPLE.COM", "user@EXAMPLE.COM"));
+        assertTrue(ConnectionInfo.isSameName("user/localhost@EXAMPLE.COM", "user/localhost@EXAMPLE.COM"));
+        // the user provided name might have a _HOST in it, which should be replaced by the hostname
+        assertTrue(ConnectionInfo.isSameName("user/localhost@EXAMPLE.COM", "user/_HOST@EXAMPLE.COM", "localhost"));
+        assertFalse(ConnectionInfo.isSameName("user/foobar@EXAMPLE.COM", "user/_HOST@EXAMPLE.COM", "localhost"));
+        assertFalse(ConnectionInfo.isSameName("user@EXAMPLE.COM", "user/_HOST@EXAMPLE.COM", "localhost"));
+    }
 }
