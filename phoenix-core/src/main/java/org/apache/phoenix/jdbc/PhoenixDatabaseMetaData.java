@@ -78,7 +78,6 @@ import com.google.common.collect.Lists;
  * 
  */
 public class PhoenixDatabaseMetaData implements DatabaseMetaData {
-    public static final int INDEX_NAME_INDEX = 4; // Shared with FAMILY_NAME_INDEX
     public static final int FAMILY_NAME_INDEX = 4;
     public static final int COLUMN_NAME_INDEX = 3;
     public static final int TABLE_NAME_INDEX = 2;
@@ -124,6 +123,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] PHYSICAL_NAME_BYTES = Bytes.toBytes(PHYSICAL_NAME);
 
     public static final String COLUMN_FAMILY = "COLUMN_FAMILY";
+    public static final byte[] COLUMN_FAMILY_BYTES = Bytes.toBytes(COLUMN_FAMILY);
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
     public static final String TABLE_SCHEM = "TABLE_SCHEM";
@@ -514,6 +514,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (colPattern == null || colPattern.length() == 0) {
             appendConjunction(where);
             where.append(COLUMN_NAME + " is not null" );
+            appendConjunction(where);
+            where.append(LINK_TYPE + " is null" );
         }
         boolean isTenantSpecificConnection = connection.getTenantId() != null;
         if (isTenantSpecificConnection) {

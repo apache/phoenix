@@ -903,6 +903,7 @@ public class UpgradeUtil {
                         "TABLE_SCHEM %s " +
                         "AND TABLE_NAME = ? " +
                         "AND COLUMN_NAME IS NOT NULL " +
+                        "AND LINK_TYPE IS NULL " +
                         "ORDER BY " + 
                         ORDINAL_POSITION;
 
@@ -1066,6 +1067,78 @@ public class UpgradeUtil {
             if (clearCache) {
                 metaConnection.getQueryServices().clearCache();
             }
+        } finally {
+            if (metaConnection != null) {
+                metaConnection.close();
+            }
+        }
+    }
+    
+    /**
+     * Upgrade the metadata in the catalog table to enable adding columns to tables with views
+     * @param oldMetaConnection caller should take care of closing the passed connection appropriately
+     * @throws SQLException
+     */
+    public static void upgradeTo4_11_0(PhoenixConnection oldMetaConnection) throws SQLException {
+        PhoenixConnection metaConnection = null;
+        try {
+            // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
+            metaConnection = new PhoenixConnection(oldMetaConnection, HConstants.LATEST_TIMESTAMP);
+            logger.info("Upgrading metadata to add parent to child links for views");
+            metaConnection.commit();
+            //     physical table 
+            //         |  
+            //     child view    
+            //         |
+            //     grand child view
+            // Create parent table to child view CHILD link. As the PARENT link from child view to physical table is not there (it gets overwritten with the PHYSICAL link) use the PHYSICAL link instead.
+            // We need to filter out grand child views PHYSICAL links while running this query
+            String createChildLink = "UPSERT INTO SYSTEM.CATALOG(TENANT_ID,TABLE_SCHEM,TABLE_NAME,COLUMN_NAME,COLUMN_FAMILY,LINK_TYPE)" +
+                                        "SELECT PARENT_TENANT_ID," + 
+                                        "       CASE INSTR(COLUMN_FAMILY,'.')" +
+                                        "              WHEN 0 THEN NULL" + 
+                                        "              ELSE REGEXP_SUBSTR(COLUMN_FAMILY,'[^\\.]+')" + 
+                                        "       END AS PARENT_SCHEMA," + 
+                                        "       CASE INSTR(COLUMN_FAMILY,'.')" + 
+                                        "              WHEN 0 THEN COLUMN_FAMILY" + 
+                                        "              ELSE SUBSTR(COLUMN_FAMILY,INSTR(COLUMN_FAMILY,'.')+1)" + 
+                                        "       END AS PARENT_TABLE," + 
+                                        "       TENANT_ID," + 
+                                        "       CASE WHEN TABLE_SCHEM IS NULL THEN TABLE_NAME" + 
+                                        "            ELSE TABLE_SCHEM||'.'||TABLE_NAME" + 
+                                        "       END AS VIEW_NAME," + 
+                                        "       4 AS LINK_TYPE " + 
+                                        "FROM SYSTEM.CATALOG(PARENT_TENANT_ID VARCHAR)" + 
+                                        "WHERE LINK_TYPE = 2 " +
+                                        "AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) NOT IN (   " +
+                                        "       SELECT TENANT_ID, " +
+                                        "              TABLE_SCHEM, " +
+                                        "              TABLE_NAME " +
+                                        "       FROM   SYSTEM.CATALOG " +
+                                        "       WHERE  LINK_TYPE = 3 )";
+            metaConnection.createStatement().execute(createChildLink);
+            metaConnection.commit();
+            // Create child view to grand child view CHILD link using grand child view to child view PARENT link.
+            String createGrandChildLink = "UPSERT INTO SYSTEM.CATALOG(TENANT_ID,TABLE_SCHEM,TABLE_NAME,COLUMN_NAME,COLUMN_FAMILY,LINK_TYPE)" +
+                                        "SELECT PARENT_TENANT_ID," + 
+                                        "       CASE INSTR(COLUMN_FAMILY,'.')" +
+                                        "              WHEN 0 THEN NULL" + 
+                                        "              ELSE REGEXP_SUBSTR(COLUMN_FAMILY,'[^\\.]+')" + 
+                                        "       END AS PARENT_SCHEMA," + 
+                                        "       CASE INSTR(COLUMN_FAMILY,'.')" + 
+                                        "              WHEN 0 THEN COLUMN_FAMILY" + 
+                                        "              ELSE SUBSTR(COLUMN_FAMILY,INSTR(COLUMN_FAMILY,'.')+1)" + 
+                                        "       END AS PARENT_TABLE," + 
+                                        "       TENANT_ID," + 
+                                        "       CASE WHEN TABLE_SCHEM IS NULL THEN TABLE_NAME" + 
+                                        "            ELSE TABLE_SCHEM||'.'||TABLE_NAME" + 
+                                        "       END AS VIEW_NAME," + 
+                                        "       4 AS LINK_TYPE " + 
+                                        "FROM SYSTEM.CATALOG(PARENT_TENANT_ID VARCHAR)" + 
+                                        "WHERE LINK_TYPE = 3 ";
+            metaConnection.createStatement().execute(createGrandChildLink);
+            metaConnection.commit();
+            metaConnection.getQueryServices().clearCache();
         } finally {
             if (metaConnection != null) {
                 metaConnection.close();
