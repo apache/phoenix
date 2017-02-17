@@ -59,6 +59,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
 import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
+import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_11_0;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
@@ -2763,6 +2764,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, null,
                             MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_10_0);
                     clearCache();
+                }
+                if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0) {
+                    upgradeTo4_11_0(metaConnection);
                 }
             }
 

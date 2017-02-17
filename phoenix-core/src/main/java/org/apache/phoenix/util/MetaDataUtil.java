@@ -306,6 +306,23 @@ public class MetaDataUtil {
         return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName, QueryConstants.SEPARATOR_BYTE_ARRAY, tableName, QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY, indexName);
     }
     
+    public static byte[] getChildLinkKey(PName parentTenantId, PName parentSchemaName, PName parentTableName, PName viewTenantId, PName viewName) {
+        return ByteUtil.concat(parentTenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : parentTenantId.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                        parentSchemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : parentSchemaName.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                        parentTableName.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        viewTenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : viewTenantId.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                        viewName.getBytes());
+    }
+    
+    public static Cell getCell(List<Cell> cells, byte[] cq) {
+        for (Cell cell : cells) {
+            if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(), cq, 0, cq.length) == 0) {
+                return cell;
+            }
+        }
+        return null;
+    }
+    
     public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         if (getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
             return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));

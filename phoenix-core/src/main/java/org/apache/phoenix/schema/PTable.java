@@ -141,14 +141,18 @@ public interface PTable extends PMetaDataEntity {
          */
         INDEX_TABLE((byte)1),
         /**
-         * Link from a view to its physical table
+         * Link from a view or index to its physical table
          */
         PHYSICAL_TABLE((byte)2),
         /**
          * Link from a view to its parent table
          */
-        PARENT_TABLE((byte)3);
-        
+        PARENT_TABLE((byte)3),
+        /**
+         * Link from a parent table to its child view
+         */
+        CHILD_TABLE((byte)4);
+
         private final byte[] byteValue;
         private final byte serializedValue;
 
