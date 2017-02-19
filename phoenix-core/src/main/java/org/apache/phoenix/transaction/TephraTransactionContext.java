@@ -34,7 +34,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
 
     public TephraTransactionContext(PhoenixTransactionContext ctx, PhoenixConnection connection, boolean threadSafe) {
 
-        this.txServiceClient = connection.getQueryServices().getTransactionSystemClient(); // TODO Should be wrapped for Omid side usage
+        this.txServiceClient = connection.getQueryServices().getTransactionSystemClient();
 
         assert(ctx instanceof TephraTransactionContext);
         TephraTransactionContext tephraTransactionContext = (TephraTransactionContext) ctx;
@@ -191,7 +191,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     @Override
     public boolean isTransactionRunning() {
         if (this.txContext != null) {
-            return (this.txContext.getCurrentTransaction() != null) ? true : false;
+            return (this.txContext.getCurrentTransaction() != null);
         }
 
         if (this.tx != null) {
