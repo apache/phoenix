@@ -17,9 +17,9 @@ import org.apache.tephra.hbase.TransactionAwareHTable;
 public class TephraTransactionTable implements PhoenixTransactionalTable {
 
     private TransactionAwareHTable transactionAwareHTable;
-    
+
     private TephraTransactionContext tephraTransactionContext;
-    
+
     public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
 
         assert(ctx instanceof TephraTransactionContext);

@@ -78,7 +78,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
             txContext.finish();
         } catch (TransactionFailureException e) {
             this.e = e;
-            if (e instanceof TransactionConflictException) { 
+            if (e instanceof TransactionConflictException) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION)
                     .setMessage(e.getMessage())
                     .setRootCause(e)
@@ -124,7 +124,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
                 throw new SQLException(e);
             }
         }
-  
+
         if (txContext == null) {
             tx.setVisibility(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT);
         }
@@ -211,7 +211,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public long getTransactionId() {
         if (this.txContext != null) {
             return txContext.getCurrentTransaction().getTransactionId();
-        } 
+        }
 
         if (tx != null) {
             return tx.getTransactionId();
@@ -224,7 +224,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public long getReadPointer() {
         if (this.txContext != null) {
             return txContext.getCurrentTransaction().getReadPointer();
-        } 
+        }
 
         if (tx != null) {
             return tx.getReadPointer();
@@ -261,7 +261,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public long getWritePointer() {
         if (this.txContext != null) {
             return txContext.getCurrentTransaction().getWritePointer();
-        } 
+        }
 
         if (tx != null) {
             return tx.getWritePointer();
@@ -274,7 +274,7 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public VisibilityLevel getVisibilityLevel() {
         if (this.txContext != null) {
             return txContext.getCurrentTransaction().getVisibilityLevel();
-        } 
+        }
 
         if (tx != null) {
             return tx.getVisibilityLevel();
