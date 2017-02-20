@@ -29,11 +29,11 @@ import sqlline.SqlLine;
  */
 public class SqllineWrapper {
   public static final String HBASE_AUTHENTICATION_ATTR = "hbase.security.authentication";
+  public static final String QUERY_SERVER_SPNEGO_AUTH_DISABLED_ATTRIB = "phoenix.queryserver.spnego.auth.disabled";
+  public static final boolean DEFAULT_QUERY_SERVER_SPNEGO_AUTH_DISABLED = false;
 
-  static UserGroupInformation loginIfNecessary() {
+  static UserGroupInformation loginIfNecessary(Configuration conf) {
     // Try to avoid HBase dependency too. Sadly, we have to bring in all of hadoop-common for this..
-    Configuration conf = new Configuration(false);
-    conf.addResource("hbase-site.xml");
     if ("kerberos".equalsIgnoreCase(conf.get(HBASE_AUTHENTICATION_ATTR))) {
       // sun.security.krb5.principal is the property for setting the principal name, if that
       // isn't set, fall back to user.name and hope for the best.
@@ -68,7 +68,17 @@ public class SqllineWrapper {
   }
 
   public static void main(String[] args) throws Exception {
-    UserGroupInformation ugi = loginIfNecessary();
+    final Configuration conf = new Configuration(false);
+    conf.addResource("hbase-site.xml");
+
+    // Check if the server config says SPNEGO auth is actually disabled.
+    final boolean disableSpnego = conf.getBoolean(QUERY_SERVER_SPNEGO_AUTH_DISABLED_ATTRIB,
+        DEFAULT_QUERY_SERVER_SPNEGO_AUTH_DISABLED);
+    if (disableSpnego) {
+      SqlLine.main(args);
+    }
+
+    UserGroupInformation ugi = loginIfNecessary(conf);
 
     if (null != ugi) {
       final String[] updatedArgs = updateArgsForKerberos(args);
