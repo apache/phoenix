@@ -33,6 +33,9 @@ import static org.mockito.Mockito.when;
 import static org.junit.Assert.assertEquals;
 
 public class PhoenixQueryBuilderTest {
+    private static final PhoenixQueryBuilder BUILDER = PhoenixQueryBuilder.getInstance();
+    private static final String TABLE_NAME = "TEST_TABLE";
+
     private IndexSearchCondition mockedIndexSearchCondition(String comparisionOp,
                                                             Object constantValue,
                                                             Object[] constantValues,
@@ -42,9 +45,11 @@ public class PhoenixQueryBuilderTest {
         IndexSearchCondition condition = mock(IndexSearchCondition.class);
         when(condition.getComparisonOp()).thenReturn(comparisionOp);
 
-        ExprNodeConstantDesc constantDesc = mock(ExprNodeConstantDesc.class);
-        when(constantDesc.getValue()).thenReturn(constantValue);
-        when(condition.getConstantDesc()).thenReturn(constantDesc);
+        if (constantValue != null) {
+            ExprNodeConstantDesc constantDesc = mock(ExprNodeConstantDesc.class);
+            when(constantDesc.getValue()).thenReturn(constantValue);
+            when(condition.getConstantDesc()).thenReturn(constantDesc);
+        }
 
         ExprNodeColumnDesc columnDesc = mock(ExprNodeColumnDesc.class);
         when(columnDesc.getColumn()).thenReturn(columnName);
@@ -69,7 +74,6 @@ public class PhoenixQueryBuilderTest {
 
     @Test
     public void testBuildQueryWithCharColumns() throws IOException {
-        final String tableName = "TEST_TABLE";
         final String COLUMN_CHAR = "Column_Char";
         final String COLUMN_VARCHAR = "Column_VChar";
         final String expectedQueryPrefix = "select /*+ NO_CACHE  */ " + COLUMN_CHAR + "," + COLUMN_VARCHAR +
@@ -78,12 +82,12 @@ public class PhoenixQueryBuilderTest {
         JobConf jobConf = new JobConf();
         List<String> readColumnList = Lists.newArrayList(COLUMN_CHAR, COLUMN_VARCHAR);
         List<IndexSearchCondition> searchConditions = Lists.newArrayList(
-            mockedIndexSearchCondition("GenericUDFOPEqual", "CHAR_VALUE", null, COLUMN_CHAR, "char(10)", false),
-            mockedIndexSearchCondition("GenericUDFOPEqual", "CHAR_VALUE2", null, COLUMN_VARCHAR, "varchar(10)", false)
+                mockedIndexSearchCondition("GenericUDFOPEqual", "CHAR_VALUE", null, COLUMN_CHAR, "char(10)", false),
+                mockedIndexSearchCondition("GenericUDFOPEqual", "CHAR_VALUE2", null, COLUMN_VARCHAR, "varchar(10)", false)
         );
 
         assertEquals(expectedQueryPrefix + "Column_Char = 'CHAR_VALUE' and Column_VChar = 'CHAR_VALUE2'",
-                PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName, readColumnList, searchConditions));
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
                 mockedIndexSearchCondition("GenericUDFIn", null,
@@ -91,7 +95,15 @@ public class PhoenixQueryBuilderTest {
         );
 
         assertEquals(expectedQueryPrefix + "Column_Char in ('CHAR1', 'CHAR2', 'CHAR3')",
-                PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName, readColumnList, searchConditions));
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
+
+        searchConditions = Lists.newArrayList(
+                mockedIndexSearchCondition("GenericUDFIn", null,
+                        new Object[]{"CHAR1", "CHAR2", "CHAR3"}, COLUMN_CHAR, "char(10)", true)
+        );
+
+        assertEquals(expectedQueryPrefix + "Column_Char not in ('CHAR1', 'CHAR2', 'CHAR3')",
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
                 mockedIndexSearchCondition("GenericUDFBetween", null,
@@ -99,6 +111,63 @@ public class PhoenixQueryBuilderTest {
         );
 
         assertEquals(expectedQueryPrefix + "Column_Char between 'CHAR1' and 'CHAR2'",
-                PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName, readColumnList, searchConditions));
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
+
+        searchConditions = Lists.newArrayList(
+                mockedIndexSearchCondition("GenericUDFBetween", null,
+                        new Object[]{"CHAR1", "CHAR2"}, COLUMN_CHAR, "char(10)", true)
+        );
+
+        assertEquals(expectedQueryPrefix + "Column_Char not between 'CHAR1' and 'CHAR2'",
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
+    }
+
+    @Test
+    public void testBuildBetweenQueryWithDateColumns() throws IOException {
+        final String COLUMN_DATE = "Column_Date";
+        final String tableName = "TEST_TABLE";
+        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ " + COLUMN_DATE +
+                " from " + tableName + " where ";
+
+        JobConf jobConf = new JobConf();
+        List<String> readColumnList = Lists.newArrayList(COLUMN_DATE);
+
+        List<IndexSearchCondition> searchConditions = Lists.newArrayList(
+                mockedIndexSearchCondition("GenericUDFBetween", null,
+                        new Object[]{"1992-01-02", "1992-02-02"}, COLUMN_DATE, "date", false)
+        );
+
+        assertEquals(expectedQueryPrefix +
+                        COLUMN_DATE + " between to_date('1992-01-02') and to_date('1992-02-02')",
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
+
+        searchConditions = Lists.newArrayList(
+                mockedIndexSearchCondition("GenericUDFBetween", null,
+                        new Object[]{"1992-01-02", "1992-02-02"}, COLUMN_DATE, "date", true)
+        );
+
+        assertEquals(expectedQueryPrefix +
+                        COLUMN_DATE + " not between to_date('1992-01-02') and to_date('1992-02-02')",
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
+    }
+
+    @Test
+    public void testBuildQueryWithNotNull() throws IOException {
+        final String COLUMN_DATE = "Column_Date";
+        final String tableName = "TEST_TABLE";
+        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ " + COLUMN_DATE +
+                " from " + tableName + " where ";
+
+        JobConf jobConf = new JobConf();
+        List<String> readColumnList = Lists.newArrayList(COLUMN_DATE);
+
+        List<IndexSearchCondition> searchConditions = Lists.newArrayList(
+                mockedIndexSearchCondition("GenericUDFOPNotNull", null,
+                        null, COLUMN_DATE, "date", true)
+        );
+
+        assertEquals(expectedQueryPrefix +
+                        COLUMN_DATE + " is not null ",
+                BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
     }
 }
