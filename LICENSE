@@ -209,16 +209,6 @@ included inline.
 
 ---
 
-This product bundles the following which are licensed under the 3-clause BSD license.
-
-Sqlline (https://github.com/julianhyde/sqlline)
-
-  Copyright (c) 2002,2003,2004,2005,2006,2007 Marc Prud'hommeaux
-  Copyright (c) 2004-2010 The Eigenbase Project
-  Copyright (c) 2013-2014 Julian Hyde
-
----
-
 This product bundles the following which are licensed under the MIT license.
 
 Portions of AngularJS (https://angularjs.org/) Copyright (c) 2010-2016 Google, Inc.
