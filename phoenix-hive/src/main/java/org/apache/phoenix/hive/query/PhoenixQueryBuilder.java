@@ -18,6 +18,7 @@
 package org.apache.phoenix.hive.query;
 
 import com.google.common.base.CharMatcher;
+import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
@@ -35,6 +36,7 @@ import javax.annotation.Nullable;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hive.ql.plan.ExprNodeConstantDesc;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.mapred.JobConf;
@@ -42,6 +44,7 @@ import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.hive.ql.index.IndexSearchCondition;
 import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.hive.util.PhoenixUtil;
+import org.apache.phoenix.util.StringUtil;
 
 /**
  * Query builder. Produces a query depending on the colummn list and conditions
@@ -87,7 +90,7 @@ public class PhoenixQueryBuilder {
             readColumnList, String whereClause, String queryTemplate, String hints, Map<String,
             TypeInfo> columnTypeMap) throws IOException {
         StringBuilder sql = new StringBuilder();
-        List<String> conditionColumnList = buildWhereClause(jobConf, sql, whereClause,columnTypeMap);
+        List<String> conditionColumnList = buildWhereClause(jobConf, sql, whereClause, columnTypeMap);
 
         if (conditionColumnList.size() > 0) {
             addConditionColumnToReadColumn(readColumnList, conditionColumnList);
@@ -110,25 +113,25 @@ public class PhoenixQueryBuilder {
     private String makeQueryString(JobConf jobConf, String tableName, List<String>
             readColumnList, List<IndexSearchCondition> searchConditions, String queryTemplate,
                                    String hints) throws IOException {
-        StringBuilder sql = new StringBuilder();
-        List<String> conditionColumnList = buildWhereClause(jobConf, sql, searchConditions);
+        StringBuilder query = new StringBuilder();
+        List<String> conditionColumnList = buildWhereClause(query, searchConditions);
 
         if (conditionColumnList.size() > 0) {
             addConditionColumnToReadColumn(readColumnList, conditionColumnList);
-            sql.insert(0, queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
+            query.insert(0, queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
         } else {
-            sql.append(queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
+            query.append(queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
         }
 
         if (LOG.isInfoEnabled()) {
-            LOG.info("Input query : " + sql.toString());
+            LOG.info("Input query : " + query.toString());
         }
 
-        return sql.toString();
+        return query.toString();
     }
 
     private String getSelectColumns(JobConf jobConf, String tableName, List<String>
@@ -614,155 +617,189 @@ public class PhoenixQueryBuilder {
         return itsMine;
     }
 
-    protected List<String> buildWhereClause(JobConf jobConf, StringBuilder sql,
-                                            List<IndexSearchCondition> searchConditions) throws
-            IOException {
-        if (searchConditions == null || searchConditions.size() == 0) {
+    protected List<String> buildWhereClause(StringBuilder sql,
+                                            List<IndexSearchCondition> conditions)
+            throws IOException {
+        if (conditions == null || conditions.size() == 0) {
             return Collections.emptyList();
         }
 
-        List<String> conditionColumnList = Lists.newArrayList();
+        List<String> columns = Lists.newArrayList();
         sql.append(" where ");
 
-        boolean firstCondition = true;
-        for (IndexSearchCondition condition : searchConditions) {
-            String comparisonOp = condition.getComparisonOp();
+        Iterator<IndexSearchCondition> iter = conditions.iterator();
+        appendExpression(sql, iter.next(), columns);
+        while (iter.hasNext()) {
+            sql.append(" and ");
+            appendExpression(sql, iter.next(), columns);
+        }
 
-            if (comparisonOp.endsWith("GenericUDFBetween") || comparisonOp.endsWith
-                    ("GenericUDFIn")) {
-                if (condition.getConstantDescs() == null) {
-                    continue;
-                }
-            } else if (comparisonOp.endsWith("GenericUDFOPNull") || comparisonOp.endsWith
-                    ("GenericUDFOPNotNull")) {
-                // keep going
-            } else if (comparisonOp.endsWith("GenericUDFOPEqual")) {
-                // keep going
-            } else {
-                if (condition.getConstantDesc().getValue() == null) {
-                    continue;
-                }
+        return columns;
+    }
+
+    private void appendExpression(StringBuilder sql, IndexSearchCondition condition,
+                                  List<String> columns) {
+        Expression expr = findExpression(condition);
+        if (expr != null) {
+            sql.append(expr.buildExpressionStringFrom(condition));
+            columns.add(condition.getColumnDesc().getColumn());
+        }
+    }
+
+    private Expression findExpression(final IndexSearchCondition condition) {
+        return Iterables.tryFind(Arrays.asList(Expression.values()), new Predicate<Expression>() {
+            @Override
+            public boolean apply(@Nullable Expression expr) {
+                return expr.isFor(condition);
+            }
+        }).orNull();
+    }
+
+    private static final Joiner JOINER_COMMA = Joiner.on(", ");
+    private static final Joiner JOINER_AND = Joiner.on(" and ");
+    private static final Joiner JOINER_SPACE = Joiner.on(" ");
+
+    private enum Expression {
+        EQUAL("UDFOPEqual", "="),
+        GREATER_THAN_OR_EQUAL_TO("UDFOPEqualOrGreaterThan", ">="),
+        GREATER_THAN("UDFOPGreaterThan", ">"),
+        LESS_THAN_OR_EQUAL_TO("UDFOPEqualOrLessThan", "<="),
+        LESS_THAN("UDFOPLessThan", "<"),
+        NOT_EQUAL("UDFOPNotEqual", "!="),
+        BETWEEN("GenericUDFBetween", "between", JOINER_AND, true) {
+            public boolean checkCondition(IndexSearchCondition condition) {
+                return condition.getConstantDescs() != null;
+            }
+        },
+        IN("GenericUDFIn", "in", JOINER_COMMA, true) {
+            public boolean checkCondition(IndexSearchCondition condition) {
+                return condition.getConstantDescs() != null;
             }
 
-            if (!firstCondition) {
-                sql.append(" and ");
-            } else {
-                firstCondition = false;
+            public String createConstants(final String typeName, ExprNodeConstantDesc[] desc) {
+                return "(" + super.createConstants(typeName, desc) + ")";
+            }
+        },
+        IS_NULL("GenericUDFOPNull", "is null") {
+            public boolean checkCondition(IndexSearchCondition condition) {
+                return true;
+            }
+        },
+        IS_NOT_NULL("GenericUDFOPNotNull", "is not null") {
+            public boolean checkCondition(IndexSearchCondition condition) {
+                return true;
+            }
+        };
+
+        private final String hiveCompOp;
+        private final String sqlCompOp;
+        private final Joiner joiner;
+        private final boolean supportNotOperator;
+
+        Expression(String hiveCompOp, String sqlCompOp) {
+            this(hiveCompOp, sqlCompOp, null);
+        }
+
+        Expression(String hiveCompOp, String sqlCompOp, Joiner joiner) {
+            this(hiveCompOp, sqlCompOp, joiner, false);
+        }
+
+        Expression(String hiveCompOp, String sqlCompOp, Joiner joiner, boolean supportNotOp) {
+            this.hiveCompOp = hiveCompOp;
+            this.sqlCompOp = sqlCompOp;
+            this.joiner = joiner;
+            this.supportNotOperator = supportNotOp;
+        }
+
+        public boolean checkCondition(IndexSearchCondition condition) {
+            return condition.getConstantDesc().getValue() != null;
+        }
+
+        public boolean isFor(IndexSearchCondition condition) {
+            return condition.getComparisonOp().endsWith(hiveCompOp) && checkCondition(condition);
+        }
+
+        public String buildExpressionStringFrom(IndexSearchCondition condition) {
+            final String type = condition.getColumnDesc().getTypeString();
+            return JOINER_SPACE.join(
+                    condition.getColumnDesc().getColumn(),
+                    getSqlCompOpString(condition),
+                    joiner != null ? createConstants(type, condition.getConstantDescs()) :
+                            createConstant(type, condition.getConstantDesc()));
+        }
+
+        public String getSqlCompOpString(IndexSearchCondition condition) {
+            return supportNotOperator ?
+                    (condition.isNot() ? "not " : "") + sqlCompOp : sqlCompOp;
+        }
+
+        public String createConstant(String typeName, ExprNodeConstantDesc constantDesc) {
+            if (constantDesc == null) {
+                return StringUtil.EMPTY_STRING;
             }
 
-            String columnName = condition.getColumnDesc().getColumn();
-            String typeName = condition.getColumnDesc().getTypeString();
+            return createConstantString(typeName, String.valueOf(constantDesc.getValue()));
+        }
 
-            if (LOG.isDebugEnabled()) {
-                LOG.debug(columnName + " has condition: " + condition);
+        public String createConstants(final String typeName, ExprNodeConstantDesc[] constantDesc) {
+            if (constantDesc == null) {
+                return StringUtil.EMPTY_STRING;
             }
 
-            conditionColumnList.add(columnName);
-            sql.append(columnName);
+            return joiner.join(Iterables.transform(Arrays.asList(constantDesc),
+                    new Function<ExprNodeConstantDesc, String>() {
+                        @Nullable
+                        @Override
+                        public String apply(@Nullable ExprNodeConstantDesc desc) {
+                            return createConstantString(typeName, String.valueOf(desc.getValue()));
+                        }
+                    }
+            ));
+        }
 
-            String[] constantValues = PhoenixStorageHandlerUtil.getConstantValues(condition,
-                    comparisonOp);
+        private static class ConstantStringWrapper {
+            private List<String> types;
+            private String prefix;
+            private String postfix;
 
-            if (comparisonOp.endsWith("UDFOPEqual")) {        // column = 1
-                sql.append(" = ").append(createConstantString(typeName, constantValues[0]));
-            } else if (comparisonOp.endsWith("UDFOPEqualOrGreaterThan")) {    // column >= 1
-                sql.append(" >= ").append(createConstantString(typeName, constantValues[0]));
-            } else if (comparisonOp.endsWith("UDFOPGreaterThan")) {        // column > 1
-                sql.append(" > ").append(createConstantString(typeName, constantValues[0]));
-            } else if (comparisonOp.endsWith("UDFOPEqualOrLessThan")) {    // column <= 1
-                sql.append(" <= ").append(createConstantString(typeName, constantValues[0]));
-            } else if (comparisonOp.endsWith("UDFOPLessThan")) {    // column < 1
-                sql.append(" < ").append(createConstantString(typeName, constantValues[0]));
-            } else if (comparisonOp.endsWith("UDFOPNotEqual")) {    // column != 1
-                sql.append(" != ").append(createConstantString(typeName, constantValues[0]));
-            } else if (comparisonOp.endsWith("GenericUDFBetween")) {
-                appendBetweenCondition(jobConf, sql, condition.isNot(), typeName, constantValues);
-            } else if (comparisonOp.endsWith("GenericUDFIn")) {
-                appendInCondition(sql, condition.isNot(), typeName, constantValues);
-            } else if (comparisonOp.endsWith("GenericUDFOPNull")) {
-                sql.append(" is null ");
-            } else if (comparisonOp.endsWith("GenericUDFOPNotNull")) {
-                sql.append(" is not null ");
+            ConstantStringWrapper(String type, String prefix, String postfix) {
+                this(Lists.newArrayList(type), prefix, postfix);
+            }
+
+            ConstantStringWrapper(List<String> types, String prefix, String postfix) {
+                this.types = types;
+                this.prefix = prefix;
+                this.postfix = postfix;
+            }
+
+            public String apply(final String typeName, String value) {
+                return Iterables.any(types, new Predicate<String>() {
+
+                    @Override
+                    public boolean apply(@Nullable String type) {
+                        return typeName.startsWith(type);
+                    }
+                }) ? prefix + value + postfix : value;
             }
         }
 
-        return conditionColumnList;
-    }
+        private static final String SINGLE_QUOTATION = "'";
+        private static List<ConstantStringWrapper> WRAPPERS = Lists.newArrayList(
+                new ConstantStringWrapper(Lists.newArrayList(
+                        serdeConstants.STRING_TYPE_NAME, serdeConstants.CHAR_TYPE_NAME,
+                        serdeConstants.VARCHAR_TYPE_NAME, serdeConstants.DATE_TYPE_NAME,
+                        serdeConstants.TIMESTAMP_TYPE_NAME
+                ), SINGLE_QUOTATION, SINGLE_QUOTATION),
+                new ConstantStringWrapper(serdeConstants.DATE_TYPE_NAME, "to_date(", ")"),
+                new ConstantStringWrapper(serdeConstants.TIMESTAMP_TYPE_NAME, "to_timestamp(", ")")
+        );
 
-    protected void appendBetweenCondition(JobConf jobConf, StringBuilder sql, boolean isNot,
-                                          String typeName, String[] conditionValues) throws
-            IOException {
-        try {
-            Object[] typedValues = PhoenixStorageHandlerUtil.toTypedValues(jobConf, typeName, conditionValues);
-            Arrays.sort(typedValues);
+        private String createConstantString(String typeName, String value) {
+            for (ConstantStringWrapper wrapper : WRAPPERS) {
+                value = wrapper.apply(typeName, value);
+            }
 
-            appendIfNot(isNot, sql).append(" between ")
-                    .append(Joiner.on(" and ").join(createConstantString(typeName, typedValues[0]),
-                    createConstantString(typeName, typedValues[1])));
-        } catch (Exception e) {
-            throw new IOException(e);
+            return value;
         }
-    }
-
-    protected void appendInCondition(StringBuilder sql, boolean isNot, String typeName, String[]
-            conditionValues) {
-        List<Object> wrappedConstants = Lists.newArrayListWithCapacity(conditionValues.length);
-        for (String conditionValue : conditionValues) {
-            wrappedConstants.add(createConstantString(typeName, conditionValue));
-        }
-
-        appendIfNot(isNot, sql)
-                .append(" in (")
-                .append(Joiner.on(", ").join(wrappedConstants))
-                .append(")");
-    }
-
-    private StringBuilder appendIfNot(boolean isNot, StringBuilder sb) {
-        return isNot ? sb.append(" not") : sb;
-    }
-
-    private static class ConstantStringWrapper {
-        private List<String> types;
-        private String prefix;
-        private String postfix;
-
-        ConstantStringWrapper(String type, String prefix, String postfix) {
-            this(Lists.newArrayList(type), prefix, postfix);
-        }
-
-        ConstantStringWrapper(List<String> types, String prefix, String postfix) {
-            this.types = types;
-            this.prefix = prefix;
-            this.postfix = postfix;
-        }
-
-        public Object apply(final String typeName, Object value) {
-            return Iterables.any(types, new Predicate<String>() {
-
-                @Override
-                public boolean apply(@Nullable String type) {
-                    return typeName.startsWith(type);
-                }
-            }) ? prefix + value + postfix : value;
-        }
-    }
-
-    private static final String SINGLE_QUOTATION = "'";
-    private static List<ConstantStringWrapper> WRAPPERS = Lists.newArrayList(
-            new ConstantStringWrapper(Lists.newArrayList(
-                    serdeConstants.STRING_TYPE_NAME, serdeConstants.CHAR_TYPE_NAME,
-                    serdeConstants.VARCHAR_TYPE_NAME, serdeConstants.DATE_TYPE_NAME,
-                    serdeConstants.TIMESTAMP_TYPE_NAME
-            ), SINGLE_QUOTATION, SINGLE_QUOTATION),
-            new ConstantStringWrapper(serdeConstants.DATE_TYPE_NAME, "to_date(", ")"),
-            new ConstantStringWrapper(serdeConstants.TIMESTAMP_TYPE_NAME, "to_timestamp(", ")")
-    );
-
-    private Object createConstantString(String typeName, Object value) {
-        for (ConstantStringWrapper wrapper : WRAPPERS) {
-            value = wrapper.apply(typeName, value);
-        }
-
-        return value;
     }
 }
