@@ -41,6 +41,7 @@ import org.apache.phoenix.expression.MultiplyExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
+import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
@@ -106,6 +107,9 @@ public interface ExpressionVisitor<E> {
     
     public Iterator<Expression> visitEnter(CoerceExpression node);
     public E visitLeave(CoerceExpression node, List<E> l);
+    
+    public Iterator<Expression> visitEnter(ReinterpretCastExpression node);
+    public E visitLeave(ReinterpretCastExpression node, List<E> l);
 
     public Iterator<Expression> visitEnter(ArrayConstructorExpression node);
     public E visitLeave(ArrayConstructorExpression node, List<E> l);

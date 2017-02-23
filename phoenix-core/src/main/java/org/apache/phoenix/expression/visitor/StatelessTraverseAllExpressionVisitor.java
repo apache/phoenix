@@ -39,6 +39,7 @@ import org.apache.phoenix.expression.MultiplyExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
+import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
@@ -162,6 +163,11 @@ public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpress
     
     @Override
     public E visitLeave(CoerceExpression node, List<E> l) {
+        return null;
+    }
+    
+    @Override
+    public E visitLeave(ReinterpretCastExpression node, List<E> l) {
         return null;
     }
 

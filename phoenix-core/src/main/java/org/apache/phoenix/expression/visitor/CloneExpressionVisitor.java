@@ -40,6 +40,7 @@ import org.apache.phoenix.expression.MultiplyExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
+import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
@@ -181,6 +182,11 @@ public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisito
 
     @Override
     public Expression visitLeave(CoerceExpression node, List<Expression> l) {
+        return isCloneNode(node, l) ? node.clone(l) : node;
+    }
+
+    @Override
+    public Expression visitLeave(ReinterpretCastExpression node, List<Expression> l) {
         return isCloneNode(node, l) ? node.clone(l) : node;
     }
 

@@ -35,6 +35,7 @@ import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.MultiplyExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
+import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
@@ -133,6 +134,11 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     
     @Override
     public Iterator<Expression> visitEnter(CoerceExpression node) {
+        return null;
+    }
+    
+    @Override
+    public Iterator<Expression> visitEnter(ReinterpretCastExpression node) {
         return null;
     }
     

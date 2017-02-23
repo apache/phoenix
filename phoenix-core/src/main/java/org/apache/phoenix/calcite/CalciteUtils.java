@@ -79,8 +79,10 @@ import org.apache.phoenix.expression.LongAddExpression;
 import org.apache.phoenix.expression.LongDivideExpression;
 import org.apache.phoenix.expression.LongMultiplyExpression;
 import org.apache.phoenix.expression.LongSubtractExpression;
+import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
+import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
@@ -757,6 +759,21 @@ public class CalciteUtils {
                 }
             }
         });
+        EXPRESSION_MAP.put(SqlKind.REINTERPRET, new ExpressionFactory() {
+
+            @SuppressWarnings("rawtypes")
+            @Override
+            public Expression newExpression(RexNode node,
+                    PhoenixRelImplementor implementor) {                
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                PDataType targetType = relDataTypeToPDataType(node.getType());
+                try {
+                    return ReinterpretCastExpression.create(children.get(0), targetType);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
         EXPRESSION_MAP.put(SqlKind.DEFAULT, new ExpressionFactory() {
             @Override
             public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
@@ -820,7 +837,9 @@ public class CalciteUtils {
                         return new UpperFunction(children);
                     } else if (op == SqlStdOperatorTable.COALESCE) {
                         return new CoalesceFunction(children);
-                    }
+                    } else if (op == SqlStdOperatorTable.MOD) {
+                        return new ModulusExpression(children);
+                    };
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }

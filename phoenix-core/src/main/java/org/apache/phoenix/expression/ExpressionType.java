@@ -164,6 +164,7 @@ public enum ExpressionType {
     ToCharFunction(ToCharFunction.class),
     ToNumberFunction(ToNumberFunction.class),
     CoerceFunction(CoerceExpression.class),
+    ReinterpretCastFunction(ReinterpretCastExpression.class),
     SubstrFunction(SubstrFunction.class),
     AndExpression(AndExpression.class),
     OrExpression(OrExpression.class),
