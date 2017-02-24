@@ -119,7 +119,11 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
             }
             @Override
             public RowProjector getProjector() {
-                return phoenixImplementor.getTableMapping().createRowProjector();
+                try {
+                    return phoenixImplementor.getTableMapping().createRowProjector(null);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
             }
             @Override
             public ResultIterator iterator(ParallelScanGrouper scanGrouper)

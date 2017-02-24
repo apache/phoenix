@@ -33,14 +33,17 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
+import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -50,6 +53,7 @@ import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -338,12 +342,24 @@ public class TableMapping {
         
         return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));
     }
-    
-    public RowProjector createRowProjector() {
+
+    public RowProjector createRowProjector() throws SQLException {
+        return createRowProjector(null);
+    }
+
+    public RowProjector createRowProjector(List<PColumn> targetColumns) throws SQLException {
         List<ColumnProjector> columnProjectors = Lists.<ColumnProjector>newArrayList();
         for (int i = 0; i < mappedColumns.size(); i++) {
             PColumn column = mappedColumns.get(i);
             Expression expr = newColumnExpression(i); // Do not use column.position() here.
+            if (targetColumns != null) {
+                PDatum targetColumn = targetColumns.get(i);
+                if (targetColumn.getDataType() != expr.getDataType()) {
+                    PDataType<?> targetType = targetColumn.getDataType();
+                    assert expr.getDataType() == null || expr.getDataType().isCastableTo(targetType);
+                    expr = CoerceExpression.create(expr, targetType, targetColumn.getSortOrder(), targetColumn.getMaxLength());
+                }
+            }
             columnProjectors.add(new ExpressionProjector(column.getName().getString(), tableRef.getTable().getName().getString(), expr, false));
         }
         // TODO get estimate row size

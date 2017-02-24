@@ -3,11 +3,8 @@ package org.apache.phoenix.calcite.rel;
 import static org.apache.phoenix.execute.MutationState.RowTimestampColInfo.NULL_ROWTIMESTAMP_INFO;
 
 import java.sql.ParameterMetaData;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,7 +17,6 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rex.RexNode;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.PhoenixTable;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -32,11 +28,8 @@ import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
-import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
-import org.apache.phoenix.execute.MutationState.RowTimestampColInfo;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -45,15 +38,12 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -87,13 +77,21 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
 
     @Override
     public StatementPlan implement(PhoenixRelImplementor implementor) {
-        final QueryPlan queryPlan = implementor.visitInput(0, (PhoenixQueryRel) input);
-        final RowProjector projector = implementor.getTableMapping().createRowProjector();
-
         final PhoenixTable targetTable = getTable().unwrap(PhoenixTable.class);
         final PhoenixConnection connection = targetTable.pc;
         final TableRef targetTableRef = targetTable.tableMapping.getTableRef();
         
+        final QueryPlan queryPlan = implementor.visitInput(0, (PhoenixQueryRel) input);
+        RowProjector projector;
+        try {
+            final List<PColumn> targetColumns =
+                    getOperation() == Operation.DELETE
+                    ? null : targetTable.tableMapping.getMappedColumns();
+            projector = implementor.getTableMapping().createRowProjector(targetColumns);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+
         if (getOperation() == Operation.INSERT) {
             return upsert(connection, targetTable, targetTableRef, queryPlan, projector);
         }
