@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.calcite.avatica.util.ByteString;
+import org.apache.calcite.avatica.util.TimeUnitRange;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.prepare.Prepare;
 import org.apache.calcite.rel.RelCollation;
@@ -96,18 +97,25 @@ import org.apache.phoenix.expression.function.CoalesceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.CurrentDateFunction;
 import org.apache.phoenix.expression.function.CurrentTimeFunction;
+import org.apache.phoenix.expression.function.DayOfMonthFunction;
+import org.apache.phoenix.expression.function.DayOfWeekFunction;
+import org.apache.phoenix.expression.function.DayOfYearFunction;
 import org.apache.phoenix.expression.function.ExpFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.HourFunction;
 import org.apache.phoenix.expression.function.LnFunction;
 import org.apache.phoenix.expression.function.LowerFunction;
 import org.apache.phoenix.expression.function.MaxAggregateFunction;
 import org.apache.phoenix.expression.function.MinAggregateFunction;
+import org.apache.phoenix.expression.function.MinuteFunction;
+import org.apache.phoenix.expression.function.MonthFunction;
 import org.apache.phoenix.expression.function.PowerFunction;
 import org.apache.phoenix.expression.function.RoundDecimalExpression;
 import org.apache.phoenix.expression.function.RoundTimestampExpression;
+import org.apache.phoenix.expression.function.SecondFunction;
 import org.apache.phoenix.expression.function.SqrtFunction;
 import org.apache.phoenix.expression.function.StddevPopFunction;
 import org.apache.phoenix.expression.function.StddevSampFunction;
@@ -115,6 +123,8 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.expression.function.WeekFunction;
+import org.apache.phoenix.expression.function.YearFunction;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -134,6 +144,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
@@ -779,6 +790,57 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
                 return null;
             }
+        });
+        EXPRESSION_MAP.put(SqlKind.EXTRACT, new ExpressionFactory() {
+            @SuppressWarnings("rawtypes")
+            @Override
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
+                RexCall call = (RexCall) node;
+                TimeUnitRange timeUnitRange =
+                        (TimeUnitRange) RexLiteral.value(
+                                call.getOperands().get(0));
+                List<Expression> children = ImmutableList.of(
+                        toExpression(call.getOperands().get(1), implementor));
+                Expression expr;
+                try {
+                    switch (timeUnitRange) {
+                    case YEAR:
+                        expr = new YearFunction(children);
+                        break;
+                    case MONTH:
+                        expr = new MonthFunction(children);
+                        break;
+                    case WEEK:
+                        expr = new WeekFunction(children);
+                        break;
+                    case DAY:
+                        expr = new DayOfMonthFunction(children);
+                        break;
+                    case DOY:
+                        expr = new DayOfYearFunction(children);
+                        break;
+                    case DOW:
+                        expr = new DayOfWeekFunction(children);
+                        break;
+                    case HOUR:
+                        expr = new HourFunction(children);
+                        break;
+                    case MINUTE:
+                        expr = new MinuteFunction(children);
+                        break;
+                    case SECOND:
+                        expr = new SecondFunction(children);
+                        break;
+                    default:
+                        throw new UnsupportedOperationException(
+                                "Unsupported EXTRACT function: " + timeUnitRange);
+                    }
+                    PDataType targetType = relDataTypeToPDataType(node.getType());
+                    return cast(targetType, null, expr, implementor);
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }            
         });
         EXPRESSION_MAP.put(SqlKind.OTHER_FUNCTION, new ExpressionFactory() {
             @Override

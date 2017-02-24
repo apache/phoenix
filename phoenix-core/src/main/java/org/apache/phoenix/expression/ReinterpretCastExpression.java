@@ -45,6 +45,10 @@ import com.google.common.collect.ImmutableList;
 
 
 public class ReinterpretCastExpression extends BaseSingleExpression {
+
+    /** The number of milliseconds in a day. */
+    private static final int MILLIS_PER_DAY = 86400000; // = 24 * 60 * 60 * 1000
+
     private PDataType toType;
     private PDataCodec inputCodec;
     
@@ -127,10 +131,10 @@ public class ReinterpretCastExpression extends BaseSingleExpression {
             } else { // PInteger
                 if (childType == PDate.INSTANCE
                         || childType == PUnsignedDate.INSTANCE) {
-                    int date = (int) dateTime / 86400000;
+                    int date = (int) dateTime / MILLIS_PER_DAY;
                     toType.getCodec().encodeInt(date, ptr);
                 } else { // Time
-                    int time = (int) dateTime % 86400000;
+                    int time = (int) dateTime % MILLIS_PER_DAY;
                     toType.getCodec().encodeInt(time, ptr);
                 }
             }
