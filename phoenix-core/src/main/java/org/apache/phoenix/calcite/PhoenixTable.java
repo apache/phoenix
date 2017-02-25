@@ -16,24 +16,34 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.CustomColumnResolvingTable;
 import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.TranslatableTable;
+import org.apache.calcite.schema.Wrapper;
 import org.apache.calcite.schema.impl.AbstractTable;
+import org.apache.calcite.sql2rel.InitializerExpressionFactory;
+import org.apache.calcite.sql2rel.NullInitializerExpressionFactory;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -45,6 +55,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.util.SchemaUtil;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -54,15 +65,17 @@ import com.google.common.collect.Lists;
  * Phoenix.
  */
 public class PhoenixTable extends AbstractTable
-    implements TranslatableTable, CustomColumnResolvingTable {
+    implements TranslatableTable, CustomColumnResolvingTable, Wrapper {
   public final TableMapping tableMapping;
   public final ImmutableBitSet pkBitSet;
   public final RelCollation collation;
   public final long byteCount;
   public final long rowCount;
   public final PhoenixConnection pc;
+  public final RelDataTypeFactory typeFactory;
+  public final InitializerExpressionFactory initializerExpressionFactory;
 
-  public PhoenixTable(PhoenixConnection pc, TableRef tableRef) throws SQLException {
+  public PhoenixTable(PhoenixConnection pc, TableRef tableRef, final RelDataTypeFactory typeFactory) throws SQLException {
       this.pc = Preconditions.checkNotNull(pc);
       PTable pTable = tableRef.getTable();
       TableRef dataTable = null;
@@ -127,8 +140,12 @@ public class PhoenixTable extends AbstractTable
       } catch (SQLException | IOException e) {
           throw new RuntimeException(e);
       }
+      this.typeFactory = typeFactory;
+      this.initializerExpressionFactory =
+              this.typeFactory == null ? null : new PhoenixTableInitializerExpressionFactory(
+                  typeFactory, pc, tableMapping);
     }
-    
+  
     public List<PColumn> getColumns() {
         return tableMapping.getMappedColumns();
     }
@@ -182,5 +199,40 @@ public class PhoenixTable extends AbstractTable
     public List<org.apache.calcite.util.Pair<RelDataTypeField, List<String>>> resolveColumn(
             RelDataType rowType, RelDataTypeFactory typeFactory, List<String> names) {
         return tableMapping.resolveColumn(rowType, typeFactory, names);
+    }
+
+    @Override public <C> C unwrap(Class<C> aClass) {
+        if (aClass.isInstance(initializerExpressionFactory)) {
+          return aClass.cast(initializerExpressionFactory);
+        }
+        return null;
+    }
+    
+    public static class PhoenixTableInitializerExpressionFactory extends
+            NullInitializerExpressionFactory {
+        private final RelDataTypeFactory typeFactory;
+        private final RexBuilder rexBuilder;
+        private final PhoenixConnection pc;
+        private final TableMapping tableMapping;
+
+        public PhoenixTableInitializerExpressionFactory(RelDataTypeFactory typeFactory,
+                PhoenixConnection pc, TableMapping tableMapping) {
+            super(typeFactory);
+            this.typeFactory = typeFactory;
+            this.rexBuilder = new RexBuilder(typeFactory);
+            this.pc = pc;
+            this.tableMapping = tableMapping;
+        }
+        
+        public RexNode newColumnDefaultValue(RelOptTable table, int iColumn) {
+            PColumn column = tableMapping.getMappedColumns().get(iColumn);
+            String expressionStr = column.getExpressionStr();
+            if(expressionStr == null) {
+                return super.newColumnDefaultValue(table, iColumn);
+            }
+            Expression defaultExpression = CalciteUtils.parseExpressionFromStr(expressionStr, pc);
+            return CalciteUtils.convertColumnExpressionToLiteral(column, defaultExpression,
+                typeFactory, rexBuilder);
+        }
     }
 }

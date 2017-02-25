@@ -170,7 +170,7 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
             
             PTable table = rootTables.get(name);
             try {
-                return new PhoenixTable(pc, new TableRef(table));
+                return new PhoenixTable(pc, new TableRef(table), null);
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }

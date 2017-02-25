@@ -24,6 +24,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexCorrelVariable;
 import org.apache.calcite.rex.RexDynamicParam;
@@ -57,6 +58,7 @@ import org.apache.calcite.util.Util;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
+import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -123,12 +125,17 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
 import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -1276,5 +1283,45 @@ public class CalciteUtils {
             }
         }
         return root;
+    }
+
+    public static Expression parseExpressionFromStr(String expressionStr, PhoenixConnection pc) {
+        StatementContext context =
+                new StatementContext(new PhoenixStatement(pc));
+        ExpressionCompiler compiler = new ExpressionCompiler(context);
+        ParseNode defaultParseNode;
+        try {
+            defaultParseNode = new SQLParser(expressionStr).parseExpression();
+        } catch (SQLException e) {
+            throw new RuntimeException("Parsing default value failed." + expressionStr);
+        }
+        Expression defaultExpression;
+        try {
+            defaultExpression = defaultParseNode.accept(compiler);
+        } catch (SQLException e) {
+            throw new RuntimeException("Parsing default value failed." + expressionStr);
+        }
+        return defaultExpression;
+    };
+
+    public static RexNode convertColumnExpressionToLiteral(PColumn column,
+            Expression defaultExpression, RelDataTypeFactory typeFactory, RexBuilder rexBuilder) {
+        ImmutableBytesWritable key = new ImmutableBytesWritable();
+        defaultExpression.evaluate(null, key);
+        column.getDataType().coerceBytes(key, null,
+                defaultExpression.getDataType(),
+                defaultExpression.getMaxLength(), defaultExpression.getScale(),
+                defaultExpression.getSortOrder(),
+                column.getMaxLength(), column.getScale(),
+                column.getSortOrder());
+          Object object =
+                  defaultExpression.getDataType().toObject(key,
+                      defaultExpression.getSortOrder(), defaultExpression.getMaxLength(),
+                      defaultExpression.getScale());
+          RelDataType pDataTypeToRelDataType =
+                  CalciteUtils.pDataTypeToRelDataType(typeFactory,
+                      defaultExpression.getDataType(), defaultExpression.getMaxLength(),
+                      defaultExpression.getScale(), column.getArraySize());
+        return rexBuilder.makeLiteral((Comparable)object, pDataTypeToRelDataType,true);
     }
 }

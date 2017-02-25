@@ -886,6 +886,7 @@ SqlColumnDefNode ColumnDef() :
     boolean isPk = false;
     SortOrder sortOrder = SortOrder.getDefault();
     boolean isRowTimestamp = false;
+    SqlNode expression = null;
     SqlParserPos pos;
 }
 {
@@ -897,6 +898,10 @@ SqlColumnDefNode ColumnDef() :
         |
         <NULL>
         {isNull = true;}
+    ]
+    [
+        <DEFAULT_KW>
+        expression = Expression(ExprContext.ACCEPT_NONQUERY)
     ]
     [
         <PRIMARY> <KEY>
@@ -915,7 +920,7 @@ SqlColumnDefNode ColumnDef() :
     ]
     {
         pos = columnName.getParserPosition().plus(getPos());
-        return new SqlColumnDefNode(pos, columnName, dataType, isNull, isPk, sortOrder, null, isRowTimestamp);
+        return new SqlColumnDefNode(pos, columnName, dataType, isNull, isPk, sortOrder, expression, isRowTimestamp);
     }
 }
 

@@ -30,6 +30,7 @@ import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.function.Function0;
+import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.phoenix.calcite.PhoenixPrepareImpl;
 import org.apache.phoenix.calcite.PhoenixSchema;
@@ -114,8 +115,9 @@ public abstract class PhoenixCalciteEmbeddedDriver extends Driver implements SQL
         final String phoenixUrl = url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL_CALCITE, PhoenixRuntime.JDBC_PROTOCOL);
         operand.put("url", phoenixUrl);
         SchemaPlus rootSchema = connection.getRootSchema();
-        rootSchema.add("phoenix",
-                PhoenixSchema.FACTORY.create(rootSchema, "phoenix", operand));
+        Schema schema = PhoenixSchema.FACTORY.create(rootSchema, "phoenix", operand);
+        ((PhoenixSchema)schema).setTypeFactory(connection.getTypeFactory());
+        rootSchema.add("phoenix",schema);
         connection.setSchema("phoenix");
         
         return connection;

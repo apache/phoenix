@@ -30,6 +30,7 @@ import org.apache.phoenix.schema.SortOrder;
 
 public class SqlColumnDefNode extends SqlNode{
     public final ColumnDef columnDef;
+    public final SqlNode defaultValueExp;
 
     public SqlColumnDefNode(
             SqlParserPos pos,
@@ -38,7 +39,7 @@ public class SqlColumnDefNode extends SqlNode{
             Boolean isNullable,
             boolean isPk,
             SortOrder sortOrder,
-            String expressionStr,
+            SqlNode defaultValueExp,
             boolean isRowTimestamp) {
         super(pos);
         final ColumnName name;
@@ -50,7 +51,8 @@ public class SqlColumnDefNode extends SqlNode{
         this.columnDef = new ColumnDef(name, dataType.typeName,
                 dataType.isArray, dataType.arraySize, isNullable,
                 dataType.maxLength, dataType.scale, isPk,
-                sortOrder, expressionStr, isRowTimestamp);
+                sortOrder, null, isRowTimestamp);
+        this.defaultValueExp = defaultValueExp;
     }
 
     @Override
