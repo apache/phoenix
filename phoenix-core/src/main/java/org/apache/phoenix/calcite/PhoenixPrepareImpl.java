@@ -3,6 +3,7 @@ package org.apache.phoenix.calcite;
 import java.lang.reflect.Type;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -644,6 +645,9 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
 
     public List<ColumnDef> getColumnDefs(SqlNodeList sqlColumnDefs)
             throws SQLException {
+        if(sqlColumnDefs == null) {
+            return Collections.<ColumnDef>emptyList();
+        }
         List<ColumnDef> columnDefs = new ArrayList<ColumnDef>(sqlColumnDefs.size());
         for(SqlNode columnDef : sqlColumnDefs) {
             SqlColumnDefNode columnDefNode = (SqlColumnDefNode) columnDef;
