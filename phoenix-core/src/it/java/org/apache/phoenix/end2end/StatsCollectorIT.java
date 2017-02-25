@@ -92,6 +92,11 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
                 sb.append(",");
             }
             sb.append("COLUMN_ENCODED_BYTES=0");
+        } else {
+            if (sb.length()>0) {
+                sb.append(",");
+            }
+            sb.append("COLUMN_ENCODED_BYTES=4");
         }
         if (!mutable) {
             if (sb.length()>0) {

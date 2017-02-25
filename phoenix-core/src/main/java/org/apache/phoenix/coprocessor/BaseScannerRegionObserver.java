@@ -19,6 +19,7 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
@@ -554,14 +555,15 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 Cell rowKv = result.get(0);
                 for (KeyValueColumnExpression kvExp : arrayKVRefs) {
                     if (kvExp.evaluate(tuple, ptr)) {
-                        for (int idx = tuple.size() - 1; idx >= 0; idx--) {
-                            Cell kv = tuple.getValue(idx);
+                        ListIterator<Cell> itr = result.listIterator();
+                        while (itr.hasNext()) {
+                            Cell kv = itr.next();
                             if (Bytes.equals(kvExp.getColumnFamily(), 0, kvExp.getColumnFamily().length,
                                     kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength())
                                 && Bytes.equals(kvExp.getColumnQualifier(), 0, kvExp.getColumnQualifier().length,
                                         kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength())) {
                                 // remove the kv that has the full array values.
-                                result.remove(idx);
+                                itr.remove();
                                 break;
                             }
                         }
