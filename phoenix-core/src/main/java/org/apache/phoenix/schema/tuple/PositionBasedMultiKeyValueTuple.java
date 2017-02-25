@@ -25,23 +25,28 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
 /**
- * Tuple that uses the 
+ * Tuple that is closely tied with {@link EncodedColumnQualiferCellsList}. It essentially provides a
+ * way of getting hold of cell belonging to a cq/cf by doing a position based look up as opposed to
+ * a MultiKeyValueTuple where we have to do a binary search in the List.
  */
 public class PositionBasedMultiKeyValueTuple extends BaseTuple {
     private EncodedColumnQualiferCellsList values;
 
-    public PositionBasedMultiKeyValueTuple() {}
-    
-    public PositionBasedMultiKeyValueTuple(List<Cell> values) {
-        checkArgument(values instanceof EncodedColumnQualiferCellsList, "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
-        this.values = (EncodedColumnQualiferCellsList)values;
+    public PositionBasedMultiKeyValueTuple() {
     }
-    
+
+    public PositionBasedMultiKeyValueTuple(List<Cell> values) {
+        checkArgument(values instanceof EncodedColumnQualiferCellsList,
+            "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
+        this.values = (EncodedColumnQualiferCellsList) values;
+    }
+
     /** Caller must not modify the list that is passed here */
     @Override
     public void setKeyValues(List<Cell> values) {
-        checkArgument(values instanceof EncodedColumnQualiferCellsList, "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
-        this.values = (EncodedColumnQualiferCellsList)values;
+        checkArgument(values instanceof EncodedColumnQualiferCellsList,
+            "PositionBasedMultiKeyValueTuple only works with lists of type EncodedColumnQualiferCellsList");
+        this.values = (EncodedColumnQualiferCellsList) values;
     }
 
     @Override
@@ -76,11 +81,10 @@ public class PositionBasedMultiKeyValueTuple extends BaseTuple {
     }
 
     @Override
-    public boolean getValue(byte[] family, byte[] qualifier,
-            ImmutableBytesWritable ptr) {
+    public boolean getValue(byte[] family, byte[] qualifier, ImmutableBytesWritable ptr) {
         Cell kv = getValue(family, qualifier);
-        if (kv == null)
-            return false;
+        if (kv == null) return false;
         ptr.set(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
         return true;
-    }}
+    }
+}

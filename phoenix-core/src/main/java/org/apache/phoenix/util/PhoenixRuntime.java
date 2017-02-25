@@ -510,7 +510,7 @@ public class PhoenixRuntime {
             PColumnFamily family = table.getColumnFamily(familyName);
             pColumn = family.getPColumnForColumnName(familyColumn);
         } else {
-            pColumn = table.getPColumnForColumnName(columnName);
+            pColumn = table.getColumnForColumnName(columnName);
         }
         return getColumnInfo(pColumn);
     }
@@ -1171,7 +1171,7 @@ public class PhoenixRuntime {
             PColumnFamily family = table.getColumnFamily(familyName);
             pColumn = family.getPColumnForColumnName(columnName);
         } else {
-            pColumn = table.getPColumnForColumnName(columnName);
+            pColumn = table.getColumnForColumnName(columnName);
         }
         return pColumn;
     }
@@ -1211,7 +1211,7 @@ public class PhoenixRuntime {
             PColumnFamily family = table.getColumnFamily(familyName);
             pColumn = family.getPColumnForColumnName(columnName);
         } else {
-            pColumn = table.getPColumnForColumnName(columnName);
+            pColumn = table.getColumnForColumnName(columnName);
         }
         return pColumn;
     }

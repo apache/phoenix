@@ -120,9 +120,9 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
-        Expression idExpression = new ColumnRef(plan.getTableRef(), plan.getTableRef().getTable().getPColumnForColumnName("ID").getPosition()).newColumnExpression();
+        Expression idExpression = new ColumnRef(plan.getTableRef(), plan.getTableRef().getTable().getColumnForColumnName("ID").getPosition()).newColumnExpression();
         Expression id = new RowKeyColumnExpression(idExpression,new RowKeyValueAccessor(plan.getTableRef().getTable().getPKColumns(),0));
-        Expression company = new KeyValueColumnExpression(plan.getTableRef().getTable().getPColumnForColumnName("COMPANY"));
+        Expression company = new KeyValueColumnExpression(plan.getTableRef().getTable().getColumnForColumnName("COMPANY"));
         // FilterList has no equals implementation
         assertTrue(filter instanceof FilterList);
         FilterList filterList = (FilterList)filter;
@@ -150,7 +150,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         QueryPlan plan = pstmt.optimizeQuery();
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
-        PColumn column = plan.getTableRef().getTable().getPColumnForColumnName("COMPANY");
+        PColumn column = plan.getTableRef().getTable().getColumnForColumnName("COMPANY");
         assertEquals(
                 singleKVFilter(constantComparison(
                     CompareOp.EQUAL,
@@ -942,8 +942,8 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
         PTable table = plan.getTableRef().getTable();
-        Expression aInteger = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_INTEGER").getPosition()).newColumnExpression();
-        Expression aString = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_STRING").getPosition()).newColumnExpression();
+        Expression aInteger = new ColumnRef(new TableRef(table), table.getColumnForColumnName("A_INTEGER").getPosition()).newColumnExpression();
+        Expression aString = new ColumnRef(new TableRef(table), table.getColumnForColumnName("A_STRING").getPosition()).newColumnExpression();
         assertEquals(
             multiEncodedKVFilter(and(
                 constantComparison(
@@ -976,8 +976,8 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
         PTable table = plan.getTableRef().getTable();
-        Expression aInteger = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_INTEGER").getPosition()).newColumnExpression();
-        Expression aString = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_STRING").getPosition()).newColumnExpression();
+        Expression aInteger = new ColumnRef(new TableRef(table), table.getColumnForColumnName("A_INTEGER").getPosition()).newColumnExpression();
+        Expression aString = new ColumnRef(new TableRef(table), table.getColumnForColumnName("A_STRING").getPosition()).newColumnExpression();
         assertEquals(
             multiEncodedKVFilter(and(
                 constantComparison(

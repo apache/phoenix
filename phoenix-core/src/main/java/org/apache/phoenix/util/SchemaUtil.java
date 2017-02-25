@@ -619,7 +619,7 @@ public class SchemaUtil {
     
     public static boolean columnExists(PTable table, String columnName) {
         try {
-            table.getPColumnForColumnName(columnName);
+            table.getColumnForColumnName(columnName);
             return true;
         } catch (ColumnNotFoundException e) {
             return false;

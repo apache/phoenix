@@ -539,7 +539,7 @@ public interface PTable extends PMetaDataEntity {
      * can be found
      * @throws AmbiguousColumnException if multiple columns are found with the given name
      */
-    PColumn getPColumnForColumnName(String name) throws ColumnNotFoundException, AmbiguousColumnException;
+    PColumn getColumnForColumnName(String name) throws ColumnNotFoundException, AmbiguousColumnException;
     
     /**
      * Get the column with the given column qualifier.
@@ -548,7 +548,7 @@ public interface PTable extends PMetaDataEntity {
      * @throws ColumnNotFoundException if no column with the given column qualifier can be found
      * @throws AmbiguousColumnException if multiple columns are found with the given column qualifier
      */
-    PColumn getPColumnForColumnQualifier(byte[] cf, byte[] cq) throws ColumnNotFoundException, AmbiguousColumnException; 
+    PColumn getColumnForColumnQualifier(byte[] cf, byte[] cq) throws ColumnNotFoundException, AmbiguousColumnException; 
     
     /**
      * Get the PK column with the given name.

@@ -804,7 +804,7 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public PColumn getPColumnForColumnName(String name) throws ColumnNotFoundException, AmbiguousColumnException {
+    public PColumn getColumnForColumnName(String name) throws ColumnNotFoundException, AmbiguousColumnException {
         List<PColumn> columns = columnsByName.get(name);
         int size = columns.size();
         if (size == 0) {
@@ -825,11 +825,11 @@ public class PTableImpl implements PTable {
     }
     
     @Override
-    public PColumn getPColumnForColumnQualifier(byte[] cf, byte[] cq) throws ColumnNotFoundException, AmbiguousColumnException {
+    public PColumn getColumnForColumnQualifier(byte[] cf, byte[] cq) throws ColumnNotFoundException, AmbiguousColumnException {
         Preconditions.checkNotNull(cq);
         if (!EncodedColumnsUtil.usesEncodedColumnNames(this) || cf == null) {
             String columnName = (String)PVarchar.INSTANCE.toObject(cq);
-            return getPColumnForColumnName(columnName);
+            return getColumnForColumnName(columnName);
         } else {
             String family = (String)PVarchar.INSTANCE.toObject(cf);
             PColumn col = kvColumnsByQualifiers.get(new KVColumnFamilyQualifier(family, cq));

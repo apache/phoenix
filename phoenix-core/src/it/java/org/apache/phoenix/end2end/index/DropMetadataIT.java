@@ -187,7 +187,7 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
             Result result = results.next();
             assertNotNull(result);
             assertNotNull("localIndexTableName2 row is missing", result.getValue(QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES, 
-                localIndex2.getPColumnForColumnName(IndexUtil.getIndexColumnName(QueryConstants.DEFAULT_COLUMN_FAMILY, "V1")).getColumnQualifierBytes()));
+                localIndex2.getColumnForColumnName(IndexUtil.getIndexColumnName(QueryConstants.DEFAULT_COLUMN_FAMILY, "V1")).getColumnQualifierBytes()));
             assertNull(results.next());
         }
     }
@@ -299,7 +299,7 @@ public class DropMetadataIT extends ParallelStatsDisabledIT {
             Result result = results.next();
             assertNotNull(result);
             PTable viewIndexPTable = pconn.getTable(new PTableKey(pconn.getTenantId(), viewIndex2));
-            PColumn column = viewIndexPTable.getPColumnForColumnName(IndexUtil.getIndexColumnName(QueryConstants.DEFAULT_COLUMN_FAMILY, "V4"));
+            PColumn column = viewIndexPTable.getColumnForColumnName(IndexUtil.getIndexColumnName(QueryConstants.DEFAULT_COLUMN_FAMILY, "V4"));
             byte[] cq = column.getColumnQualifierBytes();
             // there should be a single row belonging to VIEWINDEX2 
             assertNotNull(viewIndex2 + " row is missing", result.getValue(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, cq));

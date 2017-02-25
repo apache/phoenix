@@ -211,7 +211,7 @@ public class ProjectionCompiler {
             PColumn indexColumn = null;
             ColumnRef ref = null;
             try {
-                indexColumn = index.getPColumnForColumnName(indexColName);
+                indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
             } catch (ColumnNotFoundException e) {
                 if (index.getIndexType() == IndexType.LOCAL) {
@@ -283,7 +283,7 @@ public class ProjectionCompiler {
             ColumnRef ref = null;
             String indexColumnFamily = null;
             try {
-                indexColumn = index.getPColumnForColumnName(indexColName);
+                indexColumn = index.getColumnForColumnName(indexColName);
                 ref = new ColumnRef(tableRef, indexColumn.getPosition());
                 indexColumnFamily = indexColumn.getFamilyName() == null ? null : indexColumn.getFamilyName().getString();
             } catch (ColumnNotFoundException e) {

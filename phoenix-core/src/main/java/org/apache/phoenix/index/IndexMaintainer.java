@@ -387,7 +387,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             String dataFamilyName = IndexUtil.getDataColumnFamilyName(indexColumnName);
             String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
             try {
-                PColumn dataColumn = dataFamilyName.equals("") ? dataTable.getPColumnForColumnName(dataColumnName) : dataTable.getColumnFamily(dataFamilyName).getPColumnForColumnName(dataColumnName);
+                PColumn dataColumn = dataFamilyName.equals("") ? dataTable.getColumnForColumnName(dataColumnName) : dataTable.getColumnFamily(dataFamilyName).getPColumnForColumnName(dataColumnName);
                 if (SchemaUtil.isPKColumn(dataColumn)) 
                     continue;
             } catch (ColumnNotFoundException e) {
@@ -514,7 +514,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         byte[] cq = colExpression.getColumnQualifier();
                         try {
                             PColumn dataColumn =
-                                    cf == null ? dataTable.getPColumnForColumnQualifier(null, cq)
+                                    cf == null ? dataTable.getColumnForColumnQualifier(null, cq)
                                             : dataTable.getColumnFamily(cf)
                                                     .getPColumnForColumnQualifier(cq);
                             indexedColumnsInfo.add(new Pair<>(dataColumn.getFamilyName()

@@ -782,7 +782,7 @@ public class MetaDataClient {
                     String colFamily = colInfo.getFirst();
                     String colName = colInfo.getSecond();
                     if (colFamily == null) {
-                        view.getPColumnForColumnName(colName);
+                        view.getColumnForColumnName(colName);
                     } else {
                         view.getColumnFamily(colFamily).getPColumnForColumnName(colName);
                     }
@@ -801,7 +801,7 @@ public class MetaDataClient {
                         // but the WHERE clause for the view statement (which is added to the index below)
                         // would fail to compile.
                         String indexColumnName = IndexUtil.getIndexColumnName(col);
-                        index.getPColumnForColumnName(indexColumnName);
+                        index.getColumnForColumnName(indexColumnName);
                     } catch (ColumnNotFoundException e1) {
                         PColumn indexCol = null;
                         try {
@@ -811,7 +811,7 @@ public class MetaDataClient {
                                 indexCol = parentTable.getColumnFamily(cf).getPColumnForColumnName(colName);
                             }
                             else {
-                                indexCol = parentTable.getPColumnForColumnName(colName);
+                                indexCol = parentTable.getColumnForColumnName(colName);
                             }
                         } catch (ColumnNotFoundException e2) { // Ignore this index and continue with others
                             containsAllReqdCols = false;
@@ -2143,12 +2143,36 @@ public class MetaDataClient {
                     } 
                     encodingScheme =  QualifierEncodingScheme.fromSerializedValue(encodingSchemeSerializedByte);
                     if (isImmutableRows) {
-                        immutableStorageScheme = (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME.getValue(tableProps);
+                        immutableStorageScheme =
+                                (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
+                                        .getValue(tableProps);
                         if (immutableStorageScheme == null) {
-                            immutableStorageScheme = ImmutableStorageScheme.valueOf(connection.getQueryServices().getProps().get(QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB, QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
-                        } 
-                        if (immutableStorageScheme!=ONE_CELL_PER_COLUMN && encodingScheme == NON_ENCODED_QUALIFIERS) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES).setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                            if (multiTenant) {
+                                immutableStorageScheme =
+                                        ImmutableStorageScheme
+                                                .valueOf(connection
+                                                        .getQueryServices()
+                                                        .getProps()
+                                                        .get(
+                                                            QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                            QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
+                            } else {
+                                immutableStorageScheme =
+                                        ImmutableStorageScheme
+                                                .valueOf(connection
+                                                        .getQueryServices()
+                                                        .getProps()
+                                                        .get(
+                                                            QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                            QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
+                            }
+                        }
+                        if (immutableStorageScheme != ONE_CELL_PER_COLUMN
+                                && encodingScheme == NON_ENCODED_QUALIFIERS) {
+                            throw new SQLExceptionInfo.Builder(
+                                    SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
+                                    .setSchemaName(schemaName).setTableName(tableName).build()
+                                    .buildException();
                         }
                     } 
                 }
@@ -3048,7 +3072,7 @@ public class MetaDataClient {
                     }
                     else {
                         try {
-                            table.getPColumnForColumnName(columnName);
+                            table.getColumnForColumnName(columnName);
                             if (!ifNotExists) {
                                 throw new ColumnAlreadyExistsException(schemaName, tableName, columnName);
                             }
@@ -3630,7 +3654,7 @@ public class MetaDataClient {
                             removedIndexTableOrColumn = true;
                         } else if (coveredCols.contains(colDropRef)) {
                             String indexColumnName = IndexUtil.getIndexColumnName(columnToDrop);
-                            PColumn indexColumn = index.getPColumnForColumnName(indexColumnName);
+                            PColumn indexColumn = index.getColumnForColumnName(indexColumnName);
                             indexColumnsToDrop.add(indexColumn);
                             // add the index column to be dropped so that we actually delete the column values
                             columnsToDrop.add(new ColumnRef(new TableRef(index), indexColumn.getPosition()));

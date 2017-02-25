@@ -546,12 +546,27 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 
             private int replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
                     final Expression[] arrayFuncRefs, List<Cell> result) {
-                // make a copy of the results array here, as we're modifying it below
+             // make a copy of the results array here, as we're modifying it below
                 MultiKeyValueTuple tuple = new MultiKeyValueTuple(ImmutableList.copyOf(result));
                 // The size of both the arrays would be same?
                 // Using KeyValueSchema to set and retrieve the value
                 // collect the first kv to get the row
                 Cell rowKv = result.get(0);
+                for (KeyValueColumnExpression kvExp : arrayKVRefs) {
+                    if (kvExp.evaluate(tuple, ptr)) {
+                        for (int idx = tuple.size() - 1; idx >= 0; idx--) {
+                            Cell kv = tuple.getValue(idx);
+                            if (Bytes.equals(kvExp.getColumnFamily(), 0, kvExp.getColumnFamily().length,
+                                    kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength())
+                                && Bytes.equals(kvExp.getColumnQualifier(), 0, kvExp.getColumnQualifier().length,
+                                        kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength())) {
+                                // remove the kv that has the full array values.
+                                result.remove(idx);
+                                break;
+                            }
+                        }
+                    }
+                }
                 byte[] value = kvSchema.toBytes(tuple, arrayFuncRefs,
                         kvSchemaBitSet, ptr);
                 // Add a dummy kv with the exact value of the array index

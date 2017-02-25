@@ -128,8 +128,5 @@ public class KeyValueColumnExpression extends ColumnExpression {
     public <T> T accept(ExpressionVisitor<T> visitor) {
         return visitor.visit(this);
     }
-    
-//    public void setDisplayName(String displayName) {
-//        this.displayName = displayName;
-//    }
+
 }

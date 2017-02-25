@@ -135,7 +135,7 @@ public class StoreNullsIT extends ParallelStatsDisabledIT {
         // first row has a value for name
         Result rs = scanner.next();
         PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, dataTableName));
-        PColumn nameColumn = table.getPColumnForColumnName("NAME");
+        PColumn nameColumn = table.getColumnForColumnName("NAME");
         byte[] qualifier = table.getImmutableStorageScheme()== ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS ? QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES : nameColumn.getColumnQualifierBytes();
         assertTrue(rs.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, qualifier));
         assertTrue(rs.size() == 2); // 2 because it also includes the empty key value column

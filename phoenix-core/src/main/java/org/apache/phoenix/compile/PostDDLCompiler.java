@@ -178,7 +178,7 @@ public class PostDDLCompiler {
                             public ColumnRef resolveColumn(String schemaName, String tableName, String colName) throws SQLException {
                                 PColumn column = tableName != null
                                         ? tableRef.getTable().getColumnFamily(tableName).getPColumnForColumnName(colName)
-                                        : tableRef.getTable().getPColumnForColumnName(colName);
+                                        : tableRef.getTable().getColumnForColumnName(colName);
                                 return new ColumnRef(tableRef, column.getPosition());
                             }
                             

@@ -2190,8 +2190,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class); 
             PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
             // Assert that the column shows up as row time stamp in the cache.
-            assertTrue(table.getPColumnForColumnName("PK1").isRowTimestamp());
-            assertFalse(table.getPColumnForColumnName("PK2").isRowTimestamp());
+            assertTrue(table.getColumnForColumnName("PK1").isRowTimestamp());
+            assertFalse(table.getColumnForColumnName("PK2").isRowTimestamp());
             assertIsRowTimestampSet(schemaName, dataTableName, "PK1");
             
             String dataTableName2 = BaseTest.generateUniqueName();
@@ -2199,16 +2199,16 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName2 + " (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
             table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName2));
             // Assert that the column shows up as row time stamp in the cache.
-            assertFalse(table.getPColumnForColumnName("PK1").isRowTimestamp());
-            assertTrue(table.getPColumnForColumnName("PK2").isRowTimestamp());
+            assertFalse(table.getColumnForColumnName("PK1").isRowTimestamp());
+            assertTrue(table.getColumnForColumnName("PK2").isRowTimestamp());
             assertIsRowTimestampSet(schemaName, dataTableName2, "PK2");
             
             // Create an index on a table has a row time stamp pk column. The column should show up as a row time stamp column for the index too. 
             conn.createStatement().execute("CREATE INDEX " + indexTableName + "  ON " + dataTableFullName2 + " (KV1) include (KV2)");
             PTable indexTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), indexTableFullName));
-            String indexColName = IndexUtil.getIndexColumnName(table.getPColumnForColumnName("PK2"));
+            String indexColName = IndexUtil.getIndexColumnName(table.getColumnForColumnName("PK2"));
             // Assert that the column shows up as row time stamp in the cache.
-            assertTrue(indexTable.getPColumnForColumnName(indexColName).isRowTimestamp());
+            assertTrue(indexTable.getColumnForColumnName(indexColName).isRowTimestamp());
             assertIsRowTimestampSet(schemaName, indexTableName, indexColName);
             String viewTableName2 = dataTableName2 + "_VIEW";
             String viewTableFullName2 = SchemaUtil.getTableName(schemaName, viewTableName2);

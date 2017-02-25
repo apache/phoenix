@@ -67,18 +67,19 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     protected static final long BATCH_SIZE = 3;
     protected static final String[] INDEX_DDLS = new String[] {
             "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
-            "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE ("
-                    + "    B_STRING, " + "    A_DATE)",
-            "CREATE INDEX %s ON %s (a_integer) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
-            "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
-            "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
-                    + "    A_DATE)",
-            "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)", 
-            "" };
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)"};
+//    ,
+//            "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE ("
+//                    + "    B_STRING, " + "    A_DATE)",
+//            "CREATE INDEX %s ON %s (a_integer) INCLUDE ("
+//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+//            "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE ("
+//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+//            "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
+//                    + "    A_DATE)",
+//            "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE ("
+//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)", 
+//            "" };
 
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
@@ -154,8 +155,8 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
-            for (boolean mutable : new boolean[]{false,true}) {
-                for (boolean columnEncoded : new boolean[]{false,true}) {
+            for (boolean mutable : new boolean[]{false}) {
+                for (boolean columnEncoded : new boolean[]{false}) {
                     testCases.add(new Object[] { indexDDL, mutable, columnEncoded });
                 }
             }

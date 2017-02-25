@@ -457,7 +457,7 @@ public class FromCompiler {
 			}
         	PColumn column = resolveCF
         	        ? tableRef.getTable().getColumnFamily(tableName).getPColumnForColumnName(colName)
-        			: tableRef.getTable().getPColumnForColumnName(colName);
+        			: tableRef.getTable().getColumnForColumnName(colName);
             return new ColumnRef(tableRef, column.getPosition());
 		}
 
@@ -868,7 +868,7 @@ public class FromCompiler {
                 while (iterator.hasNext()) {
                     TableRef tableRef = iterator.next();
                     try {
-                        PColumn column = tableRef.getTable().getPColumnForColumnName(colName);
+                        PColumn column = tableRef.getTable().getColumnForColumnName(colName);
                         if (theTableRef != null) { throw new AmbiguousColumnException(colName); }
                         theTableRef = tableRef;
                         theColumnPosition = column.getPosition();
@@ -881,7 +881,7 @@ public class FromCompiler {
             } else {
                 try {
                     TableRef tableRef = resolveTable(schemaName, tableName);
-                    PColumn column = tableRef.getTable().getPColumnForColumnName(colName);
+                    PColumn column = tableRef.getTable().getColumnForColumnName(colName);
                     return new ColumnRef(tableRef, column.getPosition());
                 } catch (TableNotFoundException e) {
                     // Try using the tableName as a columnFamily reference instead
