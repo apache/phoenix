@@ -2511,7 +2511,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             ResultSet rs = stmt.executeQuery();
             assertTrue(rs.next());
             if (columnEncoded) {
-                assertTrue(Bytes.equals(QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS.encode(expectedValue), rs.getBytes(1)));
+                assertTrue(Bytes.equals(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS.encode(expectedValue), rs.getBytes(1)));
             } else {
                 assertTrue(Bytes.equals(columnName.getBytes(), rs.getBytes(1)));
             }

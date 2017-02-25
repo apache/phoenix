@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.and;
 import static org.apache.phoenix.util.TestUtil.constantComparison;
@@ -87,7 +87,7 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
                         constantComparison(
                             CompareOp.EQUAL,
                             A_STRING, "foo")
-                    ), FOUR_BYTE_QUALIFIERS),
+                    ), TWO_BYTE_QUALIFIERS),
                 filter);
     }
 
@@ -111,7 +111,7 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
                         constantComparison(
                             CompareOp.EQUAL,
                             A_STRING, "foo")
-                    ), FOUR_BYTE_QUALIFIERS),
+                    ), TWO_BYTE_QUALIFIERS),
                 filter);
     }
 }

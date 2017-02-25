@@ -522,7 +522,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         String createTableDDL = "CREATE TABLE IF NOT EXISTS " + tableName + " (pk INTEGER PRIMARY KEY)";
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(createTableDDL);
-            assertColumnEncodingMetadata(QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
         // Execute the ddl again
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
@@ -530,7 +530,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute(createTableDDL);
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
-            assertColumnEncodingMetadata(QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
         // Now execute the ddl with a different COLUMN_ENCODED_BYTES. This shouldn't change the original encoded bytes setting.
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
@@ -538,7 +538,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute(createTableDDL + " COLUMN_ENCODED_BYTES = 1");
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
-            assertColumnEncodingMetadata(QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
         // Now execute the ddl where COLUMN_ENCODED_BYTES=0. This shouldn't change the original encoded bytes setting.
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(nextTimestamp()));
@@ -546,7 +546,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute(createTableDDL + " COLUMN_ENCODED_BYTES = 0");
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
-            assertColumnEncodingMetadata(QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, tableName, conn);
         }
 
     }

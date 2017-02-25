@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.and;
@@ -266,7 +266,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
             multiEncodedKVFilter(columnComparison(
                 CompareOp.EQUAL,
                 A_STRING,
-                B_STRING), FOUR_BYTE_QUALIFIERS),
+                B_STRING), TWO_BYTE_QUALIFIERS),
             filter);
     }
 
@@ -306,7 +306,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 constantComparison(
                     CompareOp.EQUAL,
                     A_STRING,
-                    "foo")), FOUR_BYTE_QUALIFIERS),
+                    "foo")), TWO_BYTE_QUALIFIERS),
             filter);
     }
 
@@ -953,7 +953,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 constantComparison(
                     CompareOp.EQUAL,
                     aString,
-                    "foo")), FOUR_BYTE_QUALIFIERS),
+                    "foo")), TWO_BYTE_QUALIFIERS),
             filter);
         
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId + tenantTypeId);
@@ -987,7 +987,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 constantComparison(
                     CompareOp.EQUAL,
                     aString,
-                    "foo")), FOUR_BYTE_QUALIFIERS),
+                    "foo")), TWO_BYTE_QUALIFIERS),
             filter);
         
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);
