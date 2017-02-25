@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.FOUR_BYTE_QUALIFIERS;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.and;
@@ -25,7 +26,7 @@ import static org.apache.phoenix.util.TestUtil.bindParams;
 import static org.apache.phoenix.util.TestUtil.columnComparison;
 import static org.apache.phoenix.util.TestUtil.constantComparison;
 import static org.apache.phoenix.util.TestUtil.in;
-import static org.apache.phoenix.util.TestUtil.multiKVFilter;
+import static org.apache.phoenix.util.TestUtil.multiEncodedKVFilter;
 import static org.apache.phoenix.util.TestUtil.not;
 import static org.apache.phoenix.util.TestUtil.or;
 import static org.apache.phoenix.util.TestUtil.singleKVFilter;
@@ -262,10 +263,10 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Scan scan = plan.getContext().getScan();
         Filter filter = scan.getFilter();
         assertEquals(
-            multiKVFilter(columnComparison(
+            multiEncodedKVFilter(columnComparison(
                 CompareOp.EQUAL,
                 A_STRING,
-                B_STRING)),
+                B_STRING), FOUR_BYTE_QUALIFIERS),
             filter);
     }
 
@@ -297,7 +298,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Filter filter = scan.getFilter();
         
         assertEquals(
-            multiKVFilter(and(
+            multiEncodedKVFilter(and(
                 constantComparison(
                     CompareOp.EQUAL,
                     A_INTEGER,
@@ -305,7 +306,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 constantComparison(
                     CompareOp.EQUAL,
                     A_STRING,
-                    "foo"))),
+                    "foo")), FOUR_BYTE_QUALIFIERS),
             filter);
     }
 
@@ -944,7 +945,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Expression aInteger = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_INTEGER").getPosition()).newColumnExpression();
         Expression aString = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_STRING").getPosition()).newColumnExpression();
         assertEquals(
-            multiKVFilter(and(
+            multiEncodedKVFilter(and(
                 constantComparison(
                     CompareOp.EQUAL,
                     aInteger,
@@ -952,7 +953,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 constantComparison(
                     CompareOp.EQUAL,
                     aString,
-                    "foo"))),
+                    "foo")), FOUR_BYTE_QUALIFIERS),
             filter);
         
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId + tenantTypeId);
@@ -978,7 +979,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         Expression aInteger = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_INTEGER").getPosition()).newColumnExpression();
         Expression aString = new ColumnRef(new TableRef(table), table.getPColumnForColumnName("A_STRING").getPosition()).newColumnExpression();
         assertEquals(
-            multiKVFilter(and(
+            multiEncodedKVFilter(and(
                 constantComparison(
                     CompareOp.EQUAL,
                     aInteger,
@@ -986,7 +987,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 constantComparison(
                     CompareOp.EQUAL,
                     aString,
-                    "foo"))),
+                    "foo")), FOUR_BYTE_QUALIFIERS),
             filter);
         
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId);

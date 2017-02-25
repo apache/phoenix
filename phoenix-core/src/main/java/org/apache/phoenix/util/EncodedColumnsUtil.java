@@ -195,4 +195,11 @@ public class EncodedColumnsUtil {
         }
         return number < QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
     }
+    
+    public static boolean isPossibleToUseEncodedCQFilter(QualifierEncodingScheme encodingScheme,
+            ImmutableStorageScheme storageScheme) {
+        return EncodedColumnsUtil.usesEncodedColumnNames(encodingScheme)
+                && storageScheme == ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+    }
+
 }
