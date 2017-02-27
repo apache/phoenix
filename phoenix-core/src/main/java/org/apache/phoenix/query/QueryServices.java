@@ -243,7 +243,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
-
+    public static final String PHOENIX_QUERY_SERVER_METRICS = "phoenix.query.server.metrics";
+    public static final String PHOENIX_PQS_GLOBAL_INITIAL_DELAY="phoenix.pqs.global.metrics" +
+            ".initial.delay.seconds";
+    public static final String PHOENIX_PQS_GLOBAL_PERIOD="phoenix.pqs.global.metrics.period.seconds";
     /**
      * Get executor service used for parallel scans
      */
