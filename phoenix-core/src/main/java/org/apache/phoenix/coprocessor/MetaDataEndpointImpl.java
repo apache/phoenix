@@ -1250,6 +1250,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return table.getName() == null;
     }
 
+	private static boolean isSchemaDeleted(PSchema schema) {
+		return schema.getSchemaName() == null;
+	}
+
     private static boolean isFunctionDeleted(PFunction function) {
         return function.getFunctionName() == null;
     }
@@ -3636,11 +3640,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             PSchema schema = loadSchema(env, lockKey, cacheKey, clientTimeStamp, clientTimeStamp);
             if (schema != null) {
                 if (schema.getTimeStamp() < clientTimeStamp) {
-                    builder.setReturnCode(MetaDataProtos.MutationCode.SCHEMA_ALREADY_EXISTS);
-                    builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                    builder.setSchema(PSchema.toProto(schema));
-                    done.run(builder.build());
-                    return;
+                    if (!isSchemaDeleted(schema)) {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.SCHEMA_ALREADY_EXISTS);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        builder.setSchema(PSchema.toProto(schema));
+                        done.run(builder.build());
+                        return;
+                    } else {
+                        builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_SCHEMA_FOUND);
+                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                        builder.setSchema(PSchema.toProto(schema));
+                        done.run(builder.build());
+                        return;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -3901,11 +3913,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 PSchema schema = loadSchema(env, lockKey, cacheKey, clientTimeStamp, clientTimeStamp);
                 if (schema != null) {
                     if (schema.getTimeStamp() < clientTimeStamp) {
-                        builder.setReturnCode(MetaDataProtos.MutationCode.SCHEMA_ALREADY_EXISTS);
-                        builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        builder.setSchema(PSchema.toProto(schema));
-                        done.run(builder.build());
-                        return;
+                        if (!isSchemaDeleted(schema)) {
+                            builder.setReturnCode(MetaDataProtos.MutationCode.SCHEMA_ALREADY_EXISTS);
+                            builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                            builder.setSchema(PSchema.toProto(schema));
+                            done.run(builder.build());
+                            return;
+                        }
                     } else {
                         builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_SCHEMA_FOUND);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
@@ -4013,7 +4027,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             if (areTablesExists) { return new MetaDataMutationResult(MutationCode.TABLES_EXIST_ON_SCHEMA, schema,
                     EnvironmentEdgeManager.currentTimeMillis()); }
-
+            invalidateList.add(new ImmutableBytesPtr(key));
             return new MetaDataMutationResult(MutationCode.SCHEMA_ALREADY_EXISTS, schema,
                     EnvironmentEdgeManager.currentTimeMillis());
         }
