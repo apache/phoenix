@@ -492,26 +492,17 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
                 if ((offset > 0 || ScanUtil.isLocalIndex(scan))  && !ScanUtil.isAnalyzeTable(scan)) {
                     if(hasReferences && actualStartKey!=null) {
                         next = scanTillScanStartRow(s, arrayKVRefs, arrayFuncRefs, result,
-                                    scannerContext, arrayElementCell);
+                            scannerContext, arrayElementCell);
                         if (result.isEmpty()) {
                             return next;
                         }
-                        IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
-                            tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
-                    }
-                    if (projector != null) {
-                        Tuple toProject = useQualifierAsListIndex ? new PositionBasedMultiKeyValueTuple(result) : new ResultTuple(Result.create(result));
-                        Tuple tuple = projector.projectResults(toProject, useNewValueColumnQualifier);
-                        result.clear();
-                        result.add(tuple.getValue(0));
-                        if(arrayElementCell != null)
-                            result.add(arrayElementCell);
                     }
                     IndexUtil.wrapResultUsingOffset(c, result, offset, dataColumns,
                         tupleProjector, dataRegion, indexMaintainer, viewConstants, ptr);
                 }
                 if (projector != null) {
-                    Tuple tuple = projector.projectResults(new ResultTuple(Result.create(result)));
+                    Tuple toProject = useQualifierAsListIndex ? new PositionBasedMultiKeyValueTuple(result) : new ResultTuple(Result.create(result));
+                    Tuple tuple = projector.projectResults(toProject, useNewValueColumnQualifier);
                     result.clear();
                     result.add(tuple.getValue(0));
                     if(arrayElementCell != null)
