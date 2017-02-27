@@ -30,12 +30,47 @@ message ImmutableBytesWritable {
   required int32 length = 3;
 }
 
+message ColumnReference {
+  required bytes family = 1;
+  required bytes qualifier = 2;
+}
+
+message ColumnInfo {
+  optional string familyName = 1;
+  required string columnName = 2;
+}
+
+message IndexMaintainer {
+  required int32 saltBuckets = 1;
+  required bool isMultiTenant = 2;
+  optional bytes viewIndexId = 3;
+  repeated ColumnReference indexedColumns = 4;
+  repeated int32 indexedColumnTypeOrdinal = 5;
+  repeated ColumnReference dataTableColRefForCoveredColumns = 6;
+  repeated ColumnReference indexTableColRefForCoveredColumns = 7;
+  required bool isLocalIndex = 8;
+  required bytes indexTableName = 9;
+  required bool rowKeyOrderOptimizable = 10;
+  required bytes dataTableEmptyKeyValueColFamily = 11;
+  required ImmutableBytesWritable emptyKeyValueColFamily = 12;
+  optional bytes indexedExpressions = 13;
+  required bytes rowKeyMetadata = 14;
+  required int32 numDataTableColFamilies = 15;
+  required bool indexWalDisabled = 16;
+  required int32 indexRowKeyByteSize = 17;
+  required bool immutable = 18;
+  repeated ColumnInfo indexedColumnInfo = 19;
+  required int32 encodingScheme = 20;
+  required int32 immutableStorageScheme = 21;
+}
+
 message AddServerCacheRequest {
   optional bytes tenantId = 1;
   required bytes cacheId  = 2;
   required ImmutableBytesWritable cachePtr = 3;
   required ServerCacheFactory cacheFactory = 4;
   optional bytes txState = 5;
+  optional bool hasProtoBufIndexMaintainer = 6;
 }
 
 message AddServerCacheResponse {

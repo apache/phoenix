@@ -141,7 +141,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
                     .append("           throw new ParseException(\"Index cannot be negative :\" + index);\n")
                     .append("        }\n")
                     .append("        Expression arrayExpr = children.get(0);\n")
-                    .append("        return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),getMaxLength());\n")
+                    .append("        return PArrayDataTypeDecoder.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),getMaxLength());\n")
                     .append("    }\n").toString();
 
     private static String GETY_EVALUATE_METHOD =
@@ -217,6 +217,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
                 .append("import org.apache.phoenix.schema.types.PVarchar;\n")
                 .append("import org.apache.phoenix.util.StringUtil;\n")
                 .append("import org.apache.phoenix.schema.types.PArrayDataType;\n")
+                .append("import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;\n")
                 .append("import org.apache.phoenix.parse.ParseException;\n")
                 .append("public class "+className+" extends ScalarFunction{\n")
                 .append("    public static final String NAME = \""+className+"\";\n")

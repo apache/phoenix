@@ -23,6 +23,7 @@ import java.util.List;
 import org.apache.phoenix.compile.SequenceValueExpression;
 import org.apache.phoenix.expression.AddExpression;
 import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.ArrayConstructorExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -42,6 +43,7 @@ import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.SingleCellConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
@@ -109,10 +111,14 @@ public interface ExpressionVisitor<E> {
     public Iterator<Expression> visitEnter(ArrayConstructorExpression node);
     public E visitLeave(ArrayConstructorExpression node, List<E> l);
     
+    public Iterator<Expression> visitEnter(SingleCellConstructorExpression node);
+    public E visitLeave(SingleCellConstructorExpression node, List<E> l);
+    
     public E visit(CorrelateVariableFieldAccessExpression node);
     public E visit(LiteralExpression node);
     public E visit(RowKeyColumnExpression node);
     public E visit(KeyValueColumnExpression node);
+    public E visit(SingleCellColumnExpression node);
     public E visit(ProjectedColumnExpression node);
     public E visit(SequenceValueExpression node);
     
