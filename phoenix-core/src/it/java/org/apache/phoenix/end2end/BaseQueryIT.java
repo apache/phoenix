@@ -67,19 +67,18 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     protected static final long BATCH_SIZE = 3;
     protected static final String[] INDEX_DDLS = new String[] {
             "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE ("
-                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)"};
-//    ,
-//            "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE ("
-//                    + "    B_STRING, " + "    A_DATE)",
-//            "CREATE INDEX %s ON %s (a_integer) INCLUDE ("
-//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
-//            "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE ("
-//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
-//            "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
-//                    + "    A_DATE)",
-//            "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE ("
-//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)", 
-//            "" };
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+            "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE ("
+                    + "    B_STRING, " + "    A_DATE)",
+            "CREATE INDEX %s ON %s (a_integer) INCLUDE ("
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+            "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE ("
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+            "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
+                    + "    A_DATE)",
+            "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE ("
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)", 
+            "" };
 
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
