@@ -55,11 +55,27 @@ public class IndexedWALEditCodec extends WALCellCodec {
   private static final int MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION = VersionUtil.encodeVersion("1", "1", "3");
   private final boolean useDefaultDecoder;
 
+  private static boolean isUseDefaultDecoder() {
+      String hbaseVersion = VersionInfo.getVersion();
+      return VersionUtil.encodeVersion(hbaseVersion) >= MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION;
+  }
+
+  /*
+   * No-args constructor must be provided for WALSplitter/RPC Codec path
+   */
+  public IndexedWALEditCodec() {
+      super();
+      this.compression = null;
+      this.useDefaultDecoder = isUseDefaultDecoder();
+  }
+
+  /*
+   * Two-args Configuration and CompressionContext codec must be provided for WALCellCodec path
+   */
   public IndexedWALEditCodec(Configuration conf, CompressionContext compression) {
       super(conf, compression);
       this.compression = compression;
-      String hbaseVersion = VersionInfo.getVersion();
-      this.useDefaultDecoder = VersionUtil.encodeVersion(hbaseVersion) >= MIN_BINARY_COMPATIBLE_INDEX_CODEC_VERSION;
+      this.useDefaultDecoder = isUseDefaultDecoder();
   }
 
   @Override
