@@ -24,9 +24,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.ParseException;
+import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PBinaryArray;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
 import org.apache.phoenix.schema.SortOrder;
@@ -61,7 +61,7 @@ public class ArrayIndexFunction extends ScalarFunction {
 			throw new ParseException("Index cannot be negative :" + index);
 		}
 		Expression arrayExpr = children.get(0);
-		return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),
+		return PArrayDataTypeDecoder.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(),
         getMaxLength());
 	}
 

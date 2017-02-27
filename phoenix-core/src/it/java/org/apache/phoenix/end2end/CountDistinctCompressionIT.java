@@ -51,7 +51,7 @@ public class CountDistinctCompressionIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testDistinctCountOnColumn() throws Exception {
         String tenantId = getOrganizationId();
-        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), (Date)null, null, getUrl());
+        String tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), (Date)null, null, getUrl(), null);
 
         String query = "SELECT count(DISTINCT A_STRING) FROM " + tableName;
 

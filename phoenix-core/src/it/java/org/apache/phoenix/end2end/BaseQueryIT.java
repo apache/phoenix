@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -30,14 +29,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.runner.RunWith;
@@ -45,6 +48,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 
 
@@ -61,6 +65,21 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     protected static final String tenantId = getOrganizationId();
     protected static final String ATABLE_INDEX_NAME = "ATABLE_IDX";
     protected static final long BATCH_SIZE = 3;
+    protected static final String[] INDEX_DDLS = new String[] {
+            "CREATE INDEX %s ON %s (a_integer DESC) INCLUDE ("
+                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)"};
+//    ,
+//            "CREATE INDEX %s ON %s (a_integer, a_string) INCLUDE ("
+//                    + "    B_STRING, " + "    A_DATE)",
+//            "CREATE INDEX %s ON %s (a_integer) INCLUDE ("
+//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+//            "CREATE LOCAL INDEX %s ON %s (a_integer DESC) INCLUDE ("
+//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)",
+//            "CREATE LOCAL INDEX %s ON %s (a_integer, a_string) INCLUDE (" + "    B_STRING, "
+//                    + "    A_DATE)",
+//            "CREATE LOCAL INDEX %s ON %s (a_integer) INCLUDE ("
+//                    + "    A_STRING, " + "    B_STRING, " + "    A_DATE)", 
+//            "" };
 
     @BeforeClass
     @Shadower(classBeingShadowed = BaseClientManagedTimeIT.class)
@@ -79,42 +98,69 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     
+    private static Map<Pair<String, String>, Pair<String, String>> namesByParams = Maps.newHashMapWithExpectedSize(10);
+    
     protected long ts;
     protected Date date;
     private String indexDDL;
+    private String tableDDLOptions;
+    protected String tableName;
+    protected String indexName;
     
-    public BaseQueryIT(String indexDDL) {
-        this.indexDDL = indexDDL;
-    }
-    
-    @Before
-    public void initTable() throws Exception {
-         ts = nextTimestamp();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl());
-        if (indexDDL != null && indexDDL.length() > 0) {
-            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
-            Connection conn = DriverManager.getConnection(getUrl(), props);
-            conn.createStatement().execute(indexDDL);
+    public BaseQueryIT(String idxDdl, boolean mutable, boolean columnEncoded) {
+        StringBuilder optionBuilder = new StringBuilder();
+        if (!columnEncoded) {
+            optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+        }
+        if (!mutable) {
+            if (optionBuilder.length()>0)
+                optionBuilder.append(",");
+            optionBuilder.append("IMMUTABLE_ROWS=true");
+            if (!columnEncoded) {
+                optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+            }
+        }
+        this.tableDDLOptions = optionBuilder.toString();
+        try {
+            this.ts = nextTimestamp();
+            Pair<String, String> runParam = new Pair<>(idxDdl, tableDDLOptions);
+            Pair<String, String> tableIndexNames = namesByParams.get(runParam);
+            if (tableIndexNames == null) {
+                this.tableName = initATableValues(null, tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl(), tableDDLOptions);
+                this.indexName = generateUniqueName();
+                namesByParams.put(runParam, new Pair<>(tableName, indexName));
+                if (idxDdl.length() > 0) {
+                    this.indexDDL = String.format(idxDdl, indexName, tableName);
+                    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+                    props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+                    Connection conn = DriverManager.getConnection(getUrl(), props);
+                    conn.createStatement().execute(this.indexDDL);
+                }
+            } else {
+                this.tableName = tableIndexNames.getFirst();
+                this.indexName = tableIndexNames.getSecond();
+                initATableValues(this.tableName, tenantId, getDefaultSplits(tenantId), date=new Date(System.currentTimeMillis()), ts, getUrl(), tableDDLOptions);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
     
-    @Parameters(name="{0}")
+    @Before
+    public void init() throws Exception {
+        this.ts = nextTimestamp();
+    }
+    
+    @Parameters(name="indexDDL={0},mutable={1},columnEncoded={2}")
     public static Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
-        testCases.add(new String[] { "CREATE INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer DESC) INCLUDE ("
-                + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
-        testCases.add(new String[] { "CREATE INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer, a_string) INCLUDE ("
-                + "    B_STRING, " + "    A_DATE)" });
-        testCases.add(new String[] { "CREATE INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer) INCLUDE ("
-                + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
-        testCases.add(new String[] { "CREATE LOCAL INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer DESC) INCLUDE ("
-                + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
-        testCases.add(new String[] { "CREATE LOCAL INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer, a_string) INCLUDE ("
-                + "    B_STRING, " + "    A_DATE)" });
-        testCases.add(new String[] { "CREATE LOCAL INDEX " + ATABLE_INDEX_NAME + " ON aTable (a_integer) INCLUDE ("
-                + "    A_STRING, " + "    B_STRING, " + "    A_DATE)" });
-        testCases.add(new String[] { "" });
+        for (String indexDDL : INDEX_DDLS) {
+            for (boolean mutable : new boolean[]{false}) {
+                for (boolean columnEncoded : new boolean[]{false}) {
+                    testCases.add(new Object[] { indexDDL, mutable, columnEncoded });
+                }
+            }
+        }
         return testCases;
     }
     
@@ -132,4 +178,5 @@ public abstract class BaseQueryIT extends BaseClientManagedTimeIT {
     protected static int nextRunCount() {
         return runCount.getAndAdd(1);
     }
+
 }

@@ -213,5 +213,68 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testDynamicColumnOnNewTable() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "create table " + tableName + 
+            "   (entry varchar not null," +
+            "    F varchar," +
+            "    A.F1v1 varchar," +
+            "    A.F1v2 varchar," +
+            "    B.F2v1 varchar" +
+            "    CONSTRAINT pk PRIMARY KEY (entry))";
+        String dml = "UPSERT INTO " + tableName + " values (?, ?, ?, ?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+                stmt.setString(1, "entry");
+                stmt.setString(2, "a");
+                stmt.setString(3, "b");
+                stmt.setString(4, "c");
+                stmt.setString(5, "d");
+                stmt.executeUpdate();
+                conn.commit();
+            }
+            dml = "UPSERT INTO " + tableName + "(entry, F, A.F1V1, A.F1v2, B.F2V1, DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+                stmt.setString(1, "dynentry");
+                stmt.setString(2, "a");
+                stmt.setString(3, "b");
+                stmt.setString(4, "c");
+                stmt.setString(5, "d");
+                stmt.setString(6, "e");
+                stmt.setString(7, "f");
+                stmt.executeUpdate();
+                conn.commit();
+            }
+            
+            // test dynamic column in where clause
+            String query = "SELECT entry, F from " + tableName + " (DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) " + " WHERE DYNCOL1 = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                stmt.setString(1, "e");
+                ResultSet rs = stmt.executeQuery();
+                assertTrue(rs.next());
+                assertEquals("dynentry", rs.getString(1));
+                assertEquals("a", rs.getString(2));
+                assertFalse(rs.next());
+            }
+            
+            // test dynamic column with projection
+            query = "SELECT entry, dyncol1, dyncol2 from " + tableName + " (DYNCOL1 VARCHAR, DYNCOL2 VARCHAR) ";
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                ResultSet rs = stmt.executeQuery();
+                assertTrue(rs.next());
+                assertEquals("dynentry", rs.getString(1));
+                assertEquals("e", rs.getString(2));
+                assertEquals("f", rs.getString(3));
+                assertTrue(rs.next());
+                assertEquals("entry", rs.getString(1));
+                assertEquals(null, rs.getString(2));
+                assertEquals(null, rs.getString(2));
+                assertFalse(rs.next());
+            }
+        }
+    }
 
 }

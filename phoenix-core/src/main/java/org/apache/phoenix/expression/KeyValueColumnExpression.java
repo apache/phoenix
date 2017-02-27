@@ -41,13 +41,25 @@ import org.apache.phoenix.util.SchemaUtil;
 public class KeyValueColumnExpression extends ColumnExpression {
     private byte[] cf;
     private byte[] cq;
-    private String displayName; // client-side only
+    private String displayName; // client-side only.
 
     public KeyValueColumnExpression() {
     }
-
+    
     public KeyValueColumnExpression(PColumn column) {
-        this(column, null);
+        super(column);
+        this.cf = column.getFamilyName().getBytes();
+        // for backward compatibility since older tables won't have columnQualifierBytes in their metadata
+        this.cq = column.getColumnQualifierBytes() != null ? column.getColumnQualifierBytes() : column.getName().getBytes();
+        this.displayName = column.getName().getString();
+    }
+    
+    public KeyValueColumnExpression(PColumn column, String displayName) {
+        super(column);
+        this.cf = column.getFamilyName().getBytes();
+        // for backward compatibility since older tables won't have columnQualifierBytes in their metadata
+        this.cq = column.getColumnQualifierBytes() != null ? column.getColumnQualifierBytes() : column.getName().getBytes();
+        this.displayName = displayName;
     }
 
     public KeyValueColumnExpression(PDatum column, byte[] cf, byte[] cq) {
@@ -56,18 +68,11 @@ public class KeyValueColumnExpression extends ColumnExpression {
         this.cq = cq;
     }
 
-    public KeyValueColumnExpression(PColumn column, String displayName) {
-        super(column);
-        this.cf = column.getFamilyName().getBytes();
-        this.cq = column.getName().getBytes();
-        this.displayName = displayName;
-    }
-
     public byte[] getColumnFamily() {
         return cf;
     }
-
-    public byte[] getColumnName() {
+    
+    public byte[] getColumnQualifier() {
         return cq;
     }
 
@@ -120,7 +125,8 @@ public class KeyValueColumnExpression extends ColumnExpression {
     }
 
     @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
+    public <T> T accept(ExpressionVisitor<T> visitor) {
         return visitor.visit(this);
     }
+
 }

@@ -288,7 +288,6 @@ public class OrderByIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
-
         try {
             String tableName1 = generateUniqueName();
             String ddl = "CREATE TABLE " + tableName1 +
@@ -376,7 +375,6 @@ public class OrderByIT extends ParallelStatsDisabledIT {
             assertEquals("a",rs.getString(1));  
             assertEquals(40,rs.getInt(2));
             assertFalse(rs.next()); 
-        } catch (SQLException e) {
         } finally {
             conn.close();
         }

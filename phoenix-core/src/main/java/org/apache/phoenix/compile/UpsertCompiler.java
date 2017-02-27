@@ -748,7 +748,7 @@ public class UpsertCompiler {
                             if (ptr.getLength() > 0) {
                                 byte[] uuidValue = ServerCacheClient.generateId();
                                 scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                scan.setAttribute(PhoenixIndexCodec.INDEX_MD, ptr.get());
+                                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
                                 scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                             }
                             ResultIterator iterator = aggPlan.iterator();
@@ -917,10 +917,10 @@ public class UpsertCompiler {
                 UpdateColumnCompiler compiler = new UpdateColumnCompiler(context);
                 int nColumns = onDupKeyPairs.size();
                 List<Expression> updateExpressions = Lists.newArrayListWithExpectedSize(nColumns);
-                LinkedHashSet<PColumn>updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
+                LinkedHashSet<PColumn> updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
                 updateColumns.add(new PColumnImpl(
                         table.getPKColumns().get(0).getName(), // Use first PK column name as we know it won't conflict with others
-                        null, PVarbinary.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null, false, null, false, false));
+                        null, PVarbinary.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null, false, null, false, false, null));
                 for (Pair<ColumnName,ParseNode> columnPair : onDupKeyPairs) {
                     ColumnName colName = columnPair.getFirst();
                     PColumn updateColumn = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName()).getColumn();

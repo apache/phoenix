@@ -37,7 +37,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 
-public class ImmutableTablePropIT extends ParallelStatsDisabledIT {
+public class ImmutableTablePropertiesIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testImmutableKeyword() throws Exception {
@@ -124,6 +124,65 @@ public class ImmutableTablePropIT extends ParallelStatsDisabledIT {
                 assertEquals(SQLExceptionCode.IMMUTABLE_TABLE_PROPERTY_INVALID.getErrorCode(), e.getErrorCode());
             }
             
+        } 
+    }
+    
+    @Test
+    public void testImmutableTableWithStorageSchemeAndColumnEncodingProps() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String immutableDataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            Statement stmt = conn.createStatement();
+            try {
+                // create immutable table with immutable table property set to true 
+                String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName +
+                        "  (a_string varchar not null, col1 integer" +
+                        "  CONSTRAINT pk PRIMARY KEY (a_string)) COLUMN_ENCODED_BYTES=0, IMMUTABLE_STORAGE_SCHEME="
+                        + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+                stmt.execute(ddl);
+                fail();
+            }
+            catch (SQLException e) {
+                assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES.getErrorCode(), e.getErrorCode());
+            }
+        } 
+    }
+    
+    @Test
+    public void testAlterImmutableStorageSchemeProp() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String immutableDataTableFullName1 = SchemaUtil.getTableName("", generateUniqueName());
+        String immutableDataTableFullName2 = SchemaUtil.getTableName("", generateUniqueName());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            Statement stmt = conn.createStatement();
+            // create an immutable table with  ONE_CELL_PER_COLUMN storage scheme
+            String ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName1 +
+                    "  (a_string varchar not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string)) COLUMN_ENCODED_BYTES=0, IMMUTABLE_STORAGE_SCHEME="
+                    + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+            stmt.execute(ddl);
+            // create an immutable table with  SINGLE_CELL_ARRAY_WITH_OFFSETS storage scheme
+            ddl = "CREATE IMMUTABLE TABLE  " + immutableDataTableFullName2 +
+                    "  (a_string varchar not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string)) COLUMN_ENCODED_BYTES=4, IMMUTABLE_STORAGE_SCHEME="
+                    + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+            stmt.execute(ddl);
+            
+            // changing the storage scheme from/to ONCE_CELL_PER_COLUMN should fail
+            try {
+                stmt.execute("ALTER TABLE " + immutableDataTableFullName1 + " SET IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS);
+                fail();
+            }
+            catch (SQLException e) {
+                assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE.getErrorCode(), e.getErrorCode());
+            }
+            try {
+                stmt.execute("ALTER TABLE " + immutableDataTableFullName2 + " SET IMMUTABLE_STORAGE_SCHEME=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+                fail();
+            }
+            catch (SQLException e) {
+                assertEquals(SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE.getErrorCode(), e.getErrorCode());
+            }
         } 
     }
     

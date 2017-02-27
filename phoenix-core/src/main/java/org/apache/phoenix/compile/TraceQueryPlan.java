@@ -53,6 +53,7 @@ import org.apache.phoenix.parse.TraceStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
@@ -74,10 +75,11 @@ public class TraceQueryPlan implements QueryPlan {
     private static final RowProjector TRACE_PROJECTOR;
     static {
         List<ExpressionProjector> projectedColumns = new ArrayList<ExpressionProjector>();
+        PName colName = PNameFactory.newName(MetricInfo.TRACE.columnName);
         PColumn column =
                 new PColumnImpl(PNameFactory.newName(MetricInfo.TRACE.columnName), null,
                         PLong.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null,
-                        false, null, false, false);
+                        false, null, false, false, colName.getBytes());
         List<PColumn> columns = new ArrayList<PColumn>();
         columns.add(column);
         Expression expression =

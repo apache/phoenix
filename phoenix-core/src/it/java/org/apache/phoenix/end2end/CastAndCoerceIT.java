@@ -43,8 +43,8 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class CastAndCoerceIT extends BaseQueryIT {
 
-    public CastAndCoerceIT(String indexDDL) {
-        super(indexDDL);
+    public CastAndCoerceIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+        super(indexDDL, mutable, columnEncoded);
     }
     
     @Parameters(name="CastAndCoerceIT_{index}") // name is used by failsafe as file name in reports
@@ -54,7 +54,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
     
     @Test
     public void testCastOperatorInSelect() throws Exception {
-        String query = "SELECT CAST(a_integer AS decimal)/2 FROM aTable WHERE ?=organization_id and 5=a_integer";
+        String query = "SELECT CAST(a_integer AS decimal)/2 FROM " + tableName + " WHERE ?=organization_id and 5=a_integer";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -72,7 +72,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
     
     @Test
     public void testCastOperatorInWhere() throws Exception {
-        String query = "SELECT a_integer FROM aTable WHERE ?=organization_id and 2.5 = CAST(a_integer AS DECIMAL)/2 ";
+        String query = "SELECT a_integer FROM " + tableName + " WHERE ?=organization_id and 2.5 = CAST(a_integer AS DECIMAL)/2 ";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -90,7 +90,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
     
     @Test
     public void testCoerceIntegerToLong() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_long >= x_integer";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND x_long >= x_integer";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -110,7 +110,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
     
     @Test
     public void testCoerceLongToDecimal1() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_decimal > x_integer";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND x_decimal > x_integer";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -128,7 +128,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
     
     @Test
     public void testCoerceLongToDecimal2() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND x_integer <= x_decimal";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND x_integer <= x_decimal";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -146,7 +146,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
     
     @Test
     public void testCoerceTinyIntToSmallInt() throws Exception {
-        String query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_byte >= a_short";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND a_byte >= a_short";
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(url, props);
@@ -176,12 +176,12 @@ public class CastAndCoerceIT extends BaseQueryIT {
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
         conn = DriverManager.getConnection(url, props);
         conn.setAutoCommit(true);
-        conn.createStatement().execute("UPSERT INTO ATABLE(organization_id,entity_id,a_time,a_timestamp) SELECT organization_id,entity_id,a_date,a_date FROM ATABLE");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (organization_id,entity_id,a_time,a_timestamp) SELECT organization_id,entity_id,a_date,a_date FROM " + tableName);
 
         url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5);
         conn = DriverManager.getConnection(url, props);
         try {
-            query = "SELECT entity_id, CAST(a_date AS BIGINT) FROM ATABLE WHERE organization_id=? AND a_date IS NOT NULL LIMIT 1";
+            query = "SELECT entity_id, CAST(a_date AS BIGINT) FROM " + tableName + " WHERE organization_id=? AND a_date IS NOT NULL LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             rs = statement.executeQuery();
@@ -190,7 +190,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
             dateAsLong = rs.getLong(2);
             assertFalse(rs.next());
         
-            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_date = CAST(? AS DATE) LIMIT 1";
+            query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND a_date = CAST(? AS DATE) LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             statement.setLong(2, dateAsLong);
@@ -199,7 +199,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
             assertEquals(ROW1, rs.getString(1));
             assertFalse(rs.next());
 
-            query = "SELECT entity_id, CAST(a_time AS BIGINT) FROM ATABLE WHERE organization_id=? AND a_time IS NOT NULL LIMIT 1";
+            query = "SELECT entity_id, CAST(a_time AS BIGINT) FROM " + tableName + " WHERE organization_id=? AND a_time IS NOT NULL LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             rs = statement.executeQuery();
@@ -208,7 +208,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
             dateAsLong = rs.getLong(2);
             assertFalse(rs.next());
         
-            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_time = CAST(? AS TIME) LIMIT 1";
+            query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND a_time = CAST(? AS TIME) LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             statement.setLong(2, dateAsLong);
@@ -217,7 +217,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
             assertEquals(ROW1, rs.getString(1));
             assertFalse(rs.next());
 
-            query = "SELECT entity_id, CAST(a_timestamp AS DECIMAL) FROM ATABLE WHERE organization_id=? AND a_timestamp IS NOT NULL LIMIT 1";
+            query = "SELECT entity_id, CAST(a_timestamp AS DECIMAL) FROM " + tableName + " WHERE organization_id=? AND a_timestamp IS NOT NULL LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             rs = statement.executeQuery();
@@ -226,7 +226,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
             dateAsDecimal = rs.getBigDecimal(2);
             assertFalse(rs.next());
         
-            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_timestamp = CAST(? AS TIMESTAMP) LIMIT 1";
+            query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND a_timestamp = CAST(? AS TIMESTAMP) LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             statement.setBigDecimal(2, dateAsDecimal);
@@ -236,7 +236,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
             assertFalse(rs.next());
 
 
-            query = "SELECT entity_id, CAST(a_timestamp AS BIGINT) FROM ATABLE WHERE organization_id=? AND a_timestamp IS NOT NULL LIMIT 1";
+            query = "SELECT entity_id, CAST(a_timestamp AS BIGINT) FROM " + tableName + " WHERE organization_id=? AND a_timestamp IS NOT NULL LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             rs = statement.executeQuery();
@@ -245,7 +245,7 @@ public class CastAndCoerceIT extends BaseQueryIT {
             dateAsLong = rs.getLong(2);
             assertFalse(rs.next());
         
-            query = "SELECT entity_id FROM ATABLE WHERE organization_id=? AND a_timestamp = CAST(? AS TIMESTAMP) LIMIT 1";
+            query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? AND a_timestamp = CAST(? AS TIMESTAMP) LIMIT 1";
             statement = conn.prepareStatement(query);
             statement.setString(1, tenantId);
             statement.setLong(2, dateAsLong);

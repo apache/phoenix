@@ -272,6 +272,8 @@ public class MutableIndexFailureIT extends BaseTest {
             // verify index table has correct data
             validateDataWithIndex(conn, fullTableName, fullIndexName);
             validateDataWithIndex(conn, secondTableName, secondFullIndexName);
+        } finally {
+            FAIL_WRITE = false;
         }
     }
 
