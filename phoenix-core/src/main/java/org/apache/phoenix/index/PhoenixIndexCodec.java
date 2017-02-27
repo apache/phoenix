@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_MD = "IdxMD";
+    public static final String INDEX_PROTO_MD = "IdxProtoMD";
     public static final String INDEX_UUID = "IdxUUID";
     public static final String INDEX_MAINTAINERS = "IndexMaintainers";
     private static KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;

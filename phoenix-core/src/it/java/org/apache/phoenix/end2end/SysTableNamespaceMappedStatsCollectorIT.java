@@ -27,8 +27,8 @@ import com.google.common.collect.Maps;
 
 public class SysTableNamespaceMappedStatsCollectorIT extends StatsCollectorIT {
     
-    public SysTableNamespaceMappedStatsCollectorIT(boolean transactional, boolean userTableNamespaceMapped) {
-        super(transactional, userTableNamespaceMapped);
+    public SysTableNamespaceMappedStatsCollectorIT(boolean mutable, boolean transactional, boolean userTableNamespaceMapped, boolean columnEncoded) {
+        super(mutable, transactional, userTableNamespaceMapped, columnEncoded);
     }
     
     @BeforeClass

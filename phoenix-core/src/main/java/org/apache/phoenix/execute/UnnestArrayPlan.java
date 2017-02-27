@@ -33,6 +33,7 @@ import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 
@@ -138,7 +139,7 @@ public class UnnestArrayPlan extends DelegateQueryPlan {
         @Override
         public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
             ptr.set(arrayPtr.get(), arrayPtr.getOffset(), arrayPtr.getLength());
-            PArrayDataType.positionAtArrayElement(ptr, index++, getDataType(), getMaxLength());
+            PArrayDataTypeDecoder.positionAtArrayElement(ptr, index++, getDataType(), getMaxLength());
             return true;
         }
 

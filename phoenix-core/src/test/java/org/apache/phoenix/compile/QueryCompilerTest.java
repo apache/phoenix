@@ -59,6 +59,7 @@ import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
+import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -173,7 +174,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             String query = "CREATE TABLE t1 (k integer not null primary key, a.k decimal, b.k decimal)";
             conn.createStatement().execute(query);
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            PColumn c = pconn.getTable(new PTableKey(pconn.getTenantId(), "T1")).getColumn("K");
+            PColumn c = pconn.getTable(new PTableKey(pconn.getTenantId(), "T1")).getColumnForColumnName("K");
             assertTrue(SchemaUtil.isPKColumn(c));
         } finally {
             conn.close();
@@ -920,6 +921,25 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testAggregateOnColumnsNotInGroupByForImmutableEncodedTable() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE IMMUTABLE TABLE  " + tableName +
+                "  (a_string varchar not null, col1 integer, col2 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string))";
+        String query = "SELECT col1, max(a_string) from " + tableName + " group by col2";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            try {
+                PreparedStatement statement = conn.prepareStatement(query);
+                statement.executeQuery();
+                fail();
+            } catch (SQLException e) { // expected
+                assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+            }
         }
     }
 
@@ -2322,7 +2342,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Iterator<Filter> iterator = ScanUtil.getFilterIterator(scan);
         while (iterator.hasNext()) {
             Filter filter = iterator.next();
-            if (filter instanceof ColumnProjectionFilter) {
+            if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
                 return true;
             }
         }
@@ -2624,7 +2644,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute(ddl);
         PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache()
                 .getTableRef(new PTableKey(null,"TABLE_WITH_DEFAULT")).getTable();
-        assertNull(table.getColumn("V").getExpressionStr());
+        assertNull(table.getColumnForColumnName("V").getExpressionStr());
     }
 
     @Test
@@ -2639,7 +2659,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute(ddl2);
         PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache()
                 .getTableRef(new PTableKey(null,"TABLE_WITH_DEFAULT")).getTable();
-        assertNull(table.getColumn("V").getExpressionStr());
+        assertNull(table.getColumnForColumnName("V").getExpressionStr());
     }
 
     @Test

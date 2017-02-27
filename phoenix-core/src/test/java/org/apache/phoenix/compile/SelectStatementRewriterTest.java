@@ -17,10 +17,11 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.and;
 import static org.apache.phoenix.util.TestUtil.constantComparison;
-import static org.apache.phoenix.util.TestUtil.multiKVFilter;
+import static org.apache.phoenix.util.TestUtil.multiEncodedKVFilter;
 import static org.apache.phoenix.util.TestUtil.singleKVFilter;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -79,14 +80,14 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where organization_id='" + tenantId + "' and a_integer=0 and a_string='foo'";
         Filter filter = compileStatement(query);
         assertEquals(
-                multiKVFilter(and(
+                multiEncodedKVFilter(and(
                         constantComparison(
                             CompareOp.EQUAL,
                             A_INTEGER, 0),
                         constantComparison(
                             CompareOp.EQUAL,
                             A_STRING, "foo")
-                    )),
+                    ), TWO_BYTE_QUALIFIERS),
                 filter);
     }
 
@@ -103,14 +104,14 @@ public class SelectStatementRewriterTest extends BaseConnectionlessQueryTest {
         String query = "select * from atable where a_integer=0 and a_string='foo'";
         Filter filter = compileStatement(query);
         assertEquals(
-                multiKVFilter(and(
+                multiEncodedKVFilter(and(
                         constantComparison(
                             CompareOp.EQUAL,
                             A_INTEGER, 0),
                         constantComparison(
                             CompareOp.EQUAL,
                             A_STRING, "foo")
-                    )),
+                    ), TWO_BYTE_QUALIFIERS),
                 filter);
     }
 }

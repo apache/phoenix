@@ -27,7 +27,7 @@ import org.apache.phoenix.expression.BaseCompoundExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PDataType;
 
 public class ArrayElemRefExpression extends BaseCompoundExpression {
@@ -48,7 +48,7 @@ public class ArrayElemRefExpression extends BaseCompoundExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression arrayExpr = children.get(0);
-        return PArrayDataType.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(), getMaxLength());
+        return PArrayDataTypeDecoder.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(), getMaxLength());
     }
 
     @Override

@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 package org.apache.phoenix.compile;
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -24,7 +25,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.FamilyWildcardParseNode;
@@ -43,11 +43,13 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -120,7 +122,7 @@ public class TupleProjectionCompiler {
             PColumn sourceColumn = table.getPKColumns().get(i);
             ColumnRef sourceColumnRef = new ColumnRef(tableRef, sourceColumn.getPosition());
             PColumn column = new ProjectedColumn(sourceColumn.getName(), sourceColumn.getFamilyName(), 
-                    position++, sourceColumn.isNullable(), sourceColumnRef);
+                    position++, sourceColumn.isNullable(), sourceColumnRef, null);
             projectedColumns.add(column);
         }
         for (PColumn sourceColumn : table.getColumns()) {
@@ -132,18 +134,18 @@ public class TupleProjectionCompiler {
                     && !families.contains(sourceColumn.getFamilyName().getString()))
                 continue;
             PColumn column = new ProjectedColumn(sourceColumn.getName(), sourceColumn.getFamilyName(), 
-                    position++, sourceColumn.isNullable(), sourceColumnRef);
+                    position++, sourceColumn.isNullable(), sourceColumnRef, sourceColumn.getColumnQualifierBytes());
             projectedColumns.add(column);
             // Wildcard or FamilyWildcard will be handled by ProjectionCompiler.
             if (!isWildcard && !families.contains(sourceColumn.getFamilyName())) {
-                context.getScan().addColumn(sourceColumn.getFamilyName().getBytes(), sourceColumn.getName().getBytes());
+            	EncodedColumnsUtil.setColumns(column, table, context.getScan());
             }
         }
         // add LocalIndexDataColumnRef
         for (LocalIndexDataColumnRef sourceColumnRef : visitor.localIndexColumnRefSet) {
             PColumn column = new ProjectedColumn(sourceColumnRef.getColumn().getName(), 
                     sourceColumnRef.getColumn().getFamilyName(), position++, 
-                    sourceColumnRef.getColumn().isNullable(), sourceColumnRef);
+                    sourceColumnRef.getColumn().isNullable(), sourceColumnRef, sourceColumnRef.getColumn().getColumnQualifierBytes());
             projectedColumns.add(column);
         }
         
@@ -154,9 +156,9 @@ public class TupleProjectionCompiler {
                 null, null, table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
                 table.getViewIndexId(),
                 table.getIndexType(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(), 
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
+                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter());
     }
-
+    
     public static PTable createProjectedTable(TableRef tableRef, List<ColumnRef> sourceColumnRefs, boolean retainPKColumns) throws SQLException {
         PTable table = tableRef.getTable();
         boolean hasSaltingColumn = retainPKColumns && table.getBucketNum() != null;
@@ -169,20 +171,23 @@ public class TupleProjectionCompiler {
             String aliasedName = tableRef.getTableAlias() == null ? 
                       SchemaUtil.getColumnName(table.getName().getString(), colName) 
                     : SchemaUtil.getColumnName(tableRef.getTableAlias(), colName);
-
-            PColumn column = new ProjectedColumn(PNameFactory.newName(aliasedName), 
-                    retainPKColumns && SchemaUtil.isPKColumn(sourceColumn) ? 
-                            null : PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY), 
-                    position++, sourceColumn.isNullable(), sourceColumnRef);
+            PName familyName =  SchemaUtil.isPKColumn(sourceColumn) ? (retainPKColumns ? null : PNameFactory.newName(VALUE_COLUMN_FAMILY)) : sourceColumn.getFamilyName();
+            PColumn column = new ProjectedColumn(PNameFactory.newName(aliasedName), familyName, 
+                    position++, sourceColumn.isNullable(), sourceColumnRef, sourceColumn.getColumnQualifierBytes());
             projectedColumns.add(column);
         }
+        EncodedCQCounter cqCounter = EncodedCQCounter.NULL_COUNTER;
+        if (EncodedColumnsUtil.usesEncodedColumnNames(table)) {
+            cqCounter = EncodedCQCounter.copy(table.getEncodedCQCounter());
+        }
+        
         return PTableImpl.makePTable(table.getTenantId(), PROJECTED_TABLE_SCHEMA, table.getName(), PTableType.PROJECTED,
                 null, table.getTimeStamp(), table.getSequenceNumber(), table.getPKName(),
                 retainPKColumns ? table.getBucketNum() : null, projectedColumns, null, null,
                 Collections.<PTable> emptyList(), table.isImmutableRows(), Collections.<PName> emptyList(), null, null,
                 table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(),
                 table.getViewIndexId(), null, table.rowKeyOrderOptimizable(), table.isTransactional(),
-                table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema());
+                table.getUpdateCacheFrequency(), table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), cqCounter);
     }
 
     // For extracting column references from single select statement

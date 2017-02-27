@@ -324,7 +324,7 @@ public class PDataTypeForArraysTest {
 				PVarchar.INSTANCE, strArr);
 		byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
 		int offset = ptr.getOffset();
 		int length = ptr.getLength();
 		byte[] bs = ptr.get();
@@ -342,7 +342,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 0, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 0, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -365,7 +365,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -402,7 +402,7 @@ public class PDataTypeForArraysTest {
 				PVarchar.INSTANCE, strArr);
 		byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-		PArrayDataType.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+		PArrayDataTypeDecoder.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
 		int offset = ptr.getOffset();
 		int length = ptr.getLength();
 		byte[] bs = ptr.get();
@@ -423,7 +423,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 2, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 2, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -444,7 +444,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 2, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 2, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -464,7 +464,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -485,7 +485,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -506,7 +506,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -528,7 +528,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -548,7 +548,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -569,7 +569,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 3, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -590,7 +590,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 0, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 0, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -611,7 +611,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -632,7 +632,7 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 4, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
         int offset = ptr.getOffset();
         int length = ptr.getLength();
         byte[] bs = ptr.get();
@@ -649,7 +649,7 @@ public class PDataTypeForArraysTest {
 				PVarchar.INSTANCE, strArr);
 		byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-		PArrayDataType.positionAtArrayElement(ptr, 0, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+		PArrayDataTypeDecoder.positionAtArrayElement(ptr, 0, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
 		int offset = ptr.getOffset();
 		int length = ptr.getLength();
 		byte[] bs = ptr.get();
@@ -667,7 +667,7 @@ public class PDataTypeForArraysTest {
 				PVarchar.INSTANCE, strArr);
 		byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-		PArrayDataType.positionAtArrayElement(ptr, 1, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
+		PArrayDataTypeDecoder.positionAtArrayElement(ptr, 1, PVarchar.INSTANCE, PVarchar.INSTANCE.getByteSize());
 		int offset = ptr.getOffset();
 		int length = ptr.getLength();
 		byte[] bs = ptr.get();
@@ -688,7 +688,7 @@ public class PDataTypeForArraysTest {
 		PLongArray.INSTANCE.toObject(arr, PLongArray.INSTANCE);
 		byte[] bytes = PLongArray.INSTANCE.toBytes(arr);
 		ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-		PArrayDataType.positionAtArrayElement(ptr, 2, PLong.INSTANCE, PLong.INSTANCE.getByteSize());
+		PArrayDataTypeDecoder.positionAtArrayElement(ptr, 2, PLong.INSTANCE, PLong.INSTANCE.getByteSize());
 		int offset = ptr.getOffset();
 		int length = ptr.getLength();
 		byte[] bs = ptr.get();
@@ -1196,7 +1196,7 @@ public class PDataTypeForArraysTest {
         PhoenixArray arr = new PhoenixArray(PVarchar.INSTANCE, objects);
         byte[] bytes = PVarcharArray.INSTANCE.toBytes(arr, PVarchar.INSTANCE, SortOrder.DESC);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(bytes);
-        PArrayDataType.positionAtArrayElement(ptr, 2, PVarchar.INSTANCE, null);
+        PArrayDataTypeDecoder.positionAtArrayElement(ptr, 2, PVarchar.INSTANCE, null);
         String value = (String)PVarchar.INSTANCE.toObject(ptr, SortOrder.DESC);
         assertEquals(null, value);
     }

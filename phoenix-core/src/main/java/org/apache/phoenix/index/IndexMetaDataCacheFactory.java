@@ -47,10 +47,10 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
     }
 
     @Override
-    public Closeable newCache (ImmutableBytesWritable cachePtr, byte[] txState, final MemoryChunk chunk) throws SQLException {
+    public Closeable newCache (ImmutableBytesWritable cachePtr, byte[] txState, final MemoryChunk chunk, boolean useProtoForIndexMaintainer) throws SQLException {
         // just use the standard keyvalue builder - this doesn't really need to be fast
         final List<IndexMaintainer> maintainers = 
-                IndexMaintainer.deserialize(cachePtr, GenericKeyValueBuilder.INSTANCE);
+                IndexMaintainer.deserialize(cachePtr, GenericKeyValueBuilder.INSTANCE, useProtoForIndexMaintainer);
         final Transaction txn;
         try {
             txn = txState.length!=0 ? MutationState.decodeTransaction(txState) : null;

@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -214,6 +215,11 @@ public class LiteralExpression extends BaseTerminalExpression {
 
     public LiteralExpression() {
     }
+    
+    public LiteralExpression(byte[] byteValue) {
+        this.byteValue = byteValue!=null ? byteValue : ByteUtil.EMPTY_BYTE_ARRAY;
+        this.determinism = Determinism.ALWAYS;
+    }
 
     private LiteralExpression(PDataType type, Determinism determinism) {
         this(null, type, ByteUtil.EMPTY_BYTE_ARRAY, determinism);
@@ -242,7 +248,10 @@ public class LiteralExpression extends BaseTerminalExpression {
     
     @Override
     public String toString() {
-        if (value == null) {
+        if (value == null && byteValue!=null) {
+            return Bytes.toStringBinary(byteValue);
+        }
+        else if (value == null) {
             return "null";
         }
         // TODO: move into PDataType?

@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PArrayDataType.PArrayDataTypeBytesArrayBuilder;
+import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -159,8 +159,8 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
     private boolean
             split(byte[] srcBytes, int srcOffset, int srcLen, ImmutableBytesWritable outPtr) {
         SortOrder sortOrder = SortOrder.ASC;
-        PArrayDataTypeBytesArrayBuilder builder =
-                new PArrayDataTypeBytesArrayBuilder(PVarchar.INSTANCE, sortOrder);
+        PArrayDataTypeEncoder builder =
+                new PArrayDataTypeEncoder(PVarchar.INSTANCE, sortOrder);
         int srcRange = srcOffset + srcLen;
         Matcher matcher = pattern.matcher(srcBytes, 0, srcRange);
         int cur = srcOffset;
@@ -168,31 +168,29 @@ public class JONIPattern extends AbstractBasePattern implements AbstractBaseSpli
         while (true) {
             int nextCur = matcher.search(cur, srcRange, Option.DEFAULT);
             if (nextCur < 0) {
-                append = builder.appendElem(srcBytes, cur, srcRange - cur);
-                if (!append) return false;
+                builder.appendValue(srcBytes, cur, srcRange - cur);
                 break;
             }
 
             // To handle the following case, which adds null at first.
             // REGEXP_SPLIT("12ONE34TWO56THREE78","[0-9]+")={null, "ONE", "TWO", "THREE", null}
             if (cur == matcher.getBegin()) {
-                builder.appendElem(srcBytes, cur, 0);
+                builder.appendValue(srcBytes, cur, 0);
             }
 
             if (cur < matcher.getBegin()) {
-                append = builder.appendElem(srcBytes, cur, matcher.getBegin() - cur);
-                if (!append) return false;
+                builder.appendValue(srcBytes, cur, matcher.getBegin() - cur);
             }
             cur = matcher.getEnd();
 
             // To handle the following case, which adds null at last.
             // REGEXP_SPLIT("12ONE34TWO56THREE78","[0-9]+")={null, "ONE", "TWO", "THREE", null}
             if (cur == srcRange) {
-                builder.appendElem(srcBytes, cur, 0);
+                builder.appendValue(srcBytes, cur, 0);
                 break;
             }
         }
-        byte[] bytes = builder.getBytesAndClose(SortOrder.ASC);
+        byte[] bytes = builder.encode();
         if (bytes == null) return false;
         outPtr.set(bytes);
         return true;
