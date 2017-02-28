@@ -185,10 +185,7 @@ public class PhoenixSchema implements Schema {
                 if(ignoredRegexFunctions.contains(info.getFunc().getName())){
                     continue;
                 }
-                List<PhoenixScalarFunction> convertBuiltinFunction = convertBuiltinFunction(info);
-                if(convertBuiltinFunction!=null) {
-                    builtinFunctions.putAll(info.getName(), convertBuiltinFunction);
-                }
+                builtinFunctions.putAll(info.getName(), convertBuiltinFunction(info));
             }
         }
         // Single depth alias functions only
@@ -216,16 +213,6 @@ public class PhoenixSchema implements Schema {
         Class<? extends FunctionExpression> clazz = functionInfo.getFunc();
 
         try {
-            if(overloadedArgs.isEmpty()) {
-                PDataType returnType = null;
-                try{
-                    returnType = evaluateReturnType(clazz, new ArrayList<PFunction.FunctionArgument>(1));
-                } catch(Exception e) {
-                    return null;
-                }
-                functionList.add(new PhoenixScalarFunction(functionInfo, new ArrayList<FunctionParameter>(1), returnType));
-                return functionList;
-            }
             for (List<FunctionArgument> argumentList : overloadedArgs) {
                 List<FunctionParameter> parameters = Lists.newArrayListWithExpectedSize(argumentList.size());
                 PDataType returnType = evaluateReturnType(clazz, argumentList);

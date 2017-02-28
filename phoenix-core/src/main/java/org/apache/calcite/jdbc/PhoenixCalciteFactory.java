@@ -297,42 +297,17 @@ public class PhoenixCalciteFactory extends CalciteFactory {
 
         @Override
         public DatabaseMetaData getMetaData() throws SQLException {
-            PhoenixConnection pc = getPhoenixConnection(getRootSchema());
-            if(pc != null) {
-                return pc.getMetaData();
-            }
-            return super.getMetaData();
-        }
-
-        @Override
-        public Properties getClientInfo() throws SQLException {
-            PhoenixConnection pc = getPhoenixConnection(getRootSchema());
-            if(pc != null) {
-                return pc.getClientInfo();
-            }
-            return super.getClientInfo();
-        }
-
-        @Override
-        public String getClientInfo(String name) throws SQLException {
-            PhoenixConnection pc = getPhoenixConnection(getRootSchema());
-            if(pc != null) {
-                return pc.getClientInfo(name);
-            }
-            return super.getClientInfo(name);
-        }
-        
-        private PhoenixConnection getPhoenixConnection(SchemaPlus rootSchema) {
             for (String subSchemaName : getRootSchema().getSubSchemaNames()) {
                 try {
                     PhoenixSchema phoenixSchema =
                             getRootSchema().getSubSchema(subSchemaName).unwrap(PhoenixSchema.class);
-                    return phoenixSchema.pc;
+                    return phoenixSchema.pc.getMetaData();
                 } catch (ClassCastException e) {
                 }
             }
-            return null;
+            return super.getMetaData();
         }
+
         @SuppressWarnings("unchecked")
         @Override
         public <T> T unwrap(Class<T> iface) throws SQLException {

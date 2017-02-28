@@ -908,19 +908,6 @@ public class CalciteUtils {
                         return new CoalesceFunction(children);
                     } else if (op == SqlStdOperatorTable.MOD) {
                         return new ModulusExpression(children);
-                    } else if (op == SqlStdOperatorTable.CAST) {
-                        PDataType targetType = relDataTypeToPDataType(node.getType());
-                        Integer maxLength =
-                                (targetType == PChar.INSTANCE
-                                    || targetType == PCharArray.INSTANCE
-                                    || targetType == PBinary.INSTANCE
-                                    || targetType == PBinaryArray.INSTANCE) ?
-                                node.getType().getPrecision() : null;
-                        try {
-                            return cast(targetType, maxLength, children.get(0), implementor);
-                        } catch (SQLException e) {
-                            throw new RuntimeException(e);
-                        }
                     };
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
