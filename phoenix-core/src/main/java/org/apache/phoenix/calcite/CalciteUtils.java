@@ -61,6 +61,7 @@ import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
 import org.apache.phoenix.expression.DateAddExpression;
@@ -1047,7 +1048,22 @@ public class CalciteUtils {
                 return implementor.newSequenceExpression(seq, SequenceValueParseNode.Op.NEXT_VALUE);
             }
         });
-        // TODO: SqlKind.CASE
+        EXPRESSION_MAP.put(SqlKind.CASE, new ExpressionFactory() {
+             @Override
+             public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
+                 List<Expression> children = convertChildren((RexCall) node, implementor);
+                 for(int i = 0; i<children.size()-1; i+=2) {
+                     Expression expression = children.get(i);
+                     children.set(i, children.get(i+1));
+                     children.set(i+1, expression);
+                 }
+                 try {
+                     return CaseExpression.create(children);
+                 } catch (SQLException e) {
+                     throw new RuntimeException(e);
+                 }
+             }
+         });
 	}
 	
     private static final Map<String, FunctionFactory> FUNCTION_MAP = Maps
