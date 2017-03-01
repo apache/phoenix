@@ -426,7 +426,10 @@ public enum SQLExceptionCode {
                     "Cannot create schema because config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                             + " for enabling name space mapping isn't enabled."), INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES(
                                     726, "43M10", " Inconsistent namespace mapping properites.."), ASYNC_NOT_ALLOWED(
-                                    727, "43M11", " ASYNC option is not allowed.. ");
+                                    727, "43M11", " ASYNC option is not allowed.. "),
+    NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
+        "because this client already has the maximum number" +
+        " of connections to the target cluster.");
 
     private final int errorCode;
     private final String sqlState;
