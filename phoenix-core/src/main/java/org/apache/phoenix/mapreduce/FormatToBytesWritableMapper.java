@@ -47,7 +47,9 @@ import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -211,30 +213,41 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
     private void initColumnIndexes() throws SQLException {
         columnIndexes = new TreeMap<>(Bytes.BYTES_COMPARATOR);
         int columnIndex = 0;
-        for(int index = 0; index < logicalNames.size(); index++) {
+        for (int index = 0; index < logicalNames.size(); index++) {
             PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
-            List<PColumn> cls = table.getColumns();
-            for (int i = 0; i < cls.size(); i++) {
-                PColumn c = cls.get(i);
-                byte[] family = new byte[0];
-                byte[] cq;
-                if (!SchemaUtil.isPKColumn(c)) {
-                    family = c.getFamilyName().getBytes();
-                    cq = c.getColumnQualifierBytes();
-                } else {
-                    cq = c.getName().getBytes();
-                }
-                byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES, cq);
-                if (!columnIndexes.containsKey(cfn)) {
+            if (!table.getImmutableStorageScheme().equals(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)) {
+                List<PColumnFamily> cfs = table.getColumnFamilies();
+                for (int i = 0; i < cfs.size(); i++) {
+                    byte[] family = cfs.get(i).getName().getBytes();
+                    byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES,
+                            QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES);
                     columnIndexes.put(cfn, new Integer(columnIndex));
                     columnIndex++;
                 }
+            } else {
+                List<PColumn> cls = table.getColumns();
+                for (int i = 0; i < cls.size(); i++) {
+                    PColumn c = cls.get(i);
+                    byte[] family = new byte[0];
+                    byte[] cq;
+                    if (!SchemaUtil.isPKColumn(c)) {
+                        family = c.getFamilyName().getBytes();
+                        cq = c.getColumnQualifierBytes();
+                    } else {
+                        cq = c.getName().getBytes();
+                    }
+                    byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES, cq);
+                    if (!columnIndexes.containsKey(cfn)) {
+                        columnIndexes.put(cfn, new Integer(columnIndex));
+                        columnIndex++;
+                    }
+                }
+                byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
+                byte[] emptyKeyValue = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
+                byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES, emptyKeyValue);
+                columnIndexes.put(cfn, new Integer(columnIndex));
+                columnIndex++;
             }
-            byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
-            byte[] emptyKeyValue = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
-            byte[] cfn = Bytes.add(emptyColumnFamily, QueryConstants.NAMESPACE_SEPARATOR_BYTES, emptyKeyValue);
-            columnIndexes.put(cfn, new Integer(columnIndex));
-            columnIndex++;
         }
     }
 

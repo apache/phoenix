@@ -189,7 +189,7 @@ public class CsvEventSerializer extends BaseEventSerializer {
 
 		public CSVRecord parse(String input) throws IOException {
 			CSVParser csvParser = new CSVParser(new StringReader(input), this.csvFormat);
-			return ((CSVRecord) Iterables.getFirst(csvParser, null));
+			return Iterables.getFirst(csvParser, null);
 		}
 	}
 

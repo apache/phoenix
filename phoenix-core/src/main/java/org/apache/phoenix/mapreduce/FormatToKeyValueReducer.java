@@ -42,7 +42,9 @@ import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -95,24 +97,34 @@ public class FormatToKeyValueReducer
         int columnIndex = 0;
         for (int index = 0; index < logicalNames.size(); index++) {
             PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
-            List<PColumn> cls = table.getColumns();
-            for (int i = 0; i < cls.size(); i++) {
-                PColumn c = cls.get(i);
-                byte[] family = new byte[0];
-                byte[] cq;
-                if (!SchemaUtil.isPKColumn(c)) {
-                    family = c.getFamilyName().getBytes();
-                    cq = c.getColumnQualifierBytes();
-                } else {
-                    // TODO: samarth verify if this is the right thing to do here.
-                    cq = c.getName().getBytes();
-                }
-                byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES, cq);
-                Pair<byte[], byte[]> pair = new Pair<>(family, cq);
-                if (!indexMap.containsKey(cfn)) {
-                    indexMap.put(cfn, new Integer(columnIndex));
+            if (!table.getImmutableStorageScheme().equals(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)) {
+                List<PColumnFamily> cfs = table.getColumnFamilies();
+                for (int i = 0; i < cfs.size(); i++) {
+                    byte[] family = cfs.get(i).getName().getBytes();
+                    Pair<byte[], byte[]> pair = new Pair<>(family,
+                            QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES);
                     columnIndexes.put(new Integer(columnIndex), pair);
                     columnIndex++;
+                }
+            } else {
+                List<PColumn> cls = table.getColumns();
+                for (int i = 0; i < cls.size(); i++) {
+                    PColumn c = cls.get(i);
+                    byte[] family = new byte[0];
+                    byte[] cq;
+                    if (!SchemaUtil.isPKColumn(c)) {
+                        family = c.getFamilyName().getBytes();
+                        cq = c.getColumnQualifierBytes();
+                    } else {
+                        cq = c.getName().getBytes();
+                    }
+                    byte[] cfn = Bytes.add(family, QueryConstants.NAMESPACE_SEPARATOR_BYTES, cq);
+                    Pair<byte[], byte[]> pair = new Pair<>(family, cq);
+                    if (!indexMap.containsKey(cfn)) {
+                        indexMap.put(cfn, new Integer(columnIndex));
+                        columnIndexes.put(new Integer(columnIndex), pair);
+                        columnIndex++;
+                    }
                 }
             }
             byte[] emptyColumnFamily = SchemaUtil.getEmptyColumnFamily(table);
