@@ -80,6 +80,10 @@ import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTR
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.TRACING_BATCH_SIZE;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_SERVICE_NAME;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME;
 import static org.apache.phoenix.query.QueryServices.TRACING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.TRACING_THREAD_POOL_SIZE;
@@ -179,8 +183,8 @@ public class QueryServicesOptions {
     public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
     public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
     public static final boolean DEFAULT_INDEX_FAILURE_BLOCK_WRITE = false; 
-    public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = true; 
-    public static final boolean DEFAULT_INDEX_FAILURE_THROW_EXCEPTION = true; 
+    public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = true;
+    public static final boolean DEFAULT_INDEX_FAILURE_THROW_EXCEPTION = true;
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_BACKWARD_TIME = 1; // 1 ms
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME = 60000 * 3; // 3 mins
@@ -295,6 +299,10 @@ public class QueryServicesOptions {
     public static final int DEFAULT_COLUMN_ENCODED_BYTES = QualifierEncodingScheme.TWO_BYTE_QUALIFIERS.getSerializedMetadataValue();
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME = ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS.toString();
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME = ImmutableStorageScheme.ONE_CELL_PER_COLUMN.toString();
+    public static final String DEFAULT_PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH = "/phoenix";
+    public static final String DEFAULT_PHOENIX_QUERY_SERVER_SERVICE_NAME = "queryserver";
+    public static final String DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME = "phoenix";
+    public static final String DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD = "phoenix";
 
     //by default, max connections from one client to one cluster is unlimited
     public static final int DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
@@ -388,6 +396,10 @@ public class QueryServicesOptions {
             .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
             .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)
             .setIfUnset(AUTO_UPGRADE_ENABLED, DEFAULT_AUTO_UPGRADE_ENABLED)
+            .setIfUnset(PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH, DEFAULT_PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH)
+            .setIfUnset(PHOENIX_QUERY_SERVER_SERVICE_NAME, DEFAULT_PHOENIX_QUERY_SERVER_SERVICE_NAME)
+            .setIfUnset(PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME, DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME)
+            .setIfUnset(PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD, DEFAULT_PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD)
             .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
             .setIfUnset(TRACING_ENABLED, DEFAULT_TRACING_ENABLED)
             .setIfUnset(TRACING_BATCH_SIZE, DEFAULT_TRACING_BATCH_SIZE)
