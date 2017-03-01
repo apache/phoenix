@@ -27,6 +27,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.hive.PhoenixRowKey;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
+import org.apache.phoenix.hive.util.ColumnMappingUtils;
 import org.apache.phoenix.hive.util.PhoenixStorageHandlerUtil;
 import org.apache.phoenix.hive.util.PhoenixUtil;
 import org.apache.phoenix.util.ColumnInfo;
@@ -52,6 +53,7 @@ public class PhoenixResultWritable implements Writable, DBWritable, Configurable
     private List<ColumnInfo> columnMetadataList;
     private List<Object> valueList;    // for output
     private Map<String, Object> rowMap = Maps.newHashMap();  // for input
+    private Map<String, String> columnMap;
 
     private int columnCount = -1;
 
@@ -71,7 +73,6 @@ public class PhoenixResultWritable implements Writable, DBWritable, Configurable
             throws IOException {
         this(config);
         this.columnMetadataList = columnMetadataList;
-
         valueList = Lists.newArrayListWithExpectedSize(columnMetadataList.size());
     }
 
@@ -158,8 +159,12 @@ public class PhoenixResultWritable implements Writable, DBWritable, Configurable
 
         for (int i = 0; i < columnCount; i++) {
             Object value = resultSet.getObject(i + 1);
-
-            rowMap.put(rsmd.getColumnName(i + 1), value);
+            String columnName = rsmd.getColumnName(i + 1);
+            String mapName = columnMap.get(columnName);
+            if(mapName != null) {
+                columnName = mapName;
+            }
+            rowMap.put(columnName, value);
         }
 
         // Adding row__id column.
@@ -195,6 +200,7 @@ public class PhoenixResultWritable implements Writable, DBWritable, Configurable
     @Override
     public void setConf(Configuration conf) {
         config = conf;
+        this.columnMap = ColumnMappingUtils.getReverseColumnMapping(config.get(PhoenixStorageHandlerConstants.PHOENIX_COLUMN_MAPPING,""));
 
         isTransactional = PhoenixStorageHandlerUtil.isTransactionalTable(config);
 

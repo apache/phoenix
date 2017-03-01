@@ -76,8 +76,8 @@ public class PhoenixQueryBuilderTest {
     public void testBuildQueryWithCharColumns() throws IOException {
         final String COLUMN_CHAR = "Column_Char";
         final String COLUMN_VARCHAR = "Column_VChar";
-        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ " + COLUMN_CHAR + "," + COLUMN_VARCHAR +
-                " from TEST_TABLE where ";
+        final String expectedQueryPrefix = "select /*+ NO_CACHE  */ \"" + COLUMN_CHAR + "\",\"" + COLUMN_VARCHAR +
+                "\" from TEST_TABLE where ";
 
         JobConf jobConf = new JobConf();
         List<String> readColumnList = Lists.newArrayList(COLUMN_CHAR, COLUMN_VARCHAR);
@@ -86,7 +86,7 @@ public class PhoenixQueryBuilderTest {
                 mockedIndexSearchCondition("GenericUDFOPEqual", "CHAR_VALUE2", null, COLUMN_VARCHAR, "varchar(10)", false)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char = 'CHAR_VALUE' and Column_VChar = 'CHAR_VALUE2'",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" = 'CHAR_VALUE' and \"Column_VChar\" = 'CHAR_VALUE2'",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
@@ -94,7 +94,7 @@ public class PhoenixQueryBuilderTest {
                         new Object[]{"CHAR1", "CHAR2", "CHAR3"}, COLUMN_CHAR, "char(10)", false)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char in ('CHAR1', 'CHAR2', 'CHAR3')",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" in ('CHAR1', 'CHAR2', 'CHAR3')",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(
@@ -110,7 +110,7 @@ public class PhoenixQueryBuilderTest {
                         new Object[]{"CHAR1", "CHAR2"}, COLUMN_CHAR, "char(10)", false)
         );
 
-        assertEquals(expectedQueryPrefix + "Column_Char between 'CHAR1' and 'CHAR2'",
+        assertEquals(expectedQueryPrefix + "\"Column_Char\" between 'CHAR1' and 'CHAR2'",
                 BUILDER.buildQuery(jobConf, TABLE_NAME, readColumnList, searchConditions));
 
         searchConditions = Lists.newArrayList(

@@ -194,6 +194,11 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
         jobProperties.put(PhoenixStorageHandlerConstants.ZOOKEEPER_PARENT, tableProperties
                 .getProperty(PhoenixStorageHandlerConstants.ZOOKEEPER_PARENT,
                         PhoenixStorageHandlerConstants.DEFAULT_ZOOKEEPER_PARENT));
+        String columnMapping = tableProperties
+                .getProperty(PhoenixStorageHandlerConstants.PHOENIX_COLUMN_MAPPING);
+        if(columnMapping != null) {
+            jobProperties.put(PhoenixStorageHandlerConstants.PHOENIX_COLUMN_MAPPING, columnMapping);
+        }
 
         jobProperties.put(hive_metastoreConstants.META_TABLE_STORAGE, this.getClass().getName());
 

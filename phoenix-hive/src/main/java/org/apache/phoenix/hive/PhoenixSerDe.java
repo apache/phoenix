@@ -84,14 +84,7 @@ public class PhoenixSerDe extends AbstractSerDe {
         }
 
         serializer = new PhoenixSerializer(conf, tbl);
-        row = new PhoenixRow(Lists.transform(serdeParams.getColumnNames(), new Function<String,
-                String>() {
-
-            @Override
-            public String apply(String input) {
-                return input.toUpperCase();
-            }
-        }));
+        row = new PhoenixRow(serdeParams.getColumnNames());
     }
 
     @Override
