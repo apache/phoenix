@@ -79,7 +79,7 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
     public StatementPlan implement(PhoenixRelImplementor implementor) {
         final PhoenixTable targetTable = getTable().unwrap(PhoenixTable.class);
         final PhoenixConnection connection = targetTable.pc;
-        final TableRef targetTableRef = targetTable.tableMapping.getTableRef();
+        final TableRef targetTableRef = new TableRef(targetTable.tableMapping.getTableRef());
         
         final QueryPlan queryPlan = implementor.visitInput(0, (PhoenixQueryRel) input);
         RowProjector projector;
