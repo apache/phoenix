@@ -20,7 +20,10 @@ package org.apache.phoenix.hive.util;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.phoenix.hive.constants.PhoenixStorageHandlerConstants;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -94,4 +97,20 @@ public class PhoenixConnectionUtil {
                 clientPort, zNodeParent) : QueryUtil.getUrl(quorum), props);
     }
 
+    public static Configuration getConfiguration(JobConf jobConf) {
+        Configuration conf = new Configuration(jobConf);
+        String quorum = conf.get(PhoenixStorageHandlerConstants.ZOOKEEPER_QUORUM);
+        if(quorum!=null) {
+            conf.set(HConstants.ZOOKEEPER_QUORUM, quorum);
+        }
+        int zooKeeperClientPort = conf.getInt(PhoenixStorageHandlerConstants.ZOOKEEPER_PORT, 0);
+        if(zooKeeperClientPort != 0) {
+            conf.setInt(HConstants.ZOOKEEPER_CLIENT_PORT, zooKeeperClientPort);
+        }
+        String zNodeParent = conf.get(PhoenixStorageHandlerConstants.ZOOKEEPER_PARENT);
+        if(zNodeParent != null) {
+            conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, zNodeParent);
+        }
+        return conf;
+    }
 }

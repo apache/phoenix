@@ -71,6 +71,7 @@ public class PhoenixRecordReader<T extends DBWritable> implements
     private PhoenixResultSet resultSet;
     private long readCount;
 
+
     private boolean isTransactional;
 
     public PhoenixRecordReader(Class<T> inputClass, final Configuration configuration, final

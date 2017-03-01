@@ -691,6 +691,7 @@ public class HiveTestUtil {
     }
 
     public int executeClient(String tname) {
+        conf.set("mapreduce.job.name", "test");
         return cliDriver.processLine(getCommands(tname), false);
     }
 
@@ -1107,27 +1108,6 @@ public class HiveTestUtil {
                 outputTestFailureHelpMessage();
             }
         }
-    }
-
-    /**
-     * Setup to execute a set of query files. Uses HiveTestUtil to do so.
-     *
-     * @param qfiles array of input query files containing arbitrary number of hive
-     *               queries
-     * @param resDir output directory
-     * @param logDir log directory
-     * @return one HiveTestUtil for each query file
-     */
-    public static HiveTestUtil[] queryListRunnerSetup(File[] qfiles, String resDir,
-                                                      String logDir) throws Exception {
-        HiveTestUtil[] qt = new HiveTestUtil[qfiles.length];
-        for (int i = 0; i < qfiles.length; i++) {
-            qt[i] = new HiveTestUtil(resDir, logDir, MiniClusterType.mr, null, "0.20");
-            qt[i].addFile(qfiles[i]);
-            qt[i].clearTestSideEffects();
-        }
-
-        return qt;
     }
 
     /**
