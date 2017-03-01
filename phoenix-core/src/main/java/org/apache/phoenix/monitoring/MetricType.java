@@ -43,7 +43,10 @@ public enum MetricType {
     RESULT_SET_TIME_MS("Wall clock time elapsed for reading all records using resultSet.next()"),
     OPEN_PHOENIX_CONNECTIONS_COUNTER("Number of open phoenix connections"),
     QUERY_SERVICES_COUNTER("Number of ConnectionQueryServicesImpl instantiated"),
-    HCONNECTIONS_COUNTER("Number of HConnections created by phoenix driver");
+    HCONNECTIONS_COUNTER("Number of HConnections created by phoenix driver"),
+    PHOENIX_CONNECTIONS_THROTTLED_COUNTER("Number of client Phoenix connections prevented from opening " +
+                                              "because there are already too many to that target cluster."),
+    PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER("Number of requests for Phoenix connections, whether successful or not.");
     
     private final String description;
 

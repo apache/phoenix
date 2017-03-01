@@ -49,6 +49,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
@@ -307,6 +308,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final boolean renewLeaseEnabled;
     private final boolean isAutoUpgradeEnabled;
     private final AtomicBoolean upgradeRequired = new AtomicBoolean(false);
+    private final int maxConnectionsAllowed;
+    private final boolean shouldThrottleNumConnections;
     public static final byte[] UPGRADE_MUTEX = "UPGRADE_MUTEX".getBytes();
     public static final byte[] UPGRADE_MUTEX_LOCKED = "UPGRADE_MUTEX_LOCKED".getBytes();
     public static final byte[] UPGRADE_MUTEX_UNLOCKED = "UPGRADE_MUTEX_UNLOCKED".getBytes();
@@ -387,6 +390,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // A little bit of a smell to leak `this` here, but should not be a problem
         this.tableStatsCache = new GuidePostsCache(this, config);
         this.isAutoUpgradeEnabled = config.getBoolean(AUTO_UPGRADE_ENABLED, QueryServicesOptions.DEFAULT_AUTO_UPGRADE_ENABLED);
+        this.maxConnectionsAllowed = config.getInt(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
+            QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS);
+        this.shouldThrottleNumConnections = (maxConnectionsAllowed > 0);
+
     }
 
     @Override
@@ -3796,12 +3803,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public void addConnection(PhoenixConnection connection) throws SQLException {
-        connectionQueues.get(getQueueIndex(connection)).add(new WeakReference<PhoenixConnection>(connection));
-        if (returnSequenceValues) {
+        if (returnSequenceValues || shouldThrottleNumConnections) {
             synchronized (connectionCountLock) {
+                if (shouldThrottleNumConnections && connectionCount + 1 > maxConnectionsAllowed){
+                    GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.increment();
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NEW_CONNECTION_THROTTLED).
+                        build().buildException();
+                }
                 connectionCount++;
             }
         }
+        connectionQueues.get(getQueueIndex(connection)).add(new WeakReference<PhoenixConnection>(connection));
     }
 
     @Override
