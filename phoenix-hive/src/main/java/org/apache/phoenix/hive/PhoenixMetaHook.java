@@ -35,8 +35,11 @@ import org.apache.phoenix.hive.util.PhoenixUtil;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.apache.phoenix.hive.util.ColumnMappingUtils.getColumnMappingMap;
 
 /**
  * Implementation for notification methods which are invoked as part of transactions against the
@@ -105,6 +108,10 @@ public class PhoenixMetaHook implements HiveMetaHook {
 
             String rowKeyName = getRowKeyMapping(fieldName, phoenixRowKeyList);
             if (rowKeyName != null) {
+                String columnName = columnMappingMap.get(fieldName);
+                if(columnName != null) {
+                    rowKeyName = columnName;
+                }
                 // In case of RowKey
                 if ("binary".equals(columnType)) {
                     // Phoenix must define max length of binary when type definition. Obtaining
@@ -115,9 +122,9 @@ public class PhoenixMetaHook implements HiveMetaHook {
                     rowKeyName = tokenList.get(0);
                 }
 
-                ddl.append("  ").append(rowKeyName).append(" ").append(columnType).append(" not " +
+                ddl.append("  ").append("\"").append(rowKeyName).append("\"").append(" ").append(columnType).append(" not " +
                         "null,\n");
-                realRowKeys.append(rowKeyName).append(",");
+                realRowKeys.append("\"").append(rowKeyName).append("\",");
             } else {
                 // In case of Column
                 String columnName = columnMappingMap.get(fieldName);
@@ -136,7 +143,7 @@ public class PhoenixMetaHook implements HiveMetaHook {
                     columnName = tokenList.get(0);
                 }
 
-                ddl.append("  ").append(columnName).append(" ").append(columnType).append(",\n");
+                ddl.append("  ").append("\"").append(columnName).append("\"").append(" ").append(columnType).append(",\n");
             }
         }
         ddl.append("  ").append("constraint pk_").append(PhoenixUtil.getTableSchema(tableName.toUpperCase())[1]).append(" primary key(")
@@ -171,30 +178,6 @@ public class PhoenixMetaHook implements HiveMetaHook {
         }
 
         return rowKeyMapping;
-    }
-
-    private Map<String, String> getColumnMappingMap(String columnMappings) {
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Column mappings : " + columnMappings);
-        }
-
-        if (columnMappings == null) {
-            if (LOG.isInfoEnabled()) {
-                LOG.info("phoenix.column.mapping not set. using field definition");
-            }
-
-            return Collections.emptyMap();
-        }
-
-        Map<String, String> columnMappingMap = Splitter.on(PhoenixStorageHandlerConstants.COMMA)
-                .trimResults().withKeyValueSeparator(PhoenixStorageHandlerConstants.COLON).split
-                        (columnMappings);
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Column mapping map : " + columnMappingMap);
-        }
-
-        return columnMappingMap;
     }
 
     @Override

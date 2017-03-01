@@ -91,7 +91,6 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         String query;
         String executionEngine = jobConf.get(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname,
                 HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.getDefaultValue());
-
         if (LOG.isDebugEnabled()) {
             LOG.debug("Target table name at split phase : " + tableName + "with whereCondition :" +
                     jobConf.get(TableScanDesc.FILTER_TEXT_CONF_STR) +
@@ -151,7 +150,7 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         setScanCacheSize(jobConf);
 
         // Adding Localization
-        HConnection connection = HConnectionManager.createConnection(jobConf);
+        HConnection connection = HConnectionManager.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf));
         RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
                 .getTableRef().getTable().getPhysicalName().toString()));
         RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
