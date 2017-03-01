@@ -2144,34 +2144,34 @@ public class MetaDataClient {
                     if (isImmutableRows) {
                         immutableStorageScheme =
                                 (ImmutableStorageScheme) TableProperty.IMMUTABLE_STORAGE_SCHEME
-                                        .getValue(tableProps);
+                                .getValue(tableProps);
                         if (immutableStorageScheme == null) {
                             if (multiTenant) {
                                 immutableStorageScheme =
                                         ImmutableStorageScheme
-                                                .valueOf(connection
-                                                        .getQueryServices()
-                                                        .getProps()
-                                                        .get(
-                                                            QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
-                                                            QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
+                                        .valueOf(connection
+                                                .getQueryServices()
+                                                .getProps()
+                                                .get(
+                                                        QueryServices.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                        QueryServicesOptions.DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME));
                             } else {
                                 immutableStorageScheme =
                                         ImmutableStorageScheme
-                                                .valueOf(connection
-                                                        .getQueryServices()
-                                                        .getProps()
-                                                        .get(
-                                                            QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
-                                                            QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
+                                        .valueOf(connection
+                                                .getQueryServices()
+                                                .getProps()
+                                                .get(
+                                                        QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB,
+                                                        QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME));
                             }
                         }
                         if (immutableStorageScheme != ONE_CELL_PER_COLUMN
                                 && encodingScheme == NON_ENCODED_QUALIFIERS) {
                             throw new SQLExceptionInfo.Builder(
                                     SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES)
-                                    .setSchemaName(schemaName).setTableName(tableName).build()
-                                    .buildException();
+                            .setSchemaName(schemaName).setTableName(tableName).build()
+                            .buildException();
                         }
                     } 
                 }
