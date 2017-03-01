@@ -31,7 +31,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.Map.Entry;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -44,13 +43,11 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -558,5 +555,87 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         PTable table = phxConn.getTable(new PTableKey(null, tableName));
         assertEquals(expectedEncodingScheme, table.getEncodingScheme());
         assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
+    }
+    
+    @Test
+    public void testMultiTenantImmutableTableMetadata() throws Exception {
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        String nonEncodedOneCellPerColumnMultiTenantTable = "nonEncodedOneCellPerColumnMultiTenantTable".toUpperCase();
+        String twoByteQualifierEncodedOneCellPerColumnMultiTenantTable = "twoByteQualifierEncodedOneCellPerColumnMultiTenantTable"
+                .toUpperCase();
+        String oneByteQualifierEncodedOneCellPerColumnMultiTenantTable = "oneByteQualifierEncodedOneCellPerColumnMultiTenantTable"
+                .toUpperCase();
+        String twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable = "twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable"
+                .toUpperCase();
+        String oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable = "oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable"
+                .toUpperCase();
+        String createTableDDL;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTableDDL = "create IMMUTABLE TABLE " + nonEncodedOneCellPerColumnMultiTenantTable + " ("
+                    + " id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.NON_ENCODED_QUALIFIERS,
+                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN, nonEncodedOneCellPerColumnMultiTenantTable, conn);
+        }
+        ts = nextTimestamp();
+        props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTableDDL = "create IMMUTABLE table " + twoByteQualifierEncodedOneCellPerColumnMultiTenantTable + " ("
+                    + " id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true";
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                    twoByteQualifierEncodedOneCellPerColumnMultiTenantTable, conn);
+        }
+        ts = nextTimestamp();
+        props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTableDDL = "create IMMUTABLE table " + oneByteQualifierEncodedOneCellPerColumnMultiTenantTable + " ("
+                    + " id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, COLUMN_ENCODED_BYTES = 1";
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.ONE_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                    oneByteQualifierEncodedOneCellPerColumnMultiTenantTable, conn);
+        }
+        ts = nextTimestamp();
+        props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTableDDL = "create IMMUTABLE table "
+                    + twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable
+                    + " ("
+                    + " id char(1) NOT NULL,"
+                    + " col1 integer NOT NULL,"
+                    + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS";
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                    twoByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
+        }
+        ts = nextTimestamp();
+        props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTableDDL = "create IMMUTABLE table "
+                    + oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable
+                    + " ("
+                    + " id char(1) NOT NULL,"
+                    + " col1 integer NOT NULL,"
+                    + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) MULTI_TENANT=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=1";
+            conn.createStatement().execute(createTableDDL);
+            assertColumnEncodingMetadata(QualifierEncodingScheme.ONE_BYTE_QUALIFIERS,
+                    ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+                    oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
+
+        }
     }
 }
