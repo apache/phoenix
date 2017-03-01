@@ -238,6 +238,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String AUTO_UPGRADE_ENABLED = "phoenix.autoupgrade.enabled";
     public static final String CLIENT_CONNECTION_CACHE_MAX_DURATION_MILLISECONDS =
         "phoenix.client.connection.max.duration";
+
+    //max number of connections from a single client to a single cluster. 0 is unlimited.
+    public static final String CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS =
+        "phoenix.client.connection.max.allowed.connections";
     public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";

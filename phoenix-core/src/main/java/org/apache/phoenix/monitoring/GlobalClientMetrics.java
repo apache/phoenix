@@ -39,7 +39,8 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_QUEUE_WAIT_TIME;
-
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -77,7 +78,10 @@ public enum GlobalClientMetrics {
     GLOBAL_SPOOL_FILE_COUNTER(SPOOL_FILE_COUNTER),
     GLOBAL_OPEN_PHOENIX_CONNECTIONS(OPEN_PHOENIX_CONNECTIONS_COUNTER),
     GLOBAL_QUERY_SERVICES_COUNTER(QUERY_SERVICES_COUNTER),
-    GLOBAL_HCONNECTIONS_COUNTER(HCONNECTIONS_COUNTER);
+    GLOBAL_HCONNECTIONS_COUNTER(HCONNECTIONS_COUNTER),
+    GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER(PHOENIX_CONNECTIONS_THROTTLED_COUNTER),
+    GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER(PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER);
+
     
     private static final boolean isGlobalMetricsEnabled = QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();
     private GlobalMetric metric;
