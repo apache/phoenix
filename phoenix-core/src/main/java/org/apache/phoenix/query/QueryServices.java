@@ -271,6 +271,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
+
+    public static final String PHOENIX_QUERY_SERVER_CLUSTER_BASE_PATH = "phoenix.queryserver.base.path";
+    public static final String PHOENIX_QUERY_SERVER_SERVICE_NAME = "phoenix.queryserver.service.name";
+    public static final String PHOENIX_QUERY_SERVER_ZK_ACL_USERNAME = "phoenix.queryserver.zookeeper.acl.username";
+    public static final String PHOENIX_QUERY_SERVER_ZK_ACL_PASSWORD = "phoenix.queryserver.zookeeper.acl.password";
     public static final String STATS_COLLECTION_ENABLED = "phoenix.stats.collection.enabled";
     public static final String USE_STATS_FOR_PARALLELIZATION = "phoenix.use.stats.parallelization";
 
