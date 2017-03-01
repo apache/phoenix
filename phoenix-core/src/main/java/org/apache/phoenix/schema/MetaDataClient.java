@@ -230,6 +230,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
@@ -3812,7 +3813,7 @@ public class MetaDataClient {
                             tableRefsToDrop.addAll(indexesToDrop);
                         }
                         // Drop any index tables that had the dropped column in the PK
-                        connection.getQueryServices().updateData(compiler.compile(tableRefsToDrop, null, null, Collections.<PColumn>emptyList(), ts));
+                        state = connection.getQueryServices().updateData(compiler.compile(tableRefsToDrop, null, null, Collections.<PColumn>emptyList(), ts));
 
                         // Drop any tenant-specific indexes
                         if (!tenantIdTableRefMap.isEmpty()) {
@@ -3822,29 +3823,33 @@ public class MetaDataClient {
                                 props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, indexTenantId);
                                 try (PhoenixConnection tenantConn = new PhoenixConnection(connection, connection.getQueryServices(), props)) {
                                     PostDDLCompiler dropCompiler = new PostDDLCompiler(tenantConn);
-                                    tenantConn.getQueryServices().updateData(dropCompiler.compile(entry.getValue(), null, null, Collections.<PColumn>emptyList(), ts));
+                                    state = tenantConn.getQueryServices().updateData(dropCompiler.compile(entry.getValue(), null, null, Collections.<PColumn>emptyList(), ts));
                                 }
                             }
                         }
 
-                        // Update empty key value column if necessary
-                        for (ColumnRef droppedColumnRef : columnsToDrop) {
-                            // Painful, but we need a TableRef with a pre-set timestamp to prevent attempts
-                            // to get any updates from the region server.
-                            // TODO: move this into PostDDLCompiler
-                            // TODO: consider filtering mutable indexes here, but then the issue is that
-                            // we'd need to force an update of the data row empty key value if a mutable
-                            // secondary index is changing its empty key value family.
-                            droppedColumnRef = droppedColumnRef.cloneAtTimestamp(ts);
-                            TableRef droppedColumnTableRef = droppedColumnRef.getTableRef();
-                            PColumn droppedColumn = droppedColumnRef.getColumn();
-                            MutationPlan plan = compiler.compile(
-                                    Collections.singletonList(droppedColumnTableRef),
-                                    getNewEmptyColumnFamilyOrNull(droppedColumnTableRef.getTable(), droppedColumn),
-                                    null,
-                                    Collections.singletonList(droppedColumn),
-                                    ts);
-                            state = connection.getQueryServices().updateData(plan);
+                        // TODO For immutable tables, if the storage scheme is not ONE_CELL_PER_COLUMN we will remove the column values at compaction time
+                        // See https://issues.apache.org/jira/browse/PHOENIX-3605
+                        if (!table.isImmutableRows() || table.getImmutableStorageScheme()==ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+                            // Update empty key value column if necessary
+                            for (ColumnRef droppedColumnRef : columnsToDrop) {
+                                // Painful, but we need a TableRef with a pre-set timestamp to prevent attempts
+                                // to get any updates from the region server.
+                                // TODO: move this into PostDDLCompiler
+                                // TODO: consider filtering mutable indexes here, but then the issue is that
+                                // we'd need to force an update of the data row empty key value if a mutable
+                                // secondary index is changing its empty key value family.
+                                droppedColumnRef = droppedColumnRef.cloneAtTimestamp(ts);
+                                TableRef droppedColumnTableRef = droppedColumnRef.getTableRef();
+                                PColumn droppedColumn = droppedColumnRef.getColumn();
+                                MutationPlan plan = compiler.compile(
+                                        Collections.singletonList(droppedColumnTableRef),
+                                        getNewEmptyColumnFamilyOrNull(droppedColumnTableRef.getTable(), droppedColumn),
+                                        null,
+                                        Collections.singletonList(droppedColumn),
+                                        ts);
+                                state = connection.getQueryServices().updateData(plan);
+                            }
                         }
                         // Return the last MutationState
                         return state;
