@@ -372,4 +372,40 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             assertTrue(ex instanceof FileAlreadyExistsException); 
         }
     }
+
+    @Test
+    public void testImportInImmutableTable() throws Exception {
+        Statement stmt = conn.createStatement();
+        stmt.execute("CREATE IMMUTABLE TABLE S.TABLE10 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE, CF1.T2 DATE, CF2.T3 DATE) ");
+
+        FileSystem fs = FileSystem.get(getUtility().getConfiguration());
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input10.csv"));
+        PrintWriter printWriter = new PrintWriter(outputStream);
+        printWriter.println("1,Name 1,1970/01/01,1970/02/01,1970/03/01");
+        printWriter.println("2,Name 2,1970/01/02,1970/02/02,1970/03/02");
+        printWriter.close();
+        CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
+        csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
+        csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB, "yyyy/MM/dd");
+        int exitCode = csvBulkLoadTool.run(new String[] { "--input", "/tmp/input10.csv", "--table", "table10",
+                "--schema", "s", "--zookeeper", zkQuorum });
+        assertEquals(0, exitCode);
+        ResultSet rs = stmt.executeQuery("SELECT id, name, t, CF1.T2, CF2.T3 FROM s.table10 ORDER BY id");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals("Name 1", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-01"), rs.getDate(3));
+        assertEquals(DateUtil.parseDate("1970-02-01"), rs.getDate(4));
+        assertEquals(DateUtil.parseDate("1970-03-01"), rs.getDate(5));
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("Name 2", rs.getString(2));
+        assertEquals(DateUtil.parseDate("1970-01-02"), rs.getDate(3));
+        assertEquals(DateUtil.parseDate("1970-02-02"), rs.getDate(4));
+        assertEquals(DateUtil.parseDate("1970-03-02"), rs.getDate(5));
+        assertFalse(rs.next());
+
+        rs.close();
+        stmt.close();
+    }
 }
