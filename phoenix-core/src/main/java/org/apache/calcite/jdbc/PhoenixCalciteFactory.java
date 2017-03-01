@@ -704,5 +704,10 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         public boolean approximateTopN() {
             return delegate.approximateTopN();
         }
+
+        @Override
+        public boolean approximateDecimal() {
+            return delegate.approximateDecimal();
+        }
     }
 }
