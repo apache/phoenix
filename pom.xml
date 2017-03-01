@@ -36,6 +36,7 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <module>phoenix-load-balancer</module>
   </modules>
 
   <repositories>
@@ -127,6 +128,8 @@
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+   <curator.version>2.12.0</curator.version>
+
   </properties>
 
   <build>
@@ -570,6 +573,11 @@
         <artifactId>phoenix-queryserver-client</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-load-balancer</artifactId>
+        <version>${project.version}</version>
+      </dependency>
 
       <!-- HBase dependencies -->
       <dependency>
@@ -951,6 +959,16 @@
         <groupId>joda-time</groupId>
         <artifactId>joda-time</artifactId>
         <version>${jodatime.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-test</artifactId>
+        <version>${curator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-client</artifactId>
+        <version>${curator.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
