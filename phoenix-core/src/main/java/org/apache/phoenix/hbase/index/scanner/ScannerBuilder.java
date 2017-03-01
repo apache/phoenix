@@ -25,7 +25,6 @@ import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
@@ -57,7 +56,7 @@ public class ScannerBuilder {
     this.update = update;
   }
 
-  public Scanner buildIndexedColumnScanner(Collection<? extends ColumnReference> indexedColumns, ColumnTracker tracker, long ts) {
+  public Scanner buildIndexedColumnScanner(Collection<? extends ColumnReference> indexedColumns, ColumnTracker tracker, long ts, boolean returnNullIfRowNotFound) {
 
     Filter columnFilters = getColumnFilters(indexedColumns);
     FilterList filters = new FilterList(Lists.newArrayList(columnFilters));
@@ -71,7 +70,7 @@ public class ScannerBuilder {
     filters.addFilter(new ApplyAndFilterDeletesFilter(getAllFamilies(indexedColumns)));
 
     // combine the family filters and the rest of the filters as a
-    return getFilteredScanner(filters);
+    return getFilteredScanner(filters, returnNullIfRowNotFound);
   }
 
   /**
@@ -108,14 +107,14 @@ public class ScannerBuilder {
     return families;
   }
 
-  private Scanner getFilteredScanner(Filter filters) {
+  private Scanner getFilteredScanner(Filter filters, boolean returnNullIfRowNotFound) {
     // create a scanner and wrap it as an iterator, meaning you can only go forward
     final FilteredKeyValueScanner kvScanner = new FilteredKeyValueScanner(filters, memstore);
     // seek the scanner to initialize it
     KeyValue start = KeyValue.createFirstOnRow(update.getRow());
     try {
       if (!kvScanner.seek(start)) {
-        return new EmptyScanner();
+        return returnNullIfRowNotFound ? null : new EmptyScanner();
       }
     } catch (IOException e) {
       // This should never happen - everything should explode if so.

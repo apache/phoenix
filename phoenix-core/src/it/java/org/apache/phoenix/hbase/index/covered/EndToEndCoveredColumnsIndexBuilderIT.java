@@ -149,7 +149,7 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     public void verify(TableState state) {
       try {
         Scanner kvs =
-            ((LocalTableState) state).getIndexedColumnsTableState(Arrays.asList(columns), false).getFirst();
+            ((LocalTableState) state).getIndexedColumnsTableState(Arrays.asList(columns), false, false).getFirst();
 
         int count = 0;
         Cell kv;

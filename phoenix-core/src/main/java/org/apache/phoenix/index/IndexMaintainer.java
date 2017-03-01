@@ -953,7 +953,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey);
         Put put = null;
         // New row being inserted: add the empty key value
-        if (valueGetter.getLatestValue(dataEmptyKeyValueRef) == null) {
+        if (valueGetter==null || valueGetter.getLatestValue(dataEmptyKeyValueRef) == null) {
             put = new Put(indexRowKey);
             // add the keyvalue for the empty row
             put.add(kvBuilder.buildPut(new ImmutableBytesPtr(indexRowKey),
@@ -1563,7 +1563,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             expression.accept(visitor);
         }
         allColumns.addAll(indexedColumns);
-        allColumns.addAll(coveredColumnsMap.keySet());
+        for (ColumnReference colRef : coveredColumnsMap.keySet()) {
+            if (immutableStorageScheme==ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+                allColumns.add(colRef);
+            } else {
+                allColumns.add(new ColumnReference(colRef.getFamily(), QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES));
+            }
+        }
         
         int dataPkOffset = (isDataTableSalted ? 1 : 0) + (isMultiTenant ? 1 : 0);
         int nIndexPkColumns = getIndexPkColumnCount();

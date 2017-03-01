@@ -98,7 +98,7 @@ public class IndexManagementUtil {
     }
 
     public static ValueGetter createGetterFromScanner(Scanner scanner, byte[] currentRow) {
-        return new LazyValueGetter(scanner, currentRow);
+        return scanner!=null ? new LazyValueGetter(scanner, currentRow) : null;
     }
 
     /**
