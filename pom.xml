@@ -36,6 +36,7 @@
     <module>phoenix-server</module>
     <module>phoenix-assembly</module>
     <module>phoenix-tracing-webapp</module>
+    <module>phoenix-load-balancer</module>
   </modules>
 
   <repositories>
@@ -127,6 +128,8 @@
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+
   </properties>
 
   <build>
