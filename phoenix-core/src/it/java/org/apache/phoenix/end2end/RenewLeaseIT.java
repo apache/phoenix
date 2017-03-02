@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -37,14 +38,13 @@ import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Maps;
 
 
 public class RenewLeaseIT extends BaseUniqueNamesOwnClusterIT {
-    private static final long RPC_TIMEOUT = 2000;
+    private static final long SCANNER_LEASE_TIMEOUT = 12000;
     private static volatile boolean SLEEP_NOW = false;
     private final static String TABLE_NAME = generateUniqueName();
     
@@ -54,11 +54,10 @@ public class RenewLeaseIT extends BaseUniqueNamesOwnClusterIT {
         serverProps.put("hbase.coprocessor.region.classes", SleepingRegionObserver.class.getName());
         Map<String,String> clientProps = Maps.newHashMapWithExpectedSize(1);
         // Must update config before starting server
-        clientProps.put("hbase.rpc.timeout", Long.toString(RPC_TIMEOUT));
+        serverProps.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Long.toString(SCANNER_LEASE_TIMEOUT));
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
-    @Ignore("Requires fix for HBASE-16503")
     @Test
     public void testLeaseDoesNotTimeout() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -83,7 +82,7 @@ public class RenewLeaseIT extends BaseUniqueNamesOwnClusterIT {
                 final int limit, final boolean hasMore) throws IOException {
             try {
                 if (SLEEP_NOW && c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString().equals(TABLE_NAME)) {
-                    Thread.sleep(RPC_TIMEOUT * 2);
+                    Thread.sleep(2 * SCANNER_LEASE_TIMEOUT);
                 }
             } catch (InterruptedException e) {
                 throw new IOException(e);
