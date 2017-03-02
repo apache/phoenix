@@ -54,6 +54,7 @@
     <curator.service.discovery.version>3.2.1</curator.service.discovery.version>
     <curator.framework>3.2.1</curator.framework>
     <curator.testing.client>3.2.1</curator.testing.client>
+    <google.guice>4.1.0</google.guice>
   </properties>
 
   <build>
@@ -202,6 +203,14 @@
         <artifactId>curator-test</artifactId>
         <version>${curator.testing.client}</version>
     </dependency>
-
+    <dependency>
+      <groupId>com.google.inject</groupId>
+      <artifactId>guice</artifactId>
+      <version>4.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core</artifactId>
+    </dependency>
   </dependencies>
 </project>
