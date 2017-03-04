@@ -445,13 +445,26 @@ public class SkipScanFilter extends FilterBase implements Writable {
                     setStartKey();
                     schema.reposition(ptr, ScanUtil.getRowKeyPosition(slotSpan, i), ScanUtil.getRowKeyPosition(slotSpan, j), minOffset, maxOffset, slotSpan[j]);
                 } else {
+                    //for PHOENIX-3705, now ptr is still point to slot i, we must make ptr point to slot j+1,
+                    //because following setStartKey method will copy rowKey columns before ptr to startKey and
+                    //then copy the lower bound of slots from j+1, according to position array, so if we do not
+                    //make ptr point to slot j+1 before setStartKey,the startKey would be erroneous.
+                    schema.reposition(
+                            ptr,
+                            ScanUtil.getRowKeyPosition(slotSpan, i),
+                            ScanUtil.getRowKeyPosition(slotSpan, j + 1),
+                            minOffset,
+                            maxOffset,
+                            slotSpan[j + 1]);
                     int currentLength = setStartKey(ptr, minOffset, j+1, nSlots, false);
                     // From here on, we use startKey as our buffer (resetting minOffset and maxOffset)
                     // We've copied the part of the current key above that we need into startKey
                     // Reinitialize the iterator to be positioned at previous slot position
                     minOffset = 0;
                     maxOffset = startKeyLength;
-                    schema.iterator(startKey, minOffset, maxOffset, ptr, ScanUtil.getRowKeyPosition(slotSpan, j)+1);
+                    //make ptr point to the first rowKey column of slot j,why we need slotSpan[j] because for Row Value Constructor(RVC),
+                    //slot j may span multiple rowKey columns, so the length of ptr must consider the slotSpan[j].
+                    schema.iterator(startKey, minOffset, maxOffset, ptr, ScanUtil.getRowKeyPosition(slotSpan, j)+1,slotSpan[j]);
                     // Do nextKey after setting the accessor b/c otherwise the null byte may have
                     // been incremented causing us not to find it
                     ByteUtil.nextKey(startKey, currentLength);
