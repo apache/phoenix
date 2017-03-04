@@ -176,5 +176,9 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-queryserver-loadbalancer</artifactId>
+    </dependency>
   </dependencies>
 </project>

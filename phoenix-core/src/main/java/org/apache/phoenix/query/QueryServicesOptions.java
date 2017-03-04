@@ -82,6 +82,8 @@ import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERYSERVER_BASE_PATH;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERYSERVER_SERVICENAME;
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -286,6 +288,8 @@ public class QueryServicesOptions {
                                                                                     // 4.10, psql and CSVBulkLoad
                                                                                     // expects binary data to be base 64
                                                                                     // encoded
+    public static final String DEFAULT_PHOENIX_QUERYSERVER_BASE_PATH = "/phoenix";
+    public static final String DEFAULT_PHOENIX_QUERYSERVER_SERVICENAME = "queryserver";
     
     private final Configuration config;
 
@@ -354,7 +358,9 @@ public class QueryServicesOptions {
             .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
             .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)
             .setIfUnset(AUTO_UPGRADE_ENABLED, DEFAULT_AUTO_UPGRADE_ENABLED)
-            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING);
+            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
+            .setIfUnset(PHOENIX_QUERYSERVER_BASE_PATH,DEFAULT_PHOENIX_QUERYSERVER_BASE_PATH)
+            .setIfUnset(PHOENIX_QUERYSERVER_SERVICENAME,DEFAULT_PHOENIX_QUERYSERVER_SERVICENAME);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.

@@ -18,9 +18,22 @@
  */
 package org.apache.phoenix.loadbalancer.service;
 
-public interface Instance {
+import org.codehaus.jackson.map.annotate.JsonRootName;
 
-    public String getServiceHost();
-    public Integer getServicePort();
+@JsonRootName("phoenixQueryServerNode")
+public class Instance {
+
+    private Integer load;
+
+    public Instance(Integer load) {
+        this.load=load;
+    }
+
+    public Integer getLoad() {
+        return this.load;
+    }
+
+
+
 
 }

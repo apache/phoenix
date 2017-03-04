@@ -43,10 +43,14 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.queryserver.register.Registry;
+import org.apache.phoenix.queryserver.register.ZookeeperRegistry;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
+import java.lang.reflect.Constructor;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -341,7 +345,14 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   }
 
   public static void main(String[] argv) throws Exception {
-    int ret = ToolRunner.run(HBaseConfiguration.create(), new QueryServer(), argv);
+    Configuration configuration=HBaseConfiguration.create();
+    QueryServer queryServer = new QueryServer();
+    int ret = ToolRunner.run(configuration, queryServer, argv);
+    String basePath=configuration.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
+    String serviceName=configuration.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
+    Registry registry = new ZookeeperRegistry().registerYourself(10,basePath,serviceName,queryServer.server.getPort(),configuration);
+    registry.start();
     System.exit(ret);
+
   }
 }

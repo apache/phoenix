@@ -18,37 +18,53 @@
  */
 package org.apache.phoenix.loadbalancer.service;
 
-import com.google.inject.Guice;
-import com.google.inject.Inject;
-import com.google.inject.Injector;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.loadbalancer.inject.GuiceModule;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.phoenix.loadbalancer.zookeeper.ZookeeperServiceDiscoverer;
+import org.apache.phoenix.query.QueryServices;
 
 public class LoadBalancer {
 
-    private Injector injector;
+    protected static final Log LOG = LogFactory.getLog(LoadBalancer.class);
+    private static Configuration configuration;
+    private static ZookeeperServiceDiscoverer zookeeperServiceDiscoverer ;
+    private static LoadBalancer loadBalancer;
+    private static final String connectString;
+    private static String basePath ;
+    private static String serviceName;
 
-    private Configuration configuration;
-
-    @Inject
-    private ZookeeperServiceDiscoverer zookeeperServiceDiscoverer;
-
-    private static volatile LoadBalancer loadBalancer= new LoadBalancer();
-
-    private LoadBalancer() {
-        injector = Guice.createInjector(new GuiceModule());
-        configuration= injector.getInstance(Configuration.class);
+    static {
+        configuration = HBaseConfiguration.create();
+        connectString = configuration.get("phoenix.zookeeper.connect","localhost:2181");
+        basePath=configuration.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
+        serviceName=configuration.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
+        try {
+            loadBalancer = new LoadBalancer();
+        } catch (Exception e) {
+            LOG.error(" error while initializing load balancer ",e);
+        }
     }
+    private LoadBalancer() throws Exception{
+        try  {
+            zookeeperServiceDiscoverer = new ZookeeperServiceDiscoverer
+                    (connectString, new ExponentialBackoffRetry(1000, 3),
+                            basePath,serviceName);
+        }catch(Exception ex){
+            LOG.error("Exception while creating a zookeeper service discoverer",ex);
+            throw ex;
+        }
+    }
+
 
     public static LoadBalancer getLoadBalancer() {
-        return loadBalancer;
+       return loadBalancer;
     }
 
-    public static Configuration getConfiguration(){
-        return loadBalancer.configuration;
-    }
 
-    public ServiceDiscoverer getServiceDiscoverer() {
+    public ServiceDiscoverer getServiceDiscoverer() throws Exception{
         return zookeeperServiceDiscoverer;
     }
 

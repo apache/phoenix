@@ -18,13 +18,14 @@
  */
 package org.apache.phoenix.loadbalancer.service;
 
+import java.io.Closeable;
 import java.util.List;
 
 /**
  * Created by rshrivastava on 3/1/17.
  */
-public interface ServiceDiscoverer {
+public interface ServiceDiscoverer extends AutoCloseable{
 
-    public List<Instance> getServiceLocationList() throws Exception;
-    public void close() throws  Exception;
+    public Instance getServiceLocation();
+
 }

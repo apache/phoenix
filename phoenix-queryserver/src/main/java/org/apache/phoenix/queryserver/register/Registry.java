@@ -16,29 +16,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.loadbalancer.service;
+package org.apache.phoenix.queryserver.register;
 
-/**
- * Created by rshrivastava on 3/1/17.
- */
-public class ZookeeperNode implements Instance {
 
-    private String host;
-    private Integer port;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.hadoop.conf.Configuration;
 
-    public ZookeeperNode(String host,Integer port) {
-        this.host=host;
-        this.port=port;
-    }
+import java.io.Closeable;
+import java.io.IOException;
 
-    @Override
-    public String getServiceHost() {
-        return null;
-    }
+public interface  Registry extends Closeable {
 
-    @Override
-    public Integer getServicePort() {
-        return null;
-    }
+    public  Registry registerYourself(Integer load,  String path,
+                                              String serviceName, Integer port, Configuration configuration) throws Exception;
 
+    public abstract void close() throws IOException ;
+    public abstract void start() throws Exception ;
 }

@@ -573,6 +573,11 @@
         <artifactId>phoenix-queryserver-client</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-queryserver-loadbalancer</artifactId>
+        <version>${project.version}</version>
+      </dependency>
 
       <!-- HBase dependencies -->
       <dependency>
