@@ -81,18 +81,24 @@ public class RowKeySchema extends ValueSchema {
     }
 
     // "iterator" initialization methods that initialize a bytes ptr with a row key for further navigation
-
     @edu.umd.cs.findbugs.annotations.SuppressWarnings(
             value="NP_BOOLEAN_RETURN_NULL", 
             justification="Designed to return null.")
-    public Boolean iterator(byte[] src, int srcOffset, int srcLength, ImmutableBytesWritable ptr, int position) {
+    public Boolean iterator(byte[] src, int srcOffset, int srcLength, ImmutableBytesWritable ptr, int position,int extraColumnSpan) {
         Boolean hasValue = null;
         ptr.set(src, srcOffset, 0);
         int maxOffset = srcOffset + srcLength;
         for (int i = 0; i < position; i++) {
             hasValue = next(ptr, i, maxOffset);
         }
+        if(extraColumnSpan > 0) {
+            readExtraFields(ptr, position, maxOffset, extraColumnSpan);
+        }
         return hasValue;
+    }
+
+    public Boolean iterator(byte[] src, int srcOffset, int srcLength, ImmutableBytesWritable ptr, int position) {
+        return iterator(src, srcOffset,srcLength, ptr, position,0);
     }
     
     public Boolean iterator(ImmutableBytesWritable srcPtr, ImmutableBytesWritable ptr, int position) {
