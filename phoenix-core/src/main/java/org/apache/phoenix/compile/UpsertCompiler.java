@@ -24,6 +24,7 @@ import java.sql.ParameterMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
@@ -106,6 +107,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -756,6 +758,10 @@ public class UpsertCompiler {
                                 Tuple row = iterator.next();
                                 final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row,
                                         PLong.INSTANCE, ptr);
+                                for (PTable index : getNewIndexes(table)) {
+                                    new MetaDataClient(connection).buildIndex(index, tableRef,
+                                            scan.getTimeRange().getMax(), scan.getTimeRange().getMax() + 1);
+                                }
                                 return new MutationState(maxSize, connection) {
                                     @Override
                                     public long getUpdateCount() {
@@ -767,7 +773,19 @@ public class UpsertCompiler {
                             }
                             
                         }
-    
+
+                        private List<PTable> getNewIndexes(PTable table) throws SQLException {
+                            List<PTable> indexes = table.getIndexes();
+                            List<PTable> newIndexes = new ArrayList<PTable>(2);
+                            PTable newTable = PhoenixRuntime.getTableNoCache(connection, table.getName().getString());
+                            for (PTable index : newTable.getIndexes()) {
+                                if (!indexes.contains(index)) {
+                                    newIndexes.add(index);
+                                }
+                            }
+                            return newIndexes;
+                        }
+
                         @Override
                         public ExplainPlan getExplainPlan() throws SQLException {
                             List<String> queryPlanSteps =  aggPlan.getExplainPlan().getPlanSteps();
