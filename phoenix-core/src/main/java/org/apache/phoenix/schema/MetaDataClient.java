@@ -1226,21 +1226,63 @@ public class MetaDataClient {
         }
         throw new IllegalStateException(); // impossible
     }
+    
+    /**
+     * For new mutations only should not be used if there are deletes done in the data table between start time and end
+     * time passed to the method.
+     */
+    public MutationState buildIndex(PTable index, TableRef dataTableRef, long startTime, long EndTime)
+            throws SQLException {
+        boolean wasAutoCommit = connection.getAutoCommit();
+        try {
+            AlterIndexStatement indexStatement = FACTORY
+                    .alterIndex(
+                            FACTORY.namedTable(null,
+                                    TableName.create(index.getSchemaName().getString(),
+                                            index.getTableName().getString())),
+                            dataTableRef.getTable().getTableName().getString(), false, PIndexState.INACTIVE);
+            alterIndex(indexStatement);
+            connection.setAutoCommit(true);
+            MutationPlan mutationPlan = getMutationPlanForBuildingIndex(index, dataTableRef);
+            Scan scan = mutationPlan.getContext().getScan();
+            try {
+                scan.setTimeRange(startTime, EndTime);
+            } catch (IOException e) {
+                throw new SQLException(e);
+            }
+            MutationState state = connection.getQueryServices().updateData(mutationPlan);
+            indexStatement = FACTORY
+                    .alterIndex(
+                            FACTORY.namedTable(null,
+                                    TableName.create(index.getSchemaName().getString(),
+                                            index.getTableName().getString())),
+                            dataTableRef.getTable().getTableName().getString(), false, PIndexState.ACTIVE);
+            alterIndex(indexStatement);
+            return state;
+        } finally {
+            connection.setAutoCommit(wasAutoCommit);
+        }
+    }
+
+    private MutationPlan getMutationPlanForBuildingIndex(PTable index, TableRef dataTableRef) throws SQLException {
+        MutationPlan mutationPlan;
+        if (index.getIndexType() == IndexType.LOCAL) {
+            PostLocalIndexDDLCompiler compiler =
+                    new PostLocalIndexDDLCompiler(connection, getFullTableName(dataTableRef));
+            mutationPlan = compiler.compile(index);
+        } else {
+            PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
+            mutationPlan = compiler.compile(index);
+        }
+        return mutationPlan;
+    }
 
     private MutationState buildIndex(PTable index, TableRef dataTableRef) throws SQLException {
         AlterIndexStatement indexStatement = null;
         boolean wasAutoCommit = connection.getAutoCommit();
         try {
             connection.setAutoCommit(true);
-            MutationPlan mutationPlan;
-            if (index.getIndexType() == IndexType.LOCAL) {
-                PostLocalIndexDDLCompiler compiler =
-                        new PostLocalIndexDDLCompiler(connection, getFullTableName(dataTableRef));
-                mutationPlan = compiler.compile(index);
-            } else {
-                PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(connection, dataTableRef);
-                mutationPlan = compiler.compile(index);
-            }
+            MutationPlan mutationPlan = getMutationPlanForBuildingIndex(index, dataTableRef);
             Scan scan = mutationPlan.getContext().getScan();
             Long scn = connection.getSCN();
             try {

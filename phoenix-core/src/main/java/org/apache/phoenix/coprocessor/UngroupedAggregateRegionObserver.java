@@ -35,7 +35,6 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -59,6 +58,7 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.io.HeapSize;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -72,7 +72,6 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
-import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -127,6 +126,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.primitives.Ints;
 
 
 /**
@@ -288,6 +288,41 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return s;
     }
 
+    class MutationList extends ArrayList<Mutation> implements HeapSize {
+        private long heapSize = 0l;
+        public MutationList() {
+            super();
+        }
+        
+        public MutationList(int size){
+            super(size);
+        }
+        
+        @Override
+        public boolean add(Mutation e) {
+            boolean r = super.add(e);
+            if (r) {
+                incrementHeapSize(e.heapSize());
+            }
+            return r;
+        }
+
+        @Override
+        public long heapSize() {
+            return heapSize;
+        }
+
+        private void incrementHeapSize(long heapSize) {
+            this.heapSize += heapSize;
+        }
+
+        @Override
+        public void clear() {
+            heapSize = 0l;
+            super.clear();
+        }
+    }
+    
     @Override
     protected RegionScanner doPostScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan, final RegionScanner s) throws IOException, SQLException {
         RegionCoprocessorEnvironment env = c.getEnvironment();
@@ -339,7 +374,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             localIndexBytes = scan.getAttribute(LOCAL_INDEX_BUILD);
         }
         List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes, useProto);
-        List<Mutation> indexMutations = localIndexBytes == null ? Collections.<Mutation>emptyList() : Lists.<Mutation>newArrayListWithExpectedSize(1024);
+        MutationList indexMutations = localIndexBytes == null ? new MutationList() : new MutationList(1024);
         
         RegionScanner theScanner = s;
         
@@ -395,9 +430,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             theScanner = new HashJoinRegionScanner(theScanner, p, j, ScanUtil.getTenantId(scan), env, useQualifierAsIndex, useNewValueColumnQualifier);
         }
         
-        int batchSize = 0;
-        long batchSizeBytes = 0L;
-        List<Mutation> mutations = Collections.emptyList();
+        int maxBatchSize = 0;
+        long maxBatchSizeBytes = 0L;
+        MutationList mutations = new MutationList();
         boolean needToWrite = false;
         Configuration conf = c.getEnvironment().getConfiguration();
         long flushSize = region.getTableDesc().getMemStoreFlushSize();
@@ -420,10 +455,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         boolean buildLocalIndex = indexMaintainers != null && dataColumns==null && !localIndexScan;
         if (isDescRowKeyOrderUpgrade || isDelete || isUpsert || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
             needToWrite = true;
-            // TODO: size better
-            mutations = Lists.newArrayListWithExpectedSize(1024);
-            batchSize = env.getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            batchSizeBytes = env.getConfiguration().getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+            maxBatchSize = env.getConfiguration().getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+            mutations = new MutationList(Ints.saturatedCast(maxBatchSize + maxBatchSize / 10));
+            maxBatchSizeBytes = env.getConfiguration().getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
                 QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
         }
         Aggregators aggregators = ServerAggregators.deserialize(
@@ -666,22 +700,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     mutations.add(put);
                                 }
                             }
-                            // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
-                            List<List<Mutation>> batchMutationList =
-                                MutationState.getMutationBatchList(batchSize, batchSizeBytes, mutations);
-                            for (List<Mutation> batchMutations : batchMutationList) {
-                                commit(region, batchMutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr,
-                                        txState, areMutationInSameRegion, targetHTable, useIndexProto);
-                                batchMutations.clear();
-                            }
+                        }
+                        if (readyToCommit(mutations, maxBatchSize, maxBatchSizeBytes)) {
+                            commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
+                                    areMutationInSameRegion, targetHTable, useIndexProto);
                             mutations.clear();
-                            // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
-                            List<List<Mutation>> batchIndexMutationList =
-                                MutationState.getMutationBatchList(batchSize, batchSizeBytes, indexMutations);
-                            for (List<Mutation> batchIndexMutations : batchIndexMutationList) {
-                                commitBatch(region, batchIndexMutations, null, blockingMemStoreSize, null, txState, useIndexProto);
-                                batchIndexMutations.clear();
-                            }
+                        }
+                        // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
+
+                        if (readyToCommit(indexMutations, maxBatchSize, maxBatchSizeBytes)) {
+                            commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState,
+                                    useIndexProto);
                             indexMutations.clear();
                         }
                         aggregators.aggregate(rowAggregators, result);
@@ -774,10 +803,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return false;
     }
 
-    private boolean readyToCommit(List<Mutation> mutations,int batchSize){
-        return !mutations.isEmpty() && batchSize > 0 &&
-        mutations.size() > batchSize;
+    private boolean readyToCommit(MutationList mutations, int maxBatchSize, long maxBatchSizeBytes) {
+        return !mutations.isEmpty() && (maxBatchSize > 0 && mutations.size() > maxBatchSize)
+                || (maxBatchSizeBytes > 0 && mutations.heapSize() > maxBatchSizeBytes);
     }
+
     @Override
     public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final InternalScanner scanner, final ScanType scanType) throws IOException {
