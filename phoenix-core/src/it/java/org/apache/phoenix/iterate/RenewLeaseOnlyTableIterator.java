@@ -19,7 +19,7 @@ package org.apache.phoenix.iterate;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
-import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NOT_RENEWED;
+import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.LOCK_NOT_ACQUIRED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.THRESHOLD_NOT_REACHED;
 
@@ -29,16 +29,18 @@ public class RenewLeaseOnlyTableIterator extends TableResultIterator {
 
     private final int numberOfLeaseRenewals;
     private final int thresholdNotReachedAt;
-    private final int doNotRenewLeaseAt;
+    private final int failToAcquireLockAt;
+    private final int failLeaseRenewalAt;
     private int counter = 0;
     private RenewLeaseStatus lastRenewLeaseStatus;
 
-    public RenewLeaseOnlyTableIterator(int renewLeaseCount, int skipRenewLeaseAt, int doNotRenewLeaseAt) throws SQLException {
+    public RenewLeaseOnlyTableIterator(int renewLeaseCount, int skipRenewLeaseAt, int failToAcquireLockAt, int doNotRenewLeaseAt) throws SQLException {
         super();
         checkArgument(renewLeaseCount >= skipRenewLeaseAt);
         this.numberOfLeaseRenewals = renewLeaseCount;
         this.thresholdNotReachedAt = skipRenewLeaseAt;
-        this.doNotRenewLeaseAt = doNotRenewLeaseAt;
+        this.failToAcquireLockAt = failToAcquireLockAt;
+        this.failLeaseRenewalAt = doNotRenewLeaseAt;
     }
 
     @Override
@@ -46,8 +48,11 @@ public class RenewLeaseOnlyTableIterator extends TableResultIterator {
         counter++;
         if (counter == thresholdNotReachedAt) {
             lastRenewLeaseStatus = THRESHOLD_NOT_REACHED;
-        } else if (counter == doNotRenewLeaseAt) {
-            lastRenewLeaseStatus = NOT_RENEWED;
+        } else if (counter == failLeaseRenewalAt) {
+            lastRenewLeaseStatus = null;
+            throw new RuntimeException("Failing lease renewal");
+        } else if (counter == failToAcquireLockAt) {
+            lastRenewLeaseStatus = LOCK_NOT_ACQUIRED;
         } else if (counter <= numberOfLeaseRenewals) {
             lastRenewLeaseStatus = RENEWED;
         } else {
