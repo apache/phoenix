@@ -595,6 +595,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     mutations.add(put);
                                 }
                             }
+                        }
                             // Commit in batches based on UPSERT_BATCH_SIZE_ATTRIB in config
                             if (!mutations.isEmpty() && batchSize > 0 &&
                                     mutations.size() % batchSize == 0) {
@@ -608,7 +609,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState);
                                 indexMutations.clear();
                             }
-                        }
+                        
                         aggregators.aggregate(rowAggregators, result);
                         hasAny = true;
                     }
