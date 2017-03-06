@@ -4077,8 +4077,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             scanningItr));
                                     logger.info("Lease renewed for scanner: " + scanningItr);
                                     break;
+                                // Scanner not initialized probably because next() hasn't been called on it yet. Enqueue it back to attempt lease renewal later.
                                 case UNINITIALIZED:
+                                // Threshold not yet reached. Re-enqueue to renew lease later.
                                 case THRESHOLD_NOT_REACHED:
+                                // Another scanner operation in progress. Re-enqueue to attempt renewing lease later.
+                                case LOCK_NOT_ACQUIRED:
                                     // add it back at the tail
                                     scannerQueue.offer(new WeakReference<TableResultIterator>(
                                             scanningItr));
@@ -4086,7 +4090,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     // if lease wasn't renewed or scanner was closed, don't add the
                                     // scanner back to the queue.
                                 case CLOSED:
-                                case NOT_RENEWED:
+                                case NOT_SUPPORTED:
                                     break;
                                 }
                             }
