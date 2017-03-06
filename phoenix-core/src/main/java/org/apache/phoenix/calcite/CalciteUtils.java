@@ -59,6 +59,7 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.calcite.rel.PhoenixRelImplementor;
 import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.ExpressionManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CaseExpression;
@@ -92,6 +93,7 @@ import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
 import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.AggregateFunction;
+import org.apache.phoenix.expression.function.AvgAggregateFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
 import org.apache.phoenix.expression.function.CeilFunction;
@@ -103,6 +105,7 @@ import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.DayOfMonthFunction;
 import org.apache.phoenix.expression.function.DayOfWeekFunction;
 import org.apache.phoenix.expression.function.DayOfYearFunction;
+import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.ExpFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
@@ -1080,55 +1083,102 @@ public class CalciteUtils {
         FUNCTION_MAP.put("COUNT", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
                 if (args.isEmpty()) {
                     args = Lists.asList(LiteralExpression.newConstant(1), new Expression[0]);
                 }
-                return new CountAggregateFunction(args);
+                AggregateFunction func = isDistinct
+                        ? new DistinctCountAggregateFunction(
+                                args,
+                                getDelegateAggregateFunction(args, exprManager))
+                        : new CountAggregateFunction(args);
+                return (FunctionExpression) exprManager.addIfAbsent(func);
             }
         });
         FUNCTION_MAP.put("$SUM0", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
-                return new SumAggregateFunction(args);
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
+                throwDistinctNotSupportedException(isDistinct, sqlFunc.getName());
+                return (FunctionExpression) exprManager.addIfAbsent(
+                        new SumAggregateFunction(args));
             }
         });
         FUNCTION_MAP.put("SUM", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
-                return new SumAggregateFunction(args);
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
+                throwDistinctNotSupportedException(isDistinct, sqlFunc.getName());
+                return (FunctionExpression) exprManager.addIfAbsent(
+                        new SumAggregateFunction(args));
+            }
+        });
+        FUNCTION_MAP.put("AVG", new FunctionFactory() {
+            @Override
+            public FunctionExpression newFunction(SqlFunction sqlFunc,
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
+                throwDistinctNotSupportedException(isDistinct, sqlFunc.getName());
+                SumAggregateFunction sumFunc;
+                CountAggregateFunction countFunc =
+                        (CountAggregateFunction) exprManager.addIfAbsent(
+                                new CountAggregateFunction(args));
+                if (!countFunc.isConstantExpression()) {
+                    sumFunc =
+                            (SumAggregateFunction) exprManager.addIfAbsent(
+                                    new SumAggregateFunction(countFunc.getChildren(),null));
+                } else {
+                    sumFunc = null;
+                }
+
+                return (FunctionExpression) exprManager.addIfAbsent(
+                        new AvgAggregateFunction(args, countFunc, sumFunc));
             }
         });
         FUNCTION_MAP.put("MAX", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
-                return new MaxAggregateFunction(args, null);
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
+                throwDistinctNotSupportedException(isDistinct, sqlFunc.getName());
+                return (FunctionExpression) exprManager.addIfAbsent(
+                        new MaxAggregateFunction(args, null));
             }
         });
         FUNCTION_MAP.put("MIN", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
-                return new MinAggregateFunction(args, null);
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
+                throwDistinctNotSupportedException(isDistinct, sqlFunc.getName());
+                return (FunctionExpression) exprManager.addIfAbsent(
+                        new MinAggregateFunction(args, null));
             }
         });
         FUNCTION_MAP.put("STDDEV_POP", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
-                return new StddevPopFunction(args);
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
+                throwDistinctNotSupportedException(isDistinct, sqlFunc.getName());
+                return (FunctionExpression) exprManager.addIfAbsent(
+                        new StddevPopFunction(args));
             }
         });
         FUNCTION_MAP.put("STDDEV_SAMP", new FunctionFactory() {
             @Override
             public FunctionExpression newFunction(SqlFunction sqlFunc,
-                    List<Expression> args) {
-                return new StddevSampFunction(args);
+                    List<Expression> args, boolean isDistinct, ExpressionManager exprManager) {
+                throwDistinctNotSupportedException(isDistinct, sqlFunc.getName());
+                return (FunctionExpression) exprManager.addIfAbsent(
+                        new StddevSampFunction(args));
             }
         });
+    }
+    
+    private static CountAggregateFunction getDelegateAggregateFunction(List<Expression> args, ExpressionManager exprManager) {
+        CountAggregateFunction countFunc = null;
+        if (args.get(0).isStateless()) {
+            countFunc = (CountAggregateFunction) exprManager.addIfAbsent(
+                    new CountAggregateFunction(args));
+        }
+        return countFunc;
     }
     
     private static List<Expression> convertChildren(RexCall call, PhoenixRelImplementor implementor) {
@@ -1197,20 +1247,29 @@ public class CalciteUtils {
         return true;
     }
 
-	public static Expression toExpression(RexNode node, PhoenixRelImplementor implementor) {
+	public static Expression toExpression(
+	        RexNode node, PhoenixRelImplementor implementor) {
 		ExpressionFactory eFactory = getFactory(node);
 		Expression expression = eFactory.newExpression(node, implementor);
 		return expression;
 	}
 	
-	public static AggregateFunction toAggregateFunction(SqlAggFunction aggFunc, List<Integer> args, PhoenixRelImplementor implementor) {
+	public static Expression toAggregateFunction(
+	        SqlAggFunction aggFunc, List<Integer> args,
+	        boolean isDistinct, RelDataType targetType,
+	        PhoenixRelImplementor implementor, ExpressionManager exprManager) {
 	    FunctionFactory fFactory = getFactory(aggFunc);
 	    List<Expression> exprs = Lists.newArrayListWithExpectedSize(args.size());
 	    for (Integer index : args) {
 	        exprs.add(implementor.newColumnExpression(index));
 	    }
 	    
-	    return (AggregateFunction) (fFactory.newFunction(aggFunc, exprs));
+	    FunctionExpression func = (fFactory.newFunction(aggFunc, exprs, isDistinct, exprManager));
+	    try {
+            return cast(relDataTypeToPDataType(targetType), null, func, implementor);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
 	}
 	
 	public static interface ExpressionFactory {
@@ -1218,7 +1277,7 @@ public class CalciteUtils {
 	}
 	
 	public static interface FunctionFactory {
-	    public FunctionExpression newFunction(SqlFunction sqlFunc, List<Expression> args);
+	    public FunctionExpression newFunction(SqlFunction sqlFunc, List<Expression> args, boolean isDistinct, ExpressionManager exprManager);
 	}
 	
 	public static boolean hasSequenceValueCall(Project project) {
@@ -1320,6 +1379,7 @@ public class CalciteUtils {
         return defaultExpression;
     };
 
+    @SuppressWarnings("rawtypes")
     public static RexNode convertColumnExpressionToLiteral(PColumn column,
             Expression defaultExpression, RelDataTypeFactory typeFactory, RexBuilder rexBuilder) {
         ImmutableBytesWritable key = new ImmutableBytesWritable();
@@ -1339,5 +1399,11 @@ public class CalciteUtils {
                       defaultExpression.getDataType(), defaultExpression.getMaxLength(),
                       defaultExpression.getScale(), column.getArraySize());
         return rexBuilder.makeLiteral((Comparable)object, pDataTypeToRelDataType,true);
+    }
+
+    private static void throwDistinctNotSupportedException(boolean isDistinct, String func) {
+        if (isDistinct) {
+            throw new UnsupportedOperationException("DISTINCT " + func + " not supported.");
+        }
     }
 }

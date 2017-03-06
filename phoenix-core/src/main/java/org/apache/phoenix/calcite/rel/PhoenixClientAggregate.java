@@ -1,7 +1,6 @@
 package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
@@ -21,6 +20,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.ClientAggregatePlan;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.TableRef;
 
@@ -72,11 +72,11 @@ public class PhoenixClientAggregate extends PhoenixAbstractAggregate {
             throw new RuntimeException(e);
         }        
         GroupBy groupBy = super.getGroupBy(implementor);       
-        super.serializeAggregators(implementor, context, groupBy.isEmpty());
+        List<Expression> funcs = super.serializeAggregators(implementor, context, groupBy.isEmpty());
         
         QueryPlan aggPlan = new ClientAggregatePlan(context, plan.getStatement(), tableRef, RowProjector.EMPTY_PROJECTOR, null, null, null, OrderBy.EMPTY_ORDER_BY, groupBy, null, plan);
         
-        return PhoenixAbstractAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));
+        return PhoenixAbstractAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), funcs);
     }
 
 }

@@ -461,10 +461,21 @@ public class CalciteIT extends BaseCalciteIT {
         }
         start(false, 1000f).sql("select mypk0, avg(mypk1) from " + SALTED_TABLE_NAME + " group by mypk0")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixClientProject(MYPK0=[$0], EXPR$1=[CAST(/($1, $2)):INTEGER NOT NULL])\n" +
-                           "    PhoenixServerAggregate(group=[{0}], agg#0=[$SUM0($1)], agg#1=[COUNT()], isOrdered=[true])\n" +
-                           "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], scanOrder=[FORWARD])\n")
+                           "  PhoenixServerAggregate(group=[{0}], EXPR$1=[AVG($1)], isOrdered=[true])\n" +
+                           "    PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], scanOrder=[FORWARD])\n")
                 .resultIs(0, expectedResult)
+                .close();
+        
+        Object[][] expectedResult2 = new Object[1000][1];
+        for (int i = 0; i < 1000; i++) {
+            expectedResult2[i][0] = 1000 - i;
+        }
+        start(false, 1000f).sql("select mypk0 from " + SALTED_TABLE_NAME + " group by mypk0 order by avg(mypk1) desc")
+                .explainIs("PhoenixToEnumerableConverter\n" +
+                           "  PhoenixServerSort(sort0=[$1], dir0=[DESC])\n" +
+                           "    PhoenixServerAggregate(group=[{0}], agg#0=[AVG($1)], isOrdered=[true])\n" +
+                           "      PhoenixTableScan(table=[[phoenix, SALTED_TEST_TABLE]], scanOrder=[FORWARD])\n")
+                .resultIs(expectedResult2)
                 .close();
     }
     
@@ -1112,7 +1123,7 @@ public class CalciteIT extends BaseCalciteIT {
         start(false, 1000f).sql("SELECT s.student_id, t.score FROM " + SCORES_TABLE_NAME + " s, UNNEST((SELECT scores FROM " + SCORES_TABLE_NAME + " s2 where s.student_id = s2.student_id)) AS t(score)")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixClientProject(STUDENT_ID=[$0], SCORE=[$6])\n" +
-                           "    PhoenixCorrelate(correlation=[$cor0], joinType=[INNER], requiredColumns=[{0}])\n" +
+                           "    PhoenixCorrelate(correlation=[$cor0], joinType=[inner], requiredColumns=[{0}])\n" +
                            "      PhoenixTableScan(table=[[phoenix, SCORES]])\n" +
                            "      PhoenixUncollect\n" +
                            "        PhoenixServerProject(EXPR$0=[$2])\n" +
@@ -1143,7 +1154,7 @@ public class CalciteIT extends BaseCalciteIT {
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(order_id=[$0], QUANTITY=[$2])\n" +
                 "    PhoenixFilter(condition=[=($2, $3)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{1}])\n" +
+                "      PhoenixCorrelate(correlation=[$cor0], joinType=[left], requiredColumns=[{1}])\n" +
                 "        PhoenixServerProject(order_id=[$0], item_id=[$2], QUANTITY=[$4])\n" +
                 "          PhoenixTableScan(table=[[phoenix, Join, OrderTable]])\n" +
                 "        PhoenixServerAggregate(group=[{}], EXPR$0=[MAX($4)])\n" +
@@ -1175,7 +1186,7 @@ public class CalciteIT extends BaseCalciteIT {
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(NAME=[$1])\n" +
                 "    PhoenixFilter(condition=[=($2, $3)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{0, 1}])\n" +
+                "      PhoenixCorrelate(correlation=[$cor0], joinType=[left], requiredColumns=[{0, 1}])\n" +
                 "        PhoenixServerProject(item_id=[$0], NAME=[$1], PRICE=[$2])\n" +
                 "          PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "        PhoenixServerAggregate(group=[{}], EXPR$0=[MAX($2)])\n" +
@@ -1205,7 +1216,7 @@ public class CalciteIT extends BaseCalciteIT {
         String p3Correlate = 
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(item_id=[$0], NAME=[$1])\n" +
-                "    PhoenixCorrelate(correlation=[$cor0], joinType=[INNER], requiredColumns=[{0}])\n" +
+                "    PhoenixCorrelate(correlation=[$cor0], joinType=[inner], requiredColumns=[{0}])\n" +
                 "      PhoenixServerProject(item_id=[$0], NAME=[$1])\n" +
                 "        PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
                 "      PhoenixServerAggregate(group=[{0}], isOrdered=[false])\n" +
@@ -1248,7 +1259,7 @@ public class CalciteIT extends BaseCalciteIT {
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(order_id=[$2])\n" +
                 "    PhoenixFilter(condition=[=($4, $5)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{1}])\n" +
+                "      PhoenixCorrelate(correlation=[$cor0], joinType=[left], requiredColumns=[{1}])\n" +
                 "        PhoenixServerJoin(condition=[=($3, $0)], joinType=[inner])\n" +
                 "          PhoenixServerProject(item_id=[$0], supplier_id=[$5])\n" +
                 "            PhoenixTableScan(table=[[phoenix, Join, ItemTable]])\n" +
@@ -1294,7 +1305,7 @@ public class CalciteIT extends BaseCalciteIT {
                 "PhoenixToEnumerableConverter\n" +
                 "  PhoenixClientProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], A_INTEGER=[$3])\n" +
                 "    PhoenixFilter(condition=[=($3, $4)])\n" +
-                "      PhoenixCorrelate(correlation=[$cor0], joinType=[LEFT], requiredColumns=[{0, 2}])\n" +
+                "      PhoenixCorrelate(correlation=[$cor0], joinType=[left], requiredColumns=[{0, 2}])\n" +
                 "        PhoenixServerProject(ORGANIZATION_ID=[$0], ENTITY_ID=[$1], B_STRING=[$3], A_INTEGER=[$4])\n" +
                 "          PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n" +
                 "        PhoenixServerAggregate(group=[{}], EXPR$0=[MIN($4)])\n" +

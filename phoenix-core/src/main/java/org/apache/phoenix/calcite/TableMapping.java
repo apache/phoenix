@@ -39,7 +39,6 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.ArgumentTypeMismatchException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;

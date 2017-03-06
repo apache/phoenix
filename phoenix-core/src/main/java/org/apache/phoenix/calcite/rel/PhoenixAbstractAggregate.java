@@ -1,5 +1,8 @@
 package org.apache.phoenix.calcite.rel;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -29,13 +32,12 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.aggregator.ClientAggregators;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
-import org.apache.phoenix.expression.function.AggregateFunction;
-import org.apache.phoenix.expression.function.CountAggregateFunction;
-import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.SingleAggregateFunction;
+import org.apache.phoenix.expression.visitor.SingleAggregateFunctionVisitor;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
@@ -151,27 +153,47 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
         return new GroupBy.GroupByBuilder().setIsOrderPreserving(isOrderedGroupBy).setExpressions(keyExprs).setKeyExpressions(keyExprs).build();        
     }
     
-    protected void serializeAggregators(PhoenixRelImplementor implementor, StatementContext context, boolean isEmptyGroupBy) {
+    protected List<Expression> serializeAggregators(PhoenixRelImplementor implementor, StatementContext context, boolean isEmptyGroupBy) {
         if(getGroupType() != Group.SIMPLE) throw new UnsupportedOperationException();
-        // TODO sort aggFuncs. same problem with group by key sorting.
-        List<SingleAggregateFunction> aggFuncs = Lists.newArrayList();
+
+        List<Expression> funcs = Lists.newArrayList();
         for (AggregateCall call : aggCalls) {
-            AggregateFunction aggFunc = CalciteUtils.toAggregateFunction(call.getAggregation(), call.getArgList(), implementor);
-            if(aggFunc instanceof CountAggregateFunction && call.isDistinct()){
-                aggFunc = new DistinctCountAggregateFunction(aggFunc.getChildren(), null);
-            }
-            if (!(aggFunc instanceof SingleAggregateFunction)) {
-                throw new UnsupportedOperationException();
-            }
-            aggFuncs.add((SingleAggregateFunction) aggFunc);
+            Expression func =
+                    CalciteUtils.toAggregateFunction(
+                            call.getAggregation(), call.getArgList(),
+                            call.isDistinct(), call.getType(),
+                            implementor, context.getExpressionManager());
+            funcs.add(func);
         }
+
+        final Set<SingleAggregateFunction> aggFuncSet = Sets.newHashSetWithExpectedSize(context.getExpressionManager().getExpressionCount());
+
+        Iterator<Expression> expressions = context.getExpressionManager().getExpressions();
+        while (expressions.hasNext()) {
+            Expression expression = expressions.next();
+            expression.accept(new SingleAggregateFunctionVisitor() {
+                @Override
+                public Iterator<Expression> visitEnter(SingleAggregateFunction function) {
+                    aggFuncSet.add(function);
+                    return Iterators.emptyIterator();
+                }
+            });
+        }
+        if (aggFuncSet.isEmpty() && isEmptyGroupBy) {
+            return funcs;
+        }
+        List<SingleAggregateFunction> aggFuncs = new ArrayList<SingleAggregateFunction>(aggFuncSet);
+        Collections.sort(aggFuncs, SingleAggregateFunction.SCHEMA_COMPARATOR);
+
         int minNullableIndex = getMinNullableIndex(aggFuncs, isEmptyGroupBy);
         context.getScan().setAttribute(BaseScannerRegionObserver.AGGREGATORS, ServerAggregators.serialize(aggFuncs, minNullableIndex));
         ClientAggregators clientAggregators = new ClientAggregators(aggFuncs, minNullableIndex);
         context.getAggregationManager().setAggregators(clientAggregators);
+
+        return funcs;
     }
     
-    protected static QueryPlan wrapWithProject(PhoenixRelImplementor implementor, QueryPlan plan, List<Expression> keyExpressions, List<SingleAggregateFunction> aggFuncs) {
+    protected static QueryPlan wrapWithProject(PhoenixRelImplementor implementor, QueryPlan plan, List<Expression> keyExpressions, List<Expression> aggFuncs) {
         List<Expression> exprs = Lists.newArrayList();
         for (int i = 0; i < keyExpressions.size(); i++) {
             Expression keyExpr = keyExpressions.get(i);
@@ -179,7 +201,7 @@ abstract public class PhoenixAbstractAggregate extends Aggregate implements Phoe
             Expression expr = new RowKeyColumnExpression(keyExpr, accessor, keyExpr.getDataType());
             exprs.add(expr);
         }
-        for (SingleAggregateFunction aggFunc : aggFuncs) {
+        for (Expression aggFunc : aggFuncs) {
             exprs.add(aggFunc);
         }
         

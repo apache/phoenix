@@ -24,6 +24,7 @@ import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.rules.AggregateExpandDistinctAggregatesRule;
 import org.apache.calcite.rel.rules.AggregateJoinTransposeRule;
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
+import org.apache.calcite.rel.rules.AggregateReduceFunctionsRule;
 import org.apache.calcite.rel.rules.FilterAggregateTransposeRule;
 import org.apache.calcite.rel.rules.FilterCorrelateRule;
 import org.apache.calcite.rel.rules.FilterJoinRule;
@@ -70,6 +71,7 @@ public class PhoenixPrograms {
             new RelOptRule[] {
                     AggregateExpandDistinctAggregatesRule.INSTANCE,
                     AggregateJoinTransposeRule.INSTANCE,
+                    AggregateReduceFunctionsRule.INSTANCE, // disable
                     //AggregateProjectMergeRule.INSTANCE,
                     FilterAggregateTransposeRule.INSTANCE,
                     FilterCorrelateRule.INSTANCE,

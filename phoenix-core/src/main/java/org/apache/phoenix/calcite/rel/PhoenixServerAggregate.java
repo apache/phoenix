@@ -1,6 +1,5 @@
 package org.apache.phoenix.calcite.rel;
 
-import java.util.Arrays;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
@@ -19,6 +18,7 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.HashJoinPlan;
 import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.expression.Expression;
 
 public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
     
@@ -76,14 +76,14 @@ public class PhoenixServerAggregate extends PhoenixAbstractAggregate {
         
         StatementContext context = basePlan.getContext();        
         GroupBy groupBy = super.getGroupBy(implementor);       
-        super.serializeAggregators(implementor, context, groupBy.isEmpty());
+        List<Expression> funcs = super.serializeAggregators(implementor, context, groupBy.isEmpty());
         
         QueryPlan aggPlan = new AggregatePlan(context, basePlan.getStatement(), basePlan.getTableRef(), basePlan.getSourceRefs().iterator().next(), RowProjector.EMPTY_PROJECTOR, null, null, OrderBy.EMPTY_ORDER_BY, null, groupBy, null, basePlan.getDynamicFilter());
         if (hashJoinPlan != null) {        
             aggPlan = HashJoinPlan.create(hashJoinPlan.getStatement(), aggPlan, hashJoinPlan.getJoinInfo(), hashJoinPlan.getSubPlans());
         }
         
-        return PhoenixAbstractAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), Arrays.asList(context.getAggregationManager().getAggregators().getFunctions()));
+        return PhoenixAbstractAggregate.wrapWithProject(implementor, aggPlan, groupBy.getKeyExpressions(), funcs);
     }
 
 }
