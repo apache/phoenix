@@ -101,11 +101,6 @@ public interface PhoenixTransactionalTable extends HTableInterface {
     public void delete(List<Delete> deletes) throws IOException;
 
     /**
-     * Return the underling htable
-     */
-    public HTableInterface getHTable();
-
-    /**
      * Delegates to {@link HTable#setAutoFlush(boolean autoFlush)}
      */
     public void setAutoFlush(boolean autoFlush);
