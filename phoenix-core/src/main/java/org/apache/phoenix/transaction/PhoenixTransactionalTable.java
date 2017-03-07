@@ -14,7 +14,7 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import java.io.IOException;
 import java.util.List;
 
-public interface PhoenixTransactionalTable {
+public interface PhoenixTransactionalTable extends HTableInterface {
 
     /**
      * Transaction version of {@link HTableInterface#get(Get get)}
