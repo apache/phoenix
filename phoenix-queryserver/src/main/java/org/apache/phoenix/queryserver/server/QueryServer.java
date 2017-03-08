@@ -18,6 +18,7 @@
 package org.apache.phoenix.queryserver.server;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Optional;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -30,6 +31,7 @@ import org.apache.calcite.avatica.server.DoAsRemoteUserCallback;
 import org.apache.calcite.avatica.server.HttpServer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.curator.test.TestingServer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -47,10 +49,8 @@ import org.apache.phoenix.queryserver.register.Registry;
 import org.apache.phoenix.queryserver.register.ZookeeperRegistry;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
-import java.lang.reflect.Constructor;
 import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -132,10 +132,31 @@ public final class QueryServer extends Configured implements Tool, Runnable {
 
   /** Constructor for use as {@link java.lang.Runnable}. */
   public QueryServer(String[] argv, Configuration conf) {
+    this(argv,conf,null);
+  }
+  /**
+   *
+   */
+  public QueryServer(String[] argv, Configuration conf,String connectString) {
     this.argv = argv;
     setConf(conf);
-  }
+    /*String basePath = conf.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
+    String serviceName = conf.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
+    if (connectString == null) {
+      String zookeeperQuorum = conf.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
+      String zookeeperPort = conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+      connectString = String.format("%s:%s",zookeeperQuorum,zookeeperPort);
+    }
 
+    try {
+      Registry registry = new ZookeeperRegistry().registerServer(10, basePath, serviceName, server.getPort()
+              , connectString);
+      registry.start();
+    } catch(Exception ex) {
+      LOG.error("Unable to connect to zookeeper instance ",ex);
+      System.exit(-1);
+    }*/
+  }
   /**
    * @return the port number this instance is bound to, or {@code -1} if the server is not running.
    */
@@ -344,14 +365,11 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       }
   }
 
+
   public static void main(String[] argv) throws Exception {
-    Configuration configuration=HBaseConfiguration.create();
+    Configuration configuration = HBaseConfiguration.create();
     QueryServer queryServer = new QueryServer();
     int ret = ToolRunner.run(configuration, queryServer, argv);
-    String basePath=configuration.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
-    String serviceName=configuration.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
-    Registry registry = new ZookeeperRegistry().registerYourself(10,basePath,serviceName,queryServer.server.getPort(),configuration);
-    registry.start();
     System.exit(ret);
 
   }

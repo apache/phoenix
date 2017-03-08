@@ -50,9 +50,9 @@
   <properties>
     <top.dir>${project.basedir}/..</top.dir>
     <shaded.package>org.apache.phoenix.shaded</shaded.package>
-    <curator.service.discovery.version>3.2.1</curator.service.discovery.version>
-    <curator.framework>3.2.1</curator.framework>
-    <curator.testing.client>3.2.1</curator.testing.client>
+    <curator.service.discovery.version>2.11.1</curator.service.discovery.version>
+    <curator.framework>2.11.1</curator.framework>
+    <curator.testing.client>2.11.1</curator.testing.client>
   </properties>
 
   <build>

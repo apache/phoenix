@@ -19,6 +19,7 @@
 package org.apache.phoenix.loadbalancer.zookeeper;
 
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.Service;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.curator.RetryPolicy;
@@ -27,8 +28,12 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.x.discovery.ServiceDiscovery;
 import org.apache.curator.x.discovery.ServiceDiscoveryBuilder;
 import org.apache.curator.x.discovery.ServiceInstance;
+import org.apache.curator.x.discovery.ServiceProvider;
 import org.apache.curator.x.discovery.details.JsonInstanceSerializer;
+import org.apache.curator.x.discovery.strategies.RandomStrategy;
+import org.apache.curator.x.discovery.strategies.RoundRobinStrategy;
 import org.apache.phoenix.loadbalancer.service.Instance;
+import org.apache.phoenix.loadbalancer.service.LeastLoadStrategy;
 import org.apache.phoenix.loadbalancer.service.LoadBalancer;
 import org.apache.phoenix.loadbalancer.service.ServiceDiscoverer;
 
@@ -68,17 +73,12 @@ public class ZookeeperServiceDiscoverer implements ServiceDiscoverer {
     }
 
     @Override
-    public Instance getServiceLocation() {
-        this.refreshServiceLocationList();
-        Collections.sort(services, new Comparator<Instance>() {
-            @Override
-            public int compare(Instance o1, Instance o2) {
-                if (o1.getLoad() == o2.getLoad() ) return 0;
-                if (o1.getLoad() > o2.getLoad() ) return 1;
-                return -1;
-            }
-        });
-        return refreshServiceLocationList().get(0);
+    public ServiceInstance<Instance> getServiceLocation() throws Exception{
+
+        ServiceProvider<Instance> provider = serviceDiscovery.serviceProviderBuilder().serviceName(serviceName)
+                .providerStrategy(new RoundRobinStrategy<Instance>()).build();
+        provider.start();
+        return provider.getInstance();
     }
 
     @Override

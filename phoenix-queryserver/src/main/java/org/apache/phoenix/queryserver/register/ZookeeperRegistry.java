@@ -19,6 +19,9 @@
 package org.apache.phoenix.queryserver.register;
 
 
+import com.google.common.base.Optional;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -31,13 +34,15 @@ import org.apache.curator.x.discovery.details.JsonInstanceSerializer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.loadbalancer.service.Instance;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.queryserver.server.QueryServer;
 
 import java.io.IOException;
 import java.net.InetAddress;
 
 public class ZookeeperRegistry implements Registry {
 
-    private  ServiceDiscovery<Instance> serviceDiscovery;
+    protected static final Log LOG = LogFactory.getLog(QueryServer.class);
+    private  Optional<ServiceDiscovery<Instance>> serviceDiscovery;
     private  ServiceInstance<Instance> instance;
 
     private ZookeeperRegistry(Integer load, CuratorFramework client, String path,
@@ -49,19 +54,18 @@ public class ZookeeperRegistry implements Registry {
         instance = ServiceInstance.<Instance>builder()
                 .name(serviceName)
                 .payload(new Instance(load))
-                .port(port) // in a real application, you'd use a common port
+                .port(port)
                 .uriSpec(uriSpec)
                 .build();
 
-        // if you mark your payload class with @JsonRootName the provided JsonInstanceSerializer will work
         JsonInstanceSerializer<Instance> serializer = new JsonInstanceSerializer<>(Instance.class);
 
-        serviceDiscovery = ServiceDiscoveryBuilder.builder(Instance.class)
+        serviceDiscovery = Optional.of(ServiceDiscoveryBuilder.builder(Instance.class)
                 .client(client)
                 .basePath(path)
                 .serializer(serializer)
                 .thisInstance(instance)
-                .build();
+                .build());
 
     }
 
@@ -69,21 +73,26 @@ public class ZookeeperRegistry implements Registry {
 
     @Override
     public void start() throws Exception {
-        serviceDiscovery.start();
+        if (serviceDiscovery.isPresent())
+                serviceDiscovery.get().start();
+        else {
+            LOG.error(" zookeeper service could not be initialized. ");
+            throw new Exception(" zookeeper service could not be initialized ");
+        }
+
     }
 
     @Override
     public void close() throws IOException {
-        CloseableUtils.closeQuietly(serviceDiscovery);
+        CloseableUtils.closeQuietly(serviceDiscovery.get());
     }
 
     @Override
-    public Registry registerYourself(Integer load,  String path,
-                                              String serviceName, Integer port, Configuration configuration) throws Exception {
-
-        String zookeeperQuorum=configuration.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
-        String zookeeperPort=configuration.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
-        final CuratorFramework curatorFramework = CuratorFrameworkFactory.newClient(String.format("%s:%s",zookeeperQuorum,zookeeperPort), new ExponentialBackoffRetry(1000, 3));
+    public Registry registerServer(Integer load, String path,
+                                   String serviceName, Integer port, String connectString)
+            throws Exception {
+        final CuratorFramework curatorFramework = CuratorFrameworkFactory.newClient(connectString,
+                new ExponentialBackoffRetry(1000, 3));
         return  new ZookeeperRegistry(load, curatorFramework, path, serviceName, port);
     }
 }

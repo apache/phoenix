@@ -21,7 +21,7 @@ package org.apache.phoenix.loadbalancer.service;
 import org.codehaus.jackson.map.annotate.JsonRootName;
 
 @JsonRootName("phoenixQueryServerNode")
-public class Instance {
+public class Instance implements Comparable<Instance>{
 
     private Integer load;
 
@@ -33,7 +33,11 @@ public class Instance {
         return this.load;
     }
 
-
-
+    @Override
+    public int compareTo(Instance o) {
+        if (this.getLoad() == o.getLoad() ) return 0;
+        if (this.getLoad() > o.getLoad()) return 1;
+        return -1;
+    }
 
 }

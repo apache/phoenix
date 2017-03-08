@@ -35,11 +35,19 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.curator.CuratorZookeeperClient;
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.curator.test.InstanceSpec;
+import org.apache.curator.test.TestingServer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
@@ -57,20 +65,30 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private static QueryServerThread AVATICA_SERVER;
   private static Configuration CONF;
   private static String CONN_STRING;
+  private static TestingServer testingServer;
+  private static String connectString;
+  private static CuratorFramework client;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     CONF = getTestClusterConfig();
+      testingServer = new TestingServer();
+      connectString = testingServer.getConnectString();
+
     CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
-            QueryServerBasicsIT.class.getName());
+            QueryServerBasicsIT.class.getName(),connectString);
     AVATICA_SERVER.start();
     AVATICA_SERVER.getQueryServer().awaitRunning();
     final int port = AVATICA_SERVER.getQueryServer().getPort();
     LOG.info("Avatica server started on port " + port);
     CONN_STRING = ThinClientUtil.getConnectionUrl("localhost", port);
     LOG.info("JDBC connection string is " + CONN_STRING);
+
+   // RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+   // client = CuratorFrameworkFactory.newClient(connectString, retryPolicy);
+   // client.start();
   }
 
   @AfterClass
@@ -162,4 +180,12 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       }
     }
   }
+
+  /*@Test
+  public void testIfNodeExists() throws Exception {
+
+    List<String> strings = client.getChildren().forPath(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH +
+            QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
+    assertTrue(" server not registered with zookeeper",strings.size() > 0);
+  }*/
 }

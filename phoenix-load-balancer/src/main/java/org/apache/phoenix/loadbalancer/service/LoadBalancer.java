@@ -38,7 +38,9 @@ public class LoadBalancer {
 
     static {
         configuration = HBaseConfiguration.create();
-        connectString = configuration.get("phoenix.zookeeper.connect","localhost:2181");
+        String zookeeperQuorum=configuration.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
+        String zookeeperPort=configuration.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+        connectString = String.format("%s:%s",zookeeperQuorum,zookeeperPort);
         basePath=configuration.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
         serviceName=configuration.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
         try {

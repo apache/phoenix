@@ -27,8 +27,8 @@ import java.io.IOException;
 
 public interface  Registry extends Closeable {
 
-    public  Registry registerYourself(Integer load,  String path,
-                                              String serviceName, Integer port, Configuration configuration) throws Exception;
+    public  Registry registerServer(Integer load, String path,
+                                    String serviceName, Integer port, String connectString) throws Exception;
 
     public abstract void close() throws IOException ;
     public abstract void start() throws Exception ;

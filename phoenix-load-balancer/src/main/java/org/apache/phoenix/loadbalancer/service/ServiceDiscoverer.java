@@ -18,6 +18,8 @@
  */
 package org.apache.phoenix.loadbalancer.service;
 
+import org.apache.curator.x.discovery.ServiceInstance;
+
 import java.io.Closeable;
 import java.util.List;
 
@@ -26,6 +28,6 @@ import java.util.List;
  */
 public interface ServiceDiscoverer extends AutoCloseable{
 
-    public Instance getServiceLocation();
+    public ServiceInstance<Instance> getServiceLocation() throws Exception;
 
 }
