@@ -110,19 +110,31 @@
       <artifactId>hadoop-minicluster</artifactId>
       <scope>test</scope>
     </dependency>
-          <dependency>
-            <groupId>org.apache.tez</groupId>
-            <artifactId>tez-tests</artifactId>
-            <scope>test</scope>
-            <version>0.8.4</version>
-            <type>test-jar</type>
-          </dependency>
-          <dependency>
-           <groupId>org.apache.tez</groupId>
-    <artifactId>tez-dag</artifactId>
-            <scope>test</scope>
-    <version>0.8.4</version>
-  </dependency>
+    <dependency>
+      <groupId>org.apache.tez</groupId>
+      <artifactId>tez-tests</artifactId>
+      <scope>test</scope>
+      <version>0.8.4</version>
+      <type>test-jar</type>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-api</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.tez</groupId>
+      <artifactId>tez-dag</artifactId>
+      <scope>test</scope>
+      <version>0.8.4</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-yarn-api</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-all</artifactId>

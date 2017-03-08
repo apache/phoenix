@@ -299,16 +299,19 @@ public class HiveTestUtil {
                 ());
 
         HadoopShims shims = ShimLoader.getHadoopShims();
-        int numberOfDataNodes = 4;
+        int numberOfDataNodes = 1;
 
         if (clusterType != MiniClusterType.none) {
             dfs = shims.getMiniDfs(conf, numberOfDataNodes, true, null);
             FileSystem fs = dfs.getFileSystem();
             String uriString = WindowsPathUtil.getHdfsUriString(fs.getUri().toString());
             if (clusterType == MiniClusterType.tez) {
-                mr = shims.getMiniTezCluster(conf, 4, uriString, 1);
+                conf.set("hive.execution.engine", "tez");
+                mr = shims.getMiniTezCluster(conf, 1, uriString, 1);
             } else {
-                mr = shims.getMiniMrCluster(conf, 4, uriString, 1);
+                conf.set("hive.execution.engine", "mr");
+                mr = shims.getMiniMrCluster(conf, 1, uriString, 1);
+
             }
         }
 

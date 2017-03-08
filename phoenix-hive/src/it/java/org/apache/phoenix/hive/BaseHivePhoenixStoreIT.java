@@ -86,7 +86,7 @@ public class BaseHivePhoenixStoreIT {
         }
 
         //Start HBase cluster
-        hbaseCluster = hbaseTestUtil.startMiniCluster(3);
+        hbaseCluster = hbaseTestUtil.startMiniCluster(1);
         MiniDFSCluster x = hbaseTestUtil.getDFSCluster();
         Class.forName(PhoenixDriver.class.getName());
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
