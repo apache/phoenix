@@ -23,7 +23,6 @@ import org.junit.BeforeClass;
 import org.junit.experimental.categories.Category;
 import org.junit.Ignore;
 
-@Ignore("Temporary disabled to run in regular build due strange incompatibility with failsafe plugion")
 @Category(NeedsOwnMiniClusterTest.class)
 public class HiveMapReduceIT extends HivePhoenixStoreIT {
 
