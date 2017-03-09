@@ -3085,8 +3085,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HBaseAdmin admin = getAdmin()) {
             ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
             
-             List<TableName> tableNames = Arrays
-                    .asList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
+            List<TableName> tableNames = Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
             if (tableNames.size() == 0) { return; }
             if (tableNames.size() > 5) {
                 logger.warn("Expected 5 system tables but found " + tableNames.size() + ":" + tableNames);
