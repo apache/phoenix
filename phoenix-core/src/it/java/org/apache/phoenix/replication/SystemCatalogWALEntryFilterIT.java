@@ -44,7 +44,7 @@ import java.util.Properties;
 import java.util.UUID;
 
 
-public class TestSystemCatalogWALEntryFilter extends ParallelStatsDisabledIT {
+public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
 
   private static final byte[] REGION = Bytes.toBytes("REGION");
   private static final UUID uuid = UUID.randomUUID();
