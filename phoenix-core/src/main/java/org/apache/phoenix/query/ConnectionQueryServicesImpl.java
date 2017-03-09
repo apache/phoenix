@@ -3086,8 +3086,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
              List<String> tableNames = Arrays
                     .asList(admin.getTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
             if (tableNames.size() == 0) { return; }
-            if (tableNames.size() > 4) { throw new IllegalArgumentException(
-                    "Expected 4 system table only but found " + tableNames.size() + ":" + tableNames); }
+            if (tableNames.size() > 5) {
+                logger.warn("Expected 5 system tables but found " + tableNames.size() + ":" + tableNames);
+            }
             byte[] mappedSystemTable = SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName();
             metatable = getTable(mappedSystemTable);
@@ -3102,6 +3103,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
                 tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
             }
+            tableNames.remove(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME);
             for (String table : tableNames) {
                 UpgradeUtil.mapTableToNamespace(admin, metatable, table, props, null, PTableType.SYSTEM,
                         null);
