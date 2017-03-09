@@ -129,7 +129,7 @@ public class UpsertCompiler {
             pkValues[0] = new byte[] {0};
         }
         for(int i = 0; i < numSplColumns; i++) {
-            pkValues[i] = values[i];
+            pkValues[i + (table.getBucketNum() != null ? 1 : 0)] = values[i];
         }
         Long rowTimestamp = null; // case when the table doesn't have a row timestamp column
         RowTimestampColInfo rowTsColInfo = new RowTimestampColInfo(useServerTimestamp, rowTimestamp);
@@ -190,10 +190,6 @@ public class UpsertCompiler {
             }
             if(tableRef.getTable().getViewIndexId() != null) {
                 values[i++] = PSmallint.INSTANCE.toBytes(tableRef.getTable().getViewIndexId());
-            }
-            
-            for(int k = 0; k <  pkSlotIndexes.length; k++) {
-                pkSlotIndexes[k] += (i + (tableRef.getTable().getBucketNum() != null ? 1 : 0));
             }
         }
         int rowCount = 0;
