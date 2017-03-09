@@ -68,7 +68,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -3083,8 +3082,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         try (HBaseAdmin admin = getAdmin()) {
             ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
             
-             List<String> tableNames = Arrays
-                    .asList(admin.getTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
+            List<String> tableNames = Lists.newArrayList(admin.getTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
             if (tableNames.size() == 0) { return; }
             if (tableNames.size() > 5) {
                 logger.warn("Expected 5 system tables but found " + tableNames.size() + ":" + tableNames);
