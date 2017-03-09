@@ -1,11 +1,16 @@
 package org.apache.phoenix.calcite.rules;
 
 import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableList;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableBitSet;
+import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan.ScanOrder;
 
@@ -42,9 +47,15 @@ public class PhoenixFilterScanMergeRule extends RelOptRule {
     public void onMatch(RelOptRuleCall call) {
         LogicalFilter filter = call.rel(0);
         PhoenixTableScan scan = call.rel(1);
-        assert scan.filter == null : "predicate should have ensured no filter";
+        RexNode condition = filter.getCondition();
+        TableMapping tableMapping =
+                scan.getTable().unwrap(PhoenixTable.class).tableMapping;
+        ImmutableBitSet columnRef = 
+                scan.extendedColumnRef.union(
+                        tableMapping.getExtendedColumnRef(
+                                ImmutableList.of(condition)));
         call.transformTo(PhoenixTableScan.create(
-                scan.getCluster(), scan.getTable(), filter.getCondition(),
-                scan.scanOrder, scan.extendedColumnRef));
+                scan.getCluster(), scan.getTable(),
+                condition, scan.scanOrder, columnRef));
     }
 }

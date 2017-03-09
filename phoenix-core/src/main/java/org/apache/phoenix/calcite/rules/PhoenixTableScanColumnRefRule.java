@@ -5,8 +5,10 @@ import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.phoenix.calcite.PhoenixTable;
+import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.calcite.rel.PhoenixTableScan;
 import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableList;
 
 public class PhoenixTableScanColumnRefRule extends RelOptRule {
 
@@ -32,8 +34,15 @@ public class PhoenixTableScanColumnRefRule extends RelOptRule {
     public void onMatch(RelOptRuleCall call) {
         Project project = call.rel(0);
         PhoenixTableScan scan = call.rel(1);
-        ImmutableBitSet bitSet = scan.getTable().unwrap(PhoenixTable.class)
-                .tableMapping.getExtendedColumnRef(project.getProjects());
+        TableMapping tableMapping =
+                scan.getTable().unwrap(PhoenixTable.class).tableMapping;
+        ImmutableBitSet bitSet =
+                tableMapping.getExtendedColumnRef(project.getProjects());
+        if (scan.filter != null) {
+            bitSet = bitSet.union(
+                    tableMapping.getExtendedColumnRef(
+                            ImmutableList.of(scan.filter)));
+        }
         if (bitSet.contains(scan.extendedColumnRef)) {
             return;
         }

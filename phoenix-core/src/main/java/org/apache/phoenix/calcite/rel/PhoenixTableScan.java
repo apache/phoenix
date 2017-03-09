@@ -115,10 +115,9 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
             if (extendedColumnRef == null) {
                 extendedColumnRef = tableMapping.getDefaultExtendedColumnRef();
             }
-            if (filter == null) {
-                this.extendedColumnRef = extendedColumnRef;
-            } else {
-                this.extendedColumnRef = extendedColumnRef.union(
+            this.extendedColumnRef = extendedColumnRef;
+            if (filter != null) {
+                assert this.extendedColumnRef.contains(
                         tableMapping.getExtendedColumnRef(ImmutableList.of(filter)));
                 // We use a implementor with a special implementation for correlate variables
                 // or bind parameters here, which translates them into a LiteralExpression
