@@ -1,11 +1,24 @@
 package org.apache.phoenix.transaction;
 
 import org.apache.phoenix.schema.PTable;
+import org.apache.tephra.Transaction.VisibilityLevel;
+import org.slf4j.Logger;
 
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
 public interface PhoenixTransactionContext {
+
+    /**
+     * 
+     * Visibility levels needed for checkpointing and  
+     *
+     */
+    public enum PhoenixVisibilityLevel {
+        SNAPSHOT,
+        SNAPSHOT_EXCLUDE_CURRENT,
+        SNAPSHOT_ALL
+      }
 
     /**
      * Starts a transaction
@@ -43,8 +56,8 @@ public interface PhoenixTransactionContext {
      * @throws InterruptedException
      * @throws TimeoutException
      */
-    public void commitDDLFence(PTable dataTable)
-            throws SQLException, InterruptedException, TimeoutException;
+    public void commitDDLFence(PTable dataTable, Logger logger)
+            throws SQLException;
 
     /**
      * mark DML with table information for conflict detection of concurrent
@@ -80,4 +93,14 @@ public interface PhoenixTransactionContext {
      * Returns transaction snapshot id
      */
     long getReadPointer();
+
+    /**
+     * Returns transaction write pointer. After checkpoint the write pointer is different than the initial one  
+     */
+    long getWritePointer();
+
+    /**
+     * Returns visibility level 
+     */
+    PhoenixVisibilityLevel getVisibilityLevel();    
 }

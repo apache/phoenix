@@ -4,6 +4,7 @@ import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.phoenix.schema.PTable;
+import org.slf4j.Logger;
 
 public class OmidTransactionContext implements PhoenixTransactionContext {
 
@@ -32,8 +33,7 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void commitDDLFence(PTable dataTable) throws SQLException,
-            InterruptedException, TimeoutException {
+    public void commitDDLFence(PTable dataTable, Logger logger) throws SQLException {
         // TODO Auto-generated method stub
 
     }
@@ -74,4 +74,15 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
         return 0;
     }
 
+    @Override
+    public long getWritePointer() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public PhoenixVisibilityLevel getVisibilityLevel() {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }

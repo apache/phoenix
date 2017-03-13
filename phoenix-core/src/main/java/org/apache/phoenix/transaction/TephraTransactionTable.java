@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch.Call;
 import org.apache.hadoop.hbase.client.coprocessor.Batch.Callback;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
+import org.apache.tephra.TxConstants;
 import org.apache.tephra.hbase.TransactionAwareHTable;
 
 import com.google.protobuf.Descriptors.MethodDescriptor;
@@ -37,12 +38,16 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     private TephraTransactionContext tephraTransactionContext;
 
     public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
+        this(ctx, hTable, false);
+    }
+
+    public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable, boolean isImmutableRows) {
 
         assert(ctx instanceof TephraTransactionContext);
 
         tephraTransactionContext = (TephraTransactionContext) ctx;
 
-        transactionAwareHTable = new TransactionAwareHTable(hTable);
+        transactionAwareHTable = new TransactionAwareHTable(hTable, isImmutableRows ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
 
         tephraTransactionContext.addTransactionAware(transactionAwareHTable);
     }

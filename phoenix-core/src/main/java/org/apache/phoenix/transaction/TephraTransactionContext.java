@@ -24,6 +24,8 @@ import org.apache.tephra.visibility.VisibilityFence;
 
 import com.google.common.collect.Lists;
 
+import org.slf4j.Logger;
+
 public class TephraTransactionContext implements PhoenixTransactionContext {
 
     private final List<TransactionAware> txAwares;
@@ -32,24 +34,26 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     private TransactionSystemClient txServiceClient;
     private TransactionFailureException e;
 
-    public TephraTransactionContext(PhoenixTransactionContext ctx, PhoenixConnection connection, boolean threadSafe) {
 
+    public TephraTransactionContext(PhoenixConnection connection) {
+        this.txServiceClient = connection.getQueryServices().getTransactionSystemClient();
+        this.txAwares = Collections.emptyList();
+        this.txContext = new TransactionContext(txServiceClient);
+    }
+
+    public TephraTransactionContext(PhoenixTransactionContext ctx, PhoenixConnection connection, boolean subTask) {
         this.txServiceClient = connection.getQueryServices().getTransactionSystemClient();
 
         assert(ctx instanceof TephraTransactionContext);
         TephraTransactionContext tephraTransactionContext = (TephraTransactionContext) ctx;
 
-        if (threadSafe) {
+        if (subTask) {
             this.tx = tephraTransactionContext.getTransaction();
             this.txAwares = Lists.newArrayList();
             this.txContext = null;
         } else {
             this.txAwares = Collections.emptyList();
-            if (ctx == null) {
-                this.txContext = new TransactionContext(txServiceClient);
-            } else {
-                this.txContext = tephraTransactionContext.getContext();
-            }
+            this.txContext = tephraTransactionContext.getContext();
         }
 
         this.e = null;
@@ -73,8 +77,12 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public void commit() throws SQLException {
+        
+        if (txContext == null || !isTransactionRunning()) {
+            return;
+        }
+        
         try {
-            assert(txContext != null);
             txContext.finish();
         } catch (TransactionFailureException e) {
             this.e = e;
@@ -93,6 +101,11 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public void abort() throws SQLException {
+        
+        if (txContext == null || !isTransactionRunning()) {
+            return;
+        }
+            
         try {
             if (e != null) {
                 txContext.abort(e);
@@ -125,6 +138,9 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
             }
         }
 
+        // Since we're querying our own table while mutating it, we must exclude
+        // see our current mutations, otherwise we can get erroneous results (for DELETE)
+        // or get into an infinite loop (for UPSERT SELECT).
         if (txContext == null) {
             tx.setVisibility(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT);
         }
@@ -135,12 +151,16 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void commitDDLFence(PTable dataTable) throws SQLException,
-            InterruptedException, TimeoutException {
+    public void commitDDLFence(PTable dataTable, Logger logger) throws SQLException {
         byte[] key = dataTable.getName().getBytes();
+
         try {
             FenceWait fenceWait = VisibilityFence.prepareWait(key, txServiceClient);
             fenceWait.await(10000, TimeUnit.MILLISECONDS);
+            
+            if (logger.isInfoEnabled()) {
+                logger.info("Added write fence at ~" + getTransaction().getReadPointer());
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INTERRUPTED_EXCEPTION).setRootCause(e).build().buildException();
@@ -156,11 +176,13 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     public void markDMLFence(PTable table) {
         byte[] logicalKey = table.getName().getBytes();
         TransactionAware logicalTxAware = VisibilityFence.create(logicalKey);
+
         if (this.txContext == null) {
             this.txAwares.add(logicalTxAware);
         } else {
             this.txContext.addTransactionAware(logicalTxAware);
         }
+
         byte[] physicalKey = table.getPhysicalName().getBytes();
         if (Bytes.compareTo(physicalKey, logicalKey) != 0) {
             TransactionAware physicalTxAware = VisibilityFence.create(physicalKey);
@@ -233,6 +255,48 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         return (-1);
     }
 
+    // For testing
+    @Override
+    public long getWritePointer() {
+        if (this.txContext != null) {
+            return txContext.getCurrentTransaction().getWritePointer();
+        }
+
+        if (tx != null) {
+            return tx.getWritePointer();
+        }
+
+        return HConstants.LATEST_TIMESTAMP;
+    }
+
+    // For testing
+    @Override
+    public PhoenixVisibilityLevel getVisibilityLevel() {
+        VisibilityLevel visibilityLevel = null;
+
+        if (this.txContext != null) {
+            visibilityLevel = txContext.getCurrentTransaction().getVisibilityLevel();
+        } else if (tx != null) {
+            visibilityLevel = tx.getVisibilityLevel();
+        }
+
+        PhoenixVisibilityLevel phoenixVisibilityLevel;
+        switch(visibilityLevel) {
+        case SNAPSHOT:
+            phoenixVisibilityLevel = PhoenixVisibilityLevel.SNAPSHOT;
+            break;
+        case SNAPSHOT_EXCLUDE_CURRENT:
+            phoenixVisibilityLevel = PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT;
+            break;
+        case SNAPSHOT_ALL:
+            phoenixVisibilityLevel = PhoenixVisibilityLevel.SNAPSHOT_ALL;
+        default:
+            phoenixVisibilityLevel = null;
+        }
+
+        return phoenixVisibilityLevel;
+    }
+
    /**
     * TephraTransactionContext specific functions
     */
@@ -254,32 +318,8 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
             txContext.addTransactionAware(txAware);
         } else if (this.tx != null) {
             txAwares.add(txAware);
+            assert(tx != null);
+            txAware.startTx(tx);
         }
-    }
-
-    // For testing
-    public long getWritePointer() {
-        if (this.txContext != null) {
-            return txContext.getCurrentTransaction().getWritePointer();
-        }
-
-        if (tx != null) {
-            return tx.getWritePointer();
-        }
-
-        return HConstants.LATEST_TIMESTAMP;
-    }
-
-    // For testing
-    public VisibilityLevel getVisibilityLevel() {
-        if (this.txContext != null) {
-            return txContext.getCurrentTransaction().getVisibilityLevel();
-        }
-
-        if (tx != null) {
-            return tx.getVisibilityLevel();
-        }
-
-        return null;
     }
 }
