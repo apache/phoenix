@@ -19,7 +19,6 @@
 package org.apache.phoenix.queryserver.register;
 
 
-import com.google.common.base.Optional;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.curator.framework.CuratorFramework;
@@ -31,9 +30,7 @@ import org.apache.curator.x.discovery.ServiceDiscoveryBuilder;
 import org.apache.curator.x.discovery.ServiceInstance;
 import org.apache.curator.x.discovery.UriSpec;
 import org.apache.curator.x.discovery.details.JsonInstanceSerializer;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.loadbalancer.service.Instance;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.server.QueryServer;
 
 import java.io.IOException;
@@ -42,30 +39,31 @@ import java.net.InetAddress;
 public class ZookeeperRegistry implements Registry {
 
     protected static final Log LOG = LogFactory.getLog(QueryServer.class);
-    private  Optional<ServiceDiscovery<Instance>> serviceDiscovery;
-    private  ServiceInstance<Instance> instance;
+    private  ServiceDiscovery<Instance> serviceDiscovery;
+    private  ServiceInstance<Instance> avanticaInstance;
+    private CuratorFramework client;
 
-    private ZookeeperRegistry(Integer load, CuratorFramework client, String path,
-                             String serviceName,Integer port) throws Exception{
+    private void register(Integer load,  String path,
+                             String serviceName,Integer avaticaServerPort) throws Exception{
 
-        String uri = String.format("%s://%s:%s","http", InetAddress.getLocalHost().getHostName(),port);
+        String uri = String.format("%s://%s:%s","http", InetAddress.getLocalHost().getHostName(),avaticaServerPort);
         UriSpec uriSpec = new UriSpec(uri);
 
-        instance = ServiceInstance.<Instance>builder()
+        avanticaInstance = ServiceInstance.<Instance>builder()
                 .name(serviceName)
                 .payload(new Instance(load))
-                .port(port)
+                .port(avaticaServerPort)
                 .uriSpec(uriSpec)
                 .build();
 
         JsonInstanceSerializer<Instance> serializer = new JsonInstanceSerializer<>(Instance.class);
 
-        serviceDiscovery = Optional.of(ServiceDiscoveryBuilder.builder(Instance.class)
+        serviceDiscovery = ServiceDiscoveryBuilder.builder(Instance.class)
                 .client(client)
                 .basePath(path)
                 .serializer(serializer)
-                .thisInstance(instance)
-                .build());
+                .thisInstance(avanticaInstance)
+                .build();
 
     }
 
@@ -73,26 +71,33 @@ public class ZookeeperRegistry implements Registry {
 
     @Override
     public void start() throws Exception {
-        if (serviceDiscovery.isPresent())
-                serviceDiscovery.get().start();
+        if (client != null)
+            client.start();
+        else {
+            LOG.error(" zookeeper client service could not be initialized. ");
+            throw new Exception(" zookeeper client service could not be initialized ");
+        }
+        if (serviceDiscovery != null)
+                serviceDiscovery.start();
         else {
             LOG.error(" zookeeper service could not be initialized. ");
             throw new Exception(" zookeeper service could not be initialized ");
         }
-
     }
 
     @Override
     public void close() throws IOException {
-        CloseableUtils.closeQuietly(serviceDiscovery.get());
+        CloseableUtils.closeQuietly(serviceDiscovery);
+        CloseableUtils.closeQuietly(client);
     }
 
     @Override
-    public Registry registerServer(Integer load, String path,
-                                   String serviceName, Integer port, String connectString)
+    public  void registerServer(Integer load, String path,
+                                   String serviceName, Integer avaticaServerPort, String zookeeperConnectString)
             throws Exception {
-        final CuratorFramework curatorFramework = CuratorFrameworkFactory.newClient(connectString,
+
+        this.client = CuratorFrameworkFactory.newClient(zookeeperConnectString,
                 new ExponentialBackoffRetry(1000, 3));
-        return  new ZookeeperRegistry(load, curatorFramework, path, serviceName, port);
+         this.register(load, path, serviceName, avaticaServerPort);
     }
 }

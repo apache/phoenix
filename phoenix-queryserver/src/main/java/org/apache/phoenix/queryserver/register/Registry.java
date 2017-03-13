@@ -20,15 +20,17 @@ package org.apache.phoenix.queryserver.register;
 
 
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.x.discovery.ServiceDiscovery;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.loadbalancer.service.Instance;
 
 import java.io.Closeable;
 import java.io.IOException;
 
 public interface  Registry extends Closeable {
 
-    public  Registry registerServer(Integer load, String path,
-                                    String serviceName, Integer port, String connectString) throws Exception;
+    public void registerServer(Integer load, String path,
+                                                     String serviceName, Integer avaticaServerPort, String connectString) throws Exception;
 
     public abstract void close() throws IOException ;
     public abstract void start() throws Exception ;

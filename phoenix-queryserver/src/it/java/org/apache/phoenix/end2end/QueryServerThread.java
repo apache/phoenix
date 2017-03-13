@@ -29,6 +29,10 @@ public class QueryServerThread extends Thread {
     this(argv, conf, null,null);
   }
 
+  public QueryServerThread(String[] argv, Configuration conf, String name) {
+    this(new QueryServer(argv, conf), name);
+  }
+
   public QueryServerThread(String[] argv, Configuration conf, String name, String connectString) {
     this(new QueryServer(argv, conf, connectString), name);
   }

@@ -32,6 +32,7 @@ import org.apache.calcite.avatica.server.HttpServer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.curator.test.TestingServer;
+import org.apache.curator.x.discovery.ServiceDiscovery;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -43,12 +44,15 @@ import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.loadbalancer.service.Instance;
+import org.apache.phoenix.loadbalancer.service.ServiceDiscoverer;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.queryserver.register.Registry;
 import org.apache.phoenix.queryserver.register.ZookeeperRegistry;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.security.PrivilegedExceptionAction;
@@ -74,6 +78,8 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   private HttpServer server = null;
   private int retCode = 0;
   private Throwable t = null;
+  private String connectString;
+  private  Registry registry;
 
   /**
    * Log information about the currently running JVM.
@@ -134,13 +140,18 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   public QueryServer(String[] argv, Configuration conf) {
     this(argv,conf,null);
   }
-  /**
-   *
-   */
+
+  /** Constructor for use as {@link java.lang.Runnable}. */
   public QueryServer(String[] argv, Configuration conf,String connectString) {
     this.argv = argv;
     setConf(conf);
-    /*String basePath = conf.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
+    this.connectString = connectString;
+
+  }
+
+  public void registerToServiceProvider(Configuration conf ) {
+
+    String basePath = conf.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
     String serviceName = conf.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
     if (connectString == null) {
       String zookeeperQuorum = conf.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
@@ -149,13 +160,19 @@ public final class QueryServer extends Configured implements Tool, Runnable {
     }
 
     try {
-      Registry registry = new ZookeeperRegistry().registerServer(10, basePath, serviceName, server.getPort()
-              , connectString);
+      registry = new ZookeeperRegistry();
+      int avaticaServerPort = getPort();
+      registry.registerServer(10, basePath, serviceName,
+              avaticaServerPort, connectString);
       registry.start();
     } catch(Exception ex) {
       LOG.error("Unable to connect to zookeeper instance ",ex);
       System.exit(-1);
-    }*/
+    }
+  }
+
+  public void closeRegistration() throws IOException {
+    registry.close();
   }
   /**
    * @return the port number this instance is bound to, or {@code -1} if the server is not running.
@@ -365,12 +382,10 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       }
   }
 
-
   public static void main(String[] argv) throws Exception {
     Configuration configuration = HBaseConfiguration.create();
     QueryServer queryServer = new QueryServer();
     int ret = ToolRunner.run(configuration, queryServer, argv);
     System.exit(ret);
-
   }
 }

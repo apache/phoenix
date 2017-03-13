@@ -29,6 +29,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -41,12 +42,10 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.curator.CuratorZookeeperClient;
 import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.curator.test.InstanceSpec;
 import org.apache.curator.test.TestingServer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
@@ -65,35 +64,39 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private static QueryServerThread AVATICA_SERVER;
   private static Configuration CONF;
   private static String CONN_STRING;
-  private static TestingServer testingServer;
-  private static String connectString;
-  private static CuratorFramework client;
+  private static TestingServer zookeeperTestingServer;
+  private static String zookeeperConnectString;
+  private static CuratorFramework zookeeperClient;
+  private static String path;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     CONF = getTestClusterConfig();
-      testingServer = new TestingServer();
-      connectString = testingServer.getConnectString();
-
+    path = CONF.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH) +"/"+
+            CONF.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
+    zookeeperTestingServer = new TestingServer();
+    zookeeperConnectString = zookeeperTestingServer.getConnectString();
     CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
-            QueryServerBasicsIT.class.getName(),connectString);
+            QueryServerBasicsIT.class.getName(), zookeeperConnectString);
     AVATICA_SERVER.start();
     AVATICA_SERVER.getQueryServer().awaitRunning();
     final int port = AVATICA_SERVER.getQueryServer().getPort();
     LOG.info("Avatica server started on port " + port);
     CONN_STRING = ThinClientUtil.getConnectionUrl("localhost", port);
     LOG.info("JDBC connection string is " + CONN_STRING);
+    AVATICA_SERVER.getQueryServer().registerToServiceProvider(CONF);
 
-   // RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
-   // client = CuratorFrameworkFactory.newClient(connectString, retryPolicy);
-   // client.start();
+    RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+    zookeeperClient = CuratorFrameworkFactory.newClient(zookeeperConnectString, retryPolicy);
+    zookeeperClient.start();
   }
 
   @AfterClass
   public static void afterClass() throws Exception {
     if (AVATICA_SERVER != null) {
+      AVATICA_SERVER.getQueryServer().closeRegistration();
       AVATICA_SERVER.join(TimeUnit.MINUTES.toMillis(1));
       Throwable t = AVATICA_SERVER.getQueryServer().getThrowable();
       if (t != null) {
@@ -101,6 +104,18 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       }
       assertEquals("query server didn't exit cleanly", 0, AVATICA_SERVER.getQueryServer()
         .getRetCode());
+      if (zookeeperClient != null )
+      {
+        zookeeperClient.close();
+      } else {
+        fail(" failed to intialize the Curator Zookeeper client");
+      }
+      if (zookeeperTestingServer != null )  {
+        zookeeperTestingServer.stop();
+        zookeeperTestingServer.close();
+      } else {
+        fail(" failed to start or initialize the Curator zookeeper client");
+      }
     }
   }
 
@@ -115,6 +130,15 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
         assertEquals(TABLE_CAT, metaData.getColumnName(1));
       }
     }
+  }
+
+  @Test
+  public void testIfNodeExists() throws Exception {
+
+    byte[] bytes = zookeeperClient.getData().forPath(path);
+    String data = new String(bytes, Charset.forName("UTF-16"));
+    List<String> strings = zookeeperClient.getChildren().forPath(path);
+    assertTrue(" server not registered with zookeeper",strings.size() > 0);
   }
 
   @Test
@@ -181,11 +205,5 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
     }
   }
 
-  /*@Test
-  public void testIfNodeExists() throws Exception {
 
-    List<String> strings = client.getChildren().forPath(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH +
-            QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
-    assertTrue(" server not registered with zookeeper",strings.size() > 0);
-  }*/
 }
