@@ -92,12 +92,12 @@ public class ZookeeperRegistry implements Registry {
     }
 
     @Override
-    public  void registerServer(Integer load, String path,
+    public  void registerServer(Integer load, String zookeeperNodePath,
                                    String serviceName, Integer avaticaServerPort, String zookeeperConnectString)
             throws Exception {
 
         this.client = CuratorFrameworkFactory.newClient(zookeeperConnectString,
                 new ExponentialBackoffRetry(1000, 3));
-         this.register(load, path, serviceName, avaticaServerPort);
+         this.register(load, zookeeperNodePath, serviceName, avaticaServerPort);
     }
 }

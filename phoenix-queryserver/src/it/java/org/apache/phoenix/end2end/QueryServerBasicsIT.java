@@ -204,6 +204,4 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       }
     }
   }
-
-
 }

@@ -29,7 +29,7 @@ import java.io.IOException;
 
 public interface  Registry extends Closeable {
 
-    public void registerServer(Integer load, String path,
+    public void registerServer(Integer load, String zookeeperNodePath,
                                                      String serviceName, Integer avaticaServerPort, String connectString) throws Exception;
 
     public abstract void close() throws IOException ;
