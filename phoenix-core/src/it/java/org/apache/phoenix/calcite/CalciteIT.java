@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.calcite;
 
+import static org.apache.phoenix.calcite.CalciteQueryPlanMatchers.filter;
+import static org.apache.phoenix.calcite.CalciteQueryPlanMatchers.phoenixPlan;
+import static org.apache.phoenix.calcite.CalciteQueryPlanMatchers.phoenixScan;
+import static org.apache.phoenix.calcite.CalciteQueryPlanMatchers.serverProject;
 import static org.apache.phoenix.end2end.BaseJoinIT.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.end2end.BaseJoinIT.JOIN_ITEM_TABLE_FULL_NAME;
 import static org.apache.phoenix.end2end.BaseJoinIT.JOIN_ORDER_TABLE_FULL_NAME;
@@ -66,8 +70,9 @@ public class CalciteIT extends BaseCalciteIT {
     
     @Test public void testTableScan() throws Exception {
         start(false, 1000f).sql("select * from aTable where a_string = 'a'")
-                .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                .explainIs(
+                        phoenixPlan().withChild(
+                            phoenixScan("ATABLE").with(filter(2, "=", "a"))))
                 .resultIs(0, new Object[][] {
                           {"00D300000000XHP", "00A123122312312", "a"}, 
                           {"00D300000000XHP", "00A223122312312", "a"}, 
@@ -95,9 +100,10 @@ public class CalciteIT extends BaseCalciteIT {
     
     @Test public void testProject() throws Exception {
         start(false, 1000f).sql("select entity_id, a_string, organization_id from aTable where a_string = 'a'")
-                .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixServerProject(ENTITY_ID=[$1], A_STRING=[$2], ORGANIZATION_ID=[$0])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, ATABLE]], filter=[=($2, 'a')])\n")
+                .explainIs(
+                        phoenixPlan().withChild(
+                            serverProject("ENTITY_ID", "A_STRING", "ORGANIZATION_ID").withChild(
+                                    phoenixScan("ATABLE").with(filter(2, "=", "a")))))
                 .resultIs(0, new Object[][] {
                           {"00A123122312312", "a", "00D300000000XHP"}, 
                           {"00A223122312312", "a", "00D300000000XHP"}, 
