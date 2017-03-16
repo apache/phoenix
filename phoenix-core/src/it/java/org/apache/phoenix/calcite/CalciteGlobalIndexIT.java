@@ -54,8 +54,8 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
         start(true, 1000f).sql("select a_integer from aTable order by a_string")
             .explainIs("PhoenixToEnumerableConverter\n" +
                        "  PhoenixServerSort(sort0=[$1], dir0=[ASC])\n" +
-                       "    PhoenixServerProject(A_INTEGER=[$4], A_STRING=[$3])\n" +
-                       "      PhoenixTableScan(table=[[phoenix, IDX_FULL]])\n")
+                       "    PhoenixServerProject(A_INTEGER=[$4], A_STRING=[$2])\n" +
+                       "      PhoenixTableScan(table=[[phoenix, ATABLE]])\n")
             .close();
         start(true, 1000f).sql("select a_string, b_string from aTable where a_string = 'a'")
             .explainIs("PhoenixToEnumerableConverter\n" +
@@ -144,7 +144,7 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
         Properties props = getConnectionProps(true, 1f);
         start(props).sql("select * from " + MULTI_TENANT_TABLE + " where tenant_id = '10' and id <= '0004'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[AND(=(CAST($0):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, '10'), <=($1, '0004'))])\n")
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[AND(=($0, CAST('10'):VARCHAR CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL), <=($1, '0004'))])\n")
                 .resultIs(0, new Object[][] {
                         {"10", "0002", 3, 4, 5},
                         {"10", "0003", 4, 5, 6},
@@ -154,7 +154,7 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
         start(props).sql("select * from " + MULTI_TENANT_TABLE + " where tenant_id = '20' and col1 < 8")
                 .explainIs("PhoenixToEnumerableConverter\n" +
                            "  PhoenixServerProject(TENANT_ID=[$0], ID=[$2], COL0=[$3], COL1=[CAST($1):INTEGER], COL2=[$4])\n" +
-                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[AND(=(CAST($0):VARCHAR(2) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, '20'), <(CAST($1):INTEGER, 8))])\n")
+                           "    PhoenixTableScan(table=[[phoenix, IDX_MULTITENANT_TEST_TABLE]], filter=[AND(=($0, CAST('20'):VARCHAR CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL), <(CAST($1):INTEGER, 8))])\n")
                 .resultIs(0, new Object[][] {
                         {"20", "0004", 5, 6, 7},
                         {"20", "0005", 6, 7, 8}})
@@ -171,7 +171,7 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
         props.setProperty("TenantId", "15");
         start(props).sql("select * from " + MULTI_TENANT_TABLE + " where id = '0284'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[=(CAST($0):VARCHAR(4) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, '0284')])\n")
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[=($0, CAST('0284'):VARCHAR CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL)])\n")
                 .resultIs(0, new Object[][] {
                         {"0284", 285, 286, 287}})
                 .close();
@@ -198,7 +198,7 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
         props.setProperty("TenantId", "10");
         start(props).sql("select * from " + MULTI_TENANT_VIEW1 + " where id = '0512'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[=(CAST($0):VARCHAR(4) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, '0512')])\n")
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[=($0, CAST('0512'):VARCHAR CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL)])\n")
                 .resultIs(0, new Object[][] {
                         {"0512", 513, 514, 515}})
                 .close();
@@ -226,7 +226,7 @@ public class CalciteGlobalIndexIT extends BaseCalciteIndexIT {
         props.setProperty("TenantId", "20");
         start(props).sql("select * from " + MULTI_TENANT_VIEW2 + " where id = '0765'")
                 .explainIs("PhoenixToEnumerableConverter\n" +
-                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[AND(>($3, 7), =(CAST($0):VARCHAR(4) CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL, '0765'))])\n")
+                           "  PhoenixTableScan(table=[[phoenix, MULTITENANT_TEST_TABLE]], filter=[AND(>($3, 7), =($0, CAST('0765'):VARCHAR CHARACTER SET \"ISO-8859-1\" COLLATE \"ISO-8859-1$en_US$primary\" NOT NULL))])\n")
                 .resultIs(0, new Object[][] {
                         {"0765", 766, 767, 768}})
                 .close();

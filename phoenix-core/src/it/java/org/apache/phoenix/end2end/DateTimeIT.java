@@ -76,7 +76,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     
     private String initAtable() throws SQLException {
         String tableName = generateUniqueName();
-        ensureTableCreated(getUrl(), tableName, ATABLE_NAME, (byte[][])null);
+        ensureTableCreated(getUrl(), tableName, ATABLE_NAME, (byte[][])null, null);
         PreparedStatement stmt = conn.prepareStatement(
             "upsert into " + tableName +
             "(" +

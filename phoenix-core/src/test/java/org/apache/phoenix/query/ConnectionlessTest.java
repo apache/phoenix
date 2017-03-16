@@ -95,8 +95,8 @@ public class ConnectionlessTest {
         "    entity_history_id char(12) not null,\n" + 
         "    created_by varchar,\n" + 
         "    created_date date\n" +
-        "    CONSTRAINT pk PRIMARY KEY (organization_id, key_prefix, entity_history_id) ) " +
-        (saltBuckets == null ? "" : (PhoenixDatabaseMetaData.SALT_BUCKETS + "=" + saltBuckets));
+        "    CONSTRAINT pk PRIMARY KEY (organization_id, key_prefix, entity_history_id) ) COLUMN_ENCODED_BYTES=4 " +
+        (saltBuckets == null ? "" : " , " + (PhoenixDatabaseMetaData.SALT_BUCKETS + "=" + saltBuckets));
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement statement = conn.prepareStatement(dmlStmt);
@@ -141,19 +141,21 @@ public class ConnectionlessTest {
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
+        kv = iterator.next();
+        assertArrayEquals(expectedRowKey1, kv.getRow());        
         assertEquals(name1, PVarchar.INSTANCE.toObject(kv.getValue()));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey1, kv.getRow());        
         assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
-        assertTrue(iterator.hasNext());
-        kv = iterator.next();
-        assertArrayEquals(expectedRowKey1, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
     }
 
     private static void assertRow2(Iterator<KeyValue> iterator, byte[] expectedRowKey2) {
         KeyValue kv;
+        kv = iterator.next();
+        assertArrayEquals(expectedRowKey2, kv.getRow());        
+        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
         assertTrue(iterator.hasNext());
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
@@ -162,10 +164,6 @@ public class ConnectionlessTest {
         kv = iterator.next();
         assertArrayEquals(expectedRowKey2, kv.getRow());        
         assertEquals(now, PDate.INSTANCE.toObject(kv.getValue()));
-        assertTrue(iterator.hasNext());
-        kv = iterator.next();
-        assertArrayEquals(expectedRowKey2, kv.getRow());        
-        assertEquals(QueryConstants.EMPTY_COLUMN_VALUE, PVarchar.INSTANCE.toObject(kv.getValue()));
     }
     
     @Test

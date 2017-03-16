@@ -24,6 +24,7 @@ import java.sql.ParameterMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
@@ -106,6 +107,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -127,7 +129,7 @@ public class UpsertCompiler {
             pkValues[0] = new byte[] {0};
         }
         for(int i = 0; i < numSplColumns; i++) {
-            pkValues[i] = values[i];
+            pkValues[i + (table.getBucketNum() != null ? 1 : 0)] = values[i];
         }
         Long rowTimestamp = null; // case when the table doesn't have a row timestamp column
         RowTimestampColInfo rowTsColInfo = new RowTimestampColInfo(useServerTimestamp, rowTimestamp);
@@ -188,10 +190,6 @@ public class UpsertCompiler {
             }
             if(tableRef.getTable().getViewIndexId() != null) {
                 values[i++] = PSmallint.INSTANCE.toBytes(tableRef.getTable().getViewIndexId());
-            }
-            
-            for(int k = 0; k <  pkSlotIndexes.length; k++) {
-                pkSlotIndexes[k] += (i + (tableRef.getTable().getBucketNum() != null ? 1 : 0));
             }
         }
         int rowCount = 0;
@@ -748,7 +746,7 @@ public class UpsertCompiler {
                             if (ptr.getLength() > 0) {
                                 byte[] uuidValue = ServerCacheClient.generateId();
                                 scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                scan.setAttribute(PhoenixIndexCodec.INDEX_MD, ptr.get());
+                                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
                                 scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                             }
                             ResultIterator iterator = aggPlan.iterator();
@@ -756,6 +754,10 @@ public class UpsertCompiler {
                                 Tuple row = iterator.next();
                                 final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row,
                                         PLong.INSTANCE, ptr);
+                                for (PTable index : getNewIndexes(table)) {
+                                    new MetaDataClient(connection).buildIndex(index, tableRef,
+                                            scan.getTimeRange().getMax(), scan.getTimeRange().getMax() + 1);
+                                }
                                 return new MutationState(maxSize, connection) {
                                     @Override
                                     public long getUpdateCount() {
@@ -767,7 +769,19 @@ public class UpsertCompiler {
                             }
                             
                         }
-    
+
+                        private List<PTable> getNewIndexes(PTable table) throws SQLException {
+                            List<PTable> indexes = table.getIndexes();
+                            List<PTable> newIndexes = new ArrayList<PTable>(2);
+                            PTable newTable = PhoenixRuntime.getTableNoCache(connection, table.getName().getString());
+                            for (PTable index : newTable.getIndexes()) {
+                                if (!indexes.contains(index)) {
+                                    newIndexes.add(index);
+                                }
+                            }
+                            return newIndexes;
+                        }
+
                         @Override
                         public ExplainPlan getExplainPlan() throws SQLException {
                             List<String> queryPlanSteps =  aggPlan.getExplainPlan().getPlanSteps();
@@ -917,10 +931,10 @@ public class UpsertCompiler {
                 UpdateColumnCompiler compiler = new UpdateColumnCompiler(context);
                 int nColumns = onDupKeyPairs.size();
                 List<Expression> updateExpressions = Lists.newArrayListWithExpectedSize(nColumns);
-                LinkedHashSet<PColumn>updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
+                LinkedHashSet<PColumn> updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
                 updateColumns.add(new PColumnImpl(
                         table.getPKColumns().get(0).getName(), // Use first PK column name as we know it won't conflict with others
-                        null, PVarbinary.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null, false, null, false, false));
+                        null, PVarbinary.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null, false, null, false, false, null));
                 for (Pair<ColumnName,ParseNode> columnPair : onDupKeyPairs) {
                     ColumnName colName = columnPair.getFirst();
                     PColumn updateColumn = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName()).getColumn();

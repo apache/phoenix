@@ -409,34 +409,6 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             }
         }
 
-        public void setTimestamp(int parameterIndex, Timestamp x, Calendar calendar)
-                throws SQLException {
-            if (x != null) {
-                x = new Timestamp(getAdjustedTime(x.getTime(), calendar));
-            }
-            super.setTimestamp(parameterIndex, x, calendar);
-        }
-
-        public void setDate(int parameterIndex, Date x, Calendar calendar)
-                throws SQLException {
-            if (x != null) {
-                x = new Date(getAdjustedTime(x.getTime(), calendar));
-            }
-            super.setDate(parameterIndex, x, calendar);
-        }
-
-        public void setTime(int parameterIndex, Time x, Calendar calendar)
-                throws SQLException {
-            if (x != null) {
-                x = new Time(getAdjustedTime(x.getTime(), calendar));
-            }
-            super.setTime(parameterIndex, x, calendar);
-        }
-
-        private long getAdjustedTime(long v, Calendar calendar) {
-            return (v - calendar.getTimeZone().getOffset(v));
-        }
-
         public void setRowId(
                 int parameterIndex,
                 RowId x) throws SQLException {

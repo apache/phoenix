@@ -111,16 +111,14 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
             final List<PColumn> mappedColumns = targetTable.tableMapping.getMappedColumns();
             final int[] columnIndexes = new int[mappedColumns.size()];
             final int[] pkSlotIndexes = new int[mappedColumns.size()];
+            int pkColPosition = -1;
             for (int i = 0; i < columnIndexes.length; i++) {
                 PColumn column = mappedColumns.get(i);
-                int pkColPosition = 0;
                 if (SchemaUtil.isPKColumn(column)) {
-                    for(PColumn col: mappedColumns) {
-                        if(col.equals(column)) break;
-                        // Since first columns in the mappedColumns are pk columns only.
-                        pkColPosition++;
+                    if (pkColPosition == -1) {
+                        pkColPosition = column.getPosition();
                     }
-                    pkSlotIndexes[i] = pkColPosition;
+                    pkSlotIndexes[i] = pkColPosition++;
                 }
                 columnIndexes[i] = column.getPosition();
             }

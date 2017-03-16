@@ -43,6 +43,8 @@ import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
+import org.apache.phoenix.expression.SingleCellConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
@@ -85,6 +87,11 @@ public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisito
 
     @Override
     public Expression visit(KeyValueColumnExpression node) {
+        return node;
+    }
+    
+    @Override
+    public Expression visit(SingleCellColumnExpression node) {
         return node;
     }
 
@@ -192,6 +199,11 @@ public abstract class CloneExpressionVisitor extends TraverseAllExpressionVisito
 
     @Override
     public Expression visitLeave(ArrayConstructorExpression node, List<Expression> l) {
+        return isCloneNode(node, l) ? node.clone(l) : node;
+    }
+    
+    @Override
+    public Expression visitLeave(SingleCellConstructorExpression node, List<Expression> l) {
         return isCloneNode(node, l) ? node.clone(l) : node;
     }
 

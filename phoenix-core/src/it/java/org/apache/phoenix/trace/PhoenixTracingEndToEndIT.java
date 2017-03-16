@@ -56,7 +56,9 @@ import com.google.common.collect.ImmutableMap;
  * Test that the logging sink stores the expected metrics/stats
  */
 
-public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
+// Marking this class as abstract till PHOENIX-3062 is fixed.
+// FIXME: PHOENIX-3062
+public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);
     private static final int MAX_RETRIES = 10;
@@ -137,7 +139,7 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         receiver.receiveSpan(span);
 
         // wait for the tracer to actually do the write
-        latch.await();
+        assertTrue("Sink not flushed. commit() not called on the connection", latch.await(60, TimeUnit.SECONDS));
 
         // look for the writes to make sure they were made
         Connection conn = getConnectionWithoutTracing();

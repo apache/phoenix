@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -26,10 +27,12 @@ import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
 import org.apache.phoenix.hbase.index.covered.TableState;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 /**
  * Phoenix-based {@link IndexCodec}. Manages all the logic of how to cleanup an index (
@@ -38,6 +41,7 @@ import com.google.common.collect.Lists;
  */
 public class PhoenixIndexCodec extends BaseIndexCodec {
     public static final String INDEX_MD = "IdxMD";
+    public static final String INDEX_PROTO_MD = "IdxProtoMD";
     public static final String INDEX_UUID = "IdxUUID";
     public static final String INDEX_MAINTAINERS = "IndexMaintainers";
     private static KeyValueBuilder KV_BUILDER = GenericKeyValueBuilder.INSTANCE;
@@ -68,7 +72,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
         ptr.set(state.getCurrentRowKey());
         List<IndexUpdate> indexUpdates = Lists.newArrayList();
         for (IndexMaintainer maintainer : indexMaintainers) {
-            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.ignoreNewerMutations());
+            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.ignoreNewerMutations(), false);
             ValueGetter valueGetter = statePair.getFirst();
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
@@ -93,15 +97,19 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             // to aid in rollback if there's a KeyValue column in the index. The alternative would be
             // to hold on to all uncommitted index row keys (even ones already sent to HBase) on the
             // client side.
-            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(maintainer.getAllColumns(), metaData.ignoreNewerMutations());
+            Set<ColumnReference> cols = Sets.newHashSet(maintainer.getAllColumns());
+            cols.add(new ColumnReference(indexMaintainers.get(0).getDataEmptyKeyValueCF(), indexMaintainers.get(0).getEmptyKeyValueQualifier()));
+            Pair<ValueGetter, IndexUpdate> statePair = state.getIndexUpdateState(cols, metaData.ignoreNewerMutations(), true);
             ValueGetter valueGetter = statePair.getFirst();
-            IndexUpdate indexUpdate = statePair.getSecond();
-            indexUpdate.setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
-                    .getTableDesc().getName() : maintainer.getIndexTableName());
-            Delete delete = maintainer.buildDeleteMutation(KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
-                    state.getCurrentTimestamp(), env.getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
-            indexUpdate.setUpdate(delete);
-            indexUpdates.add(indexUpdate);
+            if (valueGetter!=null) {
+                IndexUpdate indexUpdate = statePair.getSecond();
+                indexUpdate.setTable(maintainer.isLocalIndex() ? state.getEnvironment().getRegion()
+                        .getTableDesc().getName() : maintainer.getIndexTableName());
+                Delete delete = maintainer.buildDeleteMutation(KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
+                        state.getCurrentTimestamp(), env.getRegion().getRegionInfo().getStartKey(), env.getRegion().getRegionInfo().getEndKey());
+                indexUpdate.setUpdate(delete);
+                indexUpdates.add(indexUpdate);
+            }
         }
         return indexUpdates;
     }

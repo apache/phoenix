@@ -339,7 +339,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
             PColumn column = mappedColumns.get(index);
             PName familyName = column.getFamilyName();
             if (familyName != null) {
-                scan.addFamily(familyName.getBytes());
+                scan.addColumn(familyName.getBytes(), column.getColumnQualifierBytes());
             }
         }
     }

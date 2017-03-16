@@ -149,7 +149,8 @@ import org.apache.tephra.TransactionManager;
 import org.apache.tephra.TxConstants;
 import org.apache.tephra.distributed.TransactionService;
 import org.apache.tephra.metrics.TxMetricsCollector;
-import org.apache.tephra.persist.InMemoryTransactionStateStorage;
+import org.apache.tephra.persist.HDFSTransactionStateStorage;
+import org.apache.tephra.snapshot.SnapshotCodecProvider;
 import org.apache.twill.discovery.DiscoveryService;
 import org.apache.twill.discovery.ZKDiscoveryService;
 import org.apache.twill.internal.utils.Networks;
@@ -460,14 +461,18 @@ public abstract class BaseTest {
         
     }
     
-    protected static void setupTxManager() throws SQLException, IOException {
+    protected static void setTxnConfigs() throws IOException {
         config.setBoolean(TxConstants.Manager.CFG_DO_PERSIST, false);
         config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
         config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
         config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, Networks.getRandomPort());
         config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder.newFolder().getAbsolutePath());
         config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, DEFAULT_TXN_TIMEOUT_SECONDS);
-
+        config.unset(TxConstants.Manager.CFG_TX_HDFS_USER);
+        config.setLong(TxConstants.Manager.CFG_TX_SNAPSHOT_INTERVAL, 5L);
+    }
+    
+    protected static void setupTxManager() throws SQLException, IOException {
         ConnectionInfo connInfo = ConnectionInfo.create(getOldUrl());
         zkClient = ZKClientServices.delegate(
           ZKClients.reWatchOnExpire(
@@ -483,7 +488,7 @@ public abstract class BaseTest {
         zkClient.startAndWait();
 
         DiscoveryService discovery = new ZKDiscoveryService(zkClient);
-        txManager = new TransactionManager(config, new InMemoryTransactionStateStorage(), new TxMetricsCollector());
+        txManager = new TransactionManager(config, new HDFSTransactionStateStorage(config, new SnapshotCodecProvider(config), new TxMetricsCollector()), new TxMetricsCollector());
         txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
         txService.startAndWait();
     }
@@ -513,8 +518,9 @@ public abstract class BaseTest {
     /**
      * Set up the test hbase cluster.
      * @return url to be used by clients to connect to the cluster.
+     * @throws IOException 
      */
-    protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) {
+    protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) throws IOException {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
             return initMiniCluster(conf, overrideProps);
@@ -569,8 +575,9 @@ public abstract class BaseTest {
     }
     
     protected static void setUpTestDriver(ReadOnlyProps serverProps, ReadOnlyProps clientProps) throws Exception {
+        setTxnConfigs();
         String url = checkClusterInitialized(serverProps);
-        checkTxManagerInitialized(clientProps);
+        checkTxManagerInitialized(serverProps);
         if (driver == null) {
             driver = initAndRegisterTestDriver(url, clientProps);
         }
@@ -726,25 +733,28 @@ public abstract class BaseTest {
     }
 
     protected static void ensureTableCreated(String url, String tableName) throws SQLException {
-        ensureTableCreated(url, tableName, tableName, null, null);
+        ensureTableCreated(url, tableName, tableName, null, null, null);
     }
 
     protected static void ensureTableCreated(String url, String tableName, String tableDDLType) throws SQLException {
-        ensureTableCreated(url, tableName, tableDDLType, null, null);
+        ensureTableCreated(url, tableName, tableDDLType, null, null, null);
     }
 
-    public static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits) throws SQLException {
-        ensureTableCreated(url, tableName, tableDDLType, splits, null);
+    public static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits, String tableDDLOptions) throws SQLException {
+        ensureTableCreated(url, tableName, tableDDLType, splits, null, tableDDLOptions);
     }
 
     protected static void ensureTableCreated(String url, String tableName, String tableDDLType, Long ts) throws SQLException {
-        ensureTableCreated(url, tableName, tableDDLType, null, ts);
+        ensureTableCreated(url, tableName, tableDDLType, null, ts, null);
     }
 
-    protected static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits, Long ts) throws SQLException {
+    protected static void ensureTableCreated(String url, String tableName, String tableDDLType, byte[][] splits, Long ts, String tableDDLOptions) throws SQLException {
         String ddl = tableDDLMap.get(tableDDLType);
         if(!tableDDLType.equals(tableName)) {
            ddl =  ddl.replace(tableDDLType, tableName);
+        }
+        if (tableDDLOptions!=null) {
+            ddl += tableDDLOptions;
         }
         createSchema(url,tableName, ts);
         createTestTable(url, ddl, splits, ts);
@@ -992,7 +1002,7 @@ public abstract class BaseTest {
     }
 
     protected static void initSumDoubleValues(String tableName, byte[][] splits, String url) throws Exception {
-        ensureTableCreated(url, tableName, SUM_DOUBLE_NAME, splits);
+        ensureTableCreated(url, tableName, SUM_DOUBLE_NAME, splits, null);
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(url, props);
         try {
@@ -1060,26 +1070,26 @@ public abstract class BaseTest {
     }
 
     protected static String initATableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
-        return initATableValues(null, tenantId, splits, date, ts, url);
+        return initATableValues(null, tenantId, splits, date, ts, url, null);
     }
     
-    protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
+    protected static String initATableValues(String tableName, String tenantId, byte[][] splits, Date date, Long ts, String url, String tableDDLOptions) throws Exception {
         if(tableName == null) {
             tableName = generateUniqueName();
         }
         String tableDDLType = ATABLE_NAME;
         if (ts == null) {
-            ensureTableCreated(url, tableName, tableDDLType, splits);
+            ensureTableCreated(url, tableName, tableDDLType, splits, null, tableDDLOptions);
         } else {
-            ensureTableCreated(url, tableName, tableDDLType, splits, ts-5);
+            ensureTableCreated(url, tableName, tableDDLType, splits, ts-5, tableDDLOptions);
         }
         
         Properties props = new Properties();
         if (ts != null) {
             props.setProperty(CURRENT_SCN_ATTRIB, Long.toString(ts-3));
         }
-        Connection conn = DriverManager.getConnection(url, props);
-        try {
+        
+        try (Connection conn = DriverManager.getConnection(url, props)) {
             // Insert all rows at ts
             PreparedStatement stmt = conn.prepareStatement(
                     "upsert into " + tableName +
@@ -1266,12 +1276,9 @@ public abstract class BaseTest {
             stmt.setFloat(15, 0.09f);
             stmt.setDouble(16, 0.0009);
             stmt.execute();
-                
             conn.commit();
-            return tableName;
-        } finally {
-            conn.close();
         }
+        return tableName;
     }
     
     protected static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts) throws Exception {
@@ -1292,9 +1299,9 @@ public abstract class BaseTest {
     
     private static void initEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits);
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits, null);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits, ts-2);
+            ensureTableCreated(url, ENTITY_HISTORY_TABLE_NAME, ENTITY_HISTORY_TABLE_NAME, splits, ts-2, null);
         }
         
         Properties props = new Properties();
@@ -1396,9 +1403,9 @@ public abstract class BaseTest {
     
     protected static void initSaltedEntityHistoryTableValues(String tenantId, byte[][] splits, Date date, Long ts, String url) throws Exception {
         if (ts == null) {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits);
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, null);
         } else {
-            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2);
+            ensureTableCreated(url, ENTITY_HISTORY_SALTED_TABLE_NAME, ENTITY_HISTORY_SALTED_TABLE_NAME, splits, ts-2, null);
         }
         
         Properties props = new Properties();

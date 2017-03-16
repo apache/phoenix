@@ -51,9 +51,11 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
+import org.apache.phoenix.schema.PTable.EncodedCQCounter;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -94,6 +96,10 @@ public class TableMapping {
             final PTable dataTable = dataTableRef.getTable();
             final List<PColumn> projectedColumns = getDataTableMappedColumns(dataTableRef, mappedColumns);
             this.mappedColumns.addAll(projectedColumns);
+            EncodedCQCounter cqCounter = EncodedCQCounter.NULL_COUNTER;
+            if (EncodedColumnsUtil.usesEncodedColumnNames(dataTable)) {
+                cqCounter = EncodedCQCounter.copy(dataTable.getEncodedCQCounter());
+            }
             PTable extendedTable = PTableImpl.makePTable(dataTable.getTenantId(),
                     TupleProjectionCompiler.PROJECTED_TABLE_SCHEMA, dataTable.getName(),
                     PTableType.PROJECTED, null, dataTable.getTimeStamp(),
@@ -104,7 +110,8 @@ public class TableMapping {
                     dataTable.getViewType(), null, null, dataTable.rowKeyOrderOptimizable(),
                     dataTable.isTransactional(), dataTable.getUpdateCacheFrequency(),
                     dataTable.getIndexDisableTimestamp(), dataTable.isNamespaceMapped(),
-                    dataTable.getAutoPartitionSeqName(), dataTable.isAppendOnlySchema());
+                    dataTable.getAutoPartitionSeqName(), dataTable.isAppendOnlySchema(),
+                    dataTable.getImmutableStorageScheme(), dataTable.getEncodingScheme(), cqCounter);
             this.extendedTableRef = new TableRef(extendedTable);
         }
         init();
@@ -498,13 +505,8 @@ public class TableMapping {
                 + (pTable.isMultiTenant() ? 1 : 0)
                 + (pTable.getViewIndexId() == null ? 0 : 1);
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(pTable.getColumns().size() - initPosition);
-        for (int i = initPosition; i < pTable.getPKColumns().size(); i++) {
-            columns.add(pTable.getPKColumns().get(i));
-        }
-        for (PColumnFamily family : pTable.getColumnFamilies()) {
-            for (PColumn column : family.getColumns()) {
-                columns.add(column);
-            }
+        for (int i = initPosition; i < pTable.getColumns().size(); i++) {
+            columns.add(pTable.getColumns().get(i));
         }
         
         return columns;
@@ -524,7 +526,8 @@ public class TableMapping {
                             new ColumnRef(dataTableRef, sourceColumn.getPosition());
                     PColumn column = new ProjectedColumn(PNameFactory.newName(colName),
                             cf.getName(), projectedColumns.size(),
-                            sourceColumn.isNullable(), sourceColumnRef);
+                            sourceColumn.isNullable(), sourceColumnRef,
+                            sourceColumn.getColumnQualifierBytes());
                     projectedColumns.add(column);
                 }
             }            

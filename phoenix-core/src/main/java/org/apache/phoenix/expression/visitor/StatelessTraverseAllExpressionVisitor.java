@@ -42,6 +42,8 @@ import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
+import org.apache.phoenix.expression.SingleCellConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
@@ -127,6 +129,11 @@ public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpress
     }
     
     @Override
+    public E visit(SingleCellColumnExpression node) {
+        return null;
+    }
+    
+    @Override
     public E visit(ProjectedColumnExpression node) {
         return null;
     }
@@ -173,6 +180,11 @@ public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpress
 
     @Override
     public E visitLeave(ArrayConstructorExpression node, List<E> l) {
+        return null;
+    }
+    
+    @Override
+    public E visitLeave(SingleCellConstructorExpression node, List<E> l) {
         return null;
     }
 

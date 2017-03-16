@@ -17,11 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
@@ -225,12 +220,12 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
             // separately, all updating the same data.
             RegionScanner scanner = null;
             PhoenixConnection conn = null;
-            if (inProgress.get() > 0) {
+            if (inProgress.getAndIncrement() > 0) {
+                inProgress.decrementAndGet();
                 LOG.debug("New ScheduledBuildIndexTask skipped as there is already one running");
                 return;
             }
             try {
-                inProgress.incrementAndGet();
                 Scan scan = new Scan();
                 SingleColumnValueFilter filter = new SingleColumnValueFilter(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
@@ -266,7 +261,6 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     if (disabledTimeStamp == null || disabledTimeStamp.length == 0 || (indexState != null
                             && PIndexState.BUILDING == PIndexState.fromSerializedValue(Bytes.toString(indexState)))) {
-
                         // Don't rebuild the building index , because they are marked for aysnc
                         continue;
                     }
@@ -290,7 +284,8 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
                     // validity check
                     if (indexTable == null || indexTable.length == 0) {
-                        LOG.debug("Index rebuild has been skipped for row=" + r);
+                        LOG.debug("We find IndexTable empty during rebuild scan:" + scan
+                                + "so, Index rebuild has been skipped for row=" + r);
                         continue;
                     }
 
@@ -335,6 +330,9 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
                         indexesToPartiallyRebuild = Lists.newArrayListWithExpectedSize(dataPTable.getIndexes().size());
                         dataTableToIndexesMap.put(dataPTable, indexesToPartiallyRebuild);
                     }
+                    LOG.debug("We have found " + indexPTable.getIndexState() + " Index:" + indexPTable.getName()
+                            + " on data table:" + dataPTable.getName() + " which was disabled at "
+                            + indexPTable.getIndexDisableTimestamp());
                     indexesToPartiallyRebuild.add(indexPTable);
                 } while (hasMore);
 
@@ -368,7 +366,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 							long timeStamp = Math.max(0, earliestDisableTimestamp - overlapTime);
 							LOG.info("Starting to build " + dataPTable + " indexes " + indexesToPartiallyRebuild
 									+ " from timestamp=" + timeStamp);
-
+							
 							TableRef tableRef = new TableRef(null, dataPTable, HConstants.LATEST_TIMESTAMP, false);
 							// TODO Need to set high timeout
 							PostDDLCompiler compiler = new PostDDLCompiler(conn);
@@ -379,6 +377,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 
 							long scanEndTime = getTimestampForBatch(timeStamp,
 									batchExecutedPerTableMap.get(dataPTable.getName()));
+							
 							dataTableScan.setTimeRange(timeStamp, scanEndTime);
 							dataTableScan.setCacheBlocks(false);
 							dataTableScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
@@ -388,10 +387,18 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 							IndexMaintainer.serializeAdditional(dataPTable, indexMetaDataPtr, indexesToPartiallyRebuild,
 									conn);
 							byte[] attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
-							dataTableScan.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
+							dataTableScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
+                            LOG.info("Starting to partially build indexes:" + indexesToPartiallyRebuild
+                                    + " on data table:" + dataPTable.getName() + " with the earliest disable timestamp:"
+                                    + earliestDisableTimestamp + " till "
+                                    + (scanEndTime == HConstants.LATEST_TIMESTAMP ? "LATEST_TIMESTAMP" : scanEndTime));
 							MutationState mutationState = plan.execute();
 							long rowCount = mutationState.getUpdateCount();
-							LOG.info(rowCount + " rows of index which are rebuild");
+                            if (scanEndTime == HConstants.LATEST_TIMESTAMP) {
+                                LOG.info("Rebuild completed for all inactive/disabled indexes in data table:"
+                                        + dataPTable.getName());
+                            }
+                            LOG.info(" no. of datatable rows read in rebuilding process is " + rowCount);
 							for (PTable indexPTable : indexesToPartiallyRebuild) {
 								String indexTableFullName = SchemaUtil.getTableName(
 										indexPTable.getSchemaName().getString(),
@@ -400,6 +407,7 @@ public class MetaDataRegionObserver extends BaseRegionObserver {
 									updateIndexState(conn, indexTableFullName, env, PIndexState.INACTIVE,
 											PIndexState.ACTIVE);
 									batchExecutedPerTableMap.remove(dataPTable.getName());
+                                    LOG.info("Making Index:" + indexPTable.getTableName() + " active after rebuilding");
 								} else {
 
 									updateDisableTimestamp(conn, indexTableFullName, env, scanEndTime, metaTable);

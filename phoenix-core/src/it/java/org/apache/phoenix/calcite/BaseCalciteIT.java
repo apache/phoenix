@@ -169,26 +169,45 @@ public class BaseCalciteIT extends BaseHBaseManagedTimeIT {
         }
 
         public Sql explainIs(String expected) throws SQLException {
-            return checkExplain(expected, true);
-        }
-
-        public Sql explainMatches(String expected) throws SQLException {
             return checkExplain(expected, false);
         }
 
-        private Sql checkExplain(String expected, boolean exact) throws SQLException {
+        public Sql explainMatches(String expected) throws SQLException {
+            return checkExplain(expected, true);
+        }
+
+        private Sql checkExplain(String expected, boolean regex) throws SQLException {
             final Statement statement = start.getConnection().createStatement();
             final ResultSet resultSet = statement.executeQuery(start.getExplainPlanString() + " " + sql);
             String explain = QueryUtil.getExplainPlan(resultSet);
             resultSet.close();
             statement.close();
-            if (exact) {
+            if (!regex) {
                 Assert.assertEquals(explain, expected);
             } else {
                 Assert.assertTrue(
                         "Explain plan \"" + explain
                         + "\" does not match \"" + expected + "\"",
                         explain.matches(expected));
+            }
+            return this;
+        }
+
+        public Sql explainIsAny(List<String> expected, boolean regex) throws SQLException {
+            final Statement statement = start.getConnection().createStatement();
+            final ResultSet resultSet = statement.executeQuery(start.getExplainPlanString() + " " + sql);
+            String explain = QueryUtil.getExplainPlan(resultSet);
+            resultSet.close();
+            statement.close();
+            boolean match = false;
+            for (String s : expected) {
+                if ((!regex && explain.equals(s))
+                        || (regex && explain.matches(s))) {
+                    match = true;
+                }
+            }
+            if (!match) {
+                Assert.fail(explain + " did not match any of the expected plans: " + expected);
             }
             return this;
         }

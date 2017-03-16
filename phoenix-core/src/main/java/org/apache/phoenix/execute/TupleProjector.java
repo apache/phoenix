@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -51,15 +54,14 @@ import org.apache.phoenix.util.SchemaUtil;
 import com.google.common.base.Preconditions;
 
 public class TupleProjector {    
-    public static final byte[] VALUE_COLUMN_FAMILY = Bytes.toBytes("_v");
-    public static final byte[] VALUE_COLUMN_QUALIFIER = new byte[0];
-    
     private static final String SCAN_PROJECTOR = "scanProjector";
     
     private final KeyValueSchema schema;
     private final Expression[] expressions;
     private ValueBitSet valueSet;
     private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    
+    private static final byte[] OLD_VALUE_COLUMN_QUALIFIER = new byte[0];
     
     public TupleProjector(RowProjector rowProjector) {
         List<? extends ColumnProjector> columnProjectors = rowProjector.getColumnProjectors();
@@ -173,11 +175,11 @@ public class TupleProjector {
     }
     
     public static class ProjectedValueTuple extends BaseTuple {
-        private ImmutableBytesWritable keyPtr = new ImmutableBytesWritable();
-        private long timestamp;
-        private ImmutableBytesWritable projectedValue = new ImmutableBytesWritable();
-        private int bitSetLen;
-        private KeyValue keyValue;
+        ImmutableBytesWritable keyPtr = new ImmutableBytesWritable();
+        long timestamp;
+        ImmutableBytesWritable projectedValue = new ImmutableBytesWritable();
+        int bitSetLen;
+        KeyValue keyValue;
 
         public ProjectedValueTuple(Tuple keyBase, long timestamp, byte[] projectedValue, int valueOffset, int valueLength, int bitSetLen) {
             keyBase.getKey(this.keyPtr);
@@ -249,20 +251,63 @@ public class TupleProjector {
         }
     }
     
+    public static class OldProjectedValueTuple extends ProjectedValueTuple {
+
+        public OldProjectedValueTuple(byte[] keyBuffer, int keyOffset, int keyLength, long timestamp,
+                byte[] projectedValue, int valueOffset, int valueLength, int bitSetLen) {
+            super(keyBuffer, keyOffset, keyLength, timestamp, projectedValue, valueOffset, valueLength, bitSetLen);
+        }
+
+        public OldProjectedValueTuple(Tuple keyBase, long timestamp, byte[] projectedValue, int valueOffset,
+                int valueLength, int bitSetLen) {
+            super(keyBase, timestamp, projectedValue, valueOffset, valueLength, bitSetLen);
+        }
+
+        @Override
+        public KeyValue getValue(int index) {
+            if (index != 0) { throw new IndexOutOfBoundsException(Integer.toString(index)); }
+            return getValue(VALUE_COLUMN_FAMILY, OLD_VALUE_COLUMN_QUALIFIER);
+        }
+
+        @Override
+        public KeyValue getValue(byte[] family, byte[] qualifier) {
+            if (keyValue == null) {
+                keyValue = KeyValueUtil.newKeyValue(keyPtr.get(), keyPtr.getOffset(), keyPtr.getLength(),
+                        VALUE_COLUMN_FAMILY, OLD_VALUE_COLUMN_QUALIFIER, timestamp, projectedValue.get(),
+                        projectedValue.getOffset(), projectedValue.getLength());
+            }
+            return keyValue;
+        }
+        
+    }
+    
     public ProjectedValueTuple projectResults(Tuple tuple) {
     	byte[] bytesValue = schema.toBytes(tuple, getExpressions(), valueSet, ptr);
     	Cell base = tuple.getValue(0);
         return new ProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
     }
     
+    public ProjectedValueTuple projectResults(Tuple tuple, boolean useNewValueQualifier) {
+        byte[] bytesValue = schema.toBytes(tuple, getExpressions(), valueSet, ptr);
+        Cell base = tuple.getValue(0);
+        if (useNewValueQualifier) {
+            return new ProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
+        } else {
+            return new OldProjectedValueTuple(base.getRowArray(), base.getRowOffset(), base.getRowLength(), base.getTimestamp(), bytesValue, 0, bytesValue.length, valueSet.getEstimatedLength());
+        }
+    }
+    
     public static void decodeProjectedValue(Tuple tuple, ImmutableBytesWritable ptr) throws IOException {
-    	boolean b = tuple.getValue(VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER, ptr);
-        if (!b)
-            throw new IOException("Trying to decode a non-projected value.");
+        boolean b = tuple.getValue(VALUE_COLUMN_FAMILY, VALUE_COLUMN_QUALIFIER, ptr);
+        if (!b) {
+            // fall back to use the old value column qualifier for backward compatibility
+            b = tuple.getValue(VALUE_COLUMN_FAMILY, OLD_VALUE_COLUMN_QUALIFIER, ptr);
+        }
+        if (!b) throw new IOException("Trying to decode a non-projected value.");
     }
     
     public static ProjectedValueTuple mergeProjectedValue(ProjectedValueTuple dest, KeyValueSchema destSchema, ValueBitSet destBitSet,
-    		Tuple src, KeyValueSchema srcSchema, ValueBitSet srcBitSet, int offset) throws IOException {
+    		Tuple src, KeyValueSchema srcSchema, ValueBitSet srcBitSet, int offset, boolean useNewValueColumnQualifier) throws IOException {
     	ImmutableBytesWritable destValue = dest.getProjectedValue();
         int origDestBitSetLen = dest.getBitSetLength();
     	destBitSet.clear();
@@ -289,7 +334,8 @@ public class TupleProjector {
     	    o = Bytes.putBytes(merged, o, srcValue.get(), srcValue.getOffset(), srcValueLen);
     	}
     	destBitSet.toBytes(merged, o);
-        return new ProjectedValueTuple(dest, dest.getTimestamp(), merged, 0, merged.length, destBitSetLen);
+        return useNewValueColumnQualifier ? new ProjectedValueTuple(dest, dest.getTimestamp(), merged, 0, merged.length, destBitSetLen) : 
+            new OldProjectedValueTuple(dest, dest.getTimestamp(), merged, 0, merged.length, destBitSetLen);
     }
 
     public KeyValueSchema getSchema() {

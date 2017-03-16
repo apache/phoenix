@@ -19,10 +19,18 @@ package org.apache.phoenix.hive.mapreduce;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.Statement;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HConnection;
@@ -36,9 +44,14 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.mapred.*;
+import org.apache.hadoop.mapred.InputFormat;
+import org.apache.hadoop.mapred.InputSplit;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.RecordReader;
+import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -55,14 +68,6 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PhoenixRuntime;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.Statement;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 
 /**
  * Custom InputFormat to feed into Hive
@@ -86,7 +91,6 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         String query;
         String executionEngine = jobConf.get(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname,
                 HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.getDefaultValue());
-
         if (LOG.isDebugEnabled()) {
             LOG.debug("Target table name at split phase : " + tableName + "with whereCondition :" +
                     jobConf.get(TableScanDesc.FILTER_TEXT_CONF_STR) +
@@ -111,8 +115,8 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
             query = PhoenixQueryBuilder.getInstance().buildQuery(jobConf, tableName,
                     PhoenixStorageHandlerUtil.getReadColumnNames(jobConf), conditionList);
         } else if (PhoenixStorageHandlerConstants.TEZ.equals(executionEngine)) {
-            Map<String, String> columnTypeMap = PhoenixStorageHandlerUtil.createColumnTypeMap
-                    (jobConf);
+            Map<String, TypeInfo> columnTypeMap =
+                    PhoenixStorageHandlerUtil.createColumnTypeMap(jobConf);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Column type map for TEZ : " + columnTypeMap);
             }
@@ -142,14 +146,11 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
                 .newJobContext(new Job(jobConf)));
         boolean splitByStats = jobConf.getBoolean(PhoenixStorageHandlerConstants.SPLIT_BY_STATS,
                 false);
-        int scanCacheSize = jobConf.getInt(PhoenixStorageHandlerConstants.HBASE_SCAN_CACHE, -1);
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Generating splits with scanCacheSize : " + scanCacheSize);
-        }
+        setScanCacheSize(jobConf);
 
         // Adding Localization
-        HConnection connection = HConnectionManager.createConnection(jobConf);
+        HConnection connection = HConnectionManager.createConnection(PhoenixConnectionUtil.getConfiguration(jobConf));
         RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
                 .getTableRef().getTable().getPhysicalName().toString()));
         RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
@@ -166,10 +167,6 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
 
             if (splitByStats) {
                 for (Scan aScan : scans) {
-                    if (scanCacheSize > 0) {
-                        aScan.setCaching(scanCacheSize);
-                    }
-
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
                                 .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
@@ -183,12 +180,6 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
                     psplits.add(inputSplit);
                 }
             } else {
-                if (scanCacheSize > 0) {
-                    for (Scan aScan : scans) {
-                        aScan.setCaching(scanCacheSize);
-                    }
-                }
-
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
                             .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
@@ -214,6 +205,17 @@ public class PhoenixInputFormat<T extends DBWritable> implements InputFormat<Wri
         }
 
         return psplits;
+    }
+
+    private void setScanCacheSize(JobConf jobConf) {
+        int scanCacheSize = jobConf.getInt(PhoenixStorageHandlerConstants.HBASE_SCAN_CACHE, -1);
+        if (scanCacheSize > 0) {
+            jobConf.setInt(HConstants.HBASE_CLIENT_SCANNER_CACHING, scanCacheSize);
+        }
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Generating splits with scanCacheSize : " + scanCacheSize);
+        }
     }
 
     @Override

@@ -46,6 +46,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -144,6 +146,8 @@ public class Indexer extends BaseRegionObserver {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
         this.environment = env;
+        env.getConfiguration().setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
+                ServerRpcControllerFactory.class, RpcControllerFactory.class);
         String serverName = env.getRegionServerServices().getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
           // make sure the right version <-> combinations are allowed.
@@ -529,7 +533,8 @@ public class Indexer extends BaseRegionObserver {
     try {
         writer.writeAndKillYourselfOnFailure(updates, true);
     } catch (IOException e) {
-        LOG.error("Exception thrown instead of killing server during index writing", e);
+            LOG.error("During WAL replay of outstanding index updates, "
+                    + "Exception is thrown instead of killing server during index writing", e);
     }
   }
 

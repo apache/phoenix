@@ -37,6 +37,7 @@ import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.SingleCellConstructorExpression;
 import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.SubtractExpression;
 import org.apache.phoenix.expression.function.ArrayAnyComparisonExpression;
@@ -144,6 +145,11 @@ public abstract class BaseExpressionVisitor<E> implements ExpressionVisitor<E> {
     
     @Override
     public Iterator<Expression> visitEnter(ArrayConstructorExpression node) {
+        return null;
+    }
+    
+    @Override
+    public Iterator<Expression> visitEnter(SingleCellConstructorExpression node) {
         return null;
     }
     

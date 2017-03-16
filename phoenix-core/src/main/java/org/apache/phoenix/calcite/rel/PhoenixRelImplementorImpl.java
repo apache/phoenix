@@ -1,5 +1,8 @@
 package org.apache.phoenix.calcite.rel;
 
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -19,6 +22,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -120,16 +124,16 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
             String name = ParseNodeFactory.createTempAlias();
             Expression expr = exprs.get(i);
             builder.addField(expr);
-            columns.add(new PColumnImpl(PNameFactory.newName(name), PNameFactory.newName(TupleProjector.VALUE_COLUMN_FAMILY),
+            columns.add(new PColumnImpl(PNameFactory.newName(name), PNameFactory.newName(QueryConstants.VALUE_COLUMN_FAMILY),
                     expr.getDataType(), expr.getMaxLength(), expr.getScale(), expr.isNullable(),
-                    i, expr.getSortOrder(), null, null, false, name, false, false));
+                    i, expr.getSortOrder(), null, null, false, name, false, false, null));
         }
         try {
             PTable pTable = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME,
                     PTableType.SUBQUERY, null, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM,
                     null, null, columns, null, null, Collections.<PTable>emptyList(),
                     false, Collections.<PName>emptyList(), null, null, false, false, false, null,
-                    null, null, true, false, 0, 0, false, null, false);
+                    null, null, true, false, 0, 0, false, null, false, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER);
             this.setTableMapping(new TableMapping(pTable));
         } catch (SQLException e) {
             throw new RuntimeException(e);

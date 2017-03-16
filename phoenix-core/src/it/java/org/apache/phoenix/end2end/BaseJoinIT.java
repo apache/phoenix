@@ -60,14 +60,14 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
                 "    \"item_id\" varchar(10), " +
                 "    price integer, " +
                 "    quantity integer, " +
-                "    \"DATE\" timestamp)");
+                "    \"DATE\" timestamp) IMMUTABLE_ROWS=true");
         builder.put(JOIN_CUSTOMER_TABLE_FULL_NAME, "create table " + JOIN_CUSTOMER_TABLE_FULL_NAME +
                 "   (\"customer_id\" varchar(10) not null primary key, " +
                 "    name varchar, " +
                 "    phone varchar(12), " +
                 "    address varchar, " +
                 "    loc_id varchar(5), " +
-                "    \"DATE\" date)");
+                "    \"DATE\" date) IMMUTABLE_ROWS=true");
         builder.put(JOIN_ITEM_TABLE_FULL_NAME, "create table " + JOIN_ITEM_TABLE_FULL_NAME +
                 "   (\"item_id\" varchar(10) not null primary key, " +
                 "    name varchar, " +

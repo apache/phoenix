@@ -65,7 +65,7 @@ public class CoerceExpression extends BaseSingleExpression {
     
     //Package protected for tests
     CoerceExpression(Expression expression, PDataType toType) {
-        this(expression, toType, SortOrder.getDefault(), null, true);
+        this(expression, toType, expression.getSortOrder(), null, true);
     }
     
     CoerceExpression(Expression expression, PDataType toType, SortOrder toSortOrder, Integer maxLength, boolean rowKeyOrderOptimizable) {
@@ -152,6 +152,11 @@ public class CoerceExpression extends BaseSingleExpression {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean isStateless() {
+        return getChild().isStateless();
     }
 
     @Override

@@ -36,7 +36,7 @@ public class BaseCalciteIndexIT extends BaseCalciteIT {
     public void initTable() throws Exception {
         final String url = getOldUrl();
         final String index = localIndex ? "LOCAL INDEX" : "INDEX";
-        initATableValues(TestUtil.ATABLE_NAME, getOrganizationId(), null, null, null, url);
+        initATableValues(TestUtil.ATABLE_NAME, getOrganizationId(), null, null, null, url, null);
         initSaltedTables(url, index);
         initMultiTenantTables(url, index);
         Connection connection = DriverManager.getConnection(url);

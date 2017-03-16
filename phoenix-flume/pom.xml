@@ -26,7 +26,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>4.10.0-HBase-1.2-SNAPSHOT</version>
+    <version>4.11.0-HBase-1.2-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-flume</artifactId>
   <name>Phoenix - Flume</name>
@@ -169,16 +169,20 @@
 
     <!-- to work with json data using flume -->
     <dependency>
-      <groupId>org.json</groupId>
+      <groupId>com.tdunning</groupId>
       <artifactId>json</artifactId>
-      <version>20160212</version>
+      <version>1.8</version>
     </dependency>
     <dependency>
       <groupId>com.jayway.jsonpath</groupId>
       <artifactId>json-path</artifactId>
       <version>2.2.0</version>
     </dependency>
-
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>${commons-csv.version}</version>
+    </dependency>
     <!-- Main dependency on flume. The last to avoid using old commons-io in IT -->
     <dependency>
       <groupId>org.apache.flume</groupId>
