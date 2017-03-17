@@ -88,6 +88,7 @@ import org.apache.phoenix.expression.ModulusExpression;
 import org.apache.phoenix.expression.NotExpression;
 import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ReinterpretCastExpression;
+import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
@@ -719,6 +720,22 @@ public class CalciteUtils {
 			}
 			
 		});
+        EXPRESSION_MAP.put(SqlKind.ROW, new ExpressionFactory() {
+
+            @Override
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                boolean isConstant = true;
+                for (Expression child : children) {
+                    if (!child.isStateless()) {
+                        isConstant = false;
+                        break;
+                    }
+                }
+                return new RowValueConstructorExpression(children, isConstant);
+            }
+            
+        });
 		EXPRESSION_MAP.put(SqlKind.INPUT_REF, new ExpressionFactory() {
 
 			@Override
