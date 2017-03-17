@@ -155,10 +155,12 @@ public interface PTable extends PMetaDataEntity {
 
         private final byte[] byteValue;
         private final byte serializedValue;
+        private final byte[] serializedByteArrayValue;
 
         LinkType(byte serializedValue) {
             this.serializedValue = serializedValue;
             this.byteValue = Bytes.toBytes(this.name());
+            this.serializedByteArrayValue = new byte[] { serializedValue };
         }
 
         public byte[] getBytes() {
@@ -167,6 +169,10 @@ public interface PTable extends PMetaDataEntity {
 
         public byte getSerializedValue() {
             return this.serializedValue;
+        }
+
+        public byte[] getSerializedValueAsByteArray() {
+            return serializedByteArrayValue;
         }
 
         public static LinkType fromSerializedValue(byte serializedValue) {

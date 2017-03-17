@@ -1644,10 +1644,23 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return rowLock;
     }
 
-    private static final byte[] CHILD_TABLE_BYTES = new byte[] {PTable.LinkType.CHILD_TABLE.getSerializedValue()};
-
     private void findAllChildViews(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName, TableViewFinderResult result) throws IOException {
-        TableViewFinderResult currResult = findChildViews(region, tenantId, schemaName, tableName);
+        TableViewFinderResult currResult = findRelatedViews(region, tenantId, schemaName, tableName,
+            LinkType.CHILD_TABLE.getSerializedValueAsByteArray());
+        result.addResult(currResult);
+        for (Result viewResult : currResult.getResults()) {
+            byte[][] rowViewKeyMetaData = new byte[5][];
+            getVarChars(viewResult.getRow(), 5, rowViewKeyMetaData);
+            byte[] viewtenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+            byte[] viewSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+            byte[] viewTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+            findAllChildViews(region, viewtenantId, viewSchema, viewTable, result);
+        }
+    }
+
+    private void findAllParentViews(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName, TableViewFinderResult result) throws IOException {
+        TableViewFinderResult currResult = findRelatedViews(region, tenantId, schemaName, tableName,
+            LinkType.PARENT_TABLE.getSerializedValueAsByteArray());
         result.addResult(currResult);
         for (Result viewResult : currResult.getResults()) {
             byte[][] rowViewKeyMetaData = new byte[5][];
@@ -1663,14 +1676,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
      * @param tableName parent table's name
      * Looks for whether child views exist for the table specified by table.
      * TODO: should we pass a timestamp here?
+     * @param linkType
      */
-    private TableViewFinderResult findChildViews(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName) throws IOException {
+    private TableViewFinderResult findRelatedViews(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName, byte[] linkType) throws IOException {
         Scan scan = new Scan();
         byte[] startRow = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
         byte[] stopRow = ByteUtil.nextKey(startRow);
         scan.setStartRow(startRow);
         scan.setStopRow(stopRow);
-        SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES, CompareOp.EQUAL, CHILD_TABLE_BYTES);
+        SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES, CompareOp.EQUAL, linkType);
         linkFilter.setFilterIfMissing(true);
         scan.setFilter(linkFilter);
         scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
@@ -1845,7 +1859,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
             if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
                 // Handle any child views that exist
-                TableViewFinderResult tableViewFinderResult = findChildViews(region, tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes());
+                TableViewFinderResult tableViewFinderResult = findRelatedViews(region, tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(),
+                    LinkType.CHILD_TABLE.getSerializedValueAsByteArray());
                 if (tableViewFinderResult.hasViews()) {
                     if (isCascade) {
                         if (tableViewFinderResult.allViewsInMultipleRegions()) {
