@@ -691,7 +691,11 @@ public class JoinCompiler {
 
         public SelectStatement getAsSubquery(List<OrderByNode> orderBy) throws SQLException {
             if (isSubselect())
-                return SubselectRewriter.applyOrderBy(SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias()), orderBy, tableNode.getAlias());
+                return SubselectRewriter.applyOrderBy(
+                        SubselectRewriter.applyPostFilters(subselect, preFilters, tableNode.getAlias()),
+                        orderBy,
+                        tableNode.getAlias(),
+                        tableNode);
 
             return NODE_FACTORY.select(tableNode, select.getHint(), false, selectNodes, getPreFiltersCombined(), null,
                     null, orderBy, null, null, 0, false, select.hasSequence(),
