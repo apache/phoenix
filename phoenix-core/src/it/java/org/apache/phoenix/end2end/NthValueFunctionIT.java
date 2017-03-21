@@ -128,6 +128,40 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void offsetValueSubAggregation() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        String nth_test_table = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + nth_test_table + " "
+                + "(id INTEGER NOT NULL PRIMARY KEY, page_id UNSIGNED_LONG,"
+                + " \"DATE\" INTEGER, \"value\" UNSIGNED_LONG)";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute("UPSERT INTO " + nth_test_table
+                + " (id, page_id, \"DATE\", \"value\") VALUES (1, 8, 0, 300)");
+        conn.createStatement().execute(
+                "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (2, 8, 1, 7)");
+        conn.createStatement().execute(
+                "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (3, 9, 2, 9)");
+        conn.createStatement().execute(
+                "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (4, 9, 3, 4)");
+        conn.createStatement().execute(
+                "UPSERT INTO " + nth_test_table + " (id, page_id, \"DATE\", \"value\") VALUES (5, 10, 4, 2)");
+        conn.createStatement().execute("UPSERT INTO " + nth_test_table
+                + " (id, page_id, \"DATE\", \"value\") VALUES (6, 10, 5, 150)");
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT NTH_VALUE(SUM_VALUE, 2) WITHIN GROUP (ORDER BY MIN_DATE ASC) FROM (" +
+                        "SELECT MIN(\"DATE\") AS MIN_DATE, SUM(\"value\") AS SUM_VALUE FROM "
+                        + nth_test_table + " GROUP BY page_id) x");
+
+        assertTrue(rs.next());
+        assertEquals(13, rs.getLong(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
     public void offsetValueLastMismatchByColumn() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 

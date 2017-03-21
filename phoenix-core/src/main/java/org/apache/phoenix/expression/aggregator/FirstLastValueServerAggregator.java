@@ -64,8 +64,6 @@ public class FirstLastValueServerAggregator extends BaseAggregator {
         topValue = null;
         topValues.clear();
         topValuesCount = 0;
-        offset = -1;
-        useOffset = false;
     }
 
     @Override
