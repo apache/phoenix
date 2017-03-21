@@ -18,16 +18,35 @@
  */
 package org.apache.phoenix.loadbalancer.service;
 
-import org.apache.curator.x.discovery.ServiceInstance;
-
-import java.io.Closeable;
-import java.util.List;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.annotate.JsonRootName;
 
 /**
- * Created by rshrivastava on 3/1/17.
+ * Immutable class for defining the server location for
+ * Phoenix query instance. This data is stored as Node data
+ * in zookeeper
  */
-public interface ServiceDiscoverer extends AutoCloseable{
+@JsonRootName("PhoenixQueryServerNode")
+public class PhoenixQueryServerNode {
 
-    public ServiceInstance<Instance> getServiceLocation() throws Exception;
+    private String host;
+    private Integer port;
 
+    public PhoenixQueryServerNode(String host, Integer port){
+        this.host = host;
+        this.port = port;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public Integer getPort() {
+        return port;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s:%s",host,port);
+    }
 }
