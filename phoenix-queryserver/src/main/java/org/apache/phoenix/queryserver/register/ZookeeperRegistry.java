@@ -25,79 +25,49 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.utils.CloseableUtils;
-import org.apache.curator.x.discovery.ServiceDiscovery;
-import org.apache.curator.x.discovery.ServiceDiscoveryBuilder;
-import org.apache.curator.x.discovery.ServiceInstance;
-import org.apache.curator.x.discovery.UriSpec;
-import org.apache.curator.x.discovery.details.JsonInstanceSerializer;
-import org.apache.phoenix.loadbalancer.service.Instance;
+import org.apache.phoenix.loadbalancer.service.LoadBalancerConfiguration;
+import org.apache.phoenix.loadbalancer.service.PhoenixQueryServerNode;
 import org.apache.phoenix.queryserver.server.QueryServer;
-
-import java.io.IOException;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.data.Stat;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
+
 
 public class ZookeeperRegistry implements Registry {
 
     protected static final Log LOG = LogFactory.getLog(QueryServer.class);
-    private  ServiceDiscovery<Instance> serviceDiscovery;
-    private  ServiceInstance<Instance> avanticaInstance;
     private CuratorFramework client;
-
-    private void register(Integer load,  String path,
-                             String serviceName,Integer avaticaServerPort) throws Exception{
-
-        String uri = String.format("%s://%s:%s","http", InetAddress.getLocalHost().getHostName(),avaticaServerPort);
-        UriSpec uriSpec = new UriSpec(uri);
-
-        avanticaInstance = ServiceInstance.<Instance>builder()
-                .name(serviceName)
-                .payload(new Instance(load))
-                .port(avaticaServerPort)
-                .uriSpec(uriSpec)
-                .build();
-
-        JsonInstanceSerializer<Instance> serializer = new JsonInstanceSerializer<>(Instance.class);
-
-        serviceDiscovery = ServiceDiscoveryBuilder.builder(Instance.class)
-                .client(client)
-                .basePath(path)
-                .serializer(serializer)
-                .thisInstance(avanticaInstance)
-                .build();
-
-    }
 
     public ZookeeperRegistry(){}
 
     @Override
-    public void start() throws Exception {
-        if (client != null)
-            client.start();
-        else {
-            LOG.error(" zookeeper client service could not be initialized. ");
-            throw new Exception(" zookeeper client service could not be initialized ");
-        }
-        if (serviceDiscovery != null)
-                serviceDiscovery.start();
-        else {
-            LOG.error(" zookeeper service could not be initialized. ");
-            throw new Exception(" zookeeper service could not be initialized ");
-        }
-    }
-
-    @Override
-    public void close() throws IOException {
-        CloseableUtils.closeQuietly(serviceDiscovery);
-        CloseableUtils.closeQuietly(client);
-    }
-
-    @Override
-    public  void registerServer(Integer load, String zookeeperNodePath,
-                                   String serviceName, Integer avaticaServerPort, String zookeeperConnectString)
+    public  void registerServer(LoadBalancerConfiguration loadBalancerConfiguration, int avaticaServerPort,
+                                String zookeeperConnectString)
             throws Exception {
 
         this.client = CuratorFrameworkFactory.newClient(zookeeperConnectString,
-                new ExponentialBackoffRetry(1000, 3));
-         this.register(load, zookeeperNodePath, serviceName, avaticaServerPort);
+                new ExponentialBackoffRetry(1000,10));
+        this.client.start();
+        String host = InetAddress.getLocalHost().getHostName();
+        String path = loadBalancerConfiguration.getFullPathToNode(host,String.valueOf(avaticaServerPort));
+        PhoenixQueryServerNode phoenixQueryServerNode = new PhoenixQueryServerNode(host, String.valueOf(avaticaServerPort));
+        String node = phoenixQueryServerNode.toJsonString();
+
+        this.client.create().creatingParentsIfNeeded().withMode(CreateMode.EPHEMERAL).forPath(path
+                ,node.getBytes(StandardCharsets.UTF_8));
+        Stat stat = this.client.setACL().withACL(loadBalancerConfiguration.getAcls()).forPath(path);
+        if (stat != null) {
+            LOG.info(" node created with right ACL");
+        }
+        else {
+            LOG.error("could not create node with right ACL");
+        }
+
+    }
+
+    @Override
+    public void deRegisterTheServer() throws Exception {
+        CloseableUtils.closeQuietly(this.client);
     }
 }

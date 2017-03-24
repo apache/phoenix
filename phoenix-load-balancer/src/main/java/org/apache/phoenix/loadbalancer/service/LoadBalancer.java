@@ -27,12 +27,15 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.api.UnhandledErrorListener;
 import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
+import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
+import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.apache.curator.framework.state.ConnectionState;
 import org.apache.curator.framework.state.ConnectionStateListener;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.utils.CloseableUtils;
 import org.apache.phoenix.loadbalancer.exception.NoPhoenixQueryServerRegisteredException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.concurrent.ThreadLocalRandom;
 import java.io.Closeable;
@@ -41,7 +44,7 @@ import java.util.List;
 
 public class LoadBalancer {
 
-    private static final Config CONFIG = new Config();
+    private static final LoadBalancerConfiguration CONFIG = new LoadBalancerConfiguration();
     private static CuratorFramework curaFramework = null;
     protected static final Log LOG = LogFactory.getLog(LoadBalancer.class);
     private static PathChildrenCache   cache = null;
@@ -56,13 +59,14 @@ public class LoadBalancer {
             curaFramework = CuratorFrameworkFactory.newClient(getZkConnectString(),
                     new ExponentialBackoffRetry(1000, 3));
             curaFramework.start();
+            curaFramework.setACL().withACL(CONFIG.getAcls());
             connectionStateListener = getConnectionStateListener();
             curaFramework.getConnectionStateListenable()
                     .addListener(connectionStateListener);
             unhandledErrorListener = getUnhandledErrorListener();
             curaFramework.getUnhandledErrorListenable()
                     .addListener(unhandledErrorListener);
-            cache = new PathChildrenCache(curaFramework, getBasePath(), true);
+            cache = new PathChildrenCache(curaFramework, CONFIG.getParentPath(), true);
             cache.start(PathChildrenCache.StartMode.BUILD_INITIAL_CACHE);
             closeAbles.add(cache);
             closeAbles.add(curaFramework);
@@ -97,12 +101,11 @@ public class LoadBalancer {
      * @return - PQS Location ( host:port)
      * @throws Exception
      */
-    public String getSingleServiceLocation()  throws Exception{
-        List<ChildData> childNodes = conductSanityCheckAndReturn();
+    public PhoenixQueryServerNode getSingleServiceLocation()  throws Exception{
+        List<PhoenixQueryServerNode> childNodes = conductSanityCheckAndReturn();
         // get an random connect string
         int i = ThreadLocalRandom.current().nextInt(0, childNodes.size());
-        ChildData childData = childNodes.get(i);
-        return new String(childData.getData(),"UTF-8");
+        return childNodes.get(i);
     }
 
     /**
@@ -110,17 +113,11 @@ public class LoadBalancer {
      * @return - PQS Locations ( host1:port1,host2:port2)
      * @throws Exception
      */
-    public List<String> getAllServiceLocation()  throws Exception{
-        List<ChildData> childNodes = conductSanityCheckAndReturn();
-        // get an random connect string
-        List<String> nodesInString = new ArrayList<>();
-        for(ChildData node:childNodes){
-            nodesInString.add(node.toString());
-        }
-        return nodesInString;
+    public List<PhoenixQueryServerNode> getAllServiceLocation()  throws Exception{
+        return conductSanityCheckAndReturn();
     }
 
-    private List<ChildData> conductSanityCheckAndReturn() throws Exception{
+    private List<PhoenixQueryServerNode> conductSanityCheckAndReturn() throws Exception{
         Preconditions.checkNotNull(curaFramework
                 ," curator framework in not initialized ");
         Preconditions.checkNotNull(cache," cache value is not initialized");
@@ -132,19 +129,17 @@ public class LoadBalancer {
             LOG.error(message, exception);
             throw exception;
         }
-        List<ChildData> currentData = cache.getCurrentData();
-        if (currentData.size() == 0) {
-            LOG.info(" No Phoenix query server instance found in zookeeper");
-            throw new NoPhoenixQueryServerRegisteredException();
+        List<String> currentNodes = curaFramework.getChildren().forPath(CONFIG.getParentPath());
+        List<PhoenixQueryServerNode> returnNodes = new ArrayList<>();
+        for(String node:currentNodes) {
+            byte[] bytes = curaFramework.getData().forPath(CONFIG.getParentPath() + "/" + node);
+            returnNodes.add(PhoenixQueryServerNode.fromJsonString(new String(
+                    bytes, StandardCharsets.UTF_8)));
         }
-        return currentData;
+        return returnNodes;
     }
     private String getZkConnectString(){
         return CONFIG.getZkConnectString();
-    }
-
-    private String getBasePath(){
-        return CONFIG.getQueryServerBasePath();
     }
 
     private ConnectionStateListener getConnectionStateListener(){

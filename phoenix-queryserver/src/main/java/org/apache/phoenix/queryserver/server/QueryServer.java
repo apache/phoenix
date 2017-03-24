@@ -41,13 +41,13 @@ import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.loadbalancer.service.LoadBalancerConfiguration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.queryserver.register.Registry;
 import org.apache.phoenix.queryserver.register.ZookeeperRegistry;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.security.PrivilegedExceptionAction;
@@ -67,14 +67,13 @@ import java.util.concurrent.TimeUnit;
 public final class QueryServer extends Configured implements Tool, Runnable {
 
   protected static final Log LOG = LogFactory.getLog(QueryServer.class);
-
   private final String[] argv;
   private final CountDownLatch runningLatch = new CountDownLatch(1);
   private HttpServer server = null;
   private int retCode = 0;
   private Throwable t = null;
-  private String zookeeperConnectString;
   private  Registry registry;
+  private LoadBalancerConfiguration loadBalancerConfiguration = new LoadBalancerConfiguration();
 
   /**
    * Log information about the currently running JVM.
@@ -133,40 +132,10 @@ public final class QueryServer extends Configured implements Tool, Runnable {
 
   /** Constructor for use as {@link java.lang.Runnable}. */
   public QueryServer(String[] argv, Configuration conf) {
-    this(argv,conf,null);
-  }
-
-  /** Constructor for use as {@link java.lang.Runnable}. */
-  public QueryServer(String[] argv, Configuration conf,String zookeeperConnectString) {
     this.argv = argv;
     setConf(conf);
-    this.zookeeperConnectString = zookeeperConnectString;
-
   }
 
-  public void registerToServiceProvider(Configuration conf ) {
-    String basePath = conf.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH);
-    String serviceName = conf.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
-    if (zookeeperConnectString == null) {
-      String zookeeperQuorum = conf.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
-      String zookeeperPort = conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
-      zookeeperConnectString = String.format("%s:%s",zookeeperQuorum,zookeeperPort);
-    }
-    try {
-      registry = new ZookeeperRegistry();
-      int avaticaServerPort = getPort();
-      registry.registerServer(10, basePath, serviceName,
-              avaticaServerPort, zookeeperConnectString);
-      registry.start();
-    } catch(Exception ex) {
-      LOG.error("Unable to connect to zookeeper instance ",ex);
-      System.exit(-1);
-    }
-  }
-
-  public void closeRegistration() throws IOException {
-    registry.close();
-  }
   /**
    * @return the port number this instance is bound to, or {@code -1} if the server is not running.
    */
@@ -265,6 +234,7 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       // Build and start the HttpServer
       server = builder.build();
       server.start();
+      registerToServiceProvider();
       runningLatch.countDown();
       server.join();
       return 0;
@@ -272,9 +242,21 @@ public final class QueryServer extends Configured implements Tool, Runnable {
       LOG.fatal("Unrecoverable service error. Shutting down.", t);
       this.t = t;
       return -1;
+    } finally {
+      deRegister();
     }
   }
 
+  private void registerToServiceProvider() throws Exception {
+      registry = new ZookeeperRegistry();
+      String connectString = String.format("%s:%s",getConf().get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB),
+              getConf().get(QueryServices.ZOOKEEPER_PORT_ATTRIB));
+      registry.registerServer(loadBalancerConfiguration,getPort(),connectString);
+  }
+
+  private void deRegister() throws Exception {
+      registry.deRegisterTheServer();
+  }
   /**
    * Parses the serialization method from the configuration.
    *

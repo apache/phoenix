@@ -19,29 +19,44 @@
 package org.apache.phoenix.loadbalancer.service;
 
 import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.annotate.JsonRootName;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Immutable class for defining the server location for
  * Phoenix query instance. This data is stored as Node data
  * in zookeeper
  */
-@JsonRootName("PhoenixQueryServerNode")
 public class PhoenixQueryServerNode {
 
-    private String host;
-    private Integer port;
+    public void setHost(String host) {
+        this.host = host;
+    }
 
-    public PhoenixQueryServerNode(String host, Integer port){
+    public void setPort(String port) {
+        this.port = port;
+    }
+
+    private String host;
+    private String port;
+
+    public PhoenixQueryServerNode(String host, String port){
         this.host = host;
         this.port = port;
+    }
+
+    public PhoenixQueryServerNode(){
+        super();
     }
 
     public String getHost() {
         return host;
     }
 
-    public Integer getPort() {
+    public String getPort() {
         return port;
     }
 
@@ -49,4 +64,16 @@ public class PhoenixQueryServerNode {
     public String toString() {
         return String.format("%s:%s",host,port);
     }
+
+    public String toJsonString() throws IOException{
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.writeValueAsString(this);
+    }
+
+    public static PhoenixQueryServerNode fromJsonString(String jsonString) throws IOException{
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.readValue(jsonString,PhoenixQueryServerNode.class);
+    }
+
+
 }

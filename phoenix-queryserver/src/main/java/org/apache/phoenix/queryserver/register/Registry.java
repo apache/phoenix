@@ -19,19 +19,13 @@
 package org.apache.phoenix.queryserver.register;
 
 
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.x.discovery.ServiceDiscovery;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.loadbalancer.service.Instance;
+import org.apache.phoenix.loadbalancer.service.LoadBalancerConfiguration;
 
-import java.io.Closeable;
-import java.io.IOException;
+public interface  Registry  {
 
-public interface  Registry extends Closeable {
+    public void deRegisterTheServer() throws Exception;
 
-    public void registerServer(Integer load, String zookeeperNodePath,
-                                                     String serviceName, Integer avaticaServerPort, String connectString) throws Exception;
+    public void registerServer(LoadBalancerConfiguration loadBalancerConfiguration, int port
+            , String connectString) throws Exception ;
 
-    public abstract void close() throws IOException ;
-    public abstract void start() throws Exception ;
 }

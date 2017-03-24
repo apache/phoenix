@@ -29,28 +29,30 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
-import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.curator.test.InstanceSpec;
 import org.apache.curator.test.TestingServer;
+import org.apache.curator.utils.CloseableUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.loadbalancer.service.LoadBalancerConfiguration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
+import org.apache.zookeeper.data.Stat;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -65,38 +67,37 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private static Configuration CONF;
   private static String CONN_STRING;
   private static TestingServer zookeeperTestingServer;
-  private static String zookeeperConnectString;
-  private static CuratorFramework zookeeperClient;
-  private static String path;
+  private static CuratorFramework curatorFramework;
+  private static String zookeeperQuorum;
+  private static String zookeeperPort;
+  private static LoadBalancerConfiguration loadBalancerConfig = new LoadBalancerConfiguration();
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     CONF = getTestClusterConfig();
-    path = CONF.get(QueryServices.PHOENIX_QUERYSERVER_BASE_PATH) +"/"+
-            CONF.get(QueryServices.PHOENIX_QUERYSERVER_SERVICENAME);
-    zookeeperTestingServer = new TestingServer();
-    zookeeperConnectString = zookeeperTestingServer.getConnectString();
+    zookeeperQuorum = CONF.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
+    zookeeperPort = CONF.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+    String connectString = String.format("%s:%s",zookeeperQuorum,
+            zookeeperPort);
+    curatorFramework = CuratorFrameworkFactory.newClient(connectString
+            , new ExponentialBackoffRetry(1000, 3));
+    curatorFramework.start();
+
     CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
-            QueryServerBasicsIT.class.getName(), zookeeperConnectString);
+            QueryServerBasicsIT.class.getName());
     AVATICA_SERVER.start();
     AVATICA_SERVER.getQueryServer().awaitRunning();
     final int port = AVATICA_SERVER.getQueryServer().getPort();
     LOG.info("Avatica server started on port " + port);
     CONN_STRING = ThinClientUtil.getConnectionUrl("localhost", port);
     LOG.info("JDBC connection string is " + CONN_STRING);
-    AVATICA_SERVER.getQueryServer().registerToServiceProvider(CONF);
-
-    RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
-    zookeeperClient = CuratorFrameworkFactory.newClient(zookeeperConnectString, retryPolicy);
-    zookeeperClient.start();
   }
 
   @AfterClass
   public static void afterClass() throws Exception {
     if (AVATICA_SERVER != null) {
-      AVATICA_SERVER.getQueryServer().closeRegistration();
       AVATICA_SERVER.join(TimeUnit.MINUTES.toMillis(1));
       Throwable t = AVATICA_SERVER.getQueryServer().getThrowable();
       if (t != null) {
@@ -104,19 +105,9 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       }
       assertEquals("query server didn't exit cleanly", 0, AVATICA_SERVER.getQueryServer()
         .getRetCode());
-      if (zookeeperClient != null )
-      {
-        zookeeperClient.close();
-      } else {
-        fail(" failed to intialize the Curator Zookeeper client");
-      }
-      if (zookeeperTestingServer != null )  {
-        zookeeperTestingServer.stop();
-        zookeeperTestingServer.close();
-      } else {
-        fail(" failed to start or initialize the Curator zookeeper client");
-      }
     }
+    CloseableUtils.closeQuietly(curatorFramework);
+    CloseableUtils.closeQuietly(zookeeperTestingServer);
   }
 
   @Test
@@ -130,15 +121,6 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
         assertEquals(TABLE_CAT, metaData.getColumnName(1));
       }
     }
-  }
-
-  @Test
-  public void testIfNodeExists() throws Exception {
-
-    byte[] bytes = zookeeperClient.getData().forPath(path);
-    String data = new String(bytes, Charset.forName("UTF-16"));
-    List<String> strings = zookeeperClient.getChildren().forPath(path);
-    assertTrue(" server not registered with zookeeper",strings.size() > 0);
   }
 
   @Test
@@ -204,4 +186,11 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       }
     }
   }
+
+  @Test
+  public void testIfRegisteredWithZookeeper() throws Exception {
+    Stat stat = curatorFramework.checkExists().forPath(loadBalancerConfig.getQueryServerBasePath());
+    Assert.assertNotNull(" The query server is not registered with zookeeper ",stat);
+  }
+
 }
