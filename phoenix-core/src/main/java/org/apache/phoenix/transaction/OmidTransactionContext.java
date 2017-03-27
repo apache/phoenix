@@ -85,4 +85,22 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
         // TODO Auto-generated method stub
         return null;
     }
+
+    @Override
+    public void setVisibilityLevel(PhoenixVisibilityLevel visibilityLevel) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public byte[] encodeTransaction() throws SQLException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public long getMaxTransactionsPerSecond() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
 }

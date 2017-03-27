@@ -204,7 +204,6 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
         Region dataRegion = null;
         IndexMaintainer indexMaintainer = null;
         byte[][] viewConstants = null;
-        Transaction tx = null;
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         if (dataColumns != null) {
             tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
@@ -213,15 +212,13 @@ public class ScanRegionObserver extends BaseScannerRegionObserver {
             List<IndexMaintainer> indexMaintainers = localIndexBytes == null ? null : IndexMaintainer.deserialize(localIndexBytes);
             indexMaintainer = indexMaintainers.get(0);
             viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
-            byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
-            tx = MutationState.decodeTransaction(txState);
         }
 
         final TupleProjector p = TupleProjector.deserializeProjectorFromScan(scan);
         final HashJoinInfo j = HashJoinInfo.deserializeHashJoinFromScan(scan);
         innerScanner =
                 getWrappedScanner(c, innerScanner, arrayKVRefs, arrayFuncRefs, offset, scan,
-                    dataColumns, tupleProjector, dataRegion, indexMaintainer, tx,
+                    dataColumns, tupleProjector, dataRegion, indexMaintainer,
                     viewConstants, kvSchema, kvSchemaBitSet, j == null ? p : null, ptr);
 
         final ImmutableBytesPtr tenantId = ScanUtil.getTenantId(scan);

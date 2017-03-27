@@ -315,7 +315,7 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final byte[][] viewConstants, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {
         return getWrappedScanner(c, s, null, null, offset, scan, dataColumns, tupleProjector,
-                dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr);
+                dataRegion, indexMaintainer, viewConstants, null, null, projector, ptr);
     }
 
     /**
@@ -330,7 +330,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
      * @param tupleProjector
      * @param dataRegion
      * @param indexMaintainer
-     * @param tx current transaction
      * @param viewConstants
      */
     protected RegionScanner getWrappedScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -338,7 +337,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final Expression[] arrayFuncRefs, final int offset, final Scan scan,
             final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
             final Region dataRegion, final IndexMaintainer indexMaintainer,
-            Transaction tx, 
             final byte[][] viewConstants, final KeyValueSchema kvSchema,
             final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
             final ImmutableBytesWritable ptr) {

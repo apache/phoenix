@@ -1,7 +1,6 @@
 package org.apache.phoenix.transaction;
 
 import org.apache.phoenix.schema.PTable;
-import org.apache.tephra.Transaction.VisibilityLevel;
 import org.slf4j.Logger;
 
 import java.sql.SQLException;
@@ -19,6 +18,8 @@ public interface PhoenixTransactionContext {
         SNAPSHOT_EXCLUDE_CURRENT,
         SNAPSHOT_ALL
       }
+
+    public static final String TX_ROLLBACK_ATTRIBUTE_KEY = "phoenix.tx.rollback"; 
 
     /**
      * Starts a transaction
@@ -87,20 +88,36 @@ public interface PhoenixTransactionContext {
     /**
      * Returns transaction unique identifier
      */
-    long getTransactionId();
+    public long getTransactionId();
 
     /**
      * Returns transaction snapshot id
      */
-    long getReadPointer();
+    public long getReadPointer();
 
     /**
      * Returns transaction write pointer. After checkpoint the write pointer is different than the initial one  
      */
-    long getWritePointer();
+    public long getWritePointer();
 
     /**
-     * Returns visibility level 
+     * Set visibility level
      */
-    PhoenixVisibilityLevel getVisibilityLevel();    
+    public void setVisibilityLevel(PhoenixVisibilityLevel visibilityLevel);
+
+    /**
+     * Returns visibility level
+     */
+    public PhoenixVisibilityLevel getVisibilityLevel();
+
+    /**
+     * Encode transaction
+     */
+    public byte[] encodeTransaction() throws SQLException;
+
+    /**
+     * 
+     * @return max transactions per second
+     */
+    public long getMaxTransactionsPerSecond();
 }

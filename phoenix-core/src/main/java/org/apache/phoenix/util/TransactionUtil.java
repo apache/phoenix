@@ -32,10 +32,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionalTable;
 import org.apache.phoenix.transaction.TephraTransactionTable;
-import org.apache.tephra.TransactionConflictException;
-import org.apache.tephra.TransactionFailureException;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.tephra.TxConstants;
-import org.apache.tephra.hbase.TransactionAwareHTable;
 
 public class TransactionUtil {
     private TransactionUtil() {
@@ -46,11 +44,11 @@ public class TransactionUtil {
     }
     
     public static long convertToNanoseconds(long serverTimeStamp) {
-        return serverTimeStamp * TxConstants.MAX_TX_PER_MS;
+        return serverTimeStamp * TransactionFactory.getTransactionFactory().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
     public static long convertToMilliseconds(long serverTimeStamp) {
-        return serverTimeStamp / TxConstants.MAX_TX_PER_MS;
+        return serverTimeStamp / TransactionFactory.getTransactionFactory().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
     public static PhoenixTransactionalTable getPhoenixTransactionTable(PhoenixTransactionContext phoenixTransactionContext, HTableInterface htable, boolean isImmutableRows) {
