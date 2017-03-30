@@ -121,6 +121,7 @@ import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
+import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -253,6 +254,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -1015,7 +1017,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 QueryServicesOptions.DEFAULT_ALLOW_ONLINE_TABLE_SCHEMA_UPDATE);
     }
 
-    private NamespaceDescriptor ensureNamespaceCreated(String schemaName) throws SQLException {
+    void ensureNamespaceCreated(String schemaName) throws SQLException {
         SQLException sqlE = null;
         try (HBaseAdmin admin = getAdmin()) {
             NamespaceDescriptor namespaceDescriptor = null;
@@ -1028,13 +1030,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 namespaceDescriptor = NamespaceDescriptor.create(schemaName).build();
                 admin.createNamespace(namespaceDescriptor);
             }
-            return namespaceDescriptor;
+            return;
         } catch (IOException e) {
             sqlE = ServerUtil.parseServerException(e);
         } finally {
             if (sqlE != null) { throw sqlE; }
         }
-        return null; // will never make it here
     }
 
     /**
@@ -2441,6 +2442,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP) {
                                         ConnectionQueryServicesImpl.this.upgradeRequired.set(true);
                                     }
+                                } catch (PhoenixIOException e) {
+                                    if (!Iterables.isEmpty(Iterables.filter(Throwables.getCausalChain(e), AccessDeniedException.class))) {
+                                        // Pass
+                                        logger.warn("Could not check for Phoenix SYSTEM tables, assuming they exist and are properly configured");
+                                        checkClientServerCompatibility(SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, getProps()).getName());
+                                        success = true;
+                                    } else {
+                                        initializationException = e;
+                                    }
+                                    return null;
                                 }
                                 if (!ConnectionQueryServicesImpl.this.upgradeRequired.get()) {
                                     createOtherSystemTables(metaConnection);
@@ -2493,8 +2504,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     
     private void createSysMutexTable(HBaseAdmin admin) throws IOException, SQLException {
         try {
-            HTableDescriptor tableDesc = new HTableDescriptor(
-                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES));
+            final String mutexTableName = PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
+            List<String> systemTables = getSystemTableNames(admin);
+            if (systemTables.contains(mutexTableName)) {
+                logger.debug("System mutex table already appears to exist, not creating it");
+                return;
+            }
+            HTableDescriptor tableDesc = new HTableDescriptor(mutexTableName);
             HColumnDescriptor columnDesc = new HColumnDescriptor(
                     PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
             columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
@@ -2510,6 +2526,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TableExistsException e) {
             // Ignore
         }
+    }
+
+    List<String> getSystemTableNames(HBaseAdmin admin) throws IOException {
+        return Lists.newArrayList(admin.getTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
     }
 
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException {
@@ -3078,23 +3098,34 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-    
-    private void ensureSystemTablesUpgraded(ReadOnlyProps props)
+
+    void ensureSystemTablesUpgraded(ReadOnlyProps props)
             throws SQLException, IOException, IllegalArgumentException, InterruptedException {
         if (!SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, props)) { return; }
         HTableInterface metatable = null;
         try (HBaseAdmin admin = getAdmin()) {
-            ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
+            // Namespace-mapping is enabled at this point.
+            try {
+                ensureNamespaceCreated(QueryConstants.SYSTEM_SCHEMA_NAME);
+            } catch (PhoenixIOException e) {
+                // We could either:
+                // 1) Not access the NS descriptor. The NS may or may not exist at this point.
+                // 2) We could not create the NS
+                // Regardless of the case 1 or 2, if the NS does not exist, we will error expectedly
+                // below. If the NS does exist and is mapped, the below check will exit gracefully.
+            }
             
-            List<String> tableNames = Lists.newArrayList(admin.getTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
+            List<String> tableNames = getSystemTableNames(admin);
+            // No tables exist matching "SYSTEM\..*", they are all already in "SYSTEM:.*"
             if (tableNames.size() == 0) { return; }
+            // Try to move any remaining tables matching "SYSTEM\..*" into "SYSTEM:"
             if (tableNames.size() > 5) {
                 logger.warn("Expected 5 system tables but found " + tableNames.size() + ":" + tableNames);
             }
             byte[] mappedSystemTable = SchemaUtil
                     .getPhysicalName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, props).getName();
             metatable = getTable(mappedSystemTable);
-            if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)) {
+            if (tableNames.contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME)) {
                 if (!admin.tableExists(mappedSystemTable)) {
                     UpgradeUtil.mapTableToNamespace(admin, metatable,
                             PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME, props, null, PTableType.SYSTEM,
