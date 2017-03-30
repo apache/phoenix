@@ -8,8 +8,9 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 
 fieldnames = ['classname', 'testcase', 'error_message','type','info'];
+singlelinecsvfile = open("single_line_calcite_failed_tests.csv", "w");
 with open('calcite_failed_tests.csv', 'w') as csvfile:
-  writer = csv.DictWriter(csvfile, fieldnames,dialect='excel',delimiter=',');
+  writer = csv.DictWriter(csvfile, fieldnames,dialect='excel',delimiter=',');  
   writer.writeheader();
   target_dir = os.path.join(os.getcwd(),'phoenix-core/target');
   list_of_dirs = os.listdir(target_dir);
@@ -29,5 +30,11 @@ with open('calcite_failed_tests.csv', 'w') as csvfile:
                 error_message = child.get('message');
                 type = child.get('type');
                 info = child.text;
+		singlelinecsvfile.write(classname+',');
+		singlelinecsvfile.write(testcase+',');
+		singlelinecsvfile.write(type.replace('\n',"\r")+',');
+		singlelinecsvfile.write(info.replace('\n',"\r"));
+		singlelinecsvfile.write("\b")
 	        writer.writerow({'classname':classname,'testcase':testcase,'error_message':error_message,'type':type,'info':info});
 csvfile.close();
+singlelinecsvfile.close();
