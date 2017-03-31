@@ -87,6 +87,7 @@ public enum SQLExceptionCode {
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Ambiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "23018", "Constraint violation."),
+    SUBQUERY_SELECT_LIST_COLUMN_MUST_HAS_ALIAS(219,"23019","Every column in subquery select lists must has alias when used for join."),
 
     CONCURRENT_TABLE_MUTATION(301, "23000", "Concurrent modification to table.", new Factory() {
         @Override
