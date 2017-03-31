@@ -259,6 +259,10 @@ public class PTableImpl implements PTable {
         return makePTable(table, timeStamp, indexes, table.getParentSchemaName(), table.getViewStatement());
     }
 
+    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, List<PColumn> columns) throws SQLException {
+        return makePTable(table, timeStamp, indexes, columns);
+    }
+
     public static PTable makePTable(PTable index, PName indexName, String viewStatement, long updateCacheFrequency, PName tenantId) throws SQLException {
         return Objects.equal(viewStatement, index.getViewStatement()) ? index : makePTable(index, indexName, index.getTimeStamp(), Lists.newArrayList(index.getPhysicalName()), index.getIndexes(), viewStatement, updateCacheFrequency, tenantId);
     }
@@ -274,13 +278,18 @@ public class PTableImpl implements PTable {
         }
 
     public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, PName parentSchemaName, String viewStatement) throws SQLException {
+        return makePTable(table, timeStamp, indexes, getColumnsToClone(table), parentSchemaName, viewStatement);
+    }
+
+    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, List<PColumn> columns, PName parentSchemaName, String viewStatement) throws SQLException {
         return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), getColumnsToClone(table), parentSchemaName, table.getParentTableName(),
-                indexes, table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), viewStatement,
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(),
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter());
+            table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timeStamp,
+            table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, parentSchemaName, table.getParentTableName(),
+            indexes, table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), viewStatement,
+            table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
+            table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(),
+            table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter());
+
     }
 
     public static PTableImpl makePTable(PTable table, Collection<PColumn> columns) throws SQLException {
@@ -1335,7 +1344,14 @@ public class PTableImpl implements PTable {
         }
     }
 
+
+
+
     public static PTableProtos.PTable toProto(PTable table) {
+        return toProto(table, true);
+    }
+
+    public static PTableProtos.PTable toProto(PTable table, boolean includeParentCols) {
       PTableProtos.PTable.Builder builder = PTableProtos.PTable.newBuilder();
       if(table.getTenantId() != null){
         builder.setTenantId(ByteStringer.wrap(table.getTenantId().getBytes()));
@@ -1368,13 +1384,14 @@ public class PTableImpl implements PTable {
         offset = 1;
         builder.setBucketNum(bucketNum);
       }
-      List<PColumn> columns = table.getColumns();
-      int columnSize = columns.size();
-      for (int i = offset; i < columnSize; i++) {
-        PColumn column = columns.get(i);
-        builder.addColumns(PColumnImpl.toProto(column));
+      if (includeParentCols) {
+          List<PColumn> columns = table.getColumns();
+          int columnSize = columns.size();
+          for (int i = offset; i < columnSize; i++) {
+              PColumn column = columns.get(i);
+              builder.addColumns(PColumnImpl.toProto(column));
+          }
       }
-
       List<PTable> indexes = table.getIndexes();
       for (PTable curIndex : indexes) {
         builder.addIndexes(toProto(curIndex));

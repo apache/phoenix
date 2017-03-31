@@ -39,50 +39,30 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 class ViewFinder {
 
-    static void findParentViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
-        TableViewFinderResult result) throws IOException {
-        TableViewFinderResult currentResult =
-            findRelatedViews(systemCatalog, tenantId, schema, table, PTable.LinkType.PARENT_TABLE);
-        result.addResult(currentResult);
-        for (Result viewResult : currentResult.getResults()) {
-            byte[][] rowViewKeyMetaData = new byte[5][];
-            getVarChars(viewResult.getRow(), 5, rowViewKeyMetaData);
-            byte[] viewtenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-            byte[] viewSchema =
-                SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                    .getBytes();
-            byte[] viewTable =
-                SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                    .getBytes();
-            findParentViews(systemCatalog, viewtenantId, viewSchema, viewTable, result);
-        }
-    }
+   static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, TableViewFinderResult result) throws IOException {
+       findAllRelatives(systemCatalog, tenantId, schema, table, linkType, Long.MAX_VALUE, result);
+   }
 
-    static void findChildViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table,
-        TableViewFinderResult result) throws IOException {
-        TableViewFinderResult currentResult =
-            findRelatedViews(systemCatalog, tenantId, schema, table, PTable.LinkType.CHILD_TABLE);
-        result.addResult(currentResult);
-        for (Result viewResult : currentResult.getResults()) {
-            byte[][] rowViewKeyMetaData = new byte[5][];
-            getVarChars(viewResult.getRow(), 5, rowViewKeyMetaData);
-            byte[] viewtenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-            byte[] viewSchema =
-                SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                    .getBytes();
-            byte[] viewTable =
-                SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                    .getBytes();
-            findChildViews(systemCatalog, viewtenantId, viewSchema, viewTable, result);
-        }
-    }
+   static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp, TableViewFinderResult result) throws IOException {
+       TableViewFinderResult currentResult = findRelatedViews(systemCatalog, tenantId, schema, table, linkType, timestamp);
+       result.addResult(currentResult);
+       for (Result viewResult : currentResult.getResults()) {
+           byte[][] rowViewKeyMetaData = new byte[5][];
+           getVarChars(viewResult.getRow(), 5, rowViewKeyMetaData);
+           byte[] viewtenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+           byte[] viewSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+           byte[] viewTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+           findAllRelatives(systemCatalog, viewtenantId, viewSchema, viewTable, linkType, timestamp, result);
+       }
+   }
 
-    static TableViewFinderResult findRelatedViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType) throws IOException {
+    static TableViewFinderResult findRelatedViews(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp) throws IOException {
         Scan scan = new Scan();
         byte[] startRow = SchemaUtil.getTableKey(tenantId, schema, table);
         byte[] stopRow = ByteUtil.nextKey(startRow);
         scan.setStartRow(startRow);
         scan.setStopRow(stopRow);
+        scan.setTimeRange(0, timestamp);
         SingleColumnValueFilter linkFilter =
             new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES, CompareFilter.CompareOp.EQUAL,
                 linkType.getSerializedValueAsByteArray());
@@ -99,8 +79,7 @@ class ViewFinder {
                 resultTuple.getKey(ptr);
                 results.add(result);
             }
-            TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
-            return tableViewFinderResult;
+            return new TableViewFinderResult(results);
         } finally {
             scanner.close();
         }
