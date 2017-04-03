@@ -23,6 +23,7 @@ import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.TranslatableTable;
 import org.apache.calcite.schema.Wrapper;
 import org.apache.calcite.schema.impl.AbstractTable;
+import org.apache.calcite.sql2rel.InitializerContext;
 import org.apache.calcite.sql2rel.InitializerExpressionFactory;
 import org.apache.calcite.sql2rel.NullInitializerExpressionFactory;
 import org.apache.calcite.util.ImmutableBitSet;
@@ -204,31 +205,30 @@ public class PhoenixTable extends AbstractTable
         return null;
     }
     
-    public static class PhoenixTableInitializerExpressionFactory extends
+    static class PhoenixTableInitializerExpressionFactory extends
             NullInitializerExpressionFactory {
-        private final RelDataTypeFactory typeFactory;
         private final RexBuilder rexBuilder;
         private final PhoenixConnection pc;
         private final TableMapping tableMapping;
 
-        public PhoenixTableInitializerExpressionFactory(RelDataTypeFactory typeFactory,
+        PhoenixTableInitializerExpressionFactory(RelDataTypeFactory typeFactory,
                 PhoenixConnection pc, TableMapping tableMapping) {
-            super(typeFactory);
-            this.typeFactory = typeFactory;
+            super();
             this.rexBuilder = new RexBuilder(typeFactory);
             this.pc = pc;
             this.tableMapping = tableMapping;
         }
         
-        public RexNode newColumnDefaultValue(RelOptTable table, int iColumn) {
+        public RexNode newColumnDefaultValue(RelOptTable table, int iColumn,
+                InitializerContext context) {
             PColumn column = tableMapping.getMappedColumns().get(iColumn);
             String expressionStr = column.getExpressionStr();
             if(expressionStr == null) {
-                return super.newColumnDefaultValue(table, iColumn);
+                return super.newColumnDefaultValue(table, iColumn, context);
             }
             Expression defaultExpression = CalciteUtils.parseExpressionFromStr(expressionStr, pc);
             return CalciteUtils.convertColumnExpressionToLiteral(column, defaultExpression,
-                typeFactory, rexBuilder);
+                rexBuilder);
         }
     }
 }

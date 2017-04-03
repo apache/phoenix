@@ -1398,7 +1398,7 @@ public class CalciteUtils {
 
     @SuppressWarnings("rawtypes")
     public static RexNode convertColumnExpressionToLiteral(PColumn column,
-            Expression defaultExpression, RelDataTypeFactory typeFactory, RexBuilder rexBuilder) {
+            Expression defaultExpression, RexBuilder rexBuilder) {
         ImmutableBytesWritable key = new ImmutableBytesWritable();
         defaultExpression.evaluate(null, key);
         column.getDataType().coerceBytes(key, null,
@@ -1412,7 +1412,7 @@ public class CalciteUtils {
                       defaultExpression.getSortOrder(), defaultExpression.getMaxLength(),
                       defaultExpression.getScale());
           RelDataType pDataTypeToRelDataType =
-                  CalciteUtils.pDataTypeToRelDataType(typeFactory,
+                  CalciteUtils.pDataTypeToRelDataType(rexBuilder.getTypeFactory(),
                       defaultExpression.getDataType(), defaultExpression.getMaxLength(),
                       defaultExpression.getScale(), column.getArraySize());
         return rexBuilder.makeLiteral((Comparable)object, pDataTypeToRelDataType,true);
