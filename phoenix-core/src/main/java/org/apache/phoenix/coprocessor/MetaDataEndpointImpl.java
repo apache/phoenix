@@ -495,6 +495,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return this;
     }
 
+    // TODO: rg combine columns here.
     @Override
     public void getTable(RpcController controller, GetTableRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -539,6 +540,46 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             } else {
                 // Subtract one because we add one due to timestamp granularity in Windows
                 builder.setMutationTime(minNonZerodisableIndexTimestamp - 1);
+            }
+
+            // here you combine columns from the parent tables
+            if (PTableType.VIEW.equals(table.getType())) {
+                List<byte[]> listOBytes = Lists.newArrayList();
+                TableViewFinderResult viewFinderResult = new TableViewFinderResult();
+                findAllParentViews(tenantId, schemaName, tableName, viewFinderResult);
+                for (Result aResult : viewFinderResult.getResults()) {
+                    byte[][] rowViewKeyMetaData = new byte[5][];
+                    getVarChars(aResult.getRow(), 5, rowViewKeyMetaData);
+                    byte[] resultTenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+                    byte[] resultSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+                    byte[] resultTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+                    byte[] rowKeyInQuestion = SchemaUtil.getTableKey(resultTenantId, resultSchema, resultTable);
+                    listOBytes.add(rowKeyInQuestion);
+                }
+                List<PColumn> allColumns = Lists.newArrayList();
+                int position = 0;
+                for (int i = listOBytes.size() - 1; i >= 0; i--) {
+                    byte[] tableInQuestion = listOBytes.get(i);
+                    PTable pTable = this.doGetTable(tableInQuestion, request.getClientTimestamp());
+                    if (pTable != null) {
+                        List<PColumn> columns = PTableImpl.getColumnsToClone(pTable);
+                        if (columns != null) {
+                            for (PColumn pColumn : columns) {
+                                PColumn column = new PColumnImpl(pColumn, position);
+                                allColumns.add(column);
+                                position++;
+                            }
+                        }
+                    }
+                }
+                for (PColumn originalColumn : table.getColumns()) {
+                    allColumns.add(new PColumnImpl(originalColumn, position));
+                    position++;
+                }
+                for (PColumn allColumn : allColumns) {
+                    System.out.println("column:  = " + allColumn);
+                }
+                table = PTableImpl.makePTable(table, allColumns);
             }
 
             if (table.getTimeStamp() != tableTimeStamp) {
@@ -1376,7 +1417,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] tenantIdBytes = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
             schemaName = rowKeyMetaData[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
             tableName = rowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-            boolean includeParentCols = false;
             byte[] parentSchemaName = null;
             byte[] parentTableName = null;
             PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
@@ -1489,7 +1529,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         if (parentTable.getSequenceNumber() != parentTableSeqNumber) {
                             builder.setReturnCode(MetaDataProtos.MutationCode.CONCURRENT_TABLE_MUTATION);
                             builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            builder.setTable(PTableImpl.toProto(parentTable, includeParentCols));
+                            builder.setTable(PTableImpl.toProto(parentTable));
                             done.run(builder.build());
                             return;
                         }
@@ -1508,14 +1548,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         if (!isTableDeleted(table)) {
                             builder.setReturnCode(MetaDataProtos.MutationCode.TABLE_ALREADY_EXISTS);
                             builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                            builder.setTable(PTableImpl.toProto(table, includeParentCols));
+                            builder.setTable(PTableImpl.toProto(table));
                             done.run(builder.build());
                             return;
                         }
                     } else {
                         builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_TABLE_FOUND);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
-                        builder.setTable(PTableImpl.toProto(table, includeParentCols));
+                        builder.setTable(PTableImpl.toProto(table));
                         done.run(builder.build());
                         return;
                     }
@@ -1730,6 +1770,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         HTableInterface hTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
         try {
             ViewFinder.findAllRelatives(hTable, tenantId, schemaName, tableName, LinkType.PARENT_TABLE, result);
+            result.addResult(ViewFinder.findBaseTable(hTable, tenantId, schemaName, tableName));
         } finally {
             hTable.close();
         }

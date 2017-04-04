@@ -7,6 +7,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -15,10 +16,12 @@ import org.junit.Test;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.util.List;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -90,6 +93,41 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         List<PColumn> columns = grandChildPTable.getColumns();
         List<String> columnNames = Lists.newArrayList();
         List<String> expectedColumnNames = Lists.newArrayList("DROPPED_CALLS");
+        for (PColumn column : columns) {
+            System.out.println("column = " + column);
+            columnNames.add(column.getName().getString().trim());
+        }
+        assertEquals(Joiner.on(", ").join(expectedColumnNames), Joiner.on(", ").join(columnNames));
+
+    }
+
+    @Test
+    public void testGettingOneChild() throws Exception {
+        TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
+        String baseTable = "PARENT_TABLE";
+        String leftChild = "LEFT_CHILD";
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddlFormat =
+            "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
+                + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
+        conn.createStatement().execute(ddlFormat);
+        conn.createStatement().execute("CREATE VIEW " + leftChild + " (carrier VARCHAR) AS SELECT * FROM " + baseTable);
+
+        ResultSet resultset = conn.getMetaData().getColumns("", "", leftChild.toUpperCase(), null);
+        int i = 1;
+        while (resultset.next()) {
+            String column_name = resultset.getString("COLUMN_NAME");
+            System.out.println("column_name = " + column_name);
+        }
+
+        conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
+
+        PTable childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
+        // now lets check and make sure the columns are correct
+        PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
+        List<PColumn> columns = grandChildPTable.getColumns();
+        List<String> columnNames = Lists.newArrayList();
+        List<String> expectedColumnNames = Lists.newArrayList("PK2", "V1", "V2", "CARRIER");
         for (PColumn column : columns) {
             System.out.println("column = " + column);
             columnNames.add(column.getName().getString().trim());

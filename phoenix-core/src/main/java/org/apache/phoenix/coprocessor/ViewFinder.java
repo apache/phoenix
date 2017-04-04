@@ -16,6 +16,7 @@
 package org.apache.phoenix.coprocessor;
 
 import com.google.common.collect.Lists;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -39,8 +40,18 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 class ViewFinder {
 
+    // get the table names from the results
+    // byte[] viewtenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+    // byte[] viewSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+    // byte[] viewTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+    // combine this MetaDataEndpointImpl.doGetTable(SchemaUtil.getTableKey().....)
+
+   static TableViewFinderResult findBaseTable(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table) throws IOException {
+        return findRelatedViews(systemCatalog, tenantId, schema, table, PTable.LinkType.PHYSICAL_TABLE, HConstants.LATEST_TIMESTAMP);
+    }
+
    static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, TableViewFinderResult result) throws IOException {
-       findAllRelatives(systemCatalog, tenantId, schema, table, linkType, Long.MAX_VALUE, result);
+       findAllRelatives(systemCatalog, tenantId, schema, table, linkType, HConstants.LATEST_TIMESTAMP, result);
    }
 
    static void findAllRelatives(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp, TableViewFinderResult result) throws IOException {

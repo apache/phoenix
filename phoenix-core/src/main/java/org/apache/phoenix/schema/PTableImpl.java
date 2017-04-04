@@ -1344,14 +1344,7 @@ public class PTableImpl implements PTable {
         }
     }
 
-
-
-
     public static PTableProtos.PTable toProto(PTable table) {
-        return toProto(table, true);
-    }
-
-    public static PTableProtos.PTable toProto(PTable table, boolean includeParentCols) {
       PTableProtos.PTable.Builder builder = PTableProtos.PTable.newBuilder();
       if(table.getTenantId() != null){
         builder.setTenantId(ByteStringer.wrap(table.getTenantId().getBytes()));
@@ -1384,13 +1377,11 @@ public class PTableImpl implements PTable {
         offset = 1;
         builder.setBucketNum(bucketNum);
       }
-      if (includeParentCols) {
-          List<PColumn> columns = table.getColumns();
-          int columnSize = columns.size();
-          for (int i = offset; i < columnSize; i++) {
-              PColumn column = columns.get(i);
-              builder.addColumns(PColumnImpl.toProto(column));
-          }
+      List<PColumn> columns = table.getColumns();
+      int columnSize = columns.size();
+      for (int i = offset; i < columnSize; i++) {
+          PColumn column = columns.get(i);
+          builder.addColumns(PColumnImpl.toProto(column));
       }
       List<PTable> indexes = table.getIndexes();
       for (PTable curIndex : indexes) {
