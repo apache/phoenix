@@ -92,7 +92,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
         List<PColumn> columns = grandChildPTable.getColumns();
         List<String> columnNames = Lists.newArrayList();
-        List<String> expectedColumnNames = Lists.newArrayList("DROPPED_CALLS");
+        List<String> expectedColumnNames = Lists.newArrayList("PK2", "V1", "V2", "CARRIER", "DROPPED_CALLS");
         for (PColumn column : columns) {
             System.out.println("column = " + column);
             columnNames.add(column.getName().getString().trim());
