@@ -1,6 +1,7 @@
 package org.apache.phoenix.coprocessor;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -17,6 +18,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -120,8 +122,6 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
             System.out.println("column_name = " + column_name);
         }
 
-        conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
-
         PTable childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
         // now lets check and make sure the columns are correct
         PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
@@ -133,7 +133,60 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
             columnNames.add(column.getName().getString().trim());
         }
         assertEquals(Joiner.on(", ").join(expectedColumnNames), Joiner.on(", ").join(columnNames));
+    }
 
+    @Test
+    public void testAlteringBaseColumns() throws Exception {
+        String baseTable = "PARENT_TABLE";
+        String leftChild = "CHILD_TABLE";
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddlFormat =
+            "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
+                + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
+        conn.createStatement().execute(ddlFormat);
+        conn.createStatement().execute("CREATE VIEW " + leftChild + " (carrier VARCHAR) AS SELECT * FROM " + baseTable);
+
+        ResultSet resultset = conn.getMetaData().getColumns("", "", leftChild.toUpperCase(), null);
+        int i = 1;
+        while (resultset.next()) {
+            String column_name = resultset.getString("COLUMN_NAME");
+            System.out.println("column_name = " + column_name);
+        }
+
+        conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
+
+        PTable childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
+        // now lets check and make sure the columns are correct
+        PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
+        List<PColumn> columns = grandChildPTable.getColumns();
+        List<String> columnNames = Lists.newArrayList();
+        List<String> expectedColumnNames = Lists.newArrayList("PK2", "V1", "V2", "CARRIER");
+        for (PColumn column : columns) {
+            columnNames.add(column.getName().getString().trim());
+        }
+        assertEquals(Joiner.on(", ").join(expectedColumnNames), Joiner.on(", ").join(columnNames));
+
+        // now lets alter the base table by adding a column
+        // conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
+        conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD V3 integer");
+
+        // make sure that column was added to the base table
+        PTable table = PhoenixRuntime.getTable(conn, baseTable.toUpperCase());
+        assertColumnsEqual(table, "PK2", "V1", "V2", "V3");
+
+        // now lets check and make sure the columns are correct
+        conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
+        grandChildPTable = PhoenixRuntime.getTable(conn, leftChild.toUpperCase());
+        assertColumnsEqual(grandChildPTable, "PK2", "V1", "V2", "V3", "CARRIER");
+    }
+
+    private void assertColumnsEqual(PTable table, String... cols) {
+        List<String> actual = Lists.newArrayList();
+        for (PColumn column : table.getColumns()) {
+            actual.add(column.getName().getString().trim());
+        }
+        List<String> expected = Arrays.asList(cols);
+        assertEquals(Joiner.on(", ").join(expected), Joiner.on(", ").join(actual));
     }
 
     private HTable getTable(TableName catalogTable) throws IOException {

@@ -1420,10 +1420,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] parentSchemaName = null;
             byte[] parentTableName = null;
             PTableType tableType = MetaDataUtil.getTableType(tableMetadata, GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
-            System.out.println("BEFORE_METADATA_SIZE " + tableMetadata.size());
+
+            // Here we are passed the parent's columns to add to a view, PHOENIX-3534 allows for a splittable
+            // System.Catalog thus we only store the columns that are new to the view, not the parents columns,
+            // thus here we remove everything that is ORDINAL.POSITION <= baseColumnCount and update the
+            // ORDINAL.POSITIONS to be shifted accordingly.
             if (PTableType.VIEW.equals(tableType)) {
                 int baseColumnCount = MetaDataUtil.getBaseColumnCount(tableMetadata);
-                System.out.println("baseColumnCount = " + baseColumnCount + " for table: " + Bytes.toString(tableName));
                 if (baseColumnCount > 0) {
                     Iterator<Mutation> mutationIterator = tableMetadata.iterator();
                     while (mutationIterator.hasNext()) {
@@ -1441,7 +1444,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                 if (mutation instanceof Put) {
                                     byte[] ordinalPositionBytes = new byte[PInteger.INSTANCE.getByteSize()];
                                     int newOrdinalValue = ordinalValue - baseColumnCount;
-                                    System.out.println("OLD_ORDINAL: " + ordinalValue + " NEW_ORDINAL: " + newOrdinalValue);
                                     PInteger.INSTANCE.getCodec()
                                         .encodeInt(newOrdinalValue, ordinalPositionBytes, 0);
                                     // this might be a hack
@@ -1453,7 +1455,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                 }
             }
-            System.out.println("AFTER_METADATA_SIZE " + tableMetadata.size());
 
             byte[] parentTableKey = null;
             Mutation viewPhysicalTableRow = null;
@@ -2374,9 +2375,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     /*
                      * For views that are not diverged, we need to make sure that the existing columns
                      * have the same ordinal position as in the base table. This is important because
-                     * we rely on the ordinal position of the column to figure out whether dropping a 
+                     * we rely on the ordinal position of the column to figure out whether dropping a
                      * column from the view will end up diverging the view from the base table.
-                     * 
+                     *
                      * For already diverged views, we don't care about the ordinal position of the existing column.
                      */
                     if (!isDivergedView(view)) {
@@ -2400,7 +2401,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                                     if (ordinalPos >= newOrdinalPosition) {
                                         if (ordinalPos == existingOrdinalPos) {
                                             /*
-                                             * No need to update ordinal positions of columns beyond the existing column's 
+                                             * No need to update ordinal positions of columns beyond the existing column's
                                              * old ordinal position.
                                              */
                                             break;
@@ -2418,67 +2419,68 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         }
                         columnsAddedToBaseTable++;
                     }
-                } else {
-                    // The column doesn't exist in the view.
-                    Put viewColumnPut = new Put(columnKey, clientTimeStamp);
-                    for (Cell cell : baseTableColumnPut.getFamilyCellMap().values().iterator().next()) {
-                        viewColumnPut.add(CellUtil.createCell(columnKey, CellUtil.cloneFamily(cell),
-                                CellUtil.cloneQualifier(cell), cell.getTimestamp(), cell.getTypeByte(),
-                                CellUtil.cloneValue(cell)));
-                    }
-                    if (isDivergedView(view)) {
-                        if (isPkCol) {
-                            /* 
-                             * Only pk cols of the base table are added to the diverged views. These pk 
-                             * cols are added at the end.
-                             */
-                            int lastOrdinalPos = getOrdinalPosition(view, view.getColumns().get(numCols - 1));
-                            int newPosition = ++lastOrdinalPos;
-                            byte[] ptr = new byte[PInteger.INSTANCE.getByteSize()];
-                            PInteger.INSTANCE.getCodec().encodeInt(newPosition, ptr, 0);
-                            viewColumnPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                                    PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, clientTimeStamp, ptr);
-                            mutationsForAddingColumnsToViews.add(viewColumnPut);
-                        } else {
-                            continue; // move on to the next column
-                        }
-                    } else {
-                        int newOrdinalPosition = p.ordinalPosition;
-                        /*
-                         * For a non-diverged view, we need to make sure that the base table column
-                         * is added at the right position.
-                         */
-                        if (ordinalPositionList.size() == 0) {
-                            ordinalPositionList.setOffset(newOrdinalPosition);
-                            ordinalPositionList.addColumn(columnKey, newOrdinalPosition);
-                            for (PColumn col : view.getColumns()) {
-                                int ordinalPos = getOrdinalPosition(view, col);
-                                if (ordinalPos >= newOrdinalPosition) {
-                                    // increment ordinal position of columns by 1
-                                    int updatedPos = ordinalPos + 1;
-                                    ordinalPositionList.addColumn(getColumnKey(viewKey, col), updatedPos);
-                                }
-                            }
-                        } else {
-                            ordinalPositionList.addColumn(columnKey, newOrdinalPosition);
-                        }
-                        mutationsForAddingColumnsToViews.add(viewColumnPut);
-                    }
-                    if (isPkCol) {
-                        deltaNumPkColsSoFar++;
-                        // Set the key sequence for the pk column to be added
-                        short currentKeySeq = SchemaUtil.getMaxKeySeq(view);
-                        short newKeySeq = (short)(currentKeySeq + deltaNumPkColsSoFar);
-                        byte[] keySeqBytes = new byte[PSmallint.INSTANCE.getByteSize()];
-                        PSmallint.INSTANCE.getCodec().encodeShort(newKeySeq, keySeqBytes, 0);
-                        viewColumnPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                                PhoenixDatabaseMetaData.KEY_SEQ_BYTES, keySeqBytes);
-                        addMutationsForAddingPkColsToViewIndexes(mutationsForAddingColumnsToViews, clientTimeStamp, view,
-                                deltaNumPkColsSoFar, columnName, viewColumnPut);
-                    }
-                    columnsAddedToView++;
-                    columnsAddedToBaseTable++;
                 }
+//                else {
+//                    // The column doesn't exist in the view.
+//                    Put viewColumnPut = new Put(columnKey, clientTimeStamp);
+//                    for (Cell cell : baseTableColumnPut.getFamilyCellMap().values().iterator().next()) {
+//                        viewColumnPut.add(CellUtil.createCell(columnKey, CellUtil.cloneFamily(cell),
+//                                CellUtil.cloneQualifier(cell), cell.getTimestamp(), cell.getTypeByte(),
+//                                CellUtil.cloneValue(cell)));
+//                    }
+//                    if (isDivergedView(view)) {
+//                        if (isPkCol) {
+//                            /*
+//                             * Only pk cols of the base table are added to the diverged views. These pk
+//                             * cols are added at the end.
+//                             */
+//                            int lastOrdinalPos = getOrdinalPosition(view, view.getColumns().get(numCols - 1));
+//                            int newPosition = ++lastOrdinalPos;
+//                            byte[] ptr = new byte[PInteger.INSTANCE.getByteSize()];
+//                            PInteger.INSTANCE.getCodec().encodeInt(newPosition, ptr, 0);
+//                            viewColumnPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+//                                    PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES, clientTimeStamp, ptr);
+//                            mutationsForAddingColumnsToViews.add(viewColumnPut);
+//                        } else {
+//                            continue; // move on to the next column
+//                        }
+//                    } else {
+//                        int newOrdinalPosition = p.ordinalPosition;
+//                        /*
+//                         * For a non-diverged view, we need to make sure that the base table column
+//                         * is added at the right position.
+//                         */
+//                        if (ordinalPositionList.size() == 0) {
+//                            ordinalPositionList.setOffset(newOrdinalPosition);
+//                            ordinalPositionList.addColumn(columnKey, newOrdinalPosition);
+//                            for (PColumn col : view.getColumns()) {
+//                                int ordinalPos = getOrdinalPosition(view, col);
+//                                if (ordinalPos >= newOrdinalPosition) {
+//                                    // increment ordinal position of columns by 1
+//                                    int updatedPos = ordinalPos + 1;
+//                                    ordinalPositionList.addColumn(getColumnKey(viewKey, col), updatedPos);
+//                                }
+//                            }
+//                        } else {
+//                            ordinalPositionList.addColumn(columnKey, newOrdinalPosition);
+//                        }
+//                        mutationsForAddingColumnsToViews.add(viewColumnPut);
+//                    }
+//                    if (isPkCol) {
+//                        deltaNumPkColsSoFar++;
+//                        // Set the key sequence for the pk column to be added
+//                        short currentKeySeq = SchemaUtil.getMaxKeySeq(view);
+//                        short newKeySeq = (short)(currentKeySeq + deltaNumPkColsSoFar);
+//                        byte[] keySeqBytes = new byte[PSmallint.INSTANCE.getByteSize()];
+//                        PSmallint.INSTANCE.getCodec().encodeShort(newKeySeq, keySeqBytes, 0);
+//                        viewColumnPut.add(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+//                                PhoenixDatabaseMetaData.KEY_SEQ_BYTES, keySeqBytes);
+//                        addMutationsForAddingPkColsToViewIndexes(mutationsForAddingColumnsToViews, clientTimeStamp, view,
+//                                deltaNumPkColsSoFar, columnName, viewColumnPut);
+//                    }
+//                    columnsAddedToView++;
+//                    columnsAddedToBaseTable++;
+//                }
             }
             /*
              * Allow adding a pk columns to base table : 1. if all the view pk columns are exactly the same as the base
@@ -2514,7 +2516,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
                 mutationsForAddingColumnsToViews.add(viewHeaderRowPut);
             }
-            
+
             /*
              * Increment the sequence number by 1 if:
              * 1) For a diverged view, there were columns (pk columns) added to the view.
@@ -2955,36 +2957,38 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             schemaName, tableName);
                     // Size for worst case - all new columns are PK column
                     List<Mutation> mutationsForAddingColumnsToViews = Lists.newArrayListWithExpectedSize(tableMetaData.size() * ( 1 + table.getIndexes().size()));
-                    // TODO propagate to grandchild views as well
-                    if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
-                        TableViewFinderResult childViewsResult = new TableViewFinderResult();
-                        findAllChildViews(tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
-                        if (childViewsResult.hasViews()) {
-                            /* 
-                             * Dis-allow if:
-                             * 1) The base column count is 0 which means that the metadata hasn't been upgraded yet or
-                             * the upgrade is currently in progress.
-                             * 
-                             * 2) If the request is from a client that is older than 4.5 version of phoenix.
-                             * Starting from 4.5, metadata requests have the client version included in them. 
-                             * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
-                             * 
-                             * 4) Trying to swtich tenancy of a table that has views
-                             */
-                            if (table.getBaseColumnCount() == 0 || !request.hasClientVersion()
-                                    || switchAttribute(table, table.isMultiTenant(), tableMetaData, MULTI_TENANT_BYTES)) {
-                                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                        EnvironmentEdgeManager.currentTimeMillis(), null);
-                            } else {
-                                mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getResults().size() * tableMetaData.size());
-                                MetaDataMutationResult mutationResult = addColumnsAndTablePropertiesToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
-                                        childViewsResult, region, locks);
-                                // return if we were not able to add the column successfully
-                                if (mutationResult!=null)
-                                    return mutationResult;
-                            }
-                        }
-                    } else if (type == PTableType.VIEW
+
+                    // TODO: rg: remove me
+//                    if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
+//                        TableViewFinderResult childViewsResult = new TableViewFinderResult();
+//                        findAllChildViews(tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
+//                        if (childViewsResult.hasViews()) {
+//                            /*
+//                             * Dis-allow if:
+//                             * 1) The base column count is 0 which means that the metadata hasn't been upgraded yet or
+//                             * the upgrade is currently in progress.
+//                             *
+//                             * 2) If the request is from a client that is older than 4.5 version of phoenix.
+//                             * Starting from 4.5, metadata requests have the client version included in them.
+//                             * We don't want to allow clients before 4.5 to add a column to the base table if it has views.
+//                             *
+//                             * 4) Trying to swtich tenancy of a table that has views
+//                             */
+//                            if (table.getBaseColumnCount() == 0 || !request.hasClientVersion()
+//                                    || switchAttribute(table, table.isMultiTenant(), tableMetaData, MULTI_TENANT_BYTES)) {
+//                                return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+//                                        EnvironmentEdgeManager.currentTimeMillis(), null);
+//                            } else {
+//                                mutationsForAddingColumnsToViews = new ArrayList<>(childViewsResult.getResults().size() * tableMetaData.size());
+//                                MetaDataMutationResult mutationResult = addColumnsAndTablePropertiesToChildViews(table, tableMetaData, mutationsForAddingColumnsToViews, schemaName, tableName, invalidateList, clientTimeStamp,
+//                                        childViewsResult, region, locks);
+//                                // return if we were not able to add the column successfully
+//                                if (mutationResult!=null)
+//                                    return mutationResult;
+//                            }
+//                        }
+//                    }
+                    if (type == PTableType.VIEW
                             && EncodedColumnsUtil.usesEncodedColumnNames(table)) {
                         /*
                          * When adding a column to a view that uses encoded column name scheme, we
@@ -3231,6 +3235,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     boolean deletePKColumn = false;
                     List<Mutation> additionalTableMetaData = Lists.newArrayList();
 
+                    /*
                     PTableType type = table.getType();
                     // TODO propagate to grandchild views as well
                     if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
@@ -3246,6 +3251,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             if (mutationResult != null) return mutationResult;
                         }
                     }
+                    */
 
                     for (Mutation m : tableMetaData) {
                         if (m instanceof Delete) {
