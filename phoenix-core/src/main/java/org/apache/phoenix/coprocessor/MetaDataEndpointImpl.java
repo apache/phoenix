@@ -543,6 +543,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
 
             // here you combine columns from the parent tables
+            // the logic is as follows, if the PColumn is in the EXLUDED_COLUMS remove it,
+            // otherwise priority of keeping duplicate columns is child -> parent
             if (PTableType.VIEW.equals(table.getType())) {
                 List<byte[]> listOBytes = Lists.newArrayList();
                 TableViewFinderResult viewFinderResult = new TableViewFinderResult();
@@ -557,29 +559,40 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     listOBytes.add(rowKeyInQuestion);
                 }
                 List<PColumn> allColumns = Lists.newArrayList();
-                int position = 0;
-                for (int i = listOBytes.size() - 1; i >= 0; i--) {
+                // add my own columns first in reverse order
+                List<PColumn> myColumns = table.getColumns();
+                for (int i = myColumns.size() - 1; i >= 0; i--) {
+                    allColumns.add(myColumns.get(i));
+                }
+                // now go up from child to parent all the way to the base table:
+                for (int i = 0; i < listOBytes.size(); i++) {
                     byte[] tableInQuestion = listOBytes.get(i);
                     PTable pTable = this.doGetTable(tableInQuestion, request.getClientTimestamp());
                     if (pTable != null) {
-                        List<PColumn> columns = PTableImpl.getColumnsToClone(pTable);
-                        if (columns != null) {
-                            for (PColumn pColumn : columns) {
-                                PColumn column = new PColumnImpl(pColumn, position);
-                                allColumns.add(column);
-                                position++;
+                        List<PColumn> someTablesColumns = PTableImpl.getColumnsToClone(pTable);
+                        if (someTablesColumns != null) {
+                            for (int j = someTablesColumns.size() - 1; j >= 0; j--) {
+                                PColumn column = someTablesColumns.get(j);
+                                // also check here to see if it is in the excluded column list if it is,
+                                // skip it.
+                                if (!allColumns.contains(column) && !isPColumnExcluded(column)) {
+                                    allColumns.add(column);
+                                }
                             }
                         }
                     }
                 }
-                for (PColumn originalColumn : table.getColumns()) {
-                    allColumns.add(new PColumnImpl(originalColumn, position));
+                List<PColumn> allTheColumns = Lists.newArrayList();
+                int position = 0;
+                for (int i = allTheColumns.size() - 1; i >= 0; i--) {
+                    allTheColumns.add(new PColumnImpl(allTheColumns.get(i), position));
                     position++;
                 }
-                for (PColumn allColumn : allColumns) {
+
+                for (PColumn allColumn : allTheColumns) {
                     System.out.println("column:  = " + allColumn);
                 }
-                table = PTableImpl.makePTable(table, allColumns);
+                table = PTableImpl.makePTable(table, allTheColumns);
             }
 
             if (table.getTimeStamp() != tableTimeStamp) {
@@ -592,6 +605,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
+    }
+
+    private boolean isPColumnExcluded(PColumn pColumn) {
+        return false;
     }
 
     private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, Region region,
@@ -2944,6 +2961,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             RpcCallback<MetaDataResponse> done) {
         try {
             List<Mutation> tableMetaData = ProtobufUtil.getMutations(request);
+
             MetaDataMutationResult result = mutateColumn(tableMetaData, new ColumnMutator() {
                 @Override
                 public MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
@@ -2998,6 +3016,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                          */
                         invalidateList.add(new ImmutableBytesPtr(MetaDataUtil
                                 .getPhysicalTableRowForView(table)));
+
+
+
                     }
                     for (Mutation m : tableMetaData) {
                         byte[] key = m.getRow();
