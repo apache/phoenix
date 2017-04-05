@@ -155,6 +155,7 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.schema.types.PVarchar;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -704,6 +705,9 @@ public class CalciteUtils {
 			public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
 				RexLiteral lit = (RexLiteral) node;
                 PDataType targetType = relDataTypeToPDataType(node.getType());
+                if (targetType == PChar.INSTANCE) {
+                    targetType = PVarchar.INSTANCE;
+                }
 				Object o = lit.getValue();
 				if (o instanceof NlsString) {
 				    o = ((NlsString) o).getValue();
@@ -784,7 +788,10 @@ public class CalciteUtils {
             public Expression newExpression(RexNode node,
                     PhoenixRelImplementor implementor) {                
                 List<Expression> children = convertChildren((RexCall) node, implementor);
-                PDataType targetType = relDataTypeToPDataType(node.getType());
+                RelDataType type = node.getType();
+                if (type.getSqlTypeName() == SqlTypeName.ROW)
+                    return children.get(0);
+                PDataType targetType = relDataTypeToPDataType(type);
                 Integer maxLength =
                         (targetType == PChar.INSTANCE
                             || targetType == PCharArray.INSTANCE
