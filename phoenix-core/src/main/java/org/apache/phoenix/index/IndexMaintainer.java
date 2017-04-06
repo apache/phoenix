@@ -1308,6 +1308,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int encodedEstimatedIndexRowKeyBytesAndImmutableRows = WritableUtils.readVInt(input);
         this.immutableRows = encodedEstimatedIndexRowKeyBytesAndImmutableRows < 0;
         this.estimatedIndexRowKeyBytes = Math.abs(encodedEstimatedIndexRowKeyBytesAndImmutableRows);
+        // Needed for backward compatibility. Clients older than 4.10 will have non-encoded tables.
+        this.immutableStorageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+        this.encodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
         initCachedState();
     }
     
