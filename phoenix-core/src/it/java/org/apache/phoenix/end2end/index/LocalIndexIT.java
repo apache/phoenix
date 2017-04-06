@@ -562,7 +562,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
             statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
-                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+                    + "\"ln\" varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
             statement.execute("upsert into " + tableName + "  values(1,'fn','ln')");
             statement
                     .execute("create local index " + indexName + " on " + tableName + "  (fn)");

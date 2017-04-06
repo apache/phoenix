@@ -42,10 +42,6 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public DelegateQueryPlan(QueryPlan delegate) {
         this.delegate = delegate;
     }
-    
-    public QueryPlan getDelegate() {
-        return delegate;
-    }
 
     @Override
     public StatementContext getContext() {
@@ -136,9 +132,13 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public ResultIterator iterator() throws SQLException {
         return iterator(DefaultParallelScanGrouper.getInstance());
     }
- 
+
     @Override
     public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
         return iterator(scanGrouper, null);
+    }
+
+    public QueryPlan getDelegate() {
+        return delegate;
     }
 }

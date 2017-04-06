@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertEquals;
@@ -260,8 +262,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         conn.createStatement().execute("upsert into " + fullTableName + " values ('abc',1,3)");
         conn.createStatement().execute("upsert into " + fullTableName + " values ('def',2,4)");
         conn.commit();
-        stmt = conn.prepareStatement("UPDATE STATISTICS " + fullTableName);
-        stmt.execute();
+        conn.createStatement().execute("UPDATE STATISTICS " + fullTableName);
         rs = conn.createStatement().executeQuery("SELECT k FROM " + fullTableName + " order by k desc");
         assertTrue(rs.next());
         assertEquals("def", rs.getString(1));
@@ -503,7 +504,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         keyRanges = getAllSplits(conn, tableName);
         assertEquals(nRows/2+1, keyRanges.size());
         ResultSet rs = conn.createStatement().executeQuery("SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM "
-                + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE PHYSICAL_NAME='" + physicalTableName + "'");
+                + "\""+ SYSTEM_CATALOG_SCHEMA + "\".\"" + SYSTEM_STATS_TABLE + "\"" + " WHERE PHYSICAL_NAME='" + physicalTableName + "'");
         rs.next();
         assertEquals(nRows - nDeletedRows, rs.getLong(1));
     }
@@ -560,7 +561,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
         rs = conn
                 .createStatement()
                 .executeQuery(
-                        "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH),COUNT(*) from SYSTEM.STATS where PHYSICAL_NAME = '"
+                        "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH),COUNT(*) from \"SYSTEM\".STATS where PHYSICAL_NAME = '"
                                 + physicalTableName + "' GROUP BY COLUMN_FAMILY ORDER BY COLUMN_FAMILY");
 
         assertTrue(rs.next());
@@ -632,7 +633,7 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             long c2Bytes = rows * (columnEncoded ? ( mutable ? 37 : 48 ) : 35);
             String physicalTableName = SchemaUtil.getPhysicalHBaseTableName(fullTableName, userTableNamespaceMapped, PTableType.TABLE).getString();
             rs = conn.createStatement().executeQuery(
-                    "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from SYSTEM.STATS where PHYSICAL_NAME = '"
+                    "SELECT COLUMN_FAMILY,SUM(GUIDE_POSTS_ROW_COUNT),SUM(GUIDE_POSTS_WIDTH) from \"SYSTEM\".STATS where PHYSICAL_NAME = '"
                             + physicalTableName + "' AND GUIDE_POST_KEY>= cast('" + strings[startIndex]
                             + "' as varbinary) AND  GUIDE_POST_KEY<cast('" + strings[endIndex]
                             + "' as varbinary) and COLUMN_FAMILY='C2' group by COLUMN_FAMILY");

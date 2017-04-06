@@ -61,9 +61,9 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
 
     private static final long BATCH_SIZE = 3;
     private static final String SELECT_NEXT_VALUE_SQL =
-            "SELECT NEXT VALUE FOR %s FROM SYSTEM.\"SEQUENCE\" LIMIT 1";
+            "SELECT NEXT VALUE FOR %s FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1";
     private static final String SELECT_CURRENT_VALUE_SQL =
-            "SELECT CURRENT VALUE FOR %s FROM SYSTEM.\"SEQUENCE\" LIMIT 1";
+            "SELECT CURRENT VALUE FOR %s FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1";
     private static final String CREATE_SEQUENCE_NO_MIN_MAX_TEMPLATE =
             "CREATE SEQUENCE bulkalloc.alpha START WITH %s INCREMENT BY %s CACHE %s";
     private static final String CREATE_SEQUENCE_WITH_MIN_MAX_TEMPLATE =
@@ -107,7 +107,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         nextConnection();
         try {
             conn.createStatement().executeQuery(
-                "SELECT NEXT NULL VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\" LIMIT 1");
+                "SELECT NEXT NULL VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("null is not allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
@@ -121,7 +121,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         nextConnection();    
         try {
             conn.createStatement().executeQuery(
-                "SELECT NEXT '89b' VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\" LIMIT 1");
+                "SELECT NEXT '89b' VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Only integers and longs are allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
@@ -136,7 +136,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         nextConnection();
         try {
             conn.createStatement().executeQuery(
-                "SELECT NEXT '-1' VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\" LIMIT 1");
+                "SELECT NEXT '-1' VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("null is not allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
@@ -150,7 +150,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         nextConnection();    
         try {
             conn.createStatement().executeQuery(
-                "SELECT NEXT 0 VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\" LIMIT 1");
+                "SELECT NEXT 0 VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Only integers and longs are allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
@@ -415,7 +415,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         try {
             conn.createStatement().executeQuery(
                         "SELECT NEXT " + sequenceProps.numAllocated
-                                + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\" LIMIT 1");
+                                + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Invoking SELECT NEXT VALUES should have thrown Reached Max Value Exception");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
@@ -453,7 +453,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         try {
             conn.createStatement().executeQuery(
                         "SELECT NEXT " + sequenceProps.numAllocated
-                                + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\" LIMIT 1");
+                                + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Invoking SELECT NEXT VALUES should have thrown Reached Max Value Exception");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
@@ -543,7 +543,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         try {
             conn.createStatement().executeQuery(
                 "SELECT NEXT " + Long.MAX_VALUE
-                        + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                        + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
@@ -644,7 +644,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         try {
              conn.createStatement().executeQuery(
                         "SELECT NEXT " + sequenceProps.numAllocated
-                                + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\" LIMIT 1");
+                                + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Invoking SELECT NEXT VALUES should have failed as operation is not supported for sequences with Cycles.");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_NOT_SUPPORTED.getErrorCode(),
@@ -682,7 +682,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         int startValueAfterAllocation = 101;
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "SELECT CURRENT VALUE FOR bulkalloc.alpha, NEXT " + props.numAllocated + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                    "SELECT CURRENT VALUE FOR bulkalloc.alpha, NEXT " + props.numAllocated + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertBulkAllocationSucceeded(props, currentValueAfterAllocation, startValueAfterAllocation);
         int currentValueFor = rs.getInt(1);
@@ -720,7 +720,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         int startValueAfterAllocation = 101;
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "SELECT NEXT 5 VALUES FOR bulkalloc.alpha, NEXT " + props.numAllocated + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                    "SELECT NEXT 5 VALUES FOR bulkalloc.alpha, NEXT " + props.numAllocated + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         int firstValue = rs.getInt(1);
         int secondValue = rs.getInt(2);
@@ -761,7 +761,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                     + "NEXT " + props.numAllocated + " VALUES FOR bulkalloc.alpha, "
                     + "CURRENT VALUE FOR bulkalloc.alpha, "
                     + "NEXT 999 VALUES FOR bulkalloc.alpha "
-                    + "FROM SYSTEM.\"SEQUENCE\"");
+                    + "FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertBulkAllocationSucceeded(props, currentValueAfterAllocation, startValueAfterAllocation);
         
@@ -801,7 +801,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         // Bulk Allocate Sequence Slots for Two Sequences
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "SELECT NEXT 100 VALUES FOR bulkalloc.alpha, NEXT 1000 VALUES FOR bulkalloc.beta FROM SYSTEM.\"SEQUENCE\"");
+                    "SELECT NEXT 100 VALUES FOR bulkalloc.alpha, NEXT 1000 VALUES FOR bulkalloc.beta FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(30, rs.getInt(1));
         assertEquals(100, rs.getInt(2));
@@ -919,7 +919,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 public Long call() throws Exception {
                     ResultSet rs =
                             conn.createStatement().executeQuery(
-                                "SELECT NEXT " + numSlotToAllocate + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                                "SELECT NEXT " + numSlotToAllocate + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
                     latch1.countDown(); // Allows NEXT VALUE FOR thread to proceed
                     latch2.await(); // Waits until NEXT VALUE FOR thread reads and increments currentValue
                     rs.next();
@@ -985,7 +985,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 public Long call() throws Exception {
                     ResultSet rs =
                             conn.createStatement().executeQuery(
-                                "SELECT NEXT " + numSlotToAllocate1 + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                                "SELECT NEXT " + numSlotToAllocate1 + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
                     rs.next();
                     latch1.countDown(); // Allows other thread to proceed
                     latch2.await(); 
@@ -1001,7 +1001,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                     latch1.await(); // Wait for other thread to execut of NEXT <n> VALUES FOR expression
                     ResultSet rs =
                             conn.createStatement().executeQuery(
-                                "SELECT NEXT " + numSlotToAllocate2 + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                                "SELECT NEXT " + numSlotToAllocate2 + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
                     rs.next();
                     long retVal = rs.getLong(1);
                     latch2.countDown(); // Allow thread to completed
@@ -1054,7 +1054,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 public Long call() throws Exception {
                     ResultSet rs =
                             conn.createStatement().executeQuery(
-                                "SELECT NEXT " + numSlotToAllocate1 + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                                "SELECT NEXT " + numSlotToAllocate1 + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
                     latch1.countDown(); // Allows other thread to proceed
                     latch2.await(); 
                     rs.next();
@@ -1070,7 +1070,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                     latch1.await(); // Wait for other thread to execut of NEXT <n> VALUES FOR expression
                     ResultSet rs =
                             conn.createStatement().executeQuery(
-                                "SELECT NEXT " + numSlotToAllocate2 + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                                "SELECT NEXT " + numSlotToAllocate2 + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
                     rs.next();
                     long retVal = rs.getLong(1);
                     latch2.countDown(); // Allow thread to completed
@@ -1124,14 +1124,14 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
             throws SQLException {
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "SELECT NEXT " + numSlotToAllocate + " VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+                    "SELECT NEXT " + numSlotToAllocate + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(expectedValue, rs.getInt(1));
     }
 
     private void reserveSlotsInBulkUsingBindsAndAssertValue(int expectedValue, long numSlotToAllocate)
             throws SQLException {
-        PreparedStatement ps = conn.prepareStatement("SELECT NEXT ? VALUES FOR bulkalloc.alpha FROM SYSTEM.\"SEQUENCE\"");
+        PreparedStatement ps = conn.prepareStatement("SELECT NEXT ? VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
         ps.setLong(1, numSlotToAllocate);
         ResultSet rs = ps.executeQuery();
         assertTrue(rs.next());
@@ -1195,7 +1195,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
         ResultSet rs =
                 conn.createStatement()
                         .executeQuery(
-                            "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM SYSTEM.\"SEQUENCE\"");
+                            "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(props.startsWith, rs.getLong("start_with"));
         assertEquals(props.incrementBy, rs.getLong("increment_by"));

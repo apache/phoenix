@@ -759,8 +759,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             try {
                 String ddl = "CREATE TABLE " + dataTableFullName + " " + "  (a_string varchar not null, col1 integer, cf1.col2 integer"
                         + "  CONSTRAINT pk PRIMARY KEY (a_string)) " +  tableDDLOptions;
-                stmt = conn.prepareStatement(ddl);
-                stmt.execute();
+                conn.createStatement().execute(ddl);
             } finally {
                 closeStatement(stmt);
             }
@@ -2476,7 +2475,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
 	
 	private void assertEncodedCQValue(String columnFamily, String columnName, String schemaName, String tableName, int expectedValue) throws Exception {
-        String query = "SELECT " + COLUMN_QUALIFIER + " FROM SYSTEM.CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
+        String query = "SELECT " + COLUMN_QUALIFIER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ?" + " AND " + COLUMN_NAME  + " = ?" + " AND " + COLUMN_QUALIFIER  + " IS NOT NULL";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PreparedStatement stmt = conn.prepareStatement(query);
@@ -2496,7 +2495,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
     
     private void assertEncodedCQCounter(String columnFamily, String schemaName, String tableName, int expectedValue) throws Exception {
-        String query = "SELECT " + COLUMN_QUALIFIER_COUNTER + " FROM SYSTEM.CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
+        String query = "SELECT " + COLUMN_QUALIFIER_COUNTER + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? " + " AND " + COLUMN_FAMILY + " = ? AND " + COLUMN_QUALIFIER_COUNTER + " IS NOT NULL";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             PreparedStatement stmt = conn.prepareStatement(query);
@@ -2515,7 +2514,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
     
     private void assertSequenceNumber(String schemaName, String tableName, long expectedSequenceNumber) throws Exception {
-        String query = "SELECT " + TABLE_SEQ_NUM + " FROM SYSTEM.CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
+        String query = "SELECT " + TABLE_SEQ_NUM + " FROM \"SYSTEM\".CATALOG WHERE " + TABLE_SCHEM + " = ? AND " + TABLE_NAME
                 + " = ? AND " +  TABLE_SEQ_NUM + " IS NOT NULL AND " + COLUMN_NAME + " IS NULL AND "
                 + COLUMN_FAMILY + " IS NULL ";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
