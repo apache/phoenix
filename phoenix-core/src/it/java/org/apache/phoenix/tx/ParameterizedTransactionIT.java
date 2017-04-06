@@ -327,8 +327,8 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
 
         Connection conn = DriverManager.getConnection(getUrl());
         // Put table in SYSTEM schema to prevent attempts to update the cache after we disable SYSTEM.CATALOG
-        conn.createStatement().execute("CREATE TABLE SYSTEM." + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)" + tableDDLOptions);
-        conn.createStatement().execute("UPSERT INTO SYSTEM." + nonTxTableName + " VALUES (1)");
+        conn.createStatement().execute("CREATE TABLE \"SYSTEM\"." + nonTxTableName + "(k INTEGER PRIMARY KEY, v VARCHAR)" + tableDDLOptions);
+        conn.createStatement().execute("UPSERT INTO \"SYSTEM\"." + nonTxTableName + " VALUES (1)");
         conn.commit();
         // Reset empty column value to an empty value like it is pre-transactions
         HTableInterface htable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes("SYSTEM." + nonTxTableName));
@@ -342,7 +342,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             // This will succeed initially in updating the HBase metadata, but then will fail when
             // the SYSTEM.CATALOG table is attempted to be updated, exercising the code to restore
             // the coprocessors back to the non transactional ones.
-            conn.createStatement().execute("ALTER TABLE SYSTEM." + nonTxTableName + " SET TRANSACTIONAL=true");
+            conn.createStatement().execute("ALTER TABLE \"SYSTEM\"." + nonTxTableName + " SET TRANSACTIONAL=true");
             fail();
         } catch (SQLException e) {
             assertTrue(e.getMessage().contains(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " is disabled"));
@@ -351,7 +351,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             admin.close();
         }
         
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM SYSTEM." + nonTxTableName + " WHERE v IS NULL");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM \"SYSTEM\"." + nonTxTableName + " WHERE v IS NULL");
         assertTrue(rs.next());
         assertEquals(1,rs.getInt(1));
         assertFalse(rs.next());

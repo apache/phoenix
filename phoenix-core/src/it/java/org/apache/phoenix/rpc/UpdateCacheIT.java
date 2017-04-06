@@ -84,7 +84,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
 	
     @Test
     public void testUpdateCacheForNonTxnSystemTable() throws Exception {
-        String fullTableName = QueryConstants.SYSTEM_SCHEMA_NAME + QueryConstants.NAME_SEPARATOR + generateUniqueName();
+        String fullTableName = "\""+ QueryConstants.SYSTEM_SCHEMA_NAME + "\""+ QueryConstants.NAME_SEPARATOR + generateUniqueName();
         setupSystemTable(fullTableName);
         helpTestUpdateCache(fullTableName, null, new int[] {0, 0});
     }

@@ -176,7 +176,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
         //second param to coalesce is signed int
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT "
-                + " COALESCE(NTH_VALUE(\"COUNT\", 100) WITHIN GROUP (ORDER BY COUNT DESC), 1) "
+                + " COALESCE(NTH_VALUE(\"COUNT\", 100) WITHIN GROUP (ORDER BY \"COUNT\" DESC), 1) "
                 + " FROM " + tableName
                 + " GROUP BY ID");
 
@@ -192,14 +192,14 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
 
         String ddl = "CREATE TABLE " + tableName + "("
                 + "    ID BIGINT NOT NULL, "
-                + "    DATE TIMESTAMP NOT NULL, "
+                + "    \"DATE\" TIMESTAMP NOT NULL, "
                 + "    \"COUNT\" BIGINT "
-                + "    CONSTRAINT pk PRIMARY KEY(ID, DATE))";
+                + "    CONSTRAINT pk PRIMARY KEY(ID, \"DATE\"))";
         conn.createStatement().execute(ddl);
 
-        conn.createStatement().execute("UPSERT INTO " + tableName + "(ID, DATE, \"COUNT\") VALUES(1, CURRENT_TIME(), 1)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + "(ID, DATE, \"COUNT\") VALUES(1, CURRENT_TIME(), 2)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + "(ID, DATE, \"COUNT\") VALUES(2, CURRENT_TIME(), 1)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + "(ID, \"DATE\", \"COUNT\") VALUES(1, CURRENT_TIME(), 1)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + "(ID, \"DATE\", \"COUNT\") VALUES(1, CURRENT_TIME(), 2)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + "(ID, \"DATE\", \"COUNT\") VALUES(2, CURRENT_TIME(), 1)");
         conn.commit();
 
         //second param to coalesce is signed int
