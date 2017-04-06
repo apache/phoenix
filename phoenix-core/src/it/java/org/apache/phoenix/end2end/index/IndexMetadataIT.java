@@ -548,7 +548,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         
         ResultSet rs = conn.createStatement().executeQuery(
             "select table_name, " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " +
-            "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") " +
+            "from \"SYSTEM\".catalog (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") " +
             "where " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " is not null and table_name like 'ASYNCIND_%' " +
             "order by " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE
         );
@@ -589,7 +589,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         
         ResultSet rs = conn.createStatement().executeQuery(
             "select table_name, " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +
-            "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
+            "from \"SYSTEM\".catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
             "where " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " !=0 and table_name like 'R_ASYNCIND_%' " +
             "order by table_name");
         assertTrue(rs.next());
@@ -602,7 +602,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" DISABLE");
         rs = conn.createStatement().executeQuery(
                 "select table_name, " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +
-                "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
+                "from \"SYSTEM\".catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
                 "where " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " !=0 and table_name like 'ASYNCIND_%' " +
                 "order by table_name" );
         assertFalse(rs.next());

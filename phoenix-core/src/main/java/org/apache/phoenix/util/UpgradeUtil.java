@@ -145,7 +145,7 @@ public class UpgradeUtil {
 
     public static String SELECT_BASE_COLUMN_COUNT_FROM_HEADER_ROW = "SELECT "
             + "BASE_COLUMN_COUNT "
-            + "FROM SYSTEM.CATALOG "
+            + "FROM \"SYSTEM\".CATALOG "
             + "WHERE "
             + "COLUMN_NAME IS NULL "
             + "AND "

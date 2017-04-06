@@ -755,8 +755,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             String ddl = "DROP INDEX " + indexName + " ON " + fullTableName;
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + "(k, v1) VALUES(?,?)");
             stmt.setString(1, "a");
@@ -1060,7 +1059,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
         try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin(); 
                 Connection c = DriverManager.getConnection(getUrl())) {
             ResultSet rs = c.getMetaData().getTables("", 
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, 
+                    "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
                     null, 
                     new String[] {PTableType.SYSTEM.toString()});
             ReadOnlyProps p = c.unwrap(PhoenixConnection.class).getQueryServices().getProps();

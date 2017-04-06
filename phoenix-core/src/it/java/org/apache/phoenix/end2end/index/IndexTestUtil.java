@@ -60,7 +60,7 @@ public class IndexTestUtil {
     // index table test.
     private static final String SELECT_DATA_INDEX_ROW = "SELECT " + COLUMN_FAMILY
             + " FROM "
-            + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
+            + "\""+SYSTEM_CATALOG_SCHEMA +"\""+ ".\"" + SYSTEM_CATALOG_TABLE
             + "\" WHERE "
             + TENANT_ID + " IS NULL AND " + TABLE_SCHEM + "=? AND " + TABLE_NAME + "=? AND " + COLUMN_NAME + " IS NULL AND " + COLUMN_FAMILY + "=?";
     

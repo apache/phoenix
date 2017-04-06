@@ -98,7 +98,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                 "                data.stat_minute VARCHAR ,\n" + 
                 "                data.state VARCHAR ,\n" + 
                 "                data.title VARCHAR ,\n" + 
-                "                data.user VARCHAR ,\n" + 
+                "                data.\"user\" VARCHAR ,\n" + 
                 "                data.inrow VARCHAR ,\n" + 
                 "                data.jobid VARCHAR ,\n" + 
                 "                data.jobtype VARCHAR ,\n" + 
