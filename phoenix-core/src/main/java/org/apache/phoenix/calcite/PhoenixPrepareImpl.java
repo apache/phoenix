@@ -1,6 +1,12 @@
 package org.apache.phoenix.calcite;
 
+import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+
 import java.lang.reflect.Type;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -115,6 +121,21 @@ import com.google.common.collect.Lists;
 public class PhoenixPrepareImpl extends CalcitePrepareImpl {
     public static final ThreadLocal<String> THREAD_SQL_STRING =
         new ThreadLocal<>();
+    
+    public static final PhoenixConnection CONNECTIONLESS_PHOENIX_CONNECTION;
+    static {
+        try {
+            Class.forName("org.apache.phoenix.jdbc.PhoenixDriver");
+            final Connection connection =
+                DriverManager.getConnection(JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + CONNECTIONLESS);
+            CONNECTIONLESS_PHOENIX_CONNECTION =
+                connection.unwrap(PhoenixConnection.class);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     protected final RelOptRule[] defaultConverterRules;
 
@@ -718,6 +739,6 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             } catch (ClassCastException e) {
             }
         }
-        throw new RuntimeException("Phoenix schema not found.");
+        return CONNECTIONLESS_PHOENIX_CONNECTION;
     }
 }
