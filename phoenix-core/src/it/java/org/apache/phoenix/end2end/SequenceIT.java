@@ -54,8 +54,8 @@ import com.google.common.collect.Lists;
 
 
 public class SequenceIT extends BaseClientManagedTimeIT {
-    private static final String NEXT_VAL_SQL = "SELECT NEXT VALUE FOR foo.bar FROM SYSTEM.\"SEQUENCE\"";
-    private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s FROM SYSTEM.\"SEQUENCE\"";
+    private static final String NEXT_VAL_SQL = "SELECT NEXT VALUE FOR foo.bar FROM \"SYSTEM\".\"SEQUENCE\"";
+    private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s FROM \"SYSTEM\".\"SEQUENCE\"";
     private static final long BATCH_SIZE = 3;
    
     private Connection conn;
@@ -80,7 +80,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 	@Test
 	public void testSystemTable() throws Exception {		
 		nextConnection();
-		String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\"";
+		String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\"";
 		ResultSet rs = conn.prepareStatement(query).executeQuery();
 		assertFalse(rs.next());
 	}
@@ -102,7 +102,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 	@Test
 	public void testSequenceNotFound() throws Exception {
         nextConnection();
-		String query = "SELECT NEXT value FOR qwert.asdf FROM SYSTEM.\"SEQUENCE\"";
+		String query = "SELECT NEXT value FOR qwert.asdf FROM \"SYSTEM\".\"SEQUENCE\"";
 		try {
 			conn.prepareStatement(query).executeQuery();
 			fail("Sequence not found");
@@ -136,7 +136,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         conn.createStatement().execute("USE " + sequenceSchemaName);
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
         nextConnection(props);
-        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='"
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='"
                 + sequenceName + "'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
@@ -159,7 +159,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         nextConnection();
         conn.createStatement().execute("CREATE SEQUENCE alpha.omega START WITH 2 INCREMENT BY 4");
         nextConnection();
-        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='OMEGA'";
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='OMEGA'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals("ALPHA", rs.getString("sequence_schema"));
@@ -176,7 +176,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         conn.createStatement().execute("CREATE SEQUENCE used.nowhere START WITH 2 INCREMENT BY 4");
         nextConnection();
         try {
-            rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR used.nowhere FROM SYSTEM.\"SEQUENCE\"");
+            rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR used.nowhere FROM \"SYSTEM\".\"SEQUENCE\"");
             rs.next();
             fail();
         } catch (SQLException e) {
@@ -184,10 +184,10 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             assertTrue(e.getNextException()==null);
         }
         
-        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR used.nowhere FROM SYSTEM.\"SEQUENCE\"");
+        rs = conn.createStatement().executeQuery("SELECT NEXT VALUE FOR used.nowhere FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
-        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR used.nowhere FROM SYSTEM.\"SEQUENCE\"");
+        rs = conn.createStatement().executeQuery("SELECT CURRENT VALUE FOR used.nowhere FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(2, rs.getInt(1));
 	}
@@ -197,7 +197,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         nextConnection();
         conn.createStatement().execute("CREATE SEQUENCE alpha.omega START WITH 2 INCREMENT BY 4");
         nextConnection();
-        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='OMEGA'";
+        String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='OMEGA'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals("ALPHA", rs.getString("sequence_schema"));
@@ -208,7 +208,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
 
         conn.createStatement().execute("DROP SEQUENCE alpha.omega");
         nextConnection();
-        query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='OMEGA'";
+        query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='OMEGA'";
         rs = conn.prepareStatement(query).executeQuery();
         assertFalse(rs.next());
 
@@ -255,7 +255,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         ResultSet rs =
                 conn.createStatement()
                         .executeQuery(
-                            "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM SYSTEM.\"SEQUENCE\"");
+                            "SELECT start_with, current_value, increment_by, cache_size, min_value, max_value, cycle_flag, sequence_schema, sequence_name FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(2, rs.getLong("start_with"));
         assertEquals(2, rs.getInt("current_value"));
@@ -270,7 +270,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         rs =
                 conn.createStatement()
                         .executeQuery(
-                            "SELECT NEXT VALUE FOR alpha.gamma, CURRENT VALUE FOR alpha.gamma FROM SYSTEM.\"SEQUENCE\"");
+                            "SELECT NEXT VALUE FOR alpha.gamma, CURRENT VALUE FOR alpha.gamma FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(2, rs.getLong(1));
         assertEquals(2, rs.getLong(2));
@@ -278,7 +278,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         rs =
                 conn.createStatement()
                         .executeQuery(
-                            "SELECT CURRENT VALUE FOR alpha.gamma, NEXT VALUE FOR alpha.gamma FROM SYSTEM.\"SEQUENCE\"");
+                            "SELECT CURRENT VALUE FOR alpha.gamma, NEXT VALUE FOR alpha.gamma FROM \"SYSTEM\".\"SEQUENCE\"");
         assertTrue(rs.next());
         assertEquals(5, rs.getLong(1));
         assertEquals(5, rs.getLong(2));
@@ -290,7 +290,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         nextConnection();
         conn.createStatement().execute("CREATE SEQUENCE alpha.zeta START WITH 4 INCREMENT BY 7");
         nextConnection();
-        String query = "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.zeta FROM SYSTEM.\"SEQUENCE\"";
+        String query = "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.zeta FROM \"SYSTEM\".\"SEQUENCE\"";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -305,7 +305,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         conn.createStatement().execute("CREATE SEQUENCE alpha.zeta START WITH 4 INCREMENT BY 7");
         conn.createStatement().execute("CREATE SEQUENCE alpha.kappa START WITH 9 INCREMENT BY 2");
         nextConnection();
-        String query = "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM SYSTEM.\"SEQUENCE\"";
+        String query = "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM \"SYSTEM\".\"SEQUENCE\"";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -337,7 +337,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             "CREATE SEQUENCE alpha.kappa START WITH 9 INCREMENT BY -2 MINVALUE 5");
         nextConnection();
         String query =
-                "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM SYSTEM.\"SEQUENCE\"";
+                "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM \"SYSTEM\".\"SEQUENCE\"";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -377,7 +377,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             "CREATE SEQUENCE alpha.kappa START WITH 9 INCREMENT BY -2 MINVALUE 5 MAXVALUE 9 CYCLE");
         nextConnection();
         String query =
-                "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM SYSTEM.\"SEQUENCE\"";
+                "SELECT NEXT VALUE FOR alpha.zeta, NEXT VALUE FOR alpha.kappa FROM \"SYSTEM\".\"SEQUENCE\"";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
@@ -702,7 +702,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         		"CLIENT RESERVE VALUES FROM 1 SEQUENCE", QueryUtil.getExplainPlan(rs));
         
         nextConnection();
-        rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM SYSTEM.\"SEQUENCE\" WHERE sequence_name='BAR'");
+        rs = conn.createStatement().executeQuery("SELECT sequence_name, current_value FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='BAR'");
         assertTrue(rs.next());
         assertEquals("BAR", rs.getString(1));
         assertEquals(1, rs.getInt(2));
@@ -724,7 +724,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         nextConnection();
         conn.createStatement().execute("CREATE SEQUENCE foo.bar START WITH 3 INCREMENT BY 2");
         nextConnection();
-        String query = "SELECT LPAD(ENCODE(NEXT VALUE FOR foo.bar,'base62'),5,'0') FROM SYSTEM.\"SEQUENCE\"";
+        String query = "SELECT LPAD(ENCODE(NEXT VALUE FOR foo.bar,'base62'),5,'0') FROM \"SYSTEM\".\"SEQUENCE\"";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals("00003", rs.getString(1));
@@ -1356,7 +1356,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         nextConnection();
         conn.createStatement().execute("CREATE SEQUENCE alpha.zeta START WITH 3 INCREMENT BY 2 CACHE 5");
         nextConnection();
-        String query = "SELECT NEXT VALUE FOR alpha.zeta FROM SYSTEM.\"SEQUENCE\"";
+        String query = "SELECT NEXT VALUE FOR alpha.zeta FROM \"SYSTEM\".\"SEQUENCE\"";
         ResultSet rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(3, rs.getInt(1));
@@ -1368,7 +1368,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         conn.close();
         
         // verify that calling close() does not return sequence values back to the server
-        query = "SELECT CURRENT_VALUE FROM SYSTEM.\"SEQUENCE\" WHERE SEQUENCE_SCHEMA='ALPHA' AND SEQUENCE_NAME='ZETA'";
+        query = "SELECT CURRENT_VALUE FROM \"SYSTEM\".\"SEQUENCE\" WHERE SEQUENCE_SCHEMA='ALPHA' AND SEQUENCE_NAME='ZETA'";
         rs = conn.prepareStatement(query).executeQuery();
         assertTrue(rs.next());
         assertEquals(13, rs.getInt(1));

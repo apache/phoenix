@@ -1773,7 +1773,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         conn = DriverManager.getConnection(getUrl(), props);
         try {
-            PreparedStatement stmt = conn.prepareStatement("select ?[2] from system.\"catalog\" limit 1");
+            PreparedStatement stmt = conn.prepareStatement("select ?[2] from \"SYSTEM\".\"catalog\" limit 1");
             Array array = conn.createArrayOf("CHAR", new String[] {"a","b","c"});
             stmt.setArray(1, array);
             ResultSet rs = stmt.executeQuery();
