@@ -282,6 +282,9 @@ public class MutationState implements SQLCloseable {
 
             phoenixTransactionContext.checkpoint(hasUncommittedData);
 
+            if (hasUncommittedData) {
+                uncommittedPhysicalNames.clear();
+            }
             return true;
         }
         return false;

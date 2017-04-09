@@ -1,5 +1,6 @@
 package org.apache.phoenix.transaction;
 
+import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.phoenix.schema.PTable;
 import org.slf4j.Logger;
 
@@ -19,7 +20,11 @@ public interface PhoenixTransactionContext {
         SNAPSHOT_ALL
       }
 
-    public static final String TX_ROLLBACK_ATTRIBUTE_KEY = "phoenix.tx.rollback"; 
+    public static final String TX_ROLLBACK_ATTRIBUTE_KEY = "tephra.tx.rollback"; //"phoenix.tx.rollback"; 
+
+    public static final String PROPERTY_TTL = "dataset.table.ttl";
+
+    public static final String READ_NON_TX_DATA = "data.tx.read.pre.existing";
 
     /**
      * Starts a transaction
@@ -120,4 +125,17 @@ public interface PhoenixTransactionContext {
      * @return max transactions per second
      */
     public long getMaxTransactionsPerSecond();
+
+    /**
+     *
+     * @param version
+     * @return
+     */
+    public boolean isPreExistingVersion(long version);
+
+    /**
+     *
+     * @return the coprocessor
+     */
+    public BaseRegionObserver getCoProcessor();
 }

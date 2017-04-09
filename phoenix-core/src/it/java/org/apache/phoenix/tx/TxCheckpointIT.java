@@ -36,9 +36,9 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.tephra.Transaction.VisibilityLevel;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -254,7 +254,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 		long wp = state.getWritePointer();
 		conn.createStatement().execute(
 				"upsert into " + fullTableName + " select max(id)+1, 'a4', 'b4' from " + fullTableName + "");
-		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+		assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
 				state.getVisibilityLevel());
 		assertEquals(wp, state.getWritePointer()); // Make sure write ptr
 													// didn't move
@@ -266,7 +266,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 
 		conn.createStatement().execute(
 				"upsert into " + fullTableName + " select max(id)+1, 'a5', 'b5' from " + fullTableName + "");
-		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+		assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
 				state.getVisibilityLevel());
 		assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr
 														// moves
@@ -279,7 +279,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 		
 		conn.createStatement().execute(
 				"upsert into " + fullTableName + " select max(id)+1, 'a6', 'b6' from " + fullTableName + "");
-		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+		assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
 				state.getVisibilityLevel());
 		assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr
 														// moves
@@ -318,7 +318,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	        state.startTransaction();
 	        long wp = state.getWritePointer();
 	        conn.createStatement().execute("delete from " + fullTableName + "1 where id1=fk1b AND fk1b=id1");
-	        assertEquals(VisibilityLevel.SNAPSHOT, state.getVisibilityLevel());
+	        assertEquals(PhoenixVisibilityLevel.SNAPSHOT, state.getVisibilityLevel());
 	        assertEquals(wp, state.getWritePointer()); // Make sure write ptr didn't move
 	
 	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from " + fullTableName + "1");
@@ -336,7 +336,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	        assertFalse(rs.next());
 	
 	        conn.createStatement().execute("delete from " + fullTableName + "1 where id1 in (select fk1a from " + fullTableName + "1 join " + fullTableName + "2 on (fk2=id1))");
-	        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
+	        assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
 	        assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
 	
 	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from " + fullTableName + "1");
@@ -353,7 +353,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             stmt.executeUpdate("upsert into " + fullTableName + "2 values (2, 4)");
 
             conn.createStatement().execute("delete from " + fullTableName + "1 where id1 in (select fk1a from " + fullTableName + "1 join " + fullTableName + "2 on (fk2=id1))");
-            assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
+            assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
             assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
     
             rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from " + fullTableName + "1");
