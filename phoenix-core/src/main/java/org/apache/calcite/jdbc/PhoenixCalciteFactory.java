@@ -525,6 +525,11 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             getSite(parameterIndex)
             .setNClob(reader);
         }
+
+        @Override
+        public void setDate(int parameterIndex, Date x) throws SQLException {
+            getSite(parameterIndex).setObject(new java.util.Date(x.getTime()));
+        }
     }
 
     /** Implementation of database metadata for JDBC 4.1. */
