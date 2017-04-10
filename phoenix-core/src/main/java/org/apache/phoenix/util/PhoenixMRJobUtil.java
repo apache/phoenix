@@ -219,15 +219,15 @@ public class PhoenixMRJobUtil {
      * @param conf - Configuration to which Capacity Queue information to be added
      */
     public static void updateCapacityQueueInfo(Configuration conf) {
-        conf.set(MRJobConfig.QUEUE_NAME,
-            conf.get(PHOENIX_INDEX_MR_QUEUE_NAME_PROPERTY, DEFAULT_QUEUE_NAME));
+        conf.set("mapreduce.job.queuename",
+                conf.get(PHOENIX_INDEX_MR_QUEUE_NAME_PROPERTY, DEFAULT_QUEUE_NAME));
         int mapMemoryMB = conf.getInt(PHOENIX_INDEX_MR_MAP_MEMORY_PROPERTY, DEFAULT_MAP_MEMROY_MB);
 
-        conf.setInt(MRJobConfig.MAP_MEMORY_MB, mapMemoryMB);
-        conf.set(MRJobConfig.MAP_JAVA_OPTS, XMX_OPT + ((int) (mapMemoryMB * 0.9)) + "m");
+        conf.setInt("mapreduce.map.memory.mb", mapMemoryMB);
+        conf.set("mapreduce.map.java.opts", XMX_OPT + ((int) (mapMemoryMB * 0.9)) + "m");
 
-        LOG.info("Queue Name=" + conf.get(MRJobConfig.QUEUE_NAME) + ";" + "Map Meory MB="
-                + conf.get(MRJobConfig.MAP_MEMORY_MB) + ";" + "Map Java Opts="
-                + conf.get(MRJobConfig.MAP_JAVA_OPTS));
+        LOG.info("Queue Name=" + conf.get("mapreduce.job.queuename") + ";" + "Map Meory MB="
+                + conf.get("mapreduce.map.memory.mb") + ";" + "Map Java Opts="
+                + conf.get("mapreduce.map.java.opts"));
     }
 }
