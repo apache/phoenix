@@ -528,7 +528,11 @@ public class PhoenixCalciteFactory extends CalciteFactory {
 
         @Override
         public void setDate(int parameterIndex, Date x) throws SQLException {
-            getSite(parameterIndex).setObject(new java.util.Date(x.getTime()));
+            if(x == null) {
+                super.setDate(parameterIndex, x);
+            } else {
+                getSite(parameterIndex).setObject(new java.util.Date(x.getTime()));
+            }
         }
     }
 
