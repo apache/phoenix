@@ -1,8 +1,9 @@
 package org.apache.phoenix.coprocessor;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.Iterables;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTable;
@@ -11,6 +12,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
@@ -20,6 +22,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -92,14 +95,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         assertEquals(1, parentViews.getResults().size());
         // now lets check and make sure the columns are correct
         PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
-        List<PColumn> columns = grandChildPTable.getColumns();
-        List<String> columnNames = Lists.newArrayList();
-        List<String> expectedColumnNames = Lists.newArrayList("PK2", "V1", "V2", "CARRIER", "DROPPED_CALLS");
-        for (PColumn column : columns) {
-            System.out.println("column = " + column);
-            columnNames.add(column.getName().getString().trim());
-        }
-        assertEquals(Joiner.on(", ").join(expectedColumnNames), Joiner.on(", ").join(columnNames));
+        assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "CARRIER", "DROPPED_CALLS");
 
     }
 
@@ -115,24 +111,11 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddlFormat);
         conn.createStatement().execute("CREATE VIEW " + leftChild + " (carrier VARCHAR) AS SELECT * FROM " + baseTable);
 
-        ResultSet resultset = conn.getMetaData().getColumns("", "", leftChild.toUpperCase(), null);
-        int i = 1;
-        while (resultset.next()) {
-            String column_name = resultset.getString("COLUMN_NAME");
-            System.out.println("column_name = " + column_name);
-        }
-
         PTable childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
         // now lets check and make sure the columns are correct
         PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
-        List<PColumn> columns = grandChildPTable.getColumns();
-        List<String> columnNames = Lists.newArrayList();
-        List<String> expectedColumnNames = Lists.newArrayList("PK2", "V1", "V2", "CARRIER");
-        for (PColumn column : columns) {
-            System.out.println("column = " + column);
-            columnNames.add(column.getName().getString().trim());
-        }
-        assertEquals(Joiner.on(", ").join(expectedColumnNames), Joiner.on(", ").join(columnNames));
+        assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "CARRIER");
+
     }
 
     @Test
@@ -172,21 +155,95 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
 
         // make sure that column was added to the base table
         PTable table = PhoenixRuntime.getTable(conn, baseTable.toUpperCase());
-        assertColumnsEqual(table, "PK2", "V1", "V2", "V3");
+        assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
 
         // now lets check and make sure the columns are correct
         conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
         grandChildPTable = PhoenixRuntime.getTable(conn, leftChild.toUpperCase());
-        assertColumnsEqual(grandChildPTable, "PK2", "V1", "V2", "V3", "CARRIER");
+        assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "V3", "CARRIER");
     }
 
-    private void assertColumnsEqual(PTable table, String... cols) {
+    @Test
+    public void testAddingAColumnWithADifferentDefinition() throws Exception {
+        String baseTable = "PARENT_TABLE";
+        String view = "CHILD_VIEW";
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddlFormat =
+            "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
+                + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
+        conn.createStatement().execute(ddlFormat);
+        conn.createStatement().execute("CREATE VIEW " + view + " (carrier BIGINT) AS SELECT * FROM " + baseTable);
+        Map<String, String> expected = new ImmutableMap.Builder<String, String>()
+            .put("PK2", "VARCHAR")
+            .put("V1", "VARCHAR")
+            .put("V2", "VARCHAR")
+            .put("CARRIER", "BIGINT")
+            .build();
+
+        assertColumnNamesAndDefinitionsEqual(PhoenixRuntime.getTable(conn , view.toUpperCase()), expected);
+        conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD carrier VARCHAR");
+
+        Map<String, String> expectedBaseTableColumns = new ImmutableMap.Builder<String, String>()
+            .put("PK2", "VARCHAR")
+            .put("V1", "VARCHAR")
+            .put("V2", "VARCHAR")
+            .put("CARRIER", "VARCHAR")
+            .build();
+
+        assertColumnNamesAndDefinitionsEqual(PhoenixRuntime.getTable(conn , baseTable.toUpperCase()), expectedBaseTableColumns);
+
+        // the view column "CARRIER" should still be a BIGINT since it was created first
+        Map<String, String> expectedViewColumnDefinition = new ImmutableMap.Builder<String, String>()
+            .put("PK2", "VARCHAR")
+            .put("V1", "VARCHAR")
+            .put("V2", "VARCHAR")
+            .put("CARRIER", "BIGINT")
+            .build();
+
+        assertColumnNamesAndDefinitionsEqual(PhoenixRuntime.getTable(conn , view.toUpperCase()), expectedViewColumnDefinition);
+    }
+
+    public void testDropCascade() throws Exception {
+        String baseTable = "PARENT_TABLE";
+        String leftChild = "LEFT_CHILD";
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddlFormat =
+            "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
+                + " CONSTRAINT NAME_PK PRIMARY KEY (PK2)" + " )";
+        conn.createStatement().execute(ddlFormat);
+        conn.createStatement().execute("CREATE VIEW " + leftChild + " (carrier VARCHAR) AS SELECT * FROM " + baseTable);
+
+        PTable childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
+        // now lets check and make sure the columns are correct
+        PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
+        assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "CARRIER");
+
+        // now lets drop the parent table
+        conn.createStatement().execute("DROP TABLE " + baseTable + " CASCADE");
+
+        // TODO: CM how to i drop the cache for a table that has no parent
+        childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
+        // now lets check and make sure the columns are correct
+        grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
+        assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "CARRIER");
+
+    }
+
+    private void assertColumnNamesEqual(PTable table, String... cols) {
         List<String> actual = Lists.newArrayList();
         for (PColumn column : table.getColumns()) {
             actual.add(column.getName().getString().trim());
         }
         List<String> expected = Arrays.asList(cols);
         assertEquals(Joiner.on(", ").join(expected), Joiner.on(", ").join(actual));
+    }
+
+    private void assertColumnNamesAndDefinitionsEqual(PTable table, Map<String, String> expected) {
+        Map<String, String> actual = Maps.newHashMap();
+        for (PColumn column : table.getColumns()) {
+            actual.put(column.getName().getString().trim(), column.getDataType().getSqlTypeName());
+        }
+        assertEquals(Joiner.on(", ").withKeyValueSeparator(" => ").join(expected), Joiner.on(", ").withKeyValueSeparator(" => ").join(actual));
     }
 
     private HTable getTable(TableName catalogTable) throws IOException {

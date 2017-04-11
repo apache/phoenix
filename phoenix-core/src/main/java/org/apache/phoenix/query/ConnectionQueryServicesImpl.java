@@ -68,7 +68,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -2932,7 +2931,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         PColumn column = new PColumnImpl(PNameFactory.newName("COLUMN_QUALIFIER"),
                 PNameFactory.newName(DEFAULT_COLUMN_FAMILY_NAME), PVarbinary.INSTANCE, null, null, true, numColumns,
                 SortOrder.ASC, null, null, false, null, false, false, 
-                Bytes.toBytes("COLUMN_QUALIFIER"));
+                Bytes.toBytes("COLUMN_QUALIFIER"), timestamp);
         String upsertColumnMetadata = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                 TENANT_ID + "," +
                 TABLE_SCHEM + "," +

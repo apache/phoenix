@@ -724,6 +724,17 @@ public class TestUtil {
                 public String getExpressionStr() {
                     return null;
                 }
+
+                @Override
+                public long getTimestamp() {
+                    return HConstants.LATEST_TIMESTAMP;
+                }
+
+                @Override
+                public boolean isExcluded() {
+                    return false;
+                }
+
                 @Override
                 public boolean isRowTimestamp() {
                     return false;

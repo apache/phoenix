@@ -91,7 +91,7 @@ public class UnionCompiler {
                 UNION_FAMILY_NAME, targetTypes.get(i).getType(), targetTypes.get(i).getMaxLength(),
                 targetTypes.get(i).getScale(), colProj.getExpression().isNullable(), i,
                 targetTypes.get(i).getSortOrder(), 500, null, false,
-                colProj.getExpression().toString(), false, false, colName.getBytes());
+                colProj.getExpression().toString(), false, false, colName.getBytes(), HConstants.LATEST_TIMESTAMP);
             projectedColumns.add(projectedColumn);
         }
         Long scn = statement.getConnection().getSCN();

@@ -55,7 +55,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT_BYTES
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES;
@@ -78,7 +77,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE_ARRAY;
 import static org.apache.phoenix.schema.PTableType.INDEX;
-import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
@@ -95,7 +93,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Set;
 
 import com.google.common.collect.Iterables;
 import org.apache.hadoop.conf.Configuration;
@@ -114,14 +111,11 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
-import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
@@ -212,7 +206,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
@@ -229,7 +222,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -559,6 +551,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     listOBytes.add(rowKeyInQuestion);
                 }
                 List<PColumn> allColumns = Lists.newArrayList();
+                List<PColumn> excludedColumns = Lists.newArrayList();
                 // add my own columns first in reverse order
                 List<PColumn> myColumns = table.getColumns();
                 for (int i = myColumns.size() - 1; i >= 0; i--) {
@@ -573,10 +566,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         if (someTablesColumns != null) {
                             for (int j = someTablesColumns.size() - 1; j >= 0; j--) {
                                 PColumn column = someTablesColumns.get(j);
-                                // also check here to see if it is in the excluded column list if it is,
-                                // skip it.
-                                if (!allColumns.contains(column) && !isPColumnExcluded(column)) {
-                                    allColumns.add(column);
+                                if (column.isExcluded()) {
+                                    excludedColumns.add(column);
+                                } else {
+                                    int existingIndex = allColumns.indexOf(column);
+                                    if (existingIndex != -1) {
+                                        // we keep the older column
+                                        PColumn existingColumn = allColumns.get(existingIndex);
+                                        if (column.getTimestamp() < existingColumn.getTimestamp()) {
+                                            allColumns.remove(existingIndex);
+                                        }
+                                    } else {
+                                        allColumns.add(column);
+                                    }
                                 }
                             }
                         }
@@ -808,7 +810,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 Arrays.copyOfRange(columnQualifierKV.getValueArray(),
                     columnQualifierKV.getValueOffset(), columnQualifierKV.getValueOffset()
                             + columnQualifierKV.getValueLength()) : (isPkColumn ? null : colName.getBytes());
-        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp, false, columnQualifierBytes);
+        PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable, position-1, sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp, false, columnQualifierBytes,
+            results.get(0).getTimestamp());
         columns.add(column);
     }
 
@@ -1933,45 +1936,48 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
 
-            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
-                // Handle any child views that exist
-                HTableInterface hTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
-                TableViewFinderResult tableViewFinderResult;
-                try {
-                    tableViewFinderResult =
-                        ViewFinder
-                            .findRelatedViews(hTable, tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(),
-                            LinkType.CHILD_TABLE, Long.MAX_VALUE);
-                } finally {
-                    hTable.close();
-                }
-                if (tableViewFinderResult.hasViews()) {
-                    if (isCascade) {
-                        // Recursively delete views - safe as all the views as all in the same region
-                        for (Result viewResult : tableViewFinderResult.getResults()) {
-                            byte[][] rowViewKeyMetaData = new byte[5][];
-                            getVarChars(viewResult.getRow(), 5, rowViewKeyMetaData);
-                            byte[] viewTenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-                            byte[] viewSchemaName = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
-                            byte[] viewName = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
-                            byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
-                            Delete delete = new Delete(viewKey, clientTimeStamp);
-                            rowsToDelete.add(delete);
-                            acquireLock(region, viewKey, locks);
-                            MetaDataMutationResult result = doDropTable(viewKey, viewTenantId, viewSchemaName,
-                                    viewName, null, PTableType.VIEW, rowsToDelete, invalidateList, locks,
-                                    tableNamesToDelete, sharedTablesToDelete, false);
-                            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                                return result;
-                            }
-                        }
-                    } else {
-                        // DROP without CASCADE on tables with child views is not permitted
-                        return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
-                                EnvironmentEdgeManager.currentTimeMillis(), null);
-                    }
-                }
-            }
+//            if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
+//                // Handle any child views that exist
+//                // move this logic somewhere else, no need to cascade
+//                HTableInterface hTable = env.getTable(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+//                TableViewFinderResult tableViewFinderResult;
+//                try {
+//                    tableViewFinderResult =
+//                        ViewFinder
+//                            .findRelatedViews(hTable, tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(),
+//                            LinkType.CHILD_TABLE, Long.MAX_VALUE);
+//                } finally {
+//                    hTable.close();
+//                }
+//
+//
+//                if (tableViewFinderResult.hasViews()) {
+//                    if (isCascade) {
+//                        // Recursively delete views - safe as all the views as all in the same region
+//                        for (Result viewResult : tableViewFinderResult.getResults()) {
+//                            byte[][] rowViewKeyMetaData = new byte[5][];
+//                            getVarChars(viewResult.getRow(), 5, rowViewKeyMetaData);
+//                            byte[] viewTenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
+//                            byte[] viewSchemaName = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+//                            byte[] viewName = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+//                            byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
+//                            Delete delete = new Delete(viewKey, clientTimeStamp);
+//                            rowsToDelete.add(delete);
+//                            acquireLock(region, viewKey, locks);
+//                            MetaDataMutationResult result = doDropTable(viewKey, viewTenantId, viewSchemaName,
+//                                    viewName, null, PTableType.VIEW, rowsToDelete, invalidateList, locks,
+//                                    tableNamesToDelete, sharedTablesToDelete, false);
+//                            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
+//                                return result;
+//                            }
+//                        }
+//                    } else {
+//                        // DROP without CASCADE on tables with child views is not permitted
+//                        return new MetaDataMutationResult(MutationCode.UNALLOWED_TABLE_MUTATION,
+//                                EnvironmentEdgeManager.currentTimeMillis(), null);
+//                    }
+//                }
+//            }
 
             // Add to list of HTables to delete, unless it's a view or its a shared index
             if (tableType != PTableType.VIEW && table.getViewIndexId()==null) {
@@ -2033,6 +2039,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
         return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS,
                 EnvironmentEdgeManager.currentTimeMillis(), table, tableNamesToDelete);
     }
+
 
     private static interface ColumnMutator {
       MetaDataMutationResult updateMutation(PTable table, byte[][] rowKeyMetaData,
@@ -3146,11 +3153,6 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     }
                 }
             }
-//            // check if the table is a view
-//            TableViewFinderResult viewFinder = new TableViewFinderResult();
-//            findAllParentViews(table.getTenantId().getBytes(), table.getSchemaName().getBytes(), table.getTableName().getBytes(), viewFinder);
-//            List<Result> results = viewFinder.getResults();
-//            for (int i = results.size() - 1; )
 
             return table;
         } finally {
