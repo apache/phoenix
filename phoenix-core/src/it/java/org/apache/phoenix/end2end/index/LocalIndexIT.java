@@ -29,6 +29,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -36,6 +37,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -363,9 +365,9 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                         + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]\nCLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));
             
-            PhoenixStatement stmt = conn1.createStatement().unwrap(PhoenixStatement.class);
-            rs = stmt.executeQuery(query);
-            QueryPlan plan = stmt.getQueryPlan();
+            PreparedStatement stmt = conn1.prepareStatement(query);
+            rs = stmt.executeQuery();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertEquals(indexTableName, plan.getContext().getCurrentTable().getTable().getName().getString());
             assertEquals(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
             assertTrue(rs.next());

@@ -37,14 +37,15 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalciteStatement;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -384,12 +385,12 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
     }
 
 
-    private static ResultIterator getResultIterator(ResultSet rs) throws SQLException {
-        return rs.unwrap(PhoenixResultSet.class).getUnderlyingIterator();
+    private static ResultIterator getResultIterator(PreparedStatement stmt) throws SQLException {
+        return ((QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan()).iterator();
     }
 
-    private static void assertRoundRobinBehavior(ResultSet rs, Statement stmt, int numFetches) throws SQLException {
-        ResultIterator itr = getResultIterator(rs);
+    private static void assertRoundRobinBehavior(ResultSet rs, PreparedStatement stmt, int numFetches) throws SQLException {
+        ResultIterator itr = getResultIterator(stmt);
         if (stmt.getFetchSize() > 1) {
             assertTrue(itr instanceof RoundRobinResultIterator);
             RoundRobinResultIterator roundRobinItr = (RoundRobinResultIterator)itr;
@@ -407,11 +408,11 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
             MockParallelIteratorFactory parallelIteratorFactory = new MockParallelIteratorFactory();
             phxConn.setIteratorFactory(parallelIteratorFactory);
             ResultSet rs = stmt.executeQuery("SELECT * FROM " + testTable);
-            StatementContext ctx = rs.unwrap(PhoenixResultSet.class).getContext();
-            PTable table = ctx.getResolver().getTables().get(0).getTable();
+            StatementContext ctx = ((QueryPlan) stmt.unwrap(PhoenixCalciteStatement.class).getQueryPlan()).getContext();
+            PTable table = ctx.getCurrentTable().getTable();
             parallelIteratorFactory.setTable(table);
-            PhoenixStatement pstmt = stmt.unwrap(PhoenixStatement.class);
-            int numIterators = pstmt.getQueryPlan().getSplits().size();
+            PhoenixCalciteStatement pstmt = stmt.unwrap(PhoenixCalciteStatement.class);
+            int numIterators = ((QueryPlan) pstmt.getQueryPlan()).getSplits().size();
             assertEquals(8, numIterators);
             int numFetches = 2 * numIterators;
             List<String> iteratorOrder = new ArrayList<>(numFetches);

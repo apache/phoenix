@@ -68,7 +68,6 @@ import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -89,6 +88,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -1767,7 +1767,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String[] queries = queryList.toArray(new String[queryList.size()]);
         for (int i = 0; i < queries.length; i++) {
             String query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
         }
         // Negative test
@@ -1776,7 +1776,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             queryList.add(String.format("SELECT * FROM T WHERE %s(k2)=2.0", sub));
         }
         for (String query : queryList.toArray(new String[queryList.size()])) {
-            Scan scan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query).getContext().getScan();
+            Scan scan = ((QueryPlan) TestUtil.getQueryPlan(conn, query)).getContext().getScan();
             assertNotNull(scan.getFilter());
             assertTrue(scan.getStartRow().length == 0);
             assertTrue(scan.getStopRow().length == 0);
@@ -1799,7 +1799,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         for (int i = 0; i < queries.length; i++) {
             String query = queries[i];
             QueryPlan plan =
-                    conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+                    (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertTrue(query, plan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
         }
         // Negative test
@@ -1808,7 +1808,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             queryList.add(String.format("SELECT * FROM T WHERE %s(k2)=2.0", sub));
         }
         for (String query : queryList.toArray(new String[queryList.size()])) {
-            Scan scan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query).getContext().getScan();
+            Scan scan = ((QueryPlan) TestUtil.getQueryPlan(conn, query)).getContext().getScan();
             assertNotNull(scan.getFilter());
             assertTrue(scan.getStartRow().length == 0);
             assertTrue(scan.getStopRow().length == 0);
@@ -1835,7 +1835,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertTrue("Expected order by to be compiled out: " + query, plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
         }
     }
@@ -1854,7 +1854,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertTrue("Expected order by to be compiled out: " + query, plan.getOrderBy() == OrderBy.REV_ROW_KEY_ORDER_BY);
         }
     }
@@ -1876,7 +1876,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertFalse("Expected order by not to be compiled out: " + query, plan.getOrderBy().getOrderByExpressions().isEmpty());
         }
     }
@@ -1897,7 +1897,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertTrue("Expected group by to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
         }
     }
@@ -1930,7 +1930,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertTrue("Expected group by to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
         }
     }
@@ -1949,7 +1949,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertFalse("Expected group by not to be order preserving: " + query, plan.getGroupBy().isOrderPreserving());
         }
     }
@@ -1968,7 +1968,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertTrue("Expected plan to use round robin iterator " + query, plan.useRoundRobinIterator());
         }
     }
@@ -1993,7 +1993,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
         }
     }
@@ -2022,7 +2022,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String query;
         for (int i = 0; i < queries.length; i++) {
             query = queries[i];
-            QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
             assertFalse("Expected plan to not use round robin iterator " + query, plan.useRoundRobinIterator());
         }
     }

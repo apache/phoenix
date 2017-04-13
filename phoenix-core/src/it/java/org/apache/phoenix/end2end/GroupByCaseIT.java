@@ -33,6 +33,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -639,9 +640,9 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
                     "    AND container_id IN ( 'container1','container2','container3' )\n" + 
                     "    ORDER BY score DESC\n" + 
                     "    LIMIT 2";
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery(query);
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            PreparedStatement stmt = conn.prepareStatement(query);
+            ResultSet rs = stmt.executeQuery();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertEquals(indexName, plan.getContext().getCurrentTable().getTable().getName().getString());
             assertFalse(plan.getOrderBy().getOrderByExpressions().isEmpty());
             assertTrue(rs.next());

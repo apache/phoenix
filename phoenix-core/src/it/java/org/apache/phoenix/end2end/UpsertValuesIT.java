@@ -39,6 +39,7 @@ import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
@@ -48,7 +49,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.DateUtil;
@@ -746,7 +746,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
             stmt.setDate(1, rowTimestampDate);
             stmt.setString(2, "KV1");
             rs = stmt.executeQuery();
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(indexName));
             assertTrue(rs.next());
             assertEquals("KV2", rs.getString("KV2"));
@@ -804,7 +804,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
             stmt.setDate(1, upsertedDate);
             stmt.setString(2, "KV1");
             rs = stmt.executeQuery();
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(indexName));
             assertTrue(rs.next());
             assertEquals("KV2", rs.getString(1));
@@ -863,7 +863,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
             stmt.setDate(1, upsertedDate);
             stmt.setString(2, "KV1");
             rs = stmt.executeQuery();
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(indexName));
             assertTrue(rs.next());
             assertEquals("KV2", rs.getString(1));

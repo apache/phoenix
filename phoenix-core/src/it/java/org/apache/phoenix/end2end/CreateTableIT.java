@@ -27,18 +27,19 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
@@ -69,10 +70,10 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         String query = "select count(*) from start_stop_test where pk >= 'EA' and pk < 'EZ'";
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
         conn = DriverManager.getConnection(getUrl(), props);
-        Statement statement = conn.createStatement();
-        statement.execute(query);
-        PhoenixStatement pstatement = statement.unwrap(PhoenixStatement.class);
-        List<KeyRange>splits = pstatement.getQueryPlan().getSplits();
+        PreparedStatement statement = conn.prepareStatement(query);
+        statement.execute();
+        PhoenixCalcitePreparedStatement pstatement = statement.unwrap(PhoenixCalcitePreparedStatement.class);
+        List<KeyRange>splits = ((QueryPlan) pstatement.getQueryPlan()).getSplits();
         assertTrue(splits.size() > 0);
     }
     

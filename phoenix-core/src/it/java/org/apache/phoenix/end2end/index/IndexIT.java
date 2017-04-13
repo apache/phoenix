@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.HConstants;
@@ -53,11 +54,11 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
@@ -323,11 +324,11 @@ public class IndexIT extends ParallelStatsDisabledIT {
                  */
                 conn2.commit();
 
-                stmt1 = conn1.createStatement();
-                rs = stmt1.executeQuery("SELECT COUNT(*) FROM " + fullTableName);
+                PreparedStatement pStmt = conn1.prepareStatement("SELECT COUNT(*) FROM " + fullTableName);
+                rs = pStmt.executeQuery();
                 assertTrue(rs.next());
                 assertEquals(4,rs.getInt(1));
-                assertEquals(fullIndexName, stmt1.unwrap(PhoenixStatement.class).getQueryPlan().getTableRef().getTable().getName().getString());
+                assertEquals(fullIndexName, ((QueryPlan) pStmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan()).getTableRef().getTable().getName().getString());
 
                 String query = "SELECT /*+ NO_INDEX */ long_pk FROM " + fullTableName;
                 rs = conn1.createStatement().executeQuery(query);

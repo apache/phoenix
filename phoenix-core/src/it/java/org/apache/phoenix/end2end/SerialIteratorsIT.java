@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -54,7 +55,7 @@ public class SerialIteratorsIT extends ParallelStatsDisabledIT {
         createTestTable(getUrl(), ddl);
         initTableValues(conn);
         String query = "SELECT t_id from " + tableName + " order by t_id desc limit " + 10;
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(query);
         int i = 25;
         while (i >= 16) {
@@ -62,7 +63,7 @@ public class SerialIteratorsIT extends ParallelStatsDisabledIT {
             assertEquals(strings[i--], rs.getString(1));
         }
         query = "SELECT t_id from " + tableName + " order by t_id limit " + 10;
-        stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        stmt = conn.createStatement();
         rs = stmt.executeQuery(query);
         i = 0;
         while (i < 10) {

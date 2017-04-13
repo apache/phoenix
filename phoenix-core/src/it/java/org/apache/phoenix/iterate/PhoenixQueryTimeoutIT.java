@@ -27,8 +27,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.junit.Before;
 import org.junit.Test;
@@ -110,8 +110,8 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, String.valueOf(timeoutMs));
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + tableName);
-        PhoenixStatement phoenixStmt = ps.unwrap(PhoenixStatement.class);
-        assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
+        PhoenixCalcitePreparedStatement phoenixStmt = ps.unwrap(PhoenixCalcitePreparedStatement.class);
+        //assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
         assertEquals(timeoutSecs, phoenixStmt.getQueryTimeout());
         return ps;
     }

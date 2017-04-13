@@ -31,16 +31,17 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
@@ -210,7 +211,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         sql = "SELECT * FROM " + viewName + " WHERE v2 >= 100";
         stmt = conn1.prepareStatement(sql);
         stmt.executeQuery();
-        QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+        QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
         assertEquals(4, plan.getSplits().size());
     }
     
@@ -262,7 +263,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             stmt.setInt(1, 1);
             stmt.setString(2, "KV3");
             ResultSet rs = stmt.executeQuery();
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
             assertTrue(rs.next());
             assertEquals("KV1", rs.getString(1));
@@ -285,14 +286,14 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
             stmt.setInt(1, 1);
             stmt.setString(2, "KV3");
             rs = stmt.executeQuery();
-            plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(globalViewIdx));
             assertEquals(6, plan.getSplits().size());
         }
     }
 
     private void assertRowCount(Connection conn, String fullTableName, String fullBaseName, int expectedCount) throws SQLException {
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + fullTableName);
         assertTrue(rs.next());
         assertEquals(expectedCount, rs.getInt(1));
@@ -304,7 +305,8 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         }
         
         // Force it not to use index and still finds correct number of rows
-        rs = stmt.executeQuery("SELECT /*+ NO_INDEX */ * FROM " + fullTableName);
+        PreparedStatement pStmt = conn.prepareStatement("SELECT /*+ NO_INDEX */ * FROM " + fullTableName);
+        rs = pStmt.executeQuery();
         int count = 0;
         while (rs.next()) {
             count++;
@@ -312,7 +314,7 @@ public class ViewIndexIT extends ParallelStatsDisabledIT {
         
         assertEquals(expectedCount, count);
         // Ensure that the table, not index is being used
-        assertEquals(fullTableName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+        assertEquals(fullTableName, pStmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
     }
 
     @Test

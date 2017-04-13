@@ -32,9 +32,10 @@ import java.sql.SQLTimeoutException;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalciteStatement;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -123,13 +124,13 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
         conn.commit();
         conn.createStatement().execute("UPDATE STATISTICS " + tableName);
         
-        PhoenixStatement pstmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        PhoenixCalciteStatement pstmt = conn.createStatement().unwrap(PhoenixCalciteStatement.class);
         pstmt.setQueryTimeout(1);
         long startTime = System.currentTimeMillis();
         try {
             ResultSet rs = pstmt.executeQuery("SELECT count(*) FROM " + tableName);
             // Force lots of chunks so query is cancelled
-            assertTrue(pstmt.getQueryPlan().getSplits().size() > 1000);
+            assertTrue(((QueryPlan) pstmt.getQueryPlan()).getSplits().size() > 1000);
             rs.next();
             fail("Total time of query was " + (System.currentTimeMillis() - startTime) + " ms, but expected to be greater than 1000");
         } catch (SQLTimeoutException e) {

@@ -1,6 +1,7 @@
 package org.apache.phoenix.calcite.rel;
 
 import java.sql.SQLException;
+import java.util.LinkedList;
 import java.util.List;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
@@ -43,6 +44,15 @@ import org.apache.phoenix.iterate.ResultIterator;
  * Scan of a Phoenix table.
  */
 public class PhoenixToEnumerableConverter extends ConverterImpl implements EnumerableRel {
+    public static final ThreadLocal<List<RuntimeContext>> RUNTIME_CONTEXT_LIST =
+            new ThreadLocal<List<RuntimeContext>>() {
+        @Override protected List<RuntimeContext> initialValue() {
+            return new LinkedList<RuntimeContext>();
+        }
+    };
+    public static final ThreadLocal<StatementPlan> QUERY_PLAN =
+            new ThreadLocal<StatementPlan>();
+    
     private final StatementContext context;
 
     public static PhoenixToEnumerableConverter create(
@@ -99,11 +109,12 @@ public class PhoenixToEnumerableConverter extends ConverterImpl implements Enume
     
     StatementPlan makePlan(PhoenixRel rel) {
         RuntimeContext runtimeContext = new RuntimeContextImpl();
-        RuntimeContext.THREAD_LOCAL.get().add(runtimeContext);
+        RUNTIME_CONTEXT_LIST.get().add(runtimeContext);
         final PhoenixRelImplementor phoenixImplementor =
                 new PhoenixRelImplementorImpl(context, runtimeContext);
         phoenixImplementor.pushContext(new ImplementorContext(true, false, ImmutableIntList.identity(rel.getRowType().getFieldCount())));
         final StatementPlan plan = rel.implement(phoenixImplementor);
+        QUERY_PLAN.set(plan);
         if (!(plan instanceof QueryPlan)) {
             return plan;
         }

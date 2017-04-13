@@ -51,6 +51,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
@@ -72,6 +73,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.AggregationManager;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
@@ -856,4 +858,13 @@ public class TestUtil {
         System.out.println("-----------------------------------------------");
     }
 
+    public static StatementPlan getQueryPlan(Connection conn, String sql) throws SQLException {
+        if (conn instanceof PhoenixConnection) {
+            return conn.createStatement().unwrap(PhoenixStatement.class).optimizeQuery(sql);
+        }
+
+        PhoenixCalcitePreparedStatement calciteStmt =
+                conn.prepareStatement(sql).unwrap(PhoenixCalcitePreparedStatement.class);
+        return calciteStmt.getQueryPlan();
+    }
 }

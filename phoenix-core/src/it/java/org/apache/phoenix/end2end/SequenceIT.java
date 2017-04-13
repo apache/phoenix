@@ -34,8 +34,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalciteStatement;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.SequenceAlreadyExistsException;
@@ -407,8 +407,9 @@ public class SequenceIT extends BaseClientManagedTimeIT {
         nextConnection();
         conn.createStatement().execute("CREATE INDEX idx ON t(v1) INCLUDE (v2)");
         nextConnection();
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        stmt.optimizeQuery("SELECT k, NEXT VALUE FOR seq.perf FROM t WHERE v1 = 'bar'");
+        PhoenixCalciteStatement stmt = conn.createStatement().unwrap(PhoenixCalciteStatement.class);
+        stmt.executeQuery("SELECT k, NEXT VALUE FOR seq.perf FROM t WHERE v1 = 'bar'");
+        stmt.getQueryPlan();
 	}
 	
 	@Test

@@ -34,6 +34,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -129,10 +130,10 @@ public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
         byte[][] splits = new byte[][] { K3, K9, KR };
         createTable(conn, splits);
         
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " LIMIT 1");
+        PreparedStatement stmt = conn.prepareStatement("SELECT * FROM " + tableName + " LIMIT 1");
+        ResultSet rs = stmt.executeQuery();
         rs.next();
-        QueryPlan plan = stmt.getQueryPlan();
+        QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
         List<List<Scan>> nestedScans = plan.getScans();
         assertNotNull(nestedScans);
         for (List<Scan> scans : nestedScans) {

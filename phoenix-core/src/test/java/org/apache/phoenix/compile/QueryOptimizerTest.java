@@ -37,13 +37,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -74,9 +72,8 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE T (k VARCHAR NOT NULL PRIMARY KEY, v1 CHAR(15), v2 VARCHAR)");
         conn.createStatement().execute("CREATE INDEX IDX ON T(v1, v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         String query = "select * from t where (v1, v2, k) > ('1', '2', '3')";
-        QueryPlan plan = stmt.optimizeQuery(query);
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -84,8 +81,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     public void testOrderByOptimizedOut() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE foo (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=true");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY k");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM foo ORDER BY k");
         assertEquals(OrderBy.FWD_ROW_KEY_ORDER_BY,plan.getOrderBy());
     }
 
@@ -94,8 +90,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         try{ 
             conn.createStatement().execute("CREATE TABLE foo (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=true");
-            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-            QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY 'a','b','c'");
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM foo ORDER BY 'a','b','c'");
             assertTrue(plan.getOrderBy().getOrderByExpressions().isEmpty());
         } finally {
             conn.close();
@@ -106,8 +101,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     public void testOrderByNotDropped() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE foo (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) IMMUTABLE_ROWS=true");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY v");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM foo ORDER BY v");
         assertFalse(plan.getOrderBy().getOrderByExpressions().isEmpty());
     }
     
@@ -115,8 +109,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     public void testOrderByDroppedCompositeKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE foo (j INTEGER NOT NULL, k BIGINT NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (j,k)) IMMUTABLE_ROWS=true");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY j,k");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM foo ORDER BY j,k");
         assertEquals(OrderBy.FWD_ROW_KEY_ORDER_BY,plan.getOrderBy());
     }
 
@@ -124,8 +117,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     public void testOrderByNotDroppedCompositeKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE foo (j INTEGER NOT NULL, k BIGINT NOT NULL, v VARCHAR CONSTRAINT pk PRIMARY KEY (j,k)) IMMUTABLE_ROWS=true");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM foo ORDER BY k,j");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM foo ORDER BY k,j");
         assertFalse(plan.getOrderBy().getOrderByExpressions().isEmpty());
     }
 
@@ -134,8 +126,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE v1 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE v1 = 'bar'");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -144,8 +135,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT v1 FROM t WHERE k = 1");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT v1 FROM t WHERE k = 1");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -154,8 +144,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT v1,v2 FROM t WHERE v1 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT v1,v2 FROM t WHERE v1 = 'bar'");
         // Choose T because v2 is not in index
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
@@ -165,8 +154,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t(v3 VARCHAR) WHERE v1 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t(v3 VARCHAR) WHERE v1 = 'bar'");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -175,8 +163,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM t WHERE v1 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM t WHERE v1 = 'bar'");
         // Choose T because v2 is not in index
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
@@ -186,8 +173,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1) INCLUDE (v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM t WHERE v1 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM t WHERE v1 = 'bar'");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -196,8 +182,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1 LIMIT 5");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE k > 30 ORDER BY v1 LIMIT 5");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -206,8 +191,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1 LIMIT 5"); // Prefer 
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE k = 30 ORDER BY v1 LIMIT 5"); // Prefer 
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -216,8 +200,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1, k DESC LIMIT 5");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE k > 30 ORDER BY v1, k DESC LIMIT 5");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -226,8 +209,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1, k LIMIT 5");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE k > 30 ORDER BY v1, k LIMIT 5");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -236,8 +218,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1, k)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k > 30 ORDER BY v1, k LIMIT 5");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE k > 30 ORDER BY v1, k LIMIT 5");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -246,8 +227,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY DESC, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1, k)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE k = 30 ORDER BY v1, k LIMIT 5");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE k = 30 ORDER BY v1, k LIMIT 5");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -258,8 +238,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx1 ON t(v1) INCLUDE(v2)");
         conn.createStatement().execute("CREATE INDEX idx2 ON t(v1,v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("IDX2", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -269,8 +248,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx1 ON t(v1) INCLUDE(v2)");
         conn.createStatement().execute("CREATE INDEX idx2 ON t(v1,v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT /*+NO_INDEX*/ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+NO_INDEX*/ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -280,10 +258,9 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx1 ON t(v1) INCLUDE(v2)");
         conn.createStatement().execute("CREATE INDEX idx2 ON t(v1,v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT /*+ INDEX(t  idx1) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+ INDEX(t  idx1) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("IDX1", plan.getTableRef().getTable().getTableName().getString());
-        plan = stmt.optimizeQuery("SELECT k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("IDX2", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -293,10 +270,9 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE \"t\" (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx1 ON \"t\"(v1) INCLUDE(v2)");
         conn.createStatement().execute("CREATE INDEX idx2 ON \"t\"(v1,v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT /*+ INDEX(\"t\" idx1) */ k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+ INDEX(\"t\" idx1) */ k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("IDX1", plan.getTableRef().getTable().getTableName().getString());
-        plan = stmt.optimizeQuery("SELECT k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("IDX2", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -306,10 +282,9 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE \"t\" (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX \"idx1\" ON \"t\"(v1) INCLUDE(v2)");
         conn.createStatement().execute("CREATE INDEX \"idx2\" ON \"t\"(v1,v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT /*+ INDEX(\"t\" \"idx1\") */ k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+ INDEX(\"t\" \"idx1\") */ k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("idx1", plan.getTableRef().getTable().getTableName().getString());
-        plan = stmt.optimizeQuery("SELECT k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT k FROM \"t\" WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("idx2", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -320,8 +295,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx1 ON t(v1) INCLUDE(v2)");
         conn.createStatement().execute("CREATE INDEX idx2 ON t(v1,v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT /*+ INDEX(t  \"IDX1\") INDEX(t  idx3) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+ INDEX(t  \"IDX1\") INDEX(t  idx3) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("IDX1", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -331,8 +305,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx1 ON t(v1) INCLUDE(v2)");
         conn.createStatement().execute("CREATE INDEX idx2 ON t(v1,v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT /*+  INDEX(t  idx3 idx4 \"idx5\") INDEX(t idx6 idx1) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+  INDEX(t  idx3 idx4 \"idx5\") INDEX(t idx6 idx1) */ k FROM t WHERE v1 = 'foo' AND v2 = 'bar'");
         assertEquals("IDX1", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -341,8 +314,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) IMMUTABLE_ROWS=true");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT count(*) FROM t");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT count(*) FROM t");
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -351,9 +323,8 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE T (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         conn.createStatement().execute("CREATE INDEX IDX ON T(v1, v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         String query = "select * from t where (v1, v2) <= ('1', '2')";
-        QueryPlan plan = stmt.optimizeQuery(query);
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -362,9 +333,8 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE T (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         conn.createStatement().execute("CREATE INDEX IDX ON T(v1, v2)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         String query = "select * from t where (k, v1, v2) <= ('3', '1', '2')";
-        QueryPlan plan = stmt.optimizeQuery(query);
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
     
@@ -436,9 +406,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
                 "CREATE TABLE TEST.TEST (testInt INTEGER, testCharArray CHAR(3)[], testByteArray BINARY(7)[], " +
                 "CONSTRAINT test_pk PRIMARY KEY(testInt)) DEFAULT_COLUMN_FAMILY='T'");
         conn.createStatement().execute("CREATE INDEX TEST_INDEX ON TEST.TEST (testInt) INCLUDE (testCharArray, testByteArray)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-
-        QueryPlan plan = stmt.optimizeQuery("SELECT /*+ INDEX(TEST.TEST TEST_INDEX)*/ testCharArray,testByteArray FROM TEST.TEST");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+ INDEX(TEST.TEST TEST_INDEX)*/ testCharArray,testByteArray FROM TEST.TEST");
         List<PColumn> columns = plan.getTableRef().getTable().getColumns();
         assertEquals(3, columns.size());
         assertEquals(3, columns.get(1).getMaxLength().intValue());
@@ -582,7 +550,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         String sql = "SELECT a_date FROM ABC_VIEW where a_string = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
         stmt.setString(1, "1000");
-        QueryPlan plan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
         assertEquals("Query should use index", PTableType.INDEX, plan.getTableRef().getTable().getType());
     }
     
@@ -618,7 +586,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         String sql = "SELECT a_date FROM ABC_VIEW where a_string = ?";
         PreparedStatement stmt = conn.prepareStatement(sql);
         stmt.setString(1, "1000");
-        QueryPlan plan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+        QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
         // should not use index as index does not contain b_string
         assertEquals("Query should not use index", PTableType.VIEW, plan.getTableRef().getTable().getType());
     }
@@ -628,8 +596,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT COUNT(DISTINCT v1) FROM t");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT COUNT(DISTINCT v1) FROM t");
         assertTrue(plan.getGroupBy().isOrderPreserving());
         assertFalse(plan.getGroupBy().getKeyExpressions().isEmpty());
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
@@ -640,8 +607,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 VARCHAR)");
         conn.createStatement().execute("CREATE INDEX idx ON t(v1)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT COUNT(DISTINCT v1) FROM t");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT COUNT(DISTINCT v1) FROM t");
         assertTrue(plan.getGroupBy().isOrderPreserving());
         assertFalse(plan.getGroupBy().getKeyExpressions().isEmpty());
         assertEquals("IDX", plan.getTableRef().getTable().getTableName().getString());
@@ -652,8 +618,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("CREATE TABLE t (k1 CHAR(3) NOT NULL, k2 CHAR(15) NOT NULL, k3 DATE NOT NULL, k4 CHAR(15) NOT NULL, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))");
         conn.createStatement().execute("CREATE INDEX idx ON t(k1,k3,k2,k4)");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("SELECT * FROM t WHERE (k1,k2,k3,k4) > ('001','001xx000003DHml',to_date('2015-10-21 09:50:55.0'),'017xx0000022FuI')");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT * FROM t WHERE (k1,k2,k3,k4) > ('001','001xx000003DHml',to_date('2015-10-21 09:50:55.0'),'017xx0000022FuI')");
         assertEquals("T", plan.getTableRef().getTable().getTableName().getString());
     }
 
@@ -686,22 +651,21 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "000000000000000");
         Connection tsconn = DriverManager.getConnection(getUrl(), props);
         tsconn.createStatement().execute("CREATE VIEW MY_TABLE_MT_VIEW AS SELECT * FROM MY_TABLES.MY_TABLE");
-        PhoenixStatement stmt = tsconn.createStatement().unwrap(PhoenixStatement.class);
-        QueryPlan plan = stmt.optimizeQuery("select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3, pkcol4) > ('0', '0', '0', '0')");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(tsconn, "select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3, pkcol4) > ('0', '0', '0', '0')");
         assertEquals("MY_TABLE_MT_VIEW", plan.getTableRef().getTable().getTableName().getString());
         
-        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol1, pkcol2) > ('0', '0') and pkcol3 = '000000000000000' and pkcol4 = '000000000000000'");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "select * from my_table_mt_view where (pkcol1, pkcol2) > ('0', '0') and pkcol3 = '000000000000000' and pkcol4 = '000000000000000'");
         assertEquals(3 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
-        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol3, pkcol4) > ('0', '0') and pkcol1 = '000000000000000'");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "select * from my_table_mt_view where (pkcol3, pkcol4) > ('0', '0') and pkcol1 = '000000000000000'");
         assertEquals(2 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
-        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3) < ('0', '0', '0')");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3) < ('0', '0', '0')");
         assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
-        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3) < ('9', '9', '9') and (pkcol1, pkcol2) > ('0', '0')");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "select * from my_table_mt_view where (pkcol1, pkcol2, pkcol3) < ('9', '9', '9') and (pkcol1, pkcol2) > ('0', '0')");
         assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
-        plan = stmt.compileQuery("select * from my_table_mt_view where pkcol1 = 'a' and pkcol2 = 'b' and pkcol3 = 'c' and (pkcol1, pkcol2) < ('z', 'z')");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "select * from my_table_mt_view where pkcol1 = 'a' and pkcol2 = 'b' and pkcol3 = 'c' and (pkcol1, pkcol2) < ('z', 'z')");
         assertEquals(4 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
         // TODO: in theory pkcol2 and pkcol3 could be bound, but we don't have the logic for that yet
-        plan = stmt.compileQuery("select * from my_table_mt_view where (pkcol2, pkcol3) > ('0', '0') and pkcol1 = '000000000000000'");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "select * from my_table_mt_view where (pkcol2, pkcol3) > ('0', '0') and pkcol1 = '000000000000000'");
         assertEquals(2 + offset, plan.getContext().getScanRanges().getBoundPkColumnCount());
     }
 
@@ -763,15 +727,14 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         String tableName = "testMintestMinMaxQualifierRange".toUpperCase();
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 VARCHAR) COLUMN_ENCODED_BYTES=4");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        ResultSet rs = stmt.executeQuery("SELECT K from " + tableName + " ORDER BY (v1)");
-        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE);
-        rs = stmt.executeQuery("SELECT K from " + tableName + " ORDER BY (v1, v2)");
-        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
-        rs = stmt.executeQuery("SELECT V2 from " + tableName + " ORDER BY (v1)");
-        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
-        rs = stmt.executeQuery("SELECT V1 from " + tableName + " ORDER BY (v1, v2)");
-        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        String query = "SELECT K from " + tableName + " ORDER BY (v1)";
+        assertQualifierRanges(conn, query, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE);
+        query = "SELECT K from " + tableName + " ORDER BY (v1, v2)";
+        assertQualifierRanges(conn, query, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        query = "SELECT V2 from " + tableName + " ORDER BY (v1)";
+        assertQualifierRanges(conn, query, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        query = "SELECT V1 from " + tableName + " ORDER BY (v1, v2)";
+        assertQualifierRanges(conn, query, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
     }
     
     @Test
@@ -779,17 +742,18 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         String tableName = "testMintestMinMaxQualifierRange".toUpperCase();
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 VARCHAR) COLUMN_ENCODED_BYTES=4");
-        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        ResultSet rs = stmt.executeQuery("SELECT K from " + tableName);
-        assertQualifierRanges(rs, ENCODED_CQ_COUNTER_INITIAL_VALUE, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
-        rs = stmt.executeQuery("SELECT V2 from " + tableName);
-        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
-        rs = stmt.executeQuery("SELECT V1 from " + tableName);
-        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE);
+        String query = "SELECT K from " + tableName;
+        assertQualifierRanges(conn, query, ENCODED_CQ_COUNTER_INITIAL_VALUE, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        query = "SELECT V2 from " + tableName;
+        assertQualifierRanges(conn, query, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        query = "SELECT V1 from " + tableName;
+        assertQualifierRanges(conn, query, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE);
     }
     
-    private static void assertQualifierRanges(ResultSet rs, int minQualifier, int maxQualifier) throws SQLException {
-        Scan scan = rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getContext().getScan();
+    private static void assertQualifierRanges(Connection conn, String query, int minQualifier, int maxQualifier) throws SQLException {
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
+        plan.iterator();
+        Scan scan = plan.getContext().getScan();
         assertNotNull(scan.getAttribute(MIN_QUALIFIER));
         assertNotNull(scan.getAttribute(MAX_QUALIFIER));
         assertEquals(minQualifier, Bytes.toInt(scan.getAttribute(MIN_QUALIFIER)));

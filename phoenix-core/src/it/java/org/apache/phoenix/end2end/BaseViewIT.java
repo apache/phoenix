@@ -26,12 +26,13 @@ import static org.junit.Assert.assertTrue;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
@@ -40,7 +41,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -220,9 +220,9 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 
         
         query = "SELECT k1, k2, s FROM " + viewName + " WHERE s = 'foo'";
-        Statement statement = conn.createStatement();
-        rs = statement.executeQuery(query);
-        Scan scan = statement.unwrap(PhoenixStatement.class).getQueryPlan().getContext().getScan();
+        PreparedStatement statement = conn.prepareStatement(query);
+        rs = statement.executeQuery();
+        Scan scan = statement.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan().getContext().getScan();
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(120, rs.getInt(2));

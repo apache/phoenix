@@ -47,9 +47,9 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.calcite.jdbc.PhoenixCalciteFactory.PhoenixCalcitePreparedStatement;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PInteger;
@@ -1161,7 +1161,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
             stmt.setDate(1, new Date(upsertedTs));
             stmt.setString(2, "KV3");
             rs = stmt.executeQuery();
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(baseTableIdx));
             assertTrue(rs.next());
             assertEquals("KV1", rs.getString("KV1"));
@@ -1250,7 +1250,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
             stmt.setDate(3, new Date(upsertedTs));
             stmt.setString(4, "KV34");
             rs = stmt.executeQuery();
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).getQueryPlan();
+            QueryPlan plan = (QueryPlan) stmt.unwrap(PhoenixCalcitePreparedStatement.class).getQueryPlan();
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(baseTableIdx));
             assertTrue(rs.next());
             assertEquals("KV13", rs.getString("KV1"));

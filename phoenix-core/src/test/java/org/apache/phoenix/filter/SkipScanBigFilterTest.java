@@ -29,7 +29,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.Shadower;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
@@ -41,6 +40,7 @@ import org.apache.phoenix.schema.stats.GuidePostsInfoBuilder;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -694,7 +694,7 @@ public class SkipScanBigFilterTest extends BaseConnectionlessQueryTest {
                 "4298107404, 4308853119, 4308853123, 4308853500, 4451174646, 4451174656, 4451174701, 4569827278, 4569827284, 4569827287, \n" + 
                 "4569827379, 4569827523, 4569827524, 4896589676, 4979049725, 5054587609, 5136433884, 5362640372, 5393109964, 5393405364, \n" + 
                 "5393405365, 5393405620, 5393405625, 5393405675, 5393405677, 5393405858, 5393405970)";
-        QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).compileQuery(query);
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, query);
         plan.iterator();
     }
 

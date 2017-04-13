@@ -31,7 +31,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
@@ -41,7 +40,6 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -50,6 +48,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 import com.google.common.base.Objects;
@@ -397,9 +396,8 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             String upsert = "UPSERT INTO " + view2 + " (K1, K2, K3, V1, V2, V3) VALUES ('key1', 'key2', 'key3', 'value1', 'value2', 'value3')";
             viewConn.createStatement().executeUpdate(upsert);
             viewConn.commit();
-            Statement stmt = viewConn.createStatement();
             String sql = "SELECT V2 FROM " + view2 + " WHERE V1 = 'value1' AND K3 = 'key3'";
-            QueryPlan plan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(sql);
+            QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(viewConn, sql);
             assertTrue(plan.getTableRef().getTable().getName().getString().equals(SchemaUtil.normalizeIdentifier(view2Index)));
             ResultSet rs = viewConn.createStatement().executeQuery(sql);
             verifyNewColumns(rs, "value2");
@@ -463,9 +461,8 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             try (Connection viewConn = getTenantConnection("tenant2")) {
                 viewConn.createStatement().executeUpdate(upsert);
                 viewConn.commit();
-                Statement stmt = viewConn.createStatement();
                 String sql = "SELECT V3 FROM " + divergedView + " WHERE V1 = 'V1' AND PK2 = 'PK2'";
-                QueryPlan plan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(sql);
+                QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(viewConn, sql);
                 assertTrue(plan.getTableRef().getTable().getName().getString().equals(SchemaUtil.normalizeIdentifier(divergedViewIndex)));
                 ResultSet rs = viewConn.createStatement().executeQuery(sql);
                 verifyNewColumns(rs, "V3");

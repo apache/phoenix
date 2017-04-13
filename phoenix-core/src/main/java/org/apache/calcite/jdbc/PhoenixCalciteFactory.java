@@ -12,8 +12,6 @@ import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 import java.sql.Savepoint;
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.sql.ResultSet;
 import java.util.Calendar;
 import java.util.List;
@@ -54,6 +52,8 @@ import org.apache.calcite.sql.validate.SqlConformance;
 import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.PhoenixSqlConformance;
+import org.apache.phoenix.calcite.rel.PhoenixToEnumerableConverter;
+import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.RuntimeContext;
@@ -176,7 +176,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
             }
             ImmutableList<RuntimeContext> ctxList = runtimeContextMap.get(handle);
             if (ctxList == null) {
-                List<RuntimeContext> activeCtx = RuntimeContext.THREAD_LOCAL.get();
+                List<RuntimeContext> activeCtx = PhoenixToEnumerableConverter.RUNTIME_CONTEXT_LIST.get();
                 ctxList = ImmutableList.copyOf(activeCtx);
                 runtimeContextMap.put(handle, ctxList);
                 activeCtx.clear();
@@ -354,7 +354,9 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         }
     }
 
-    private static class PhoenixCalciteStatement extends CalciteStatement {
+    public static class PhoenixCalciteStatement extends CalciteStatement {
+        private StatementPlan queryPlan;
+
         public PhoenixCalciteStatement(PhoenixCalciteConnection connection,
                 Meta.StatementHandle h, int resultSetType, int resultSetConcurrency,
                 int resultSetHoldability) {
@@ -362,10 +364,16 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                     resultSetHoldability);
         }
 
+        public StatementPlan getQueryPlan() {
+            return this.queryPlan;
+        }
+
         @Override
         public boolean execute(String sql) throws SQLException {
             try {
-                return super.execute(sql);
+                boolean b = super.execute(sql);
+                this.queryPlan = PhoenixToEnumerableConverter.QUERY_PLAN.get();
+                return b;
             } catch (SQLException e) {
                 throw CalciteUtils.unwrapSqlException(e);
             }
@@ -374,14 +382,18 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         @Override
         public ResultSet executeQuery(String sql) throws SQLException{
             try {
-                return super.executeQuery(sql);
+                ResultSet rs = super.executeQuery(sql);
+                this.queryPlan = PhoenixToEnumerableConverter.QUERY_PLAN.get();
+                return rs;
             } catch (SQLException e) {
                 throw CalciteUtils.unwrapSqlException(e);
             }
         }
     }
 
-    private static class PhoenixCalcitePreparedStatement extends CalcitePreparedStatement {
+    public static class PhoenixCalcitePreparedStatement extends CalcitePreparedStatement {
+        private final StatementPlan queryPlan;
+
         @SuppressWarnings("rawtypes")
         PhoenixCalcitePreparedStatement(PhoenixCalciteConnection connection,
                 Meta.StatementHandle h, CalcitePrepare.CalciteSignature signature,
@@ -389,6 +401,11 @@ public class PhoenixCalciteFactory extends CalciteFactory {
                         throws SQLException {
             super(connection, h, signature, resultSetType, resultSetConcurrency,
                     resultSetHoldability);
+            this.queryPlan = PhoenixToEnumerableConverter.QUERY_PLAN.get();
+        }
+
+        public StatementPlan getQueryPlan() {
+            return this.queryPlan;
         }
 
         @Override

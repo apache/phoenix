@@ -44,7 +44,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
@@ -131,7 +130,7 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         String ehId = "333333333333333";
         
         Object[] values = new Object[] {tenantId, createdDate, parentId, ehId};
-        QueryPlan plan = conn.createStatement().unwrap(PhoenixStatement.class).optimizeQuery("SELECT PARENT_ID FROM T WHERE CREATED_DATE > CURRENT_DATE()-1 AND TENANT_ID = '111111111111111'");
+        QueryPlan plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT PARENT_ID FROM T WHERE CREATED_DATE > CURRENT_DATE()-1 AND TENANT_ID = '111111111111111'");
         List<Pair<String,String>> pkColumns = PhoenixRuntime.getPkColsForSql(conn, plan);
         String fullTableName = plan.getTableRef().getTable().getName().getString();
         assertEquals("I", fullTableName);
@@ -139,7 +138,7 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
         Object[] decodedValues = PhoenixRuntime.decodeColumnValues(conn, fullTableName, encodedValues, pkColumns);
         assertArrayEquals(values, decodedValues);
         
-        plan = conn.createStatement().unwrap(PhoenixStatement.class).optimizeQuery("SELECT /*+ NO_INDEX */ ENTITY_HISTORY_ID FROM T");
+        plan = (QueryPlan) TestUtil.getQueryPlan(conn, "SELECT /*+ NO_INDEX */ ENTITY_HISTORY_ID FROM T");
         pkColumns = PhoenixRuntime.getPkColsForSql(conn, plan);
         values = new Object[] {tenantId, parentId, createdDate, ehId};
         fullTableName = plan.getTableRef().getTable().getName().getString();
