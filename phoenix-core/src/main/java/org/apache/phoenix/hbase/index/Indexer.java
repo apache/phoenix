@@ -386,18 +386,20 @@ public class Indexer extends BaseRegionObserver {
   }
 
   @Override
-  public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
+      MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
       if (this.disabled) {
-          super.postBatchMutate(c, miniBatchOp);
+          super.postBatchMutateIndispensably(c, miniBatchOp, success);
           return;
         }
     this.builder.batchCompleted(miniBatchOp);
-
-    //each batch operation, only the first one will have anything useful, so we can just grab that
-    Mutation mutation = miniBatchOp.getOperation(0);
-    WALEdit edit = miniBatchOp.getWalEdit(0);
-    doPost(edit, mutation, mutation.getDurability(), false);
+    
+    if (success) { // if miniBatchOp was successfully written, write index updates
+        //each batch operation, only the first one will have anything useful, so we can just grab that
+        Mutation mutation = miniBatchOp.getOperation(0);
+        WALEdit edit = miniBatchOp.getWalEdit(0);
+        doPost(edit, mutation, mutation.getDurability(), false);
+    }
   }
 
   private void doPost(WALEdit edit, Mutation m, final Durability durability, boolean allowLocalUpdates) throws IOException {
