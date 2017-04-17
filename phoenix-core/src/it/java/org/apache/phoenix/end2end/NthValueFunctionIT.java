@@ -61,6 +61,71 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void multipleNthValueFunctionTest() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        String nthValue = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
+                + "(id INTEGER NOT NULL, feid UNSIGNED_LONG NOT NULL,"
+                + " uid INTEGER NOT NULL, lrd INTEGER"
+                + " CONSTRAINT PKVIEW PRIMARY KEY ( id, feid, uid))";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, 1, 7)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, 2, 9)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, 3, 4)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, 4, 2)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, 5, 1)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, 6, 3)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, 8, 5)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, 7, 8)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 10, 5, 1)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 10, 6, 3)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 10, 7, 5)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 10, 8, 8)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (3, 10, 5, 1)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (3, 10, 6, 3)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (3, 10, 7, 5)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (3, 10, 8, 8)");
+
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT NTH_VALUE(uid, 1) WITHIN GROUP (ORDER BY lrd DESC) as nth1_user_id, NTH_VALUE(uid, 2) WITHIN GROUP (ORDER BY lrd DESC) as nth2_user_id, NTH_VALUE(uid, 3) WITHIN GROUP (ORDER BY lrd DESC) as nth3_user_id  FROM " + nthValue
+                + " where id=2 and feid in (8, 9, 10) GROUP BY feid");
+
+        assertTrue(rs.next());
+        assertEquals(rs.getInt(1), 2);
+        assertEquals(rs.getInt(2), 1);
+        assertEquals(rs.getInt(3), 3);
+        assertTrue(rs.next());
+        assertEquals(rs.getInt(1), 7);
+        assertEquals(rs.getInt(2), 8);
+        assertEquals(rs.getInt(3), 6);
+        assertTrue(rs.next());
+        assertEquals(rs.getInt(1), 8);
+        assertEquals(rs.getInt(2), 7);
+        assertEquals(rs.getInt(3), 6);
+        assertFalse(rs.next());
+    }
+
+    @Test
     public void offsetValueAscOrder() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
