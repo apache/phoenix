@@ -63,7 +63,6 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.tephra.Transaction;
 
 import com.google.common.collect.ImmutableList;
 
