@@ -21,14 +21,18 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.RegionSizeCalculator;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -42,6 +46,7 @@ import org.apache.phoenix.iterate.MapReduceParallelScanGrouper;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PhoenixRuntime;
 
@@ -80,16 +85,72 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
         final Configuration configuration = context.getConfiguration();
         final QueryPlan queryPlan = getQueryPlan(context,configuration);
         final List<KeyRange> allSplits = queryPlan.getSplits();
-        final List<InputSplit> splits = generateSplits(queryPlan,allSplits);
+        final List<InputSplit> splits = generateSplits(queryPlan, allSplits, configuration);
         return splits;
     }
 
-    private List<InputSplit> generateSplits(final QueryPlan qplan, final List<KeyRange> splits) throws IOException {
+    private List<InputSplit> generateSplits(final QueryPlan qplan, final List<KeyRange> splits, Configuration config) throws IOException {
         Preconditions.checkNotNull(qplan);
         Preconditions.checkNotNull(splits);
+
+        // Get the RegionSizeCalculator
+        org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(config);
+        RegionLocator regionLocator = connection.getRegionLocator(TableName.valueOf(qplan
+                .getTableRef().getTable().getPhysicalName().toString()));
+        RegionSizeCalculator sizeCalculator = new RegionSizeCalculator(regionLocator, connection
+                .getAdmin());
+
+
         final List<InputSplit> psplits = Lists.newArrayListWithExpectedSize(splits.size());
         for (List<Scan> scans : qplan.getScans()) {
-            psplits.add(new PhoenixInputSplit(scans));
+            // Get the region location
+            HRegionLocation location = regionLocator.getRegionLocation(
+                    scans.get(0).getStartRow(),
+                    false
+            );
+
+            String regionLocation = location.getHostname();
+
+            // Get the region size
+            long regionSize = sizeCalculator.getRegionSize(
+                    location.getRegionInfo().getRegionName()
+            );
+
+            // Generate splits based off statistics, or just region splits?
+            boolean splitByStats = PhoenixConfigurationUtil.getSplitByStats(config);
+
+            if(splitByStats) {
+                for(Scan aScan: scans) {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debug("Split for  scan : " + aScan + "with scanAttribute : " + aScan
+                                .getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : [" +
+                                aScan.getCaching() + ", " + aScan.getCacheBlocks() + ", " + aScan
+                                .getBatch() + "] and  regionLocation : " + regionLocation);
+                    }
+
+                    psplits.add(new PhoenixInputSplit(Collections.singletonList(aScan), regionSize, regionLocation));
+                }
+            }
+            else {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Scan count[" + scans.size() + "] : " + Bytes.toStringBinary(scans
+                            .get(0).getStartRow()) + " ~ " + Bytes.toStringBinary(scans.get(scans
+                            .size() - 1).getStopRow()));
+                    LOG.debug("First scan : " + scans.get(0) + "with scanAttribute : " + scans
+                            .get(0).getAttributesMap() + " [scanCache, cacheBlock, scanBatch] : " +
+                            "[" + scans.get(0).getCaching() + ", " + scans.get(0).getCacheBlocks()
+                            + ", " + scans.get(0).getBatch() + "] and  regionLocation : " +
+                            regionLocation);
+
+                    for (int i = 0, limit = scans.size(); i < limit; i++) {
+                        LOG.debug("EXPECTED_UPPER_REGION_KEY[" + i + "] : " + Bytes
+                                .toStringBinary(scans.get(i).getAttribute
+                                        (BaseScannerRegionObserver.EXPECTED_UPPER_REGION_KEY)));
+                    }
+                }
+
+                psplits.add(new PhoenixInputSplit(scans, regionSize, regionLocation));
+            }
         }
         return psplits;
     }

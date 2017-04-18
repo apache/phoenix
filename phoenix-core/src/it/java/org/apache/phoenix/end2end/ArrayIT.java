@@ -2777,4 +2777,32 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertTrue(rs.next());
         assertEquals(conn.createArrayOf("CHAR", new String[]{"aaa", "bbb", "ccc"}), rs.getArray(1));
     }
+
+    @Test
+    public void testArrayIndexFunctionForImmutableTable() throws Exception {
+        String tableName = "testArrayIndexFunctionForImmutableTable".toUpperCase();
+        long ts = nextTimestamp();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "CREATE IMMUTABLE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY, ZIP VARCHAR ARRAY[10])";
+            conn.createStatement().execute(ddl);
+        }
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 20));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " (region_name,zip) VALUES('SF Bay Area',ARRAY['94115','94030','94125'])");
+            conn.commit();
+        }
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String sql = "SELECT ZIP[2] FROM " + tableName;
+            try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+                assertTrue(rs.next());
+                assertEquals("94030", rs.getString(1));
+            }
+        }
+    }
+
 }

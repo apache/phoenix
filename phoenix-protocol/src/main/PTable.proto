@@ -47,6 +47,7 @@ message PColumn {
   optional string expression = 12;
   optional bool isRowTimestamp = 13;
   optional bool isDynamic = 14;
+  optional bytes columnQualifierBytes = 15;
 }
 
 message PTableStats {
@@ -95,4 +96,12 @@ message PTable {
   optional string autoParititonSeqName = 31;
   optional bool isAppendOnlySchema = 32;
   optional bytes parentNameBytes = 33;
+  optional bytes storageScheme = 34;
+  optional bytes encodingScheme = 35;
+  repeated EncodedCQCounter encodedCQCounters = 36;
+}
+
+message EncodedCQCounter {
+	required string colFamily = 1;
+	required int32 counter = 2;
 }

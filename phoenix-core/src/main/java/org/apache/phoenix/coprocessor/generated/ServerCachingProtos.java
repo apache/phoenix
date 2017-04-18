@@ -649,6 +649,4947 @@ public final class ServerCachingProtos {
     // @@protoc_insertion_point(class_scope:ImmutableBytesWritable)
   }
 
+  public interface ColumnReferenceOrBuilder
+      extends com.google.protobuf.MessageOrBuilder {
+
+    // required bytes family = 1;
+    /**
+     * <code>required bytes family = 1;</code>
+     */
+    boolean hasFamily();
+    /**
+     * <code>required bytes family = 1;</code>
+     */
+    com.google.protobuf.ByteString getFamily();
+
+    // required bytes qualifier = 2;
+    /**
+     * <code>required bytes qualifier = 2;</code>
+     */
+    boolean hasQualifier();
+    /**
+     * <code>required bytes qualifier = 2;</code>
+     */
+    com.google.protobuf.ByteString getQualifier();
+  }
+  /**
+   * Protobuf type {@code ColumnReference}
+   */
+  public static final class ColumnReference extends
+      com.google.protobuf.GeneratedMessage
+      implements ColumnReferenceOrBuilder {
+    // Use ColumnReference.newBuilder() to construct.
+    private ColumnReference(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+      this.unknownFields = builder.getUnknownFields();
+    }
+    private ColumnReference(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+
+    private static final ColumnReference defaultInstance;
+    public static ColumnReference getDefaultInstance() {
+      return defaultInstance;
+    }
+
+    public ColumnReference getDefaultInstanceForType() {
+      return defaultInstance;
+    }
+
+    private final com.google.protobuf.UnknownFieldSet unknownFields;
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+        getUnknownFields() {
+      return this.unknownFields;
+    }
+    private ColumnReference(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      initFields();
+      int mutable_bitField0_ = 0;
+      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+          com.google.protobuf.UnknownFieldSet.newBuilder();
+      try {
+        boolean done = false;
+        while (!done) {
+          int tag = input.readTag();
+          switch (tag) {
+            case 0:
+              done = true;
+              break;
+            default: {
+              if (!parseUnknownField(input, unknownFields,
+                                     extensionRegistry, tag)) {
+                done = true;
+              }
+              break;
+            }
+            case 10: {
+              bitField0_ |= 0x00000001;
+              family_ = input.readBytes();
+              break;
+            }
+            case 18: {
+              bitField0_ |= 0x00000002;
+              qualifier_ = input.readBytes();
+              break;
+            }
+          }
+        }
+      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+        throw e.setUnfinishedMessage(this);
+      } catch (java.io.IOException e) {
+        throw new com.google.protobuf.InvalidProtocolBufferException(
+            e.getMessage()).setUnfinishedMessage(this);
+      } finally {
+        this.unknownFields = unknownFields.build();
+        makeExtensionsImmutable();
+      }
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnReference_descriptor;
+    }
+
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnReference_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.class, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder.class);
+    }
+
+    public static com.google.protobuf.Parser<ColumnReference> PARSER =
+        new com.google.protobuf.AbstractParser<ColumnReference>() {
+      public ColumnReference parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return new ColumnReference(input, extensionRegistry);
+      }
+    };
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ColumnReference> getParserForType() {
+      return PARSER;
+    }
+
+    private int bitField0_;
+    // required bytes family = 1;
+    public static final int FAMILY_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString family_;
+    /**
+     * <code>required bytes family = 1;</code>
+     */
+    public boolean hasFamily() {
+      return ((bitField0_ & 0x00000001) == 0x00000001);
+    }
+    /**
+     * <code>required bytes family = 1;</code>
+     */
+    public com.google.protobuf.ByteString getFamily() {
+      return family_;
+    }
+
+    // required bytes qualifier = 2;
+    public static final int QUALIFIER_FIELD_NUMBER = 2;
+    private com.google.protobuf.ByteString qualifier_;
+    /**
+     * <code>required bytes qualifier = 2;</code>
+     */
+    public boolean hasQualifier() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required bytes qualifier = 2;</code>
+     */
+    public com.google.protobuf.ByteString getQualifier() {
+      return qualifier_;
+    }
+
+    private void initFields() {
+      family_ = com.google.protobuf.ByteString.EMPTY;
+      qualifier_ = com.google.protobuf.ByteString.EMPTY;
+    }
+    private byte memoizedIsInitialized = -1;
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized != -1) return isInitialized == 1;
+
+      if (!hasFamily()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasQualifier()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getSerializedSize();
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        output.writeBytes(1, family_);
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeBytes(2, qualifier_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    private int memoizedSerializedSize = -1;
+    public int getSerializedSize() {
+      int size = memoizedSerializedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(1, family_);
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(2, qualifier_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSerializedSize = size;
+      return size;
+    }
+
+    private static final long serialVersionUID = 0L;
+    @java.lang.Override
+    protected java.lang.Object writeReplace()
+        throws java.io.ObjectStreamException {
+      return super.writeReplace();
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference)) {
+        return super.equals(obj);
+      }
+      org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference other = (org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference) obj;
+
+      boolean result = true;
+      result = result && (hasFamily() == other.hasFamily());
+      if (hasFamily()) {
+        result = result && getFamily()
+            .equals(other.getFamily());
+      }
+      result = result && (hasQualifier() == other.hasQualifier());
+      if (hasQualifier()) {
+        result = result && getQualifier()
+            .equals(other.getQualifier());
+      }
+      result = result &&
+          getUnknownFields().equals(other.getUnknownFields());
+      return result;
+    }
+
+    private int memoizedHashCode = 0;
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptorForType().hashCode();
+      if (hasFamily()) {
+        hash = (37 * hash) + FAMILY_FIELD_NUMBER;
+        hash = (53 * hash) + getFamily().hashCode();
+      }
+      if (hasQualifier()) {
+        hash = (37 * hash) + QUALIFIER_FIELD_NUMBER;
+        hash = (53 * hash) + getQualifier().hashCode();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() { return Builder.create(); }
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference prototype) {
+      return newBuilder().mergeFrom(prototype);
+    }
+    public Builder toBuilder() { return newBuilder(this); }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code ColumnReference}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder>
+       implements org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnReference_descriptor;
+      }
+
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnReference_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.class, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder.class);
+      }
+
+      // Construct using org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
+        }
+      }
+      private static Builder create() {
+        return new Builder();
+      }
+
+      public Builder clear() {
+        super.clear();
+        family_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000001);
+        qualifier_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000002);
+        return this;
+      }
+
+      public Builder clone() {
+        return create().mergeFrom(buildPartial());
+      }
+
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnReference_descriptor;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance();
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference build() {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference buildPartial() {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference result = new org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference(this);
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
+          to_bitField0_ |= 0x00000001;
+        }
+        result.family_ = family_;
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.qualifier_ = qualifier_;
+        result.bitField0_ = to_bitField0_;
+        onBuilt();
+        return result;
+      }
+
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference other) {
+        if (other == org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance()) return this;
+        if (other.hasFamily()) {
+          setFamily(other.getFamily());
+        }
+        if (other.hasQualifier()) {
+          setQualifier(other.getQualifier());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        return this;
+      }
+
+      public final boolean isInitialized() {
+        if (!hasFamily()) {
+          
+          return false;
+        }
+        if (!hasQualifier()) {
+          
+          return false;
+        }
+        return true;
+      }
+
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference parsedMessage = null;
+        try {
+          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference) e.getUnfinishedMessage();
+          throw e;
+        } finally {
+          if (parsedMessage != null) {
+            mergeFrom(parsedMessage);
+          }
+        }
+        return this;
+      }
+      private int bitField0_;
+
+      // required bytes family = 1;
+      private com.google.protobuf.ByteString family_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes family = 1;</code>
+       */
+      public boolean hasFamily() {
+        return ((bitField0_ & 0x00000001) == 0x00000001);
+      }
+      /**
+       * <code>required bytes family = 1;</code>
+       */
+      public com.google.protobuf.ByteString getFamily() {
+        return family_;
+      }
+      /**
+       * <code>required bytes family = 1;</code>
+       */
+      public Builder setFamily(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000001;
+        family_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes family = 1;</code>
+       */
+      public Builder clearFamily() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        family_ = getDefaultInstance().getFamily();
+        onChanged();
+        return this;
+      }
+
+      // required bytes qualifier = 2;
+      private com.google.protobuf.ByteString qualifier_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes qualifier = 2;</code>
+       */
+      public boolean hasQualifier() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
+      }
+      /**
+       * <code>required bytes qualifier = 2;</code>
+       */
+      public com.google.protobuf.ByteString getQualifier() {
+        return qualifier_;
+      }
+      /**
+       * <code>required bytes qualifier = 2;</code>
+       */
+      public Builder setQualifier(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000002;
+        qualifier_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes qualifier = 2;</code>
+       */
+      public Builder clearQualifier() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        qualifier_ = getDefaultInstance().getQualifier();
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:ColumnReference)
+    }
+
+    static {
+      defaultInstance = new ColumnReference(true);
+      defaultInstance.initFields();
+    }
+
+    // @@protoc_insertion_point(class_scope:ColumnReference)
+  }
+
+  public interface ColumnInfoOrBuilder
+      extends com.google.protobuf.MessageOrBuilder {
+
+    // optional string familyName = 1;
+    /**
+     * <code>optional string familyName = 1;</code>
+     */
+    boolean hasFamilyName();
+    /**
+     * <code>optional string familyName = 1;</code>
+     */
+    java.lang.String getFamilyName();
+    /**
+     * <code>optional string familyName = 1;</code>
+     */
+    com.google.protobuf.ByteString
+        getFamilyNameBytes();
+
+    // required string columnName = 2;
+    /**
+     * <code>required string columnName = 2;</code>
+     */
+    boolean hasColumnName();
+    /**
+     * <code>required string columnName = 2;</code>
+     */
+    java.lang.String getColumnName();
+    /**
+     * <code>required string columnName = 2;</code>
+     */
+    com.google.protobuf.ByteString
+        getColumnNameBytes();
+  }
+  /**
+   * Protobuf type {@code ColumnInfo}
+   */
+  public static final class ColumnInfo extends
+      com.google.protobuf.GeneratedMessage
+      implements ColumnInfoOrBuilder {
+    // Use ColumnInfo.newBuilder() to construct.
+    private ColumnInfo(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+      this.unknownFields = builder.getUnknownFields();
+    }
+    private ColumnInfo(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+
+    private static final ColumnInfo defaultInstance;
+    public static ColumnInfo getDefaultInstance() {
+      return defaultInstance;
+    }
+
+    public ColumnInfo getDefaultInstanceForType() {
+      return defaultInstance;
+    }
+
+    private final com.google.protobuf.UnknownFieldSet unknownFields;
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+        getUnknownFields() {
+      return this.unknownFields;
+    }
+    private ColumnInfo(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      initFields();
+      int mutable_bitField0_ = 0;
+      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+          com.google.protobuf.UnknownFieldSet.newBuilder();
+      try {
+        boolean done = false;
+        while (!done) {
+          int tag = input.readTag();
+          switch (tag) {
+            case 0:
+              done = true;
+              break;
+            default: {
+              if (!parseUnknownField(input, unknownFields,
+                                     extensionRegistry, tag)) {
+                done = true;
+              }
+              break;
+            }
+            case 10: {
+              bitField0_ |= 0x00000001;
+              familyName_ = input.readBytes();
+              break;
+            }
+            case 18: {
+              bitField0_ |= 0x00000002;
+              columnName_ = input.readBytes();
+              break;
+            }
+          }
+        }
+      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+        throw e.setUnfinishedMessage(this);
+      } catch (java.io.IOException e) {
+        throw new com.google.protobuf.InvalidProtocolBufferException(
+            e.getMessage()).setUnfinishedMessage(this);
+      } finally {
+        this.unknownFields = unknownFields.build();
+        makeExtensionsImmutable();
+      }
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnInfo_descriptor;
+    }
+
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnInfo_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.class, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder.class);
+    }
+
+    public static com.google.protobuf.Parser<ColumnInfo> PARSER =
+        new com.google.protobuf.AbstractParser<ColumnInfo>() {
+      public ColumnInfo parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return new ColumnInfo(input, extensionRegistry);
+      }
+    };
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<ColumnInfo> getParserForType() {
+      return PARSER;
+    }
+
+    private int bitField0_;
+    // optional string familyName = 1;
+    public static final int FAMILYNAME_FIELD_NUMBER = 1;
+    private java.lang.Object familyName_;
+    /**
+     * <code>optional string familyName = 1;</code>
+     */
+    public boolean hasFamilyName() {
+      return ((bitField0_ & 0x00000001) == 0x00000001);
+    }
+    /**
+     * <code>optional string familyName = 1;</code>
+     */
+    public java.lang.String getFamilyName() {
+      java.lang.Object ref = familyName_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        if (bs.isValidUtf8()) {
+          familyName_ = s;
+        }
+        return s;
+      }
+    }
+    /**
+     * <code>optional string familyName = 1;</code>
+     */
+    public com.google.protobuf.ByteString
+        getFamilyNameBytes() {
+      java.lang.Object ref = familyName_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        familyName_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    // required string columnName = 2;
+    public static final int COLUMNNAME_FIELD_NUMBER = 2;
+    private java.lang.Object columnName_;
+    /**
+     * <code>required string columnName = 2;</code>
+     */
+    public boolean hasColumnName() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required string columnName = 2;</code>
+     */
+    public java.lang.String getColumnName() {
+      java.lang.Object ref = columnName_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        if (bs.isValidUtf8()) {
+          columnName_ = s;
+        }
+        return s;
+      }
+    }
+    /**
+     * <code>required string columnName = 2;</code>
+     */
+    public com.google.protobuf.ByteString
+        getColumnNameBytes() {
+      java.lang.Object ref = columnName_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        columnName_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    private void initFields() {
+      familyName_ = "";
+      columnName_ = "";
+    }
+    private byte memoizedIsInitialized = -1;
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized != -1) return isInitialized == 1;
+
+      if (!hasColumnName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getSerializedSize();
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        output.writeBytes(1, getFamilyNameBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeBytes(2, getColumnNameBytes());
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    private int memoizedSerializedSize = -1;
+    public int getSerializedSize() {
+      int size = memoizedSerializedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(1, getFamilyNameBytes());
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(2, getColumnNameBytes());
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSerializedSize = size;
+      return size;
+    }
+
+    private static final long serialVersionUID = 0L;
+    @java.lang.Override
+    protected java.lang.Object writeReplace()
+        throws java.io.ObjectStreamException {
+      return super.writeReplace();
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo)) {
+        return super.equals(obj);
+      }
+      org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo other = (org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo) obj;
+
+      boolean result = true;
+      result = result && (hasFamilyName() == other.hasFamilyName());
+      if (hasFamilyName()) {
+        result = result && getFamilyName()
+            .equals(other.getFamilyName());
+      }
+      result = result && (hasColumnName() == other.hasColumnName());
+      if (hasColumnName()) {
+        result = result && getColumnName()
+            .equals(other.getColumnName());
+      }
+      result = result &&
+          getUnknownFields().equals(other.getUnknownFields());
+      return result;
+    }
+
+    private int memoizedHashCode = 0;
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptorForType().hashCode();
+      if (hasFamilyName()) {
+        hash = (37 * hash) + FAMILYNAME_FIELD_NUMBER;
+        hash = (53 * hash) + getFamilyName().hashCode();
+      }
+      if (hasColumnName()) {
+        hash = (37 * hash) + COLUMNNAME_FIELD_NUMBER;
+        hash = (53 * hash) + getColumnName().hashCode();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() { return Builder.create(); }
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo prototype) {
+      return newBuilder().mergeFrom(prototype);
+    }
+    public Builder toBuilder() { return newBuilder(this); }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code ColumnInfo}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder>
+       implements org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnInfo_descriptor;
+      }
+
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnInfo_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.class, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder.class);
+      }
+
+      // Construct using org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
+        }
+      }
+      private static Builder create() {
+        return new Builder();
+      }
+
+      public Builder clear() {
+        super.clear();
+        familyName_ = "";
+        bitField0_ = (bitField0_ & ~0x00000001);
+        columnName_ = "";
+        bitField0_ = (bitField0_ & ~0x00000002);
+        return this;
+      }
+
+      public Builder clone() {
+        return create().mergeFrom(buildPartial());
+      }
+
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_ColumnInfo_descriptor;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.getDefaultInstance();
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo build() {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo buildPartial() {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo result = new org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo(this);
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
+          to_bitField0_ |= 0x00000001;
+        }
+        result.familyName_ = familyName_;
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.columnName_ = columnName_;
+        result.bitField0_ = to_bitField0_;
+        onBuilt();
+        return result;
+      }
+
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo other) {
+        if (other == org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.getDefaultInstance()) return this;
+        if (other.hasFamilyName()) {
+          bitField0_ |= 0x00000001;
+          familyName_ = other.familyName_;
+          onChanged();
+        }
+        if (other.hasColumnName()) {
+          bitField0_ |= 0x00000002;
+          columnName_ = other.columnName_;
+          onChanged();
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        return this;
+      }
+
+      public final boolean isInitialized() {
+        if (!hasColumnName()) {
+          
+          return false;
+        }
+        return true;
+      }
+
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo parsedMessage = null;
+        try {
+          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo) e.getUnfinishedMessage();
+          throw e;
+        } finally {
+          if (parsedMessage != null) {
+            mergeFrom(parsedMessage);
+          }
+        }
+        return this;
+      }
+      private int bitField0_;
+
+      // optional string familyName = 1;
+      private java.lang.Object familyName_ = "";
+      /**
+       * <code>optional string familyName = 1;</code>
+       */
+      public boolean hasFamilyName() {
+        return ((bitField0_ & 0x00000001) == 0x00000001);
+      }
+      /**
+       * <code>optional string familyName = 1;</code>
+       */
+      public java.lang.String getFamilyName() {
+        java.lang.Object ref = familyName_;
+        if (!(ref instanceof java.lang.String)) {
+          java.lang.String s = ((com.google.protobuf.ByteString) ref)
+              .toStringUtf8();
+          familyName_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>optional string familyName = 1;</code>
+       */
+      public com.google.protobuf.ByteString
+          getFamilyNameBytes() {
+        java.lang.Object ref = familyName_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          familyName_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>optional string familyName = 1;</code>
+       */
+      public Builder setFamilyName(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000001;
+        familyName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional string familyName = 1;</code>
+       */
+      public Builder clearFamilyName() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        familyName_ = getDefaultInstance().getFamilyName();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional string familyName = 1;</code>
+       */
+      public Builder setFamilyNameBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000001;
+        familyName_ = value;
+        onChanged();
+        return this;
+      }
+
+      // required string columnName = 2;
+      private java.lang.Object columnName_ = "";
+      /**
+       * <code>required string columnName = 2;</code>
+       */
+      public boolean hasColumnName() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
+      }
+      /**
+       * <code>required string columnName = 2;</code>
+       */
+      public java.lang.String getColumnName() {
+        java.lang.Object ref = columnName_;
+        if (!(ref instanceof java.lang.String)) {
+          java.lang.String s = ((com.google.protobuf.ByteString) ref)
+              .toStringUtf8();
+          columnName_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>required string columnName = 2;</code>
+       */
+      public com.google.protobuf.ByteString
+          getColumnNameBytes() {
+        java.lang.Object ref = columnName_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          columnName_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>required string columnName = 2;</code>
+       */
+      public Builder setColumnName(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000002;
+        columnName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required string columnName = 2;</code>
+       */
+      public Builder clearColumnName() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        columnName_ = getDefaultInstance().getColumnName();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required string columnName = 2;</code>
+       */
+      public Builder setColumnNameBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000002;
+        columnName_ = value;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:ColumnInfo)
+    }
+
+    static {
+      defaultInstance = new ColumnInfo(true);
+      defaultInstance.initFields();
+    }
+
+    // @@protoc_insertion_point(class_scope:ColumnInfo)
+  }
+
+  public interface IndexMaintainerOrBuilder
+      extends com.google.protobuf.MessageOrBuilder {
+
+    // required int32 saltBuckets = 1;
+    /**
+     * <code>required int32 saltBuckets = 1;</code>
+     */
+    boolean hasSaltBuckets();
+    /**
+     * <code>required int32 saltBuckets = 1;</code>
+     */
+    int getSaltBuckets();
+
+    // required bool isMultiTenant = 2;
+    /**
+     * <code>required bool isMultiTenant = 2;</code>
+     */
+    boolean hasIsMultiTenant();
+    /**
+     * <code>required bool isMultiTenant = 2;</code>
+     */
+    boolean getIsMultiTenant();
+
+    // optional bytes viewIndexId = 3;
+    /**
+     * <code>optional bytes viewIndexId = 3;</code>
+     */
+    boolean hasViewIndexId();
+    /**
+     * <code>optional bytes viewIndexId = 3;</code>
+     */
+    com.google.protobuf.ByteString getViewIndexId();
+
+    // repeated .ColumnReference indexedColumns = 4;
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> 
+        getIndexedColumnsList();
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getIndexedColumns(int index);
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    int getIndexedColumnsCount();
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+        getIndexedColumnsOrBuilderList();
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getIndexedColumnsOrBuilder(
+        int index);
+
+    // repeated int32 indexedColumnTypeOrdinal = 5;
+    /**
+     * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+     */
+    java.util.List<java.lang.Integer> getIndexedColumnTypeOrdinalList();
+    /**
+     * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+     */
+    int getIndexedColumnTypeOrdinalCount();
+    /**
+     * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+     */
+    int getIndexedColumnTypeOrdinal(int index);
+
+    // repeated .ColumnReference dataTableColRefForCoveredColumns = 6;
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> 
+        getDataTableColRefForCoveredColumnsList();
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getDataTableColRefForCoveredColumns(int index);
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    int getDataTableColRefForCoveredColumnsCount();
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+        getDataTableColRefForCoveredColumnsOrBuilderList();
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getDataTableColRefForCoveredColumnsOrBuilder(
+        int index);
+
+    // repeated .ColumnReference indexTableColRefForCoveredColumns = 7;
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> 
+        getIndexTableColRefForCoveredColumnsList();
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getIndexTableColRefForCoveredColumns(int index);
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    int getIndexTableColRefForCoveredColumnsCount();
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+        getIndexTableColRefForCoveredColumnsOrBuilderList();
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getIndexTableColRefForCoveredColumnsOrBuilder(
+        int index);
+
+    // required bool isLocalIndex = 8;
+    /**
+     * <code>required bool isLocalIndex = 8;</code>
+     */
+    boolean hasIsLocalIndex();
+    /**
+     * <code>required bool isLocalIndex = 8;</code>
+     */
+    boolean getIsLocalIndex();
+
+    // required bytes indexTableName = 9;
+    /**
+     * <code>required bytes indexTableName = 9;</code>
+     */
+    boolean hasIndexTableName();
+    /**
+     * <code>required bytes indexTableName = 9;</code>
+     */
+    com.google.protobuf.ByteString getIndexTableName();
+
+    // required bool rowKeyOrderOptimizable = 10;
+    /**
+     * <code>required bool rowKeyOrderOptimizable = 10;</code>
+     */
+    boolean hasRowKeyOrderOptimizable();
+    /**
+     * <code>required bool rowKeyOrderOptimizable = 10;</code>
+     */
+    boolean getRowKeyOrderOptimizable();
+
+    // required bytes dataTableEmptyKeyValueColFamily = 11;
+    /**
+     * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+     */
+    boolean hasDataTableEmptyKeyValueColFamily();
+    /**
+     * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+     */
+    com.google.protobuf.ByteString getDataTableEmptyKeyValueColFamily();
+
+    // required .ImmutableBytesWritable emptyKeyValueColFamily = 12;
+    /**
+     * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+     */
+    boolean hasEmptyKeyValueColFamily();
+    /**
+     * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable getEmptyKeyValueColFamily();
+    /**
+     * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritableOrBuilder getEmptyKeyValueColFamilyOrBuilder();
+
+    // optional bytes indexedExpressions = 13;
+    /**
+     * <code>optional bytes indexedExpressions = 13;</code>
+     */
+    boolean hasIndexedExpressions();
+    /**
+     * <code>optional bytes indexedExpressions = 13;</code>
+     */
+    com.google.protobuf.ByteString getIndexedExpressions();
+
+    // required bytes rowKeyMetadata = 14;
+    /**
+     * <code>required bytes rowKeyMetadata = 14;</code>
+     */
+    boolean hasRowKeyMetadata();
+    /**
+     * <code>required bytes rowKeyMetadata = 14;</code>
+     */
+    com.google.protobuf.ByteString getRowKeyMetadata();
+
+    // required int32 numDataTableColFamilies = 15;
+    /**
+     * <code>required int32 numDataTableColFamilies = 15;</code>
+     */
+    boolean hasNumDataTableColFamilies();
+    /**
+     * <code>required int32 numDataTableColFamilies = 15;</code>
+     */
+    int getNumDataTableColFamilies();
+
+    // required bool indexWalDisabled = 16;
+    /**
+     * <code>required bool indexWalDisabled = 16;</code>
+     */
+    boolean hasIndexWalDisabled();
+    /**
+     * <code>required bool indexWalDisabled = 16;</code>
+     */
+    boolean getIndexWalDisabled();
+
+    // required int32 indexRowKeyByteSize = 17;
+    /**
+     * <code>required int32 indexRowKeyByteSize = 17;</code>
+     */
+    boolean hasIndexRowKeyByteSize();
+    /**
+     * <code>required int32 indexRowKeyByteSize = 17;</code>
+     */
+    int getIndexRowKeyByteSize();
+
+    // required bool immutable = 18;
+    /**
+     * <code>required bool immutable = 18;</code>
+     */
+    boolean hasImmutable();
+    /**
+     * <code>required bool immutable = 18;</code>
+     */
+    boolean getImmutable();
+
+    // repeated .ColumnInfo indexedColumnInfo = 19;
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo> 
+        getIndexedColumnInfoList();
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo getIndexedColumnInfo(int index);
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    int getIndexedColumnInfoCount();
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder> 
+        getIndexedColumnInfoOrBuilderList();
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder getIndexedColumnInfoOrBuilder(
+        int index);
+
+    // required int32 encodingScheme = 20;
+    /**
+     * <code>required int32 encodingScheme = 20;</code>
+     */
+    boolean hasEncodingScheme();
+    /**
+     * <code>required int32 encodingScheme = 20;</code>
+     */
+    int getEncodingScheme();
+
+    // required int32 immutableStorageScheme = 21;
+    /**
+     * <code>required int32 immutableStorageScheme = 21;</code>
+     */
+    boolean hasImmutableStorageScheme();
+    /**
+     * <code>required int32 immutableStorageScheme = 21;</code>
+     */
+    int getImmutableStorageScheme();
+  }
+  /**
+   * Protobuf type {@code IndexMaintainer}
+   */
+  public static final class IndexMaintainer extends
+      com.google.protobuf.GeneratedMessage
+      implements IndexMaintainerOrBuilder {
+    // Use IndexMaintainer.newBuilder() to construct.
+    private IndexMaintainer(com.google.protobuf.GeneratedMessage.Builder<?> builder) {
+      super(builder);
+      this.unknownFields = builder.getUnknownFields();
+    }
+    private IndexMaintainer(boolean noInit) { this.unknownFields = com.google.protobuf.UnknownFieldSet.getDefaultInstance(); }
+
+    private static final IndexMaintainer defaultInstance;
+    public static IndexMaintainer getDefaultInstance() {
+      return defaultInstance;
+    }
+
+    public IndexMaintainer getDefaultInstanceForType() {
+      return defaultInstance;
+    }
+
+    private final com.google.protobuf.UnknownFieldSet unknownFields;
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+        getUnknownFields() {
+      return this.unknownFields;
+    }
+    private IndexMaintainer(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      initFields();
+      int mutable_bitField0_ = 0;
+      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+          com.google.protobuf.UnknownFieldSet.newBuilder();
+      try {
+        boolean done = false;
+        while (!done) {
+          int tag = input.readTag();
+          switch (tag) {
+            case 0:
+              done = true;
+              break;
+            default: {
+              if (!parseUnknownField(input, unknownFields,
+                                     extensionRegistry, tag)) {
+                done = true;
+              }
+              break;
+            }
+            case 8: {
+              bitField0_ |= 0x00000001;
+              saltBuckets_ = input.readInt32();
+              break;
+            }
+            case 16: {
+              bitField0_ |= 0x00000002;
+              isMultiTenant_ = input.readBool();
+              break;
+            }
+            case 26: {
+              bitField0_ |= 0x00000004;
+              viewIndexId_ = input.readBytes();
+              break;
+            }
+            case 34: {
+              if (!((mutable_bitField0_ & 0x00000008) == 0x00000008)) {
+                indexedColumns_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference>();
+                mutable_bitField0_ |= 0x00000008;
+              }
+              indexedColumns_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.PARSER, extensionRegistry));
+              break;
+            }
+            case 40: {
+              if (!((mutable_bitField0_ & 0x00000010) == 0x00000010)) {
+                indexedColumnTypeOrdinal_ = new java.util.ArrayList<java.lang.Integer>();
+                mutable_bitField0_ |= 0x00000010;
+              }
+              indexedColumnTypeOrdinal_.add(input.readInt32());
+              break;
+            }
+            case 42: {
+              int length = input.readRawVarint32();
+              int limit = input.pushLimit(length);
+              if (!((mutable_bitField0_ & 0x00000010) == 0x00000010) && input.getBytesUntilLimit() > 0) {
+                indexedColumnTypeOrdinal_ = new java.util.ArrayList<java.lang.Integer>();
+                mutable_bitField0_ |= 0x00000010;
+              }
+              while (input.getBytesUntilLimit() > 0) {
+                indexedColumnTypeOrdinal_.add(input.readInt32());
+              }
+              input.popLimit(limit);
+              break;
+            }
+            case 50: {
+              if (!((mutable_bitField0_ & 0x00000020) == 0x00000020)) {
+                dataTableColRefForCoveredColumns_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference>();
+                mutable_bitField0_ |= 0x00000020;
+              }
+              dataTableColRefForCoveredColumns_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.PARSER, extensionRegistry));
+              break;
+            }
+            case 58: {
+              if (!((mutable_bitField0_ & 0x00000040) == 0x00000040)) {
+                indexTableColRefForCoveredColumns_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference>();
+                mutable_bitField0_ |= 0x00000040;
+              }
+              indexTableColRefForCoveredColumns_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.PARSER, extensionRegistry));
+              break;
+            }
+            case 64: {
+              bitField0_ |= 0x00000008;
+              isLocalIndex_ = input.readBool();
+              break;
+            }
+            case 74: {
+              bitField0_ |= 0x00000010;
+              indexTableName_ = input.readBytes();
+              break;
+            }
+            case 80: {
+              bitField0_ |= 0x00000020;
+              rowKeyOrderOptimizable_ = input.readBool();
+              break;
+            }
+            case 90: {
+              bitField0_ |= 0x00000040;
+              dataTableEmptyKeyValueColFamily_ = input.readBytes();
+              break;
+            }
+            case 98: {
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.Builder subBuilder = null;
+              if (((bitField0_ & 0x00000080) == 0x00000080)) {
+                subBuilder = emptyKeyValueColFamily_.toBuilder();
+              }
+              emptyKeyValueColFamily_ = input.readMessage(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.PARSER, extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(emptyKeyValueColFamily_);
+                emptyKeyValueColFamily_ = subBuilder.buildPartial();
+              }
+              bitField0_ |= 0x00000080;
+              break;
+            }
+            case 106: {
+              bitField0_ |= 0x00000100;
+              indexedExpressions_ = input.readBytes();
+              break;
+            }
+            case 114: {
+              bitField0_ |= 0x00000200;
+              rowKeyMetadata_ = input.readBytes();
+              break;
+            }
+            case 120: {
+              bitField0_ |= 0x00000400;
+              numDataTableColFamilies_ = input.readInt32();
+              break;
+            }
+            case 128: {
+              bitField0_ |= 0x00000800;
+              indexWalDisabled_ = input.readBool();
+              break;
+            }
+            case 136: {
+              bitField0_ |= 0x00001000;
+              indexRowKeyByteSize_ = input.readInt32();
+              break;
+            }
+            case 144: {
+              bitField0_ |= 0x00002000;
+              immutable_ = input.readBool();
+              break;
+            }
+            case 154: {
+              if (!((mutable_bitField0_ & 0x00040000) == 0x00040000)) {
+                indexedColumnInfo_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo>();
+                mutable_bitField0_ |= 0x00040000;
+              }
+              indexedColumnInfo_.add(input.readMessage(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.PARSER, extensionRegistry));
+              break;
+            }
+            case 160: {
+              bitField0_ |= 0x00004000;
+              encodingScheme_ = input.readInt32();
+              break;
+            }
+            case 168: {
+              bitField0_ |= 0x00008000;
+              immutableStorageScheme_ = input.readInt32();
+              break;
+            }
+          }
+        }
+      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+        throw e.setUnfinishedMessage(this);
+      } catch (java.io.IOException e) {
+        throw new com.google.protobuf.InvalidProtocolBufferException(
+            e.getMessage()).setUnfinishedMessage(this);
+      } finally {
+        if (((mutable_bitField0_ & 0x00000008) == 0x00000008)) {
+          indexedColumns_ = java.util.Collections.unmodifiableList(indexedColumns_);
+        }
+        if (((mutable_bitField0_ & 0x00000010) == 0x00000010)) {
+          indexedColumnTypeOrdinal_ = java.util.Collections.unmodifiableList(indexedColumnTypeOrdinal_);
+        }
+        if (((mutable_bitField0_ & 0x00000020) == 0x00000020)) {
+          dataTableColRefForCoveredColumns_ = java.util.Collections.unmodifiableList(dataTableColRefForCoveredColumns_);
+        }
+        if (((mutable_bitField0_ & 0x00000040) == 0x00000040)) {
+          indexTableColRefForCoveredColumns_ = java.util.Collections.unmodifiableList(indexTableColRefForCoveredColumns_);
+        }
+        if (((mutable_bitField0_ & 0x00040000) == 0x00040000)) {
+          indexedColumnInfo_ = java.util.Collections.unmodifiableList(indexedColumnInfo_);
+        }
+        this.unknownFields = unknownFields.build();
+        makeExtensionsImmutable();
+      }
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_IndexMaintainer_descriptor;
+    }
+
+    protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_IndexMaintainer_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer.class, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer.Builder.class);
+    }
+
+    public static com.google.protobuf.Parser<IndexMaintainer> PARSER =
+        new com.google.protobuf.AbstractParser<IndexMaintainer>() {
+      public IndexMaintainer parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return new IndexMaintainer(input, extensionRegistry);
+      }
+    };
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<IndexMaintainer> getParserForType() {
+      return PARSER;
+    }
+
+    private int bitField0_;
+    // required int32 saltBuckets = 1;
+    public static final int SALTBUCKETS_FIELD_NUMBER = 1;
+    private int saltBuckets_;
+    /**
+     * <code>required int32 saltBuckets = 1;</code>
+     */
+    public boolean hasSaltBuckets() {
+      return ((bitField0_ & 0x00000001) == 0x00000001);
+    }
+    /**
+     * <code>required int32 saltBuckets = 1;</code>
+     */
+    public int getSaltBuckets() {
+      return saltBuckets_;
+    }
+
+    // required bool isMultiTenant = 2;
+    public static final int ISMULTITENANT_FIELD_NUMBER = 2;
+    private boolean isMultiTenant_;
+    /**
+     * <code>required bool isMultiTenant = 2;</code>
+     */
+    public boolean hasIsMultiTenant() {
+      return ((bitField0_ & 0x00000002) == 0x00000002);
+    }
+    /**
+     * <code>required bool isMultiTenant = 2;</code>
+     */
+    public boolean getIsMultiTenant() {
+      return isMultiTenant_;
+    }
+
+    // optional bytes viewIndexId = 3;
+    public static final int VIEWINDEXID_FIELD_NUMBER = 3;
+    private com.google.protobuf.ByteString viewIndexId_;
+    /**
+     * <code>optional bytes viewIndexId = 3;</code>
+     */
+    public boolean hasViewIndexId() {
+      return ((bitField0_ & 0x00000004) == 0x00000004);
+    }
+    /**
+     * <code>optional bytes viewIndexId = 3;</code>
+     */
+    public com.google.protobuf.ByteString getViewIndexId() {
+      return viewIndexId_;
+    }
+
+    // repeated .ColumnReference indexedColumns = 4;
+    public static final int INDEXEDCOLUMNS_FIELD_NUMBER = 4;
+    private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> indexedColumns_;
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> getIndexedColumnsList() {
+      return indexedColumns_;
+    }
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+        getIndexedColumnsOrBuilderList() {
+      return indexedColumns_;
+    }
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    public int getIndexedColumnsCount() {
+      return indexedColumns_.size();
+    }
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getIndexedColumns(int index) {
+      return indexedColumns_.get(index);
+    }
+    /**
+     * <code>repeated .ColumnReference indexedColumns = 4;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getIndexedColumnsOrBuilder(
+        int index) {
+      return indexedColumns_.get(index);
+    }
+
+    // repeated int32 indexedColumnTypeOrdinal = 5;
+    public static final int INDEXEDCOLUMNTYPEORDINAL_FIELD_NUMBER = 5;
+    private java.util.List<java.lang.Integer> indexedColumnTypeOrdinal_;
+    /**
+     * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+     */
+    public java.util.List<java.lang.Integer>
+        getIndexedColumnTypeOrdinalList() {
+      return indexedColumnTypeOrdinal_;
+    }
+    /**
+     * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+     */
+    public int getIndexedColumnTypeOrdinalCount() {
+      return indexedColumnTypeOrdinal_.size();
+    }
+    /**
+     * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+     */
+    public int getIndexedColumnTypeOrdinal(int index) {
+      return indexedColumnTypeOrdinal_.get(index);
+    }
+
+    // repeated .ColumnReference dataTableColRefForCoveredColumns = 6;
+    public static final int DATATABLECOLREFFORCOVEREDCOLUMNS_FIELD_NUMBER = 6;
+    private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> dataTableColRefForCoveredColumns_;
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> getDataTableColRefForCoveredColumnsList() {
+      return dataTableColRefForCoveredColumns_;
+    }
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+        getDataTableColRefForCoveredColumnsOrBuilderList() {
+      return dataTableColRefForCoveredColumns_;
+    }
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    public int getDataTableColRefForCoveredColumnsCount() {
+      return dataTableColRefForCoveredColumns_.size();
+    }
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getDataTableColRefForCoveredColumns(int index) {
+      return dataTableColRefForCoveredColumns_.get(index);
+    }
+    /**
+     * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getDataTableColRefForCoveredColumnsOrBuilder(
+        int index) {
+      return dataTableColRefForCoveredColumns_.get(index);
+    }
+
+    // repeated .ColumnReference indexTableColRefForCoveredColumns = 7;
+    public static final int INDEXTABLECOLREFFORCOVEREDCOLUMNS_FIELD_NUMBER = 7;
+    private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> indexTableColRefForCoveredColumns_;
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> getIndexTableColRefForCoveredColumnsList() {
+      return indexTableColRefForCoveredColumns_;
+    }
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+        getIndexTableColRefForCoveredColumnsOrBuilderList() {
+      return indexTableColRefForCoveredColumns_;
+    }
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    public int getIndexTableColRefForCoveredColumnsCount() {
+      return indexTableColRefForCoveredColumns_.size();
+    }
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getIndexTableColRefForCoveredColumns(int index) {
+      return indexTableColRefForCoveredColumns_.get(index);
+    }
+    /**
+     * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getIndexTableColRefForCoveredColumnsOrBuilder(
+        int index) {
+      return indexTableColRefForCoveredColumns_.get(index);
+    }
+
+    // required bool isLocalIndex = 8;
+    public static final int ISLOCALINDEX_FIELD_NUMBER = 8;
+    private boolean isLocalIndex_;
+    /**
+     * <code>required bool isLocalIndex = 8;</code>
+     */
+    public boolean hasIsLocalIndex() {
+      return ((bitField0_ & 0x00000008) == 0x00000008);
+    }
+    /**
+     * <code>required bool isLocalIndex = 8;</code>
+     */
+    public boolean getIsLocalIndex() {
+      return isLocalIndex_;
+    }
+
+    // required bytes indexTableName = 9;
+    public static final int INDEXTABLENAME_FIELD_NUMBER = 9;
+    private com.google.protobuf.ByteString indexTableName_;
+    /**
+     * <code>required bytes indexTableName = 9;</code>
+     */
+    public boolean hasIndexTableName() {
+      return ((bitField0_ & 0x00000010) == 0x00000010);
+    }
+    /**
+     * <code>required bytes indexTableName = 9;</code>
+     */
+    public com.google.protobuf.ByteString getIndexTableName() {
+      return indexTableName_;
+    }
+
+    // required bool rowKeyOrderOptimizable = 10;
+    public static final int ROWKEYORDEROPTIMIZABLE_FIELD_NUMBER = 10;
+    private boolean rowKeyOrderOptimizable_;
+    /**
+     * <code>required bool rowKeyOrderOptimizable = 10;</code>
+     */
+    public boolean hasRowKeyOrderOptimizable() {
+      return ((bitField0_ & 0x00000020) == 0x00000020);
+    }
+    /**
+     * <code>required bool rowKeyOrderOptimizable = 10;</code>
+     */
+    public boolean getRowKeyOrderOptimizable() {
+      return rowKeyOrderOptimizable_;
+    }
+
+    // required bytes dataTableEmptyKeyValueColFamily = 11;
+    public static final int DATATABLEEMPTYKEYVALUECOLFAMILY_FIELD_NUMBER = 11;
+    private com.google.protobuf.ByteString dataTableEmptyKeyValueColFamily_;
+    /**
+     * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+     */
+    public boolean hasDataTableEmptyKeyValueColFamily() {
+      return ((bitField0_ & 0x00000040) == 0x00000040);
+    }
+    /**
+     * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+     */
+    public com.google.protobuf.ByteString getDataTableEmptyKeyValueColFamily() {
+      return dataTableEmptyKeyValueColFamily_;
+    }
+
+    // required .ImmutableBytesWritable emptyKeyValueColFamily = 12;
+    public static final int EMPTYKEYVALUECOLFAMILY_FIELD_NUMBER = 12;
+    private org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable emptyKeyValueColFamily_;
+    /**
+     * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+     */
+    public boolean hasEmptyKeyValueColFamily() {
+      return ((bitField0_ & 0x00000080) == 0x00000080);
+    }
+    /**
+     * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable getEmptyKeyValueColFamily() {
+      return emptyKeyValueColFamily_;
+    }
+    /**
+     * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritableOrBuilder getEmptyKeyValueColFamilyOrBuilder() {
+      return emptyKeyValueColFamily_;
+    }
+
+    // optional bytes indexedExpressions = 13;
+    public static final int INDEXEDEXPRESSIONS_FIELD_NUMBER = 13;
+    private com.google.protobuf.ByteString indexedExpressions_;
+    /**
+     * <code>optional bytes indexedExpressions = 13;</code>
+     */
+    public boolean hasIndexedExpressions() {
+      return ((bitField0_ & 0x00000100) == 0x00000100);
+    }
+    /**
+     * <code>optional bytes indexedExpressions = 13;</code>
+     */
+    public com.google.protobuf.ByteString getIndexedExpressions() {
+      return indexedExpressions_;
+    }
+
+    // required bytes rowKeyMetadata = 14;
+    public static final int ROWKEYMETADATA_FIELD_NUMBER = 14;
+    private com.google.protobuf.ByteString rowKeyMetadata_;
+    /**
+     * <code>required bytes rowKeyMetadata = 14;</code>
+     */
+    public boolean hasRowKeyMetadata() {
+      return ((bitField0_ & 0x00000200) == 0x00000200);
+    }
+    /**
+     * <code>required bytes rowKeyMetadata = 14;</code>
+     */
+    public com.google.protobuf.ByteString getRowKeyMetadata() {
+      return rowKeyMetadata_;
+    }
+
+    // required int32 numDataTableColFamilies = 15;
+    public static final int NUMDATATABLECOLFAMILIES_FIELD_NUMBER = 15;
+    private int numDataTableColFamilies_;
+    /**
+     * <code>required int32 numDataTableColFamilies = 15;</code>
+     */
+    public boolean hasNumDataTableColFamilies() {
+      return ((bitField0_ & 0x00000400) == 0x00000400);
+    }
+    /**
+     * <code>required int32 numDataTableColFamilies = 15;</code>
+     */
+    public int getNumDataTableColFamilies() {
+      return numDataTableColFamilies_;
+    }
+
+    // required bool indexWalDisabled = 16;
+    public static final int INDEXWALDISABLED_FIELD_NUMBER = 16;
+    private boolean indexWalDisabled_;
+    /**
+     * <code>required bool indexWalDisabled = 16;</code>
+     */
+    public boolean hasIndexWalDisabled() {
+      return ((bitField0_ & 0x00000800) == 0x00000800);
+    }
+    /**
+     * <code>required bool indexWalDisabled = 16;</code>
+     */
+    public boolean getIndexWalDisabled() {
+      return indexWalDisabled_;
+    }
+
+    // required int32 indexRowKeyByteSize = 17;
+    public static final int INDEXROWKEYBYTESIZE_FIELD_NUMBER = 17;
+    private int indexRowKeyByteSize_;
+    /**
+     * <code>required int32 indexRowKeyByteSize = 17;</code>
+     */
+    public boolean hasIndexRowKeyByteSize() {
+      return ((bitField0_ & 0x00001000) == 0x00001000);
+    }
+    /**
+     * <code>required int32 indexRowKeyByteSize = 17;</code>
+     */
+    public int getIndexRowKeyByteSize() {
+      return indexRowKeyByteSize_;
+    }
+
+    // required bool immutable = 18;
+    public static final int IMMUTABLE_FIELD_NUMBER = 18;
+    private boolean immutable_;
+    /**
+     * <code>required bool immutable = 18;</code>
+     */
+    public boolean hasImmutable() {
+      return ((bitField0_ & 0x00002000) == 0x00002000);
+    }
+    /**
+     * <code>required bool immutable = 18;</code>
+     */
+    public boolean getImmutable() {
+      return immutable_;
+    }
+
+    // repeated .ColumnInfo indexedColumnInfo = 19;
+    public static final int INDEXEDCOLUMNINFO_FIELD_NUMBER = 19;
+    private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo> indexedColumnInfo_;
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo> getIndexedColumnInfoList() {
+      return indexedColumnInfo_;
+    }
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder> 
+        getIndexedColumnInfoOrBuilderList() {
+      return indexedColumnInfo_;
+    }
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    public int getIndexedColumnInfoCount() {
+      return indexedColumnInfo_.size();
+    }
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo getIndexedColumnInfo(int index) {
+      return indexedColumnInfo_.get(index);
+    }
+    /**
+     * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+     */
+    public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder getIndexedColumnInfoOrBuilder(
+        int index) {
+      return indexedColumnInfo_.get(index);
+    }
+
+    // required int32 encodingScheme = 20;
+    public static final int ENCODINGSCHEME_FIELD_NUMBER = 20;
+    private int encodingScheme_;
+    /**
+     * <code>required int32 encodingScheme = 20;</code>
+     */
+    public boolean hasEncodingScheme() {
+      return ((bitField0_ & 0x00004000) == 0x00004000);
+    }
+    /**
+     * <code>required int32 encodingScheme = 20;</code>
+     */
+    public int getEncodingScheme() {
+      return encodingScheme_;
+    }
+
+    // required int32 immutableStorageScheme = 21;
+    public static final int IMMUTABLESTORAGESCHEME_FIELD_NUMBER = 21;
+    private int immutableStorageScheme_;
+    /**
+     * <code>required int32 immutableStorageScheme = 21;</code>
+     */
+    public boolean hasImmutableStorageScheme() {
+      return ((bitField0_ & 0x00008000) == 0x00008000);
+    }
+    /**
+     * <code>required int32 immutableStorageScheme = 21;</code>
+     */
+    public int getImmutableStorageScheme() {
+      return immutableStorageScheme_;
+    }
+
+    private void initFields() {
+      saltBuckets_ = 0;
+      isMultiTenant_ = false;
+      viewIndexId_ = com.google.protobuf.ByteString.EMPTY;
+      indexedColumns_ = java.util.Collections.emptyList();
+      indexedColumnTypeOrdinal_ = java.util.Collections.emptyList();
+      dataTableColRefForCoveredColumns_ = java.util.Collections.emptyList();
+      indexTableColRefForCoveredColumns_ = java.util.Collections.emptyList();
+      isLocalIndex_ = false;
+      indexTableName_ = com.google.protobuf.ByteString.EMPTY;
+      rowKeyOrderOptimizable_ = false;
+      dataTableEmptyKeyValueColFamily_ = com.google.protobuf.ByteString.EMPTY;
+      emptyKeyValueColFamily_ = org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.getDefaultInstance();
+      indexedExpressions_ = com.google.protobuf.ByteString.EMPTY;
+      rowKeyMetadata_ = com.google.protobuf.ByteString.EMPTY;
+      numDataTableColFamilies_ = 0;
+      indexWalDisabled_ = false;
+      indexRowKeyByteSize_ = 0;
+      immutable_ = false;
+      indexedColumnInfo_ = java.util.Collections.emptyList();
+      encodingScheme_ = 0;
+      immutableStorageScheme_ = 0;
+    }
+    private byte memoizedIsInitialized = -1;
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized != -1) return isInitialized == 1;
+
+      if (!hasSaltBuckets()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasIsMultiTenant()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasIsLocalIndex()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasIndexTableName()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasRowKeyOrderOptimizable()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasDataTableEmptyKeyValueColFamily()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasEmptyKeyValueColFamily()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasRowKeyMetadata()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasNumDataTableColFamilies()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasIndexWalDisabled()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasIndexRowKeyByteSize()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasImmutable()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasEncodingScheme()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      if (!hasImmutableStorageScheme()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      for (int i = 0; i < getIndexedColumnsCount(); i++) {
+        if (!getIndexedColumns(i).isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
+      for (int i = 0; i < getDataTableColRefForCoveredColumnsCount(); i++) {
+        if (!getDataTableColRefForCoveredColumns(i).isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
+      for (int i = 0; i < getIndexTableColRefForCoveredColumnsCount(); i++) {
+        if (!getIndexTableColRefForCoveredColumns(i).isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
+      if (!getEmptyKeyValueColFamily().isInitialized()) {
+        memoizedIsInitialized = 0;
+        return false;
+      }
+      for (int i = 0; i < getIndexedColumnInfoCount(); i++) {
+        if (!getIndexedColumnInfo(i).isInitialized()) {
+          memoizedIsInitialized = 0;
+          return false;
+        }
+      }
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      getSerializedSize();
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        output.writeInt32(1, saltBuckets_);
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        output.writeBool(2, isMultiTenant_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        output.writeBytes(3, viewIndexId_);
+      }
+      for (int i = 0; i < indexedColumns_.size(); i++) {
+        output.writeMessage(4, indexedColumns_.get(i));
+      }
+      for (int i = 0; i < indexedColumnTypeOrdinal_.size(); i++) {
+        output.writeInt32(5, indexedColumnTypeOrdinal_.get(i));
+      }
+      for (int i = 0; i < dataTableColRefForCoveredColumns_.size(); i++) {
+        output.writeMessage(6, dataTableColRefForCoveredColumns_.get(i));
+      }
+      for (int i = 0; i < indexTableColRefForCoveredColumns_.size(); i++) {
+        output.writeMessage(7, indexTableColRefForCoveredColumns_.get(i));
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        output.writeBool(8, isLocalIndex_);
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        output.writeBytes(9, indexTableName_);
+      }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+        output.writeBool(10, rowKeyOrderOptimizable_);
+      }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        output.writeBytes(11, dataTableEmptyKeyValueColFamily_);
+      }
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
+        output.writeMessage(12, emptyKeyValueColFamily_);
+      }
+      if (((bitField0_ & 0x00000100) == 0x00000100)) {
+        output.writeBytes(13, indexedExpressions_);
+      }
+      if (((bitField0_ & 0x00000200) == 0x00000200)) {
+        output.writeBytes(14, rowKeyMetadata_);
+      }
+      if (((bitField0_ & 0x00000400) == 0x00000400)) {
+        output.writeInt32(15, numDataTableColFamilies_);
+      }
+      if (((bitField0_ & 0x00000800) == 0x00000800)) {
+        output.writeBool(16, indexWalDisabled_);
+      }
+      if (((bitField0_ & 0x00001000) == 0x00001000)) {
+        output.writeInt32(17, indexRowKeyByteSize_);
+      }
+      if (((bitField0_ & 0x00002000) == 0x00002000)) {
+        output.writeBool(18, immutable_);
+      }
+      for (int i = 0; i < indexedColumnInfo_.size(); i++) {
+        output.writeMessage(19, indexedColumnInfo_.get(i));
+      }
+      if (((bitField0_ & 0x00004000) == 0x00004000)) {
+        output.writeInt32(20, encodingScheme_);
+      }
+      if (((bitField0_ & 0x00008000) == 0x00008000)) {
+        output.writeInt32(21, immutableStorageScheme_);
+      }
+      getUnknownFields().writeTo(output);
+    }
+
+    private int memoizedSerializedSize = -1;
+    public int getSerializedSize() {
+      int size = memoizedSerializedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (((bitField0_ & 0x00000001) == 0x00000001)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(1, saltBuckets_);
+      }
+      if (((bitField0_ & 0x00000002) == 0x00000002)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(2, isMultiTenant_);
+      }
+      if (((bitField0_ & 0x00000004) == 0x00000004)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(3, viewIndexId_);
+      }
+      for (int i = 0; i < indexedColumns_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(4, indexedColumns_.get(i));
+      }
+      {
+        int dataSize = 0;
+        for (int i = 0; i < indexedColumnTypeOrdinal_.size(); i++) {
+          dataSize += com.google.protobuf.CodedOutputStream
+            .computeInt32SizeNoTag(indexedColumnTypeOrdinal_.get(i));
+        }
+        size += dataSize;
+        size += 1 * getIndexedColumnTypeOrdinalList().size();
+      }
+      for (int i = 0; i < dataTableColRefForCoveredColumns_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(6, dataTableColRefForCoveredColumns_.get(i));
+      }
+      for (int i = 0; i < indexTableColRefForCoveredColumns_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(7, indexTableColRefForCoveredColumns_.get(i));
+      }
+      if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(8, isLocalIndex_);
+      }
+      if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(9, indexTableName_);
+      }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(10, rowKeyOrderOptimizable_);
+      }
+      if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(11, dataTableEmptyKeyValueColFamily_);
+      }
+      if (((bitField0_ & 0x00000080) == 0x00000080)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(12, emptyKeyValueColFamily_);
+      }
+      if (((bitField0_ & 0x00000100) == 0x00000100)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(13, indexedExpressions_);
+      }
+      if (((bitField0_ & 0x00000200) == 0x00000200)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(14, rowKeyMetadata_);
+      }
+      if (((bitField0_ & 0x00000400) == 0x00000400)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(15, numDataTableColFamilies_);
+      }
+      if (((bitField0_ & 0x00000800) == 0x00000800)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(16, indexWalDisabled_);
+      }
+      if (((bitField0_ & 0x00001000) == 0x00001000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(17, indexRowKeyByteSize_);
+      }
+      if (((bitField0_ & 0x00002000) == 0x00002000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(18, immutable_);
+      }
+      for (int i = 0; i < indexedColumnInfo_.size(); i++) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(19, indexedColumnInfo_.get(i));
+      }
+      if (((bitField0_ & 0x00004000) == 0x00004000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(20, encodingScheme_);
+      }
+      if (((bitField0_ & 0x00008000) == 0x00008000)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeInt32Size(21, immutableStorageScheme_);
+      }
+      size += getUnknownFields().getSerializedSize();
+      memoizedSerializedSize = size;
+      return size;
+    }
+
+    private static final long serialVersionUID = 0L;
+    @java.lang.Override
+    protected java.lang.Object writeReplace()
+        throws java.io.ObjectStreamException {
+      return super.writeReplace();
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer)) {
+        return super.equals(obj);
+      }
+      org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer other = (org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer) obj;
+
+      boolean result = true;
+      result = result && (hasSaltBuckets() == other.hasSaltBuckets());
+      if (hasSaltBuckets()) {
+        result = result && (getSaltBuckets()
+            == other.getSaltBuckets());
+      }
+      result = result && (hasIsMultiTenant() == other.hasIsMultiTenant());
+      if (hasIsMultiTenant()) {
+        result = result && (getIsMultiTenant()
+            == other.getIsMultiTenant());
+      }
+      result = result && (hasViewIndexId() == other.hasViewIndexId());
+      if (hasViewIndexId()) {
+        result = result && getViewIndexId()
+            .equals(other.getViewIndexId());
+      }
+      result = result && getIndexedColumnsList()
+          .equals(other.getIndexedColumnsList());
+      result = result && getIndexedColumnTypeOrdinalList()
+          .equals(other.getIndexedColumnTypeOrdinalList());
+      result = result && getDataTableColRefForCoveredColumnsList()
+          .equals(other.getDataTableColRefForCoveredColumnsList());
+      result = result && getIndexTableColRefForCoveredColumnsList()
+          .equals(other.getIndexTableColRefForCoveredColumnsList());
+      result = result && (hasIsLocalIndex() == other.hasIsLocalIndex());
+      if (hasIsLocalIndex()) {
+        result = result && (getIsLocalIndex()
+            == other.getIsLocalIndex());
+      }
+      result = result && (hasIndexTableName() == other.hasIndexTableName());
+      if (hasIndexTableName()) {
+        result = result && getIndexTableName()
+            .equals(other.getIndexTableName());
+      }
+      result = result && (hasRowKeyOrderOptimizable() == other.hasRowKeyOrderOptimizable());
+      if (hasRowKeyOrderOptimizable()) {
+        result = result && (getRowKeyOrderOptimizable()
+            == other.getRowKeyOrderOptimizable());
+      }
+      result = result && (hasDataTableEmptyKeyValueColFamily() == other.hasDataTableEmptyKeyValueColFamily());
+      if (hasDataTableEmptyKeyValueColFamily()) {
+        result = result && getDataTableEmptyKeyValueColFamily()
+            .equals(other.getDataTableEmptyKeyValueColFamily());
+      }
+      result = result && (hasEmptyKeyValueColFamily() == other.hasEmptyKeyValueColFamily());
+      if (hasEmptyKeyValueColFamily()) {
+        result = result && getEmptyKeyValueColFamily()
+            .equals(other.getEmptyKeyValueColFamily());
+      }
+      result = result && (hasIndexedExpressions() == other.hasIndexedExpressions());
+      if (hasIndexedExpressions()) {
+        result = result && getIndexedExpressions()
+            .equals(other.getIndexedExpressions());
+      }
+      result = result && (hasRowKeyMetadata() == other.hasRowKeyMetadata());
+      if (hasRowKeyMetadata()) {
+        result = result && getRowKeyMetadata()
+            .equals(other.getRowKeyMetadata());
+      }
+      result = result && (hasNumDataTableColFamilies() == other.hasNumDataTableColFamilies());
+      if (hasNumDataTableColFamilies()) {
+        result = result && (getNumDataTableColFamilies()
+            == other.getNumDataTableColFamilies());
+      }
+      result = result && (hasIndexWalDisabled() == other.hasIndexWalDisabled());
+      if (hasIndexWalDisabled()) {
+        result = result && (getIndexWalDisabled()
+            == other.getIndexWalDisabled());
+      }
+      result = result && (hasIndexRowKeyByteSize() == other.hasIndexRowKeyByteSize());
+      if (hasIndexRowKeyByteSize()) {
+        result = result && (getIndexRowKeyByteSize()
+            == other.getIndexRowKeyByteSize());
+      }
+      result = result && (hasImmutable() == other.hasImmutable());
+      if (hasImmutable()) {
+        result = result && (getImmutable()
+            == other.getImmutable());
+      }
+      result = result && getIndexedColumnInfoList()
+          .equals(other.getIndexedColumnInfoList());
+      result = result && (hasEncodingScheme() == other.hasEncodingScheme());
+      if (hasEncodingScheme()) {
+        result = result && (getEncodingScheme()
+            == other.getEncodingScheme());
+      }
+      result = result && (hasImmutableStorageScheme() == other.hasImmutableStorageScheme());
+      if (hasImmutableStorageScheme()) {
+        result = result && (getImmutableStorageScheme()
+            == other.getImmutableStorageScheme());
+      }
+      result = result &&
+          getUnknownFields().equals(other.getUnknownFields());
+      return result;
+    }
+
+    private int memoizedHashCode = 0;
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptorForType().hashCode();
+      if (hasSaltBuckets()) {
+        hash = (37 * hash) + SALTBUCKETS_FIELD_NUMBER;
+        hash = (53 * hash) + getSaltBuckets();
+      }
+      if (hasIsMultiTenant()) {
+        hash = (37 * hash) + ISMULTITENANT_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getIsMultiTenant());
+      }
+      if (hasViewIndexId()) {
+        hash = (37 * hash) + VIEWINDEXID_FIELD_NUMBER;
+        hash = (53 * hash) + getViewIndexId().hashCode();
+      }
+      if (getIndexedColumnsCount() > 0) {
+        hash = (37 * hash) + INDEXEDCOLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexedColumnsList().hashCode();
+      }
+      if (getIndexedColumnTypeOrdinalCount() > 0) {
+        hash = (37 * hash) + INDEXEDCOLUMNTYPEORDINAL_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexedColumnTypeOrdinalList().hashCode();
+      }
+      if (getDataTableColRefForCoveredColumnsCount() > 0) {
+        hash = (37 * hash) + DATATABLECOLREFFORCOVEREDCOLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + getDataTableColRefForCoveredColumnsList().hashCode();
+      }
+      if (getIndexTableColRefForCoveredColumnsCount() > 0) {
+        hash = (37 * hash) + INDEXTABLECOLREFFORCOVEREDCOLUMNS_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexTableColRefForCoveredColumnsList().hashCode();
+      }
+      if (hasIsLocalIndex()) {
+        hash = (37 * hash) + ISLOCALINDEX_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getIsLocalIndex());
+      }
+      if (hasIndexTableName()) {
+        hash = (37 * hash) + INDEXTABLENAME_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexTableName().hashCode();
+      }
+      if (hasRowKeyOrderOptimizable()) {
+        hash = (37 * hash) + ROWKEYORDEROPTIMIZABLE_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getRowKeyOrderOptimizable());
+      }
+      if (hasDataTableEmptyKeyValueColFamily()) {
+        hash = (37 * hash) + DATATABLEEMPTYKEYVALUECOLFAMILY_FIELD_NUMBER;
+        hash = (53 * hash) + getDataTableEmptyKeyValueColFamily().hashCode();
+      }
+      if (hasEmptyKeyValueColFamily()) {
+        hash = (37 * hash) + EMPTYKEYVALUECOLFAMILY_FIELD_NUMBER;
+        hash = (53 * hash) + getEmptyKeyValueColFamily().hashCode();
+      }
+      if (hasIndexedExpressions()) {
+        hash = (37 * hash) + INDEXEDEXPRESSIONS_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexedExpressions().hashCode();
+      }
+      if (hasRowKeyMetadata()) {
+        hash = (37 * hash) + ROWKEYMETADATA_FIELD_NUMBER;
+        hash = (53 * hash) + getRowKeyMetadata().hashCode();
+      }
+      if (hasNumDataTableColFamilies()) {
+        hash = (37 * hash) + NUMDATATABLECOLFAMILIES_FIELD_NUMBER;
+        hash = (53 * hash) + getNumDataTableColFamilies();
+      }
+      if (hasIndexWalDisabled()) {
+        hash = (37 * hash) + INDEXWALDISABLED_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getIndexWalDisabled());
+      }
+      if (hasIndexRowKeyByteSize()) {
+        hash = (37 * hash) + INDEXROWKEYBYTESIZE_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexRowKeyByteSize();
+      }
+      if (hasImmutable()) {
+        hash = (37 * hash) + IMMUTABLE_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getImmutable());
+      }
+      if (getIndexedColumnInfoCount() > 0) {
+        hash = (37 * hash) + INDEXEDCOLUMNINFO_FIELD_NUMBER;
+        hash = (53 * hash) + getIndexedColumnInfoList().hashCode();
+      }
+      if (hasEncodingScheme()) {
+        hash = (37 * hash) + ENCODINGSCHEME_FIELD_NUMBER;
+        hash = (53 * hash) + getEncodingScheme();
+      }
+      if (hasImmutableStorageScheme()) {
+        hash = (37 * hash) + IMMUTABLESTORAGESCHEME_FIELD_NUMBER;
+        hash = (53 * hash) + getImmutableStorageScheme();
+      }
+      hash = (29 * hash) + getUnknownFields().hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseDelimitedFrom(input, extensionRegistry);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input);
+    }
+    public static org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return PARSER.parseFrom(input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() { return Builder.create(); }
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer prototype) {
+      return newBuilder().mergeFrom(prototype);
+    }
+    public Builder toBuilder() { return newBuilder(this); }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code IndexMaintainer}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessage.Builder<Builder>
+       implements org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainerOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_IndexMaintainer_descriptor;
+      }
+
+      protected com.google.protobuf.GeneratedMessage.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_IndexMaintainer_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer.class, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer.Builder.class);
+      }
+
+      // Construct using org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessage.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders) {
+          getIndexedColumnsFieldBuilder();
+          getDataTableColRefForCoveredColumnsFieldBuilder();
+          getIndexTableColRefForCoveredColumnsFieldBuilder();
+          getEmptyKeyValueColFamilyFieldBuilder();
+          getIndexedColumnInfoFieldBuilder();
+        }
+      }
+      private static Builder create() {
+        return new Builder();
+      }
+
+      public Builder clear() {
+        super.clear();
+        saltBuckets_ = 0;
+        bitField0_ = (bitField0_ & ~0x00000001);
+        isMultiTenant_ = false;
+        bitField0_ = (bitField0_ & ~0x00000002);
+        viewIndexId_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000004);
+        if (indexedColumnsBuilder_ == null) {
+          indexedColumns_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000008);
+        } else {
+          indexedColumnsBuilder_.clear();
+        }
+        indexedColumnTypeOrdinal_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000010);
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          dataTableColRefForCoveredColumns_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000020);
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.clear();
+        }
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          indexTableColRefForCoveredColumns_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000040);
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.clear();
+        }
+        isLocalIndex_ = false;
+        bitField0_ = (bitField0_ & ~0x00000080);
+        indexTableName_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000100);
+        rowKeyOrderOptimizable_ = false;
+        bitField0_ = (bitField0_ & ~0x00000200);
+        dataTableEmptyKeyValueColFamily_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00000400);
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          emptyKeyValueColFamily_ = org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.getDefaultInstance();
+        } else {
+          emptyKeyValueColFamilyBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000800);
+        indexedExpressions_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00001000);
+        rowKeyMetadata_ = com.google.protobuf.ByteString.EMPTY;
+        bitField0_ = (bitField0_ & ~0x00002000);
+        numDataTableColFamilies_ = 0;
+        bitField0_ = (bitField0_ & ~0x00004000);
+        indexWalDisabled_ = false;
+        bitField0_ = (bitField0_ & ~0x00008000);
+        indexRowKeyByteSize_ = 0;
+        bitField0_ = (bitField0_ & ~0x00010000);
+        immutable_ = false;
+        bitField0_ = (bitField0_ & ~0x00020000);
+        if (indexedColumnInfoBuilder_ == null) {
+          indexedColumnInfo_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00040000);
+        } else {
+          indexedColumnInfoBuilder_.clear();
+        }
+        encodingScheme_ = 0;
+        bitField0_ = (bitField0_ & ~0x00080000);
+        immutableStorageScheme_ = 0;
+        bitField0_ = (bitField0_ & ~0x00100000);
+        return this;
+      }
+
+      public Builder clone() {
+        return create().mergeFrom(buildPartial());
+      }
+
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.internal_static_IndexMaintainer_descriptor;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer getDefaultInstanceForType() {
+        return org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer.getDefaultInstance();
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer build() {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer buildPartial() {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer result = new org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer(this);
+        int from_bitField0_ = bitField0_;
+        int to_bitField0_ = 0;
+        if (((from_bitField0_ & 0x00000001) == 0x00000001)) {
+          to_bitField0_ |= 0x00000001;
+        }
+        result.saltBuckets_ = saltBuckets_;
+        if (((from_bitField0_ & 0x00000002) == 0x00000002)) {
+          to_bitField0_ |= 0x00000002;
+        }
+        result.isMultiTenant_ = isMultiTenant_;
+        if (((from_bitField0_ & 0x00000004) == 0x00000004)) {
+          to_bitField0_ |= 0x00000004;
+        }
+        result.viewIndexId_ = viewIndexId_;
+        if (indexedColumnsBuilder_ == null) {
+          if (((bitField0_ & 0x00000008) == 0x00000008)) {
+            indexedColumns_ = java.util.Collections.unmodifiableList(indexedColumns_);
+            bitField0_ = (bitField0_ & ~0x00000008);
+          }
+          result.indexedColumns_ = indexedColumns_;
+        } else {
+          result.indexedColumns_ = indexedColumnsBuilder_.build();
+        }
+        if (((bitField0_ & 0x00000010) == 0x00000010)) {
+          indexedColumnTypeOrdinal_ = java.util.Collections.unmodifiableList(indexedColumnTypeOrdinal_);
+          bitField0_ = (bitField0_ & ~0x00000010);
+        }
+        result.indexedColumnTypeOrdinal_ = indexedColumnTypeOrdinal_;
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          if (((bitField0_ & 0x00000020) == 0x00000020)) {
+            dataTableColRefForCoveredColumns_ = java.util.Collections.unmodifiableList(dataTableColRefForCoveredColumns_);
+            bitField0_ = (bitField0_ & ~0x00000020);
+          }
+          result.dataTableColRefForCoveredColumns_ = dataTableColRefForCoveredColumns_;
+        } else {
+          result.dataTableColRefForCoveredColumns_ = dataTableColRefForCoveredColumnsBuilder_.build();
+        }
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          if (((bitField0_ & 0x00000040) == 0x00000040)) {
+            indexTableColRefForCoveredColumns_ = java.util.Collections.unmodifiableList(indexTableColRefForCoveredColumns_);
+            bitField0_ = (bitField0_ & ~0x00000040);
+          }
+          result.indexTableColRefForCoveredColumns_ = indexTableColRefForCoveredColumns_;
+        } else {
+          result.indexTableColRefForCoveredColumns_ = indexTableColRefForCoveredColumnsBuilder_.build();
+        }
+        if (((from_bitField0_ & 0x00000080) == 0x00000080)) {
+          to_bitField0_ |= 0x00000008;
+        }
+        result.isLocalIndex_ = isLocalIndex_;
+        if (((from_bitField0_ & 0x00000100) == 0x00000100)) {
+          to_bitField0_ |= 0x00000010;
+        }
+        result.indexTableName_ = indexTableName_;
+        if (((from_bitField0_ & 0x00000200) == 0x00000200)) {
+          to_bitField0_ |= 0x00000020;
+        }
+        result.rowKeyOrderOptimizable_ = rowKeyOrderOptimizable_;
+        if (((from_bitField0_ & 0x00000400) == 0x00000400)) {
+          to_bitField0_ |= 0x00000040;
+        }
+        result.dataTableEmptyKeyValueColFamily_ = dataTableEmptyKeyValueColFamily_;
+        if (((from_bitField0_ & 0x00000800) == 0x00000800)) {
+          to_bitField0_ |= 0x00000080;
+        }
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          result.emptyKeyValueColFamily_ = emptyKeyValueColFamily_;
+        } else {
+          result.emptyKeyValueColFamily_ = emptyKeyValueColFamilyBuilder_.build();
+        }
+        if (((from_bitField0_ & 0x00001000) == 0x00001000)) {
+          to_bitField0_ |= 0x00000100;
+        }
+        result.indexedExpressions_ = indexedExpressions_;
+        if (((from_bitField0_ & 0x00002000) == 0x00002000)) {
+          to_bitField0_ |= 0x00000200;
+        }
+        result.rowKeyMetadata_ = rowKeyMetadata_;
+        if (((from_bitField0_ & 0x00004000) == 0x00004000)) {
+          to_bitField0_ |= 0x00000400;
+        }
+        result.numDataTableColFamilies_ = numDataTableColFamilies_;
+        if (((from_bitField0_ & 0x00008000) == 0x00008000)) {
+          to_bitField0_ |= 0x00000800;
+        }
+        result.indexWalDisabled_ = indexWalDisabled_;
+        if (((from_bitField0_ & 0x00010000) == 0x00010000)) {
+          to_bitField0_ |= 0x00001000;
+        }
+        result.indexRowKeyByteSize_ = indexRowKeyByteSize_;
+        if (((from_bitField0_ & 0x00020000) == 0x00020000)) {
+          to_bitField0_ |= 0x00002000;
+        }
+        result.immutable_ = immutable_;
+        if (indexedColumnInfoBuilder_ == null) {
+          if (((bitField0_ & 0x00040000) == 0x00040000)) {
+            indexedColumnInfo_ = java.util.Collections.unmodifiableList(indexedColumnInfo_);
+            bitField0_ = (bitField0_ & ~0x00040000);
+          }
+          result.indexedColumnInfo_ = indexedColumnInfo_;
+        } else {
+          result.indexedColumnInfo_ = indexedColumnInfoBuilder_.build();
+        }
+        if (((from_bitField0_ & 0x00080000) == 0x00080000)) {
+          to_bitField0_ |= 0x00004000;
+        }
+        result.encodingScheme_ = encodingScheme_;
+        if (((from_bitField0_ & 0x00100000) == 0x00100000)) {
+          to_bitField0_ |= 0x00008000;
+        }
+        result.immutableStorageScheme_ = immutableStorageScheme_;
+        result.bitField0_ = to_bitField0_;
+        onBuilt();
+        return result;
+      }
+
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer) {
+          return mergeFrom((org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer other) {
+        if (other == org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer.getDefaultInstance()) return this;
+        if (other.hasSaltBuckets()) {
+          setSaltBuckets(other.getSaltBuckets());
+        }
+        if (other.hasIsMultiTenant()) {
+          setIsMultiTenant(other.getIsMultiTenant());
+        }
+        if (other.hasViewIndexId()) {
+          setViewIndexId(other.getViewIndexId());
+        }
+        if (indexedColumnsBuilder_ == null) {
+          if (!other.indexedColumns_.isEmpty()) {
+            if (indexedColumns_.isEmpty()) {
+              indexedColumns_ = other.indexedColumns_;
+              bitField0_ = (bitField0_ & ~0x00000008);
+            } else {
+              ensureIndexedColumnsIsMutable();
+              indexedColumns_.addAll(other.indexedColumns_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.indexedColumns_.isEmpty()) {
+            if (indexedColumnsBuilder_.isEmpty()) {
+              indexedColumnsBuilder_.dispose();
+              indexedColumnsBuilder_ = null;
+              indexedColumns_ = other.indexedColumns_;
+              bitField0_ = (bitField0_ & ~0x00000008);
+              indexedColumnsBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   getIndexedColumnsFieldBuilder() : null;
+            } else {
+              indexedColumnsBuilder_.addAllMessages(other.indexedColumns_);
+            }
+          }
+        }
+        if (!other.indexedColumnTypeOrdinal_.isEmpty()) {
+          if (indexedColumnTypeOrdinal_.isEmpty()) {
+            indexedColumnTypeOrdinal_ = other.indexedColumnTypeOrdinal_;
+            bitField0_ = (bitField0_ & ~0x00000010);
+          } else {
+            ensureIndexedColumnTypeOrdinalIsMutable();
+            indexedColumnTypeOrdinal_.addAll(other.indexedColumnTypeOrdinal_);
+          }
+          onChanged();
+        }
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          if (!other.dataTableColRefForCoveredColumns_.isEmpty()) {
+            if (dataTableColRefForCoveredColumns_.isEmpty()) {
+              dataTableColRefForCoveredColumns_ = other.dataTableColRefForCoveredColumns_;
+              bitField0_ = (bitField0_ & ~0x00000020);
+            } else {
+              ensureDataTableColRefForCoveredColumnsIsMutable();
+              dataTableColRefForCoveredColumns_.addAll(other.dataTableColRefForCoveredColumns_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.dataTableColRefForCoveredColumns_.isEmpty()) {
+            if (dataTableColRefForCoveredColumnsBuilder_.isEmpty()) {
+              dataTableColRefForCoveredColumnsBuilder_.dispose();
+              dataTableColRefForCoveredColumnsBuilder_ = null;
+              dataTableColRefForCoveredColumns_ = other.dataTableColRefForCoveredColumns_;
+              bitField0_ = (bitField0_ & ~0x00000020);
+              dataTableColRefForCoveredColumnsBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   getDataTableColRefForCoveredColumnsFieldBuilder() : null;
+            } else {
+              dataTableColRefForCoveredColumnsBuilder_.addAllMessages(other.dataTableColRefForCoveredColumns_);
+            }
+          }
+        }
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          if (!other.indexTableColRefForCoveredColumns_.isEmpty()) {
+            if (indexTableColRefForCoveredColumns_.isEmpty()) {
+              indexTableColRefForCoveredColumns_ = other.indexTableColRefForCoveredColumns_;
+              bitField0_ = (bitField0_ & ~0x00000040);
+            } else {
+              ensureIndexTableColRefForCoveredColumnsIsMutable();
+              indexTableColRefForCoveredColumns_.addAll(other.indexTableColRefForCoveredColumns_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.indexTableColRefForCoveredColumns_.isEmpty()) {
+            if (indexTableColRefForCoveredColumnsBuilder_.isEmpty()) {
+              indexTableColRefForCoveredColumnsBuilder_.dispose();
+              indexTableColRefForCoveredColumnsBuilder_ = null;
+              indexTableColRefForCoveredColumns_ = other.indexTableColRefForCoveredColumns_;
+              bitField0_ = (bitField0_ & ~0x00000040);
+              indexTableColRefForCoveredColumnsBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   getIndexTableColRefForCoveredColumnsFieldBuilder() : null;
+            } else {
+              indexTableColRefForCoveredColumnsBuilder_.addAllMessages(other.indexTableColRefForCoveredColumns_);
+            }
+          }
+        }
+        if (other.hasIsLocalIndex()) {
+          setIsLocalIndex(other.getIsLocalIndex());
+        }
+        if (other.hasIndexTableName()) {
+          setIndexTableName(other.getIndexTableName());
+        }
+        if (other.hasRowKeyOrderOptimizable()) {
+          setRowKeyOrderOptimizable(other.getRowKeyOrderOptimizable());
+        }
+        if (other.hasDataTableEmptyKeyValueColFamily()) {
+          setDataTableEmptyKeyValueColFamily(other.getDataTableEmptyKeyValueColFamily());
+        }
+        if (other.hasEmptyKeyValueColFamily()) {
+          mergeEmptyKeyValueColFamily(other.getEmptyKeyValueColFamily());
+        }
+        if (other.hasIndexedExpressions()) {
+          setIndexedExpressions(other.getIndexedExpressions());
+        }
+        if (other.hasRowKeyMetadata()) {
+          setRowKeyMetadata(other.getRowKeyMetadata());
+        }
+        if (other.hasNumDataTableColFamilies()) {
+          setNumDataTableColFamilies(other.getNumDataTableColFamilies());
+        }
+        if (other.hasIndexWalDisabled()) {
+          setIndexWalDisabled(other.getIndexWalDisabled());
+        }
+        if (other.hasIndexRowKeyByteSize()) {
+          setIndexRowKeyByteSize(other.getIndexRowKeyByteSize());
+        }
+        if (other.hasImmutable()) {
+          setImmutable(other.getImmutable());
+        }
+        if (indexedColumnInfoBuilder_ == null) {
+          if (!other.indexedColumnInfo_.isEmpty()) {
+            if (indexedColumnInfo_.isEmpty()) {
+              indexedColumnInfo_ = other.indexedColumnInfo_;
+              bitField0_ = (bitField0_ & ~0x00040000);
+            } else {
+              ensureIndexedColumnInfoIsMutable();
+              indexedColumnInfo_.addAll(other.indexedColumnInfo_);
+            }
+            onChanged();
+          }
+        } else {
+          if (!other.indexedColumnInfo_.isEmpty()) {
+            if (indexedColumnInfoBuilder_.isEmpty()) {
+              indexedColumnInfoBuilder_.dispose();
+              indexedColumnInfoBuilder_ = null;
+              indexedColumnInfo_ = other.indexedColumnInfo_;
+              bitField0_ = (bitField0_ & ~0x00040000);
+              indexedColumnInfoBuilder_ = 
+                com.google.protobuf.GeneratedMessage.alwaysUseFieldBuilders ?
+                   getIndexedColumnInfoFieldBuilder() : null;
+            } else {
+              indexedColumnInfoBuilder_.addAllMessages(other.indexedColumnInfo_);
+            }
+          }
+        }
+        if (other.hasEncodingScheme()) {
+          setEncodingScheme(other.getEncodingScheme());
+        }
+        if (other.hasImmutableStorageScheme()) {
+          setImmutableStorageScheme(other.getImmutableStorageScheme());
+        }
+        this.mergeUnknownFields(other.getUnknownFields());
+        return this;
+      }
+
+      public final boolean isInitialized() {
+        if (!hasSaltBuckets()) {
+          
+          return false;
+        }
+        if (!hasIsMultiTenant()) {
+          
+          return false;
+        }
+        if (!hasIsLocalIndex()) {
+          
+          return false;
+        }
+        if (!hasIndexTableName()) {
+          
+          return false;
+        }
+        if (!hasRowKeyOrderOptimizable()) {
+          
+          return false;
+        }
+        if (!hasDataTableEmptyKeyValueColFamily()) {
+          
+          return false;
+        }
+        if (!hasEmptyKeyValueColFamily()) {
+          
+          return false;
+        }
+        if (!hasRowKeyMetadata()) {
+          
+          return false;
+        }
+        if (!hasNumDataTableColFamilies()) {
+          
+          return false;
+        }
+        if (!hasIndexWalDisabled()) {
+          
+          return false;
+        }
+        if (!hasIndexRowKeyByteSize()) {
+          
+          return false;
+        }
+        if (!hasImmutable()) {
+          
+          return false;
+        }
+        if (!hasEncodingScheme()) {
+          
+          return false;
+        }
+        if (!hasImmutableStorageScheme()) {
+          
+          return false;
+        }
+        for (int i = 0; i < getIndexedColumnsCount(); i++) {
+          if (!getIndexedColumns(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        for (int i = 0; i < getDataTableColRefForCoveredColumnsCount(); i++) {
+          if (!getDataTableColRefForCoveredColumns(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        for (int i = 0; i < getIndexTableColRefForCoveredColumnsCount(); i++) {
+          if (!getIndexTableColRefForCoveredColumns(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        if (!getEmptyKeyValueColFamily().isInitialized()) {
+          
+          return false;
+        }
+        for (int i = 0; i < getIndexedColumnInfoCount(); i++) {
+          if (!getIndexedColumnInfo(i).isInitialized()) {
+            
+            return false;
+          }
+        }
+        return true;
+      }
+
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer parsedMessage = null;
+        try {
+          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          parsedMessage = (org.apache.phoenix.coprocessor.generated.ServerCachingProtos.IndexMaintainer) e.getUnfinishedMessage();
+          throw e;
+        } finally {
+          if (parsedMessage != null) {
+            mergeFrom(parsedMessage);
+          }
+        }
+        return this;
+      }
+      private int bitField0_;
+
+      // required int32 saltBuckets = 1;
+      private int saltBuckets_ ;
+      /**
+       * <code>required int32 saltBuckets = 1;</code>
+       */
+      public boolean hasSaltBuckets() {
+        return ((bitField0_ & 0x00000001) == 0x00000001);
+      }
+      /**
+       * <code>required int32 saltBuckets = 1;</code>
+       */
+      public int getSaltBuckets() {
+        return saltBuckets_;
+      }
+      /**
+       * <code>required int32 saltBuckets = 1;</code>
+       */
+      public Builder setSaltBuckets(int value) {
+        bitField0_ |= 0x00000001;
+        saltBuckets_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int32 saltBuckets = 1;</code>
+       */
+      public Builder clearSaltBuckets() {
+        bitField0_ = (bitField0_ & ~0x00000001);
+        saltBuckets_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // required bool isMultiTenant = 2;
+      private boolean isMultiTenant_ ;
+      /**
+       * <code>required bool isMultiTenant = 2;</code>
+       */
+      public boolean hasIsMultiTenant() {
+        return ((bitField0_ & 0x00000002) == 0x00000002);
+      }
+      /**
+       * <code>required bool isMultiTenant = 2;</code>
+       */
+      public boolean getIsMultiTenant() {
+        return isMultiTenant_;
+      }
+      /**
+       * <code>required bool isMultiTenant = 2;</code>
+       */
+      public Builder setIsMultiTenant(boolean value) {
+        bitField0_ |= 0x00000002;
+        isMultiTenant_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool isMultiTenant = 2;</code>
+       */
+      public Builder clearIsMultiTenant() {
+        bitField0_ = (bitField0_ & ~0x00000002);
+        isMultiTenant_ = false;
+        onChanged();
+        return this;
+      }
+
+      // optional bytes viewIndexId = 3;
+      private com.google.protobuf.ByteString viewIndexId_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes viewIndexId = 3;</code>
+       */
+      public boolean hasViewIndexId() {
+        return ((bitField0_ & 0x00000004) == 0x00000004);
+      }
+      /**
+       * <code>optional bytes viewIndexId = 3;</code>
+       */
+      public com.google.protobuf.ByteString getViewIndexId() {
+        return viewIndexId_;
+      }
+      /**
+       * <code>optional bytes viewIndexId = 3;</code>
+       */
+      public Builder setViewIndexId(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000004;
+        viewIndexId_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bytes viewIndexId = 3;</code>
+       */
+      public Builder clearViewIndexId() {
+        bitField0_ = (bitField0_ & ~0x00000004);
+        viewIndexId_ = getDefaultInstance().getViewIndexId();
+        onChanged();
+        return this;
+      }
+
+      // repeated .ColumnReference indexedColumns = 4;
+      private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> indexedColumns_ =
+        java.util.Collections.emptyList();
+      private void ensureIndexedColumnsIsMutable() {
+        if (!((bitField0_ & 0x00000008) == 0x00000008)) {
+          indexedColumns_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference>(indexedColumns_);
+          bitField0_ |= 0x00000008;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> indexedColumnsBuilder_;
+
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> getIndexedColumnsList() {
+        if (indexedColumnsBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(indexedColumns_);
+        } else {
+          return indexedColumnsBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public int getIndexedColumnsCount() {
+        if (indexedColumnsBuilder_ == null) {
+          return indexedColumns_.size();
+        } else {
+          return indexedColumnsBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getIndexedColumns(int index) {
+        if (indexedColumnsBuilder_ == null) {
+          return indexedColumns_.get(index);
+        } else {
+          return indexedColumnsBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder setIndexedColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (indexedColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexedColumnsIsMutable();
+          indexedColumns_.set(index, value);
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder setIndexedColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (indexedColumnsBuilder_ == null) {
+          ensureIndexedColumnsIsMutable();
+          indexedColumns_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder addIndexedColumns(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (indexedColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexedColumnsIsMutable();
+          indexedColumns_.add(value);
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder addIndexedColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (indexedColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexedColumnsIsMutable();
+          indexedColumns_.add(index, value);
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder addIndexedColumns(
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (indexedColumnsBuilder_ == null) {
+          ensureIndexedColumnsIsMutable();
+          indexedColumns_.add(builderForValue.build());
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder addIndexedColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (indexedColumnsBuilder_ == null) {
+          ensureIndexedColumnsIsMutable();
+          indexedColumns_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder addAllIndexedColumns(
+          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> values) {
+        if (indexedColumnsBuilder_ == null) {
+          ensureIndexedColumnsIsMutable();
+          super.addAll(values, indexedColumns_);
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder clearIndexedColumns() {
+        if (indexedColumnsBuilder_ == null) {
+          indexedColumns_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000008);
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public Builder removeIndexedColumns(int index) {
+        if (indexedColumnsBuilder_ == null) {
+          ensureIndexedColumnsIsMutable();
+          indexedColumns_.remove(index);
+          onChanged();
+        } else {
+          indexedColumnsBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder getIndexedColumnsBuilder(
+          int index) {
+        return getIndexedColumnsFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getIndexedColumnsOrBuilder(
+          int index) {
+        if (indexedColumnsBuilder_ == null) {
+          return indexedColumns_.get(index);  } else {
+          return indexedColumnsBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+           getIndexedColumnsOrBuilderList() {
+        if (indexedColumnsBuilder_ != null) {
+          return indexedColumnsBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(indexedColumns_);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder addIndexedColumnsBuilder() {
+        return getIndexedColumnsFieldBuilder().addBuilder(
+            org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder addIndexedColumnsBuilder(
+          int index) {
+        return getIndexedColumnsFieldBuilder().addBuilder(
+            index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnReference indexedColumns = 4;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder> 
+           getIndexedColumnsBuilderList() {
+        return getIndexedColumnsFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+          getIndexedColumnsFieldBuilder() {
+        if (indexedColumnsBuilder_ == null) {
+          indexedColumnsBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder>(
+                  indexedColumns_,
+                  ((bitField0_ & 0x00000008) == 0x00000008),
+                  getParentForChildren(),
+                  isClean());
+          indexedColumns_ = null;
+        }
+        return indexedColumnsBuilder_;
+      }
+
+      // repeated int32 indexedColumnTypeOrdinal = 5;
+      private java.util.List<java.lang.Integer> indexedColumnTypeOrdinal_ = java.util.Collections.emptyList();
+      private void ensureIndexedColumnTypeOrdinalIsMutable() {
+        if (!((bitField0_ & 0x00000010) == 0x00000010)) {
+          indexedColumnTypeOrdinal_ = new java.util.ArrayList<java.lang.Integer>(indexedColumnTypeOrdinal_);
+          bitField0_ |= 0x00000010;
+         }
+      }
+      /**
+       * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+       */
+      public java.util.List<java.lang.Integer>
+          getIndexedColumnTypeOrdinalList() {
+        return java.util.Collections.unmodifiableList(indexedColumnTypeOrdinal_);
+      }
+      /**
+       * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+       */
+      public int getIndexedColumnTypeOrdinalCount() {
+        return indexedColumnTypeOrdinal_.size();
+      }
+      /**
+       * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+       */
+      public int getIndexedColumnTypeOrdinal(int index) {
+        return indexedColumnTypeOrdinal_.get(index);
+      }
+      /**
+       * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+       */
+      public Builder setIndexedColumnTypeOrdinal(
+          int index, int value) {
+        ensureIndexedColumnTypeOrdinalIsMutable();
+        indexedColumnTypeOrdinal_.set(index, value);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+       */
+      public Builder addIndexedColumnTypeOrdinal(int value) {
+        ensureIndexedColumnTypeOrdinalIsMutable();
+        indexedColumnTypeOrdinal_.add(value);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+       */
+      public Builder addAllIndexedColumnTypeOrdinal(
+          java.lang.Iterable<? extends java.lang.Integer> values) {
+        ensureIndexedColumnTypeOrdinalIsMutable();
+        super.addAll(values, indexedColumnTypeOrdinal_);
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>repeated int32 indexedColumnTypeOrdinal = 5;</code>
+       */
+      public Builder clearIndexedColumnTypeOrdinal() {
+        indexedColumnTypeOrdinal_ = java.util.Collections.emptyList();
+        bitField0_ = (bitField0_ & ~0x00000010);
+        onChanged();
+        return this;
+      }
+
+      // repeated .ColumnReference dataTableColRefForCoveredColumns = 6;
+      private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> dataTableColRefForCoveredColumns_ =
+        java.util.Collections.emptyList();
+      private void ensureDataTableColRefForCoveredColumnsIsMutable() {
+        if (!((bitField0_ & 0x00000020) == 0x00000020)) {
+          dataTableColRefForCoveredColumns_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference>(dataTableColRefForCoveredColumns_);
+          bitField0_ |= 0x00000020;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> dataTableColRefForCoveredColumnsBuilder_;
+
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> getDataTableColRefForCoveredColumnsList() {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(dataTableColRefForCoveredColumns_);
+        } else {
+          return dataTableColRefForCoveredColumnsBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public int getDataTableColRefForCoveredColumnsCount() {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          return dataTableColRefForCoveredColumns_.size();
+        } else {
+          return dataTableColRefForCoveredColumnsBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getDataTableColRefForCoveredColumns(int index) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          return dataTableColRefForCoveredColumns_.get(index);
+        } else {
+          return dataTableColRefForCoveredColumnsBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder setDataTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          dataTableColRefForCoveredColumns_.set(index, value);
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder setDataTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          dataTableColRefForCoveredColumns_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder addDataTableColRefForCoveredColumns(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          dataTableColRefForCoveredColumns_.add(value);
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder addDataTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          dataTableColRefForCoveredColumns_.add(index, value);
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder addDataTableColRefForCoveredColumns(
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          dataTableColRefForCoveredColumns_.add(builderForValue.build());
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder addDataTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          dataTableColRefForCoveredColumns_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder addAllDataTableColRefForCoveredColumns(
+          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> values) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          super.addAll(values, dataTableColRefForCoveredColumns_);
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder clearDataTableColRefForCoveredColumns() {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          dataTableColRefForCoveredColumns_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000020);
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public Builder removeDataTableColRefForCoveredColumns(int index) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureDataTableColRefForCoveredColumnsIsMutable();
+          dataTableColRefForCoveredColumns_.remove(index);
+          onChanged();
+        } else {
+          dataTableColRefForCoveredColumnsBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder getDataTableColRefForCoveredColumnsBuilder(
+          int index) {
+        return getDataTableColRefForCoveredColumnsFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getDataTableColRefForCoveredColumnsOrBuilder(
+          int index) {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          return dataTableColRefForCoveredColumns_.get(index);  } else {
+          return dataTableColRefForCoveredColumnsBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+           getDataTableColRefForCoveredColumnsOrBuilderList() {
+        if (dataTableColRefForCoveredColumnsBuilder_ != null) {
+          return dataTableColRefForCoveredColumnsBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(dataTableColRefForCoveredColumns_);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder addDataTableColRefForCoveredColumnsBuilder() {
+        return getDataTableColRefForCoveredColumnsFieldBuilder().addBuilder(
+            org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder addDataTableColRefForCoveredColumnsBuilder(
+          int index) {
+        return getDataTableColRefForCoveredColumnsFieldBuilder().addBuilder(
+            index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnReference dataTableColRefForCoveredColumns = 6;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder> 
+           getDataTableColRefForCoveredColumnsBuilderList() {
+        return getDataTableColRefForCoveredColumnsFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+          getDataTableColRefForCoveredColumnsFieldBuilder() {
+        if (dataTableColRefForCoveredColumnsBuilder_ == null) {
+          dataTableColRefForCoveredColumnsBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder>(
+                  dataTableColRefForCoveredColumns_,
+                  ((bitField0_ & 0x00000020) == 0x00000020),
+                  getParentForChildren(),
+                  isClean());
+          dataTableColRefForCoveredColumns_ = null;
+        }
+        return dataTableColRefForCoveredColumnsBuilder_;
+      }
+
+      // repeated .ColumnReference indexTableColRefForCoveredColumns = 7;
+      private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> indexTableColRefForCoveredColumns_ =
+        java.util.Collections.emptyList();
+      private void ensureIndexTableColRefForCoveredColumnsIsMutable() {
+        if (!((bitField0_ & 0x00000040) == 0x00000040)) {
+          indexTableColRefForCoveredColumns_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference>(indexTableColRefForCoveredColumns_);
+          bitField0_ |= 0x00000040;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> indexTableColRefForCoveredColumnsBuilder_;
+
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> getIndexTableColRefForCoveredColumnsList() {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(indexTableColRefForCoveredColumns_);
+        } else {
+          return indexTableColRefForCoveredColumnsBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public int getIndexTableColRefForCoveredColumnsCount() {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          return indexTableColRefForCoveredColumns_.size();
+        } else {
+          return indexTableColRefForCoveredColumnsBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference getIndexTableColRefForCoveredColumns(int index) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          return indexTableColRefForCoveredColumns_.get(index);
+        } else {
+          return indexTableColRefForCoveredColumnsBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder setIndexTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          indexTableColRefForCoveredColumns_.set(index, value);
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder setIndexTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          indexTableColRefForCoveredColumns_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder addIndexTableColRefForCoveredColumns(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          indexTableColRefForCoveredColumns_.add(value);
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder addIndexTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference value) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          indexTableColRefForCoveredColumns_.add(index, value);
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder addIndexTableColRefForCoveredColumns(
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          indexTableColRefForCoveredColumns_.add(builderForValue.build());
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder addIndexTableColRefForCoveredColumns(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder builderForValue) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          indexTableColRefForCoveredColumns_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder addAllIndexTableColRefForCoveredColumns(
+          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference> values) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          super.addAll(values, indexTableColRefForCoveredColumns_);
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder clearIndexTableColRefForCoveredColumns() {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          indexTableColRefForCoveredColumns_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00000040);
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public Builder removeIndexTableColRefForCoveredColumns(int index) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          ensureIndexTableColRefForCoveredColumnsIsMutable();
+          indexTableColRefForCoveredColumns_.remove(index);
+          onChanged();
+        } else {
+          indexTableColRefForCoveredColumnsBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder getIndexTableColRefForCoveredColumnsBuilder(
+          int index) {
+        return getIndexTableColRefForCoveredColumnsFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder getIndexTableColRefForCoveredColumnsOrBuilder(
+          int index) {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          return indexTableColRefForCoveredColumns_.get(index);  } else {
+          return indexTableColRefForCoveredColumnsBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+           getIndexTableColRefForCoveredColumnsOrBuilderList() {
+        if (indexTableColRefForCoveredColumnsBuilder_ != null) {
+          return indexTableColRefForCoveredColumnsBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(indexTableColRefForCoveredColumns_);
+        }
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder addIndexTableColRefForCoveredColumnsBuilder() {
+        return getIndexTableColRefForCoveredColumnsFieldBuilder().addBuilder(
+            org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder addIndexTableColRefForCoveredColumnsBuilder(
+          int index) {
+        return getIndexTableColRefForCoveredColumnsFieldBuilder().addBuilder(
+            index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnReference indexTableColRefForCoveredColumns = 7;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder> 
+           getIndexTableColRefForCoveredColumnsBuilderList() {
+        return getIndexTableColRefForCoveredColumnsFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder> 
+          getIndexTableColRefForCoveredColumnsFieldBuilder() {
+        if (indexTableColRefForCoveredColumnsBuilder_ == null) {
+          indexTableColRefForCoveredColumnsBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReference.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnReferenceOrBuilder>(
+                  indexTableColRefForCoveredColumns_,
+                  ((bitField0_ & 0x00000040) == 0x00000040),
+                  getParentForChildren(),
+                  isClean());
+          indexTableColRefForCoveredColumns_ = null;
+        }
+        return indexTableColRefForCoveredColumnsBuilder_;
+      }
+
+      // required bool isLocalIndex = 8;
+      private boolean isLocalIndex_ ;
+      /**
+       * <code>required bool isLocalIndex = 8;</code>
+       */
+      public boolean hasIsLocalIndex() {
+        return ((bitField0_ & 0x00000080) == 0x00000080);
+      }
+      /**
+       * <code>required bool isLocalIndex = 8;</code>
+       */
+      public boolean getIsLocalIndex() {
+        return isLocalIndex_;
+      }
+      /**
+       * <code>required bool isLocalIndex = 8;</code>
+       */
+      public Builder setIsLocalIndex(boolean value) {
+        bitField0_ |= 0x00000080;
+        isLocalIndex_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool isLocalIndex = 8;</code>
+       */
+      public Builder clearIsLocalIndex() {
+        bitField0_ = (bitField0_ & ~0x00000080);
+        isLocalIndex_ = false;
+        onChanged();
+        return this;
+      }
+
+      // required bytes indexTableName = 9;
+      private com.google.protobuf.ByteString indexTableName_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes indexTableName = 9;</code>
+       */
+      public boolean hasIndexTableName() {
+        return ((bitField0_ & 0x00000100) == 0x00000100);
+      }
+      /**
+       * <code>required bytes indexTableName = 9;</code>
+       */
+      public com.google.protobuf.ByteString getIndexTableName() {
+        return indexTableName_;
+      }
+      /**
+       * <code>required bytes indexTableName = 9;</code>
+       */
+      public Builder setIndexTableName(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000100;
+        indexTableName_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes indexTableName = 9;</code>
+       */
+      public Builder clearIndexTableName() {
+        bitField0_ = (bitField0_ & ~0x00000100);
+        indexTableName_ = getDefaultInstance().getIndexTableName();
+        onChanged();
+        return this;
+      }
+
+      // required bool rowKeyOrderOptimizable = 10;
+      private boolean rowKeyOrderOptimizable_ ;
+      /**
+       * <code>required bool rowKeyOrderOptimizable = 10;</code>
+       */
+      public boolean hasRowKeyOrderOptimizable() {
+        return ((bitField0_ & 0x00000200) == 0x00000200);
+      }
+      /**
+       * <code>required bool rowKeyOrderOptimizable = 10;</code>
+       */
+      public boolean getRowKeyOrderOptimizable() {
+        return rowKeyOrderOptimizable_;
+      }
+      /**
+       * <code>required bool rowKeyOrderOptimizable = 10;</code>
+       */
+      public Builder setRowKeyOrderOptimizable(boolean value) {
+        bitField0_ |= 0x00000200;
+        rowKeyOrderOptimizable_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool rowKeyOrderOptimizable = 10;</code>
+       */
+      public Builder clearRowKeyOrderOptimizable() {
+        bitField0_ = (bitField0_ & ~0x00000200);
+        rowKeyOrderOptimizable_ = false;
+        onChanged();
+        return this;
+      }
+
+      // required bytes dataTableEmptyKeyValueColFamily = 11;
+      private com.google.protobuf.ByteString dataTableEmptyKeyValueColFamily_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+       */
+      public boolean hasDataTableEmptyKeyValueColFamily() {
+        return ((bitField0_ & 0x00000400) == 0x00000400);
+      }
+      /**
+       * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+       */
+      public com.google.protobuf.ByteString getDataTableEmptyKeyValueColFamily() {
+        return dataTableEmptyKeyValueColFamily_;
+      }
+      /**
+       * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+       */
+      public Builder setDataTableEmptyKeyValueColFamily(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00000400;
+        dataTableEmptyKeyValueColFamily_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes dataTableEmptyKeyValueColFamily = 11;</code>
+       */
+      public Builder clearDataTableEmptyKeyValueColFamily() {
+        bitField0_ = (bitField0_ & ~0x00000400);
+        dataTableEmptyKeyValueColFamily_ = getDefaultInstance().getDataTableEmptyKeyValueColFamily();
+        onChanged();
+        return this;
+      }
+
+      // required .ImmutableBytesWritable emptyKeyValueColFamily = 12;
+      private org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable emptyKeyValueColFamily_ = org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.getDefaultInstance();
+      private com.google.protobuf.SingleFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritableOrBuilder> emptyKeyValueColFamilyBuilder_;
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public boolean hasEmptyKeyValueColFamily() {
+        return ((bitField0_ & 0x00000800) == 0x00000800);
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable getEmptyKeyValueColFamily() {
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          return emptyKeyValueColFamily_;
+        } else {
+          return emptyKeyValueColFamilyBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public Builder setEmptyKeyValueColFamily(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable value) {
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          emptyKeyValueColFamily_ = value;
+          onChanged();
+        } else {
+          emptyKeyValueColFamilyBuilder_.setMessage(value);
+        }
+        bitField0_ |= 0x00000800;
+        return this;
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public Builder setEmptyKeyValueColFamily(
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.Builder builderForValue) {
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          emptyKeyValueColFamily_ = builderForValue.build();
+          onChanged();
+        } else {
+          emptyKeyValueColFamilyBuilder_.setMessage(builderForValue.build());
+        }
+        bitField0_ |= 0x00000800;
+        return this;
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public Builder mergeEmptyKeyValueColFamily(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable value) {
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          if (((bitField0_ & 0x00000800) == 0x00000800) &&
+              emptyKeyValueColFamily_ != org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.getDefaultInstance()) {
+            emptyKeyValueColFamily_ =
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.newBuilder(emptyKeyValueColFamily_).mergeFrom(value).buildPartial();
+          } else {
+            emptyKeyValueColFamily_ = value;
+          }
+          onChanged();
+        } else {
+          emptyKeyValueColFamilyBuilder_.mergeFrom(value);
+        }
+        bitField0_ |= 0x00000800;
+        return this;
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public Builder clearEmptyKeyValueColFamily() {
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          emptyKeyValueColFamily_ = org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.getDefaultInstance();
+          onChanged();
+        } else {
+          emptyKeyValueColFamilyBuilder_.clear();
+        }
+        bitField0_ = (bitField0_ & ~0x00000800);
+        return this;
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.Builder getEmptyKeyValueColFamilyBuilder() {
+        bitField0_ |= 0x00000800;
+        onChanged();
+        return getEmptyKeyValueColFamilyFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritableOrBuilder getEmptyKeyValueColFamilyOrBuilder() {
+        if (emptyKeyValueColFamilyBuilder_ != null) {
+          return emptyKeyValueColFamilyBuilder_.getMessageOrBuilder();
+        } else {
+          return emptyKeyValueColFamily_;
+        }
+      }
+      /**
+       * <code>required .ImmutableBytesWritable emptyKeyValueColFamily = 12;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritableOrBuilder> 
+          getEmptyKeyValueColFamilyFieldBuilder() {
+        if (emptyKeyValueColFamilyBuilder_ == null) {
+          emptyKeyValueColFamilyBuilder_ = new com.google.protobuf.SingleFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritableOrBuilder>(
+                  emptyKeyValueColFamily_,
+                  getParentForChildren(),
+                  isClean());
+          emptyKeyValueColFamily_ = null;
+        }
+        return emptyKeyValueColFamilyBuilder_;
+      }
+
+      // optional bytes indexedExpressions = 13;
+      private com.google.protobuf.ByteString indexedExpressions_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>optional bytes indexedExpressions = 13;</code>
+       */
+      public boolean hasIndexedExpressions() {
+        return ((bitField0_ & 0x00001000) == 0x00001000);
+      }
+      /**
+       * <code>optional bytes indexedExpressions = 13;</code>
+       */
+      public com.google.protobuf.ByteString getIndexedExpressions() {
+        return indexedExpressions_;
+      }
+      /**
+       * <code>optional bytes indexedExpressions = 13;</code>
+       */
+      public Builder setIndexedExpressions(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00001000;
+        indexedExpressions_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bytes indexedExpressions = 13;</code>
+       */
+      public Builder clearIndexedExpressions() {
+        bitField0_ = (bitField0_ & ~0x00001000);
+        indexedExpressions_ = getDefaultInstance().getIndexedExpressions();
+        onChanged();
+        return this;
+      }
+
+      // required bytes rowKeyMetadata = 14;
+      private com.google.protobuf.ByteString rowKeyMetadata_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>required bytes rowKeyMetadata = 14;</code>
+       */
+      public boolean hasRowKeyMetadata() {
+        return ((bitField0_ & 0x00002000) == 0x00002000);
+      }
+      /**
+       * <code>required bytes rowKeyMetadata = 14;</code>
+       */
+      public com.google.protobuf.ByteString getRowKeyMetadata() {
+        return rowKeyMetadata_;
+      }
+      /**
+       * <code>required bytes rowKeyMetadata = 14;</code>
+       */
+      public Builder setRowKeyMetadata(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  bitField0_ |= 0x00002000;
+        rowKeyMetadata_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bytes rowKeyMetadata = 14;</code>
+       */
+      public Builder clearRowKeyMetadata() {
+        bitField0_ = (bitField0_ & ~0x00002000);
+        rowKeyMetadata_ = getDefaultInstance().getRowKeyMetadata();
+        onChanged();
+        return this;
+      }
+
+      // required int32 numDataTableColFamilies = 15;
+      private int numDataTableColFamilies_ ;
+      /**
+       * <code>required int32 numDataTableColFamilies = 15;</code>
+       */
+      public boolean hasNumDataTableColFamilies() {
+        return ((bitField0_ & 0x00004000) == 0x00004000);
+      }
+      /**
+       * <code>required int32 numDataTableColFamilies = 15;</code>
+       */
+      public int getNumDataTableColFamilies() {
+        return numDataTableColFamilies_;
+      }
+      /**
+       * <code>required int32 numDataTableColFamilies = 15;</code>
+       */
+      public Builder setNumDataTableColFamilies(int value) {
+        bitField0_ |= 0x00004000;
+        numDataTableColFamilies_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int32 numDataTableColFamilies = 15;</code>
+       */
+      public Builder clearNumDataTableColFamilies() {
+        bitField0_ = (bitField0_ & ~0x00004000);
+        numDataTableColFamilies_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // required bool indexWalDisabled = 16;
+      private boolean indexWalDisabled_ ;
+      /**
+       * <code>required bool indexWalDisabled = 16;</code>
+       */
+      public boolean hasIndexWalDisabled() {
+        return ((bitField0_ & 0x00008000) == 0x00008000);
+      }
+      /**
+       * <code>required bool indexWalDisabled = 16;</code>
+       */
+      public boolean getIndexWalDisabled() {
+        return indexWalDisabled_;
+      }
+      /**
+       * <code>required bool indexWalDisabled = 16;</code>
+       */
+      public Builder setIndexWalDisabled(boolean value) {
+        bitField0_ |= 0x00008000;
+        indexWalDisabled_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool indexWalDisabled = 16;</code>
+       */
+      public Builder clearIndexWalDisabled() {
+        bitField0_ = (bitField0_ & ~0x00008000);
+        indexWalDisabled_ = false;
+        onChanged();
+        return this;
+      }
+
+      // required int32 indexRowKeyByteSize = 17;
+      private int indexRowKeyByteSize_ ;
+      /**
+       * <code>required int32 indexRowKeyByteSize = 17;</code>
+       */
+      public boolean hasIndexRowKeyByteSize() {
+        return ((bitField0_ & 0x00010000) == 0x00010000);
+      }
+      /**
+       * <code>required int32 indexRowKeyByteSize = 17;</code>
+       */
+      public int getIndexRowKeyByteSize() {
+        return indexRowKeyByteSize_;
+      }
+      /**
+       * <code>required int32 indexRowKeyByteSize = 17;</code>
+       */
+      public Builder setIndexRowKeyByteSize(int value) {
+        bitField0_ |= 0x00010000;
+        indexRowKeyByteSize_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int32 indexRowKeyByteSize = 17;</code>
+       */
+      public Builder clearIndexRowKeyByteSize() {
+        bitField0_ = (bitField0_ & ~0x00010000);
+        indexRowKeyByteSize_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // required bool immutable = 18;
+      private boolean immutable_ ;
+      /**
+       * <code>required bool immutable = 18;</code>
+       */
+      public boolean hasImmutable() {
+        return ((bitField0_ & 0x00020000) == 0x00020000);
+      }
+      /**
+       * <code>required bool immutable = 18;</code>
+       */
+      public boolean getImmutable() {
+        return immutable_;
+      }
+      /**
+       * <code>required bool immutable = 18;</code>
+       */
+      public Builder setImmutable(boolean value) {
+        bitField0_ |= 0x00020000;
+        immutable_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required bool immutable = 18;</code>
+       */
+      public Builder clearImmutable() {
+        bitField0_ = (bitField0_ & ~0x00020000);
+        immutable_ = false;
+        onChanged();
+        return this;
+      }
+
+      // repeated .ColumnInfo indexedColumnInfo = 19;
+      private java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo> indexedColumnInfo_ =
+        java.util.Collections.emptyList();
+      private void ensureIndexedColumnInfoIsMutable() {
+        if (!((bitField0_ & 0x00040000) == 0x00040000)) {
+          indexedColumnInfo_ = new java.util.ArrayList<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo>(indexedColumnInfo_);
+          bitField0_ |= 0x00040000;
+         }
+      }
+
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder> indexedColumnInfoBuilder_;
+
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo> getIndexedColumnInfoList() {
+        if (indexedColumnInfoBuilder_ == null) {
+          return java.util.Collections.unmodifiableList(indexedColumnInfo_);
+        } else {
+          return indexedColumnInfoBuilder_.getMessageList();
+        }
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public int getIndexedColumnInfoCount() {
+        if (indexedColumnInfoBuilder_ == null) {
+          return indexedColumnInfo_.size();
+        } else {
+          return indexedColumnInfoBuilder_.getCount();
+        }
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo getIndexedColumnInfo(int index) {
+        if (indexedColumnInfoBuilder_ == null) {
+          return indexedColumnInfo_.get(index);
+        } else {
+          return indexedColumnInfoBuilder_.getMessage(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder setIndexedColumnInfo(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo value) {
+        if (indexedColumnInfoBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexedColumnInfoIsMutable();
+          indexedColumnInfo_.set(index, value);
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.setMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder setIndexedColumnInfo(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder builderForValue) {
+        if (indexedColumnInfoBuilder_ == null) {
+          ensureIndexedColumnInfoIsMutable();
+          indexedColumnInfo_.set(index, builderForValue.build());
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.setMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder addIndexedColumnInfo(org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo value) {
+        if (indexedColumnInfoBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexedColumnInfoIsMutable();
+          indexedColumnInfo_.add(value);
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.addMessage(value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder addIndexedColumnInfo(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo value) {
+        if (indexedColumnInfoBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          ensureIndexedColumnInfoIsMutable();
+          indexedColumnInfo_.add(index, value);
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.addMessage(index, value);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder addIndexedColumnInfo(
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder builderForValue) {
+        if (indexedColumnInfoBuilder_ == null) {
+          ensureIndexedColumnInfoIsMutable();
+          indexedColumnInfo_.add(builderForValue.build());
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.addMessage(builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder addIndexedColumnInfo(
+          int index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder builderForValue) {
+        if (indexedColumnInfoBuilder_ == null) {
+          ensureIndexedColumnInfoIsMutable();
+          indexedColumnInfo_.add(index, builderForValue.build());
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.addMessage(index, builderForValue.build());
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder addAllIndexedColumnInfo(
+          java.lang.Iterable<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo> values) {
+        if (indexedColumnInfoBuilder_ == null) {
+          ensureIndexedColumnInfoIsMutable();
+          super.addAll(values, indexedColumnInfo_);
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.addAllMessages(values);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder clearIndexedColumnInfo() {
+        if (indexedColumnInfoBuilder_ == null) {
+          indexedColumnInfo_ = java.util.Collections.emptyList();
+          bitField0_ = (bitField0_ & ~0x00040000);
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.clear();
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public Builder removeIndexedColumnInfo(int index) {
+        if (indexedColumnInfoBuilder_ == null) {
+          ensureIndexedColumnInfoIsMutable();
+          indexedColumnInfo_.remove(index);
+          onChanged();
+        } else {
+          indexedColumnInfoBuilder_.remove(index);
+        }
+        return this;
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder getIndexedColumnInfoBuilder(
+          int index) {
+        return getIndexedColumnInfoFieldBuilder().getBuilder(index);
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder getIndexedColumnInfoOrBuilder(
+          int index) {
+        if (indexedColumnInfoBuilder_ == null) {
+          return indexedColumnInfo_.get(index);  } else {
+          return indexedColumnInfoBuilder_.getMessageOrBuilder(index);
+        }
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public java.util.List<? extends org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder> 
+           getIndexedColumnInfoOrBuilderList() {
+        if (indexedColumnInfoBuilder_ != null) {
+          return indexedColumnInfoBuilder_.getMessageOrBuilderList();
+        } else {
+          return java.util.Collections.unmodifiableList(indexedColumnInfo_);
+        }
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder addIndexedColumnInfoBuilder() {
+        return getIndexedColumnInfoFieldBuilder().addBuilder(
+            org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder addIndexedColumnInfoBuilder(
+          int index) {
+        return getIndexedColumnInfoFieldBuilder().addBuilder(
+            index, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.getDefaultInstance());
+      }
+      /**
+       * <code>repeated .ColumnInfo indexedColumnInfo = 19;</code>
+       */
+      public java.util.List<org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder> 
+           getIndexedColumnInfoBuilderList() {
+        return getIndexedColumnInfoFieldBuilder().getBuilderList();
+      }
+      private com.google.protobuf.RepeatedFieldBuilder<
+          org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder> 
+          getIndexedColumnInfoFieldBuilder() {
+        if (indexedColumnInfoBuilder_ == null) {
+          indexedColumnInfoBuilder_ = new com.google.protobuf.RepeatedFieldBuilder<
+              org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfo.Builder, org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ColumnInfoOrBuilder>(
+                  indexedColumnInfo_,
+                  ((bitField0_ & 0x00040000) == 0x00040000),
+                  getParentForChildren(),
+                  isClean());
+          indexedColumnInfo_ = null;
+        }
+        return indexedColumnInfoBuilder_;
+      }
+
+      // required int32 encodingScheme = 20;
+      private int encodingScheme_ ;
+      /**
+       * <code>required int32 encodingScheme = 20;</code>
+       */
+      public boolean hasEncodingScheme() {
+        return ((bitField0_ & 0x00080000) == 0x00080000);
+      }
+      /**
+       * <code>required int32 encodingScheme = 20;</code>
+       */
+      public int getEncodingScheme() {
+        return encodingScheme_;
+      }
+      /**
+       * <code>required int32 encodingScheme = 20;</code>
+       */
+      public Builder setEncodingScheme(int value) {
+        bitField0_ |= 0x00080000;
+        encodingScheme_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int32 encodingScheme = 20;</code>
+       */
+      public Builder clearEncodingScheme() {
+        bitField0_ = (bitField0_ & ~0x00080000);
+        encodingScheme_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // required int32 immutableStorageScheme = 21;
+      private int immutableStorageScheme_ ;
+      /**
+       * <code>required int32 immutableStorageScheme = 21;</code>
+       */
+      public boolean hasImmutableStorageScheme() {
+        return ((bitField0_ & 0x00100000) == 0x00100000);
+      }
+      /**
+       * <code>required int32 immutableStorageScheme = 21;</code>
+       */
+      public int getImmutableStorageScheme() {
+        return immutableStorageScheme_;
+      }
+      /**
+       * <code>required int32 immutableStorageScheme = 21;</code>
+       */
+      public Builder setImmutableStorageScheme(int value) {
+        bitField0_ |= 0x00100000;
+        immutableStorageScheme_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>required int32 immutableStorageScheme = 21;</code>
+       */
+      public Builder clearImmutableStorageScheme() {
+        bitField0_ = (bitField0_ & ~0x00100000);
+        immutableStorageScheme_ = 0;
+        onChanged();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:IndexMaintainer)
+    }
+
+    static {
+      defaultInstance = new IndexMaintainer(true);
+      defaultInstance.initFields();
+    }
+
+    // @@protoc_insertion_point(class_scope:IndexMaintainer)
+  }
+
   public interface AddServerCacheRequestOrBuilder
       extends com.google.protobuf.MessageOrBuilder {
 
@@ -709,6 +5650,16 @@ public final class ServerCachingProtos {
      * <code>optional bytes txState = 5;</code>
      */
     com.google.protobuf.ByteString getTxState();
+
+    // optional bool hasProtoBufIndexMaintainer = 6;
+    /**
+     * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+     */
+    boolean hasHasProtoBufIndexMaintainer();
+    /**
+     * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+     */
+    boolean getHasProtoBufIndexMaintainer();
   }
   /**
    * Protobuf type {@code AddServerCacheRequest}
@@ -800,6 +5751,11 @@ public final class ServerCachingProtos {
             case 42: {
               bitField0_ |= 0x00000010;
               txState_ = input.readBytes();
+              break;
+            }
+            case 48: {
+              bitField0_ |= 0x00000020;
+              hasProtoBufIndexMaintainer_ = input.readBool();
               break;
             }
           }
@@ -934,12 +5890,29 @@ public final class ServerCachingProtos {
       return txState_;
     }
 
+    // optional bool hasProtoBufIndexMaintainer = 6;
+    public static final int HASPROTOBUFINDEXMAINTAINER_FIELD_NUMBER = 6;
+    private boolean hasProtoBufIndexMaintainer_;
+    /**
+     * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+     */
+    public boolean hasHasProtoBufIndexMaintainer() {
+      return ((bitField0_ & 0x00000020) == 0x00000020);
+    }
+    /**
+     * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+     */
+    public boolean getHasProtoBufIndexMaintainer() {
+      return hasProtoBufIndexMaintainer_;
+    }
+
     private void initFields() {
       tenantId_ = com.google.protobuf.ByteString.EMPTY;
       cacheId_ = com.google.protobuf.ByteString.EMPTY;
       cachePtr_ = org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ImmutableBytesWritable.getDefaultInstance();
       cacheFactory_ = org.apache.phoenix.coprocessor.generated.ServerCacheFactoryProtos.ServerCacheFactory.getDefaultInstance();
       txState_ = com.google.protobuf.ByteString.EMPTY;
+      hasProtoBufIndexMaintainer_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -988,6 +5961,9 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
         output.writeBytes(5, txState_);
       }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+        output.writeBool(6, hasProtoBufIndexMaintainer_);
+      }
       getUnknownFields().writeTo(output);
     }
 
@@ -1016,6 +5992,10 @@ public final class ServerCachingProtos {
       if (((bitField0_ & 0x00000010) == 0x00000010)) {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(5, txState_);
+      }
+      if (((bitField0_ & 0x00000020) == 0x00000020)) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBoolSize(6, hasProtoBufIndexMaintainer_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -1065,6 +6045,11 @@ public final class ServerCachingProtos {
         result = result && getTxState()
             .equals(other.getTxState());
       }
+      result = result && (hasHasProtoBufIndexMaintainer() == other.hasHasProtoBufIndexMaintainer());
+      if (hasHasProtoBufIndexMaintainer()) {
+        result = result && (getHasProtoBufIndexMaintainer()
+            == other.getHasProtoBufIndexMaintainer());
+      }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
       return result;
@@ -1097,6 +6082,10 @@ public final class ServerCachingProtos {
       if (hasTxState()) {
         hash = (37 * hash) + TXSTATE_FIELD_NUMBER;
         hash = (53 * hash) + getTxState().hashCode();
+      }
+      if (hasHasProtoBufIndexMaintainer()) {
+        hash = (37 * hash) + HASPROTOBUFINDEXMAINTAINER_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getHasProtoBufIndexMaintainer());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -1227,6 +6216,8 @@ public final class ServerCachingProtos {
         bitField0_ = (bitField0_ & ~0x00000008);
         txState_ = com.google.protobuf.ByteString.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000010);
+        hasProtoBufIndexMaintainer_ = false;
+        bitField0_ = (bitField0_ & ~0x00000020);
         return this;
       }
 
@@ -1283,6 +6274,10 @@ public final class ServerCachingProtos {
           to_bitField0_ |= 0x00000010;
         }
         result.txState_ = txState_;
+        if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
+          to_bitField0_ |= 0x00000020;
+        }
+        result.hasProtoBufIndexMaintainer_ = hasProtoBufIndexMaintainer_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -1313,6 +6308,9 @@ public final class ServerCachingProtos {
         }
         if (other.hasTxState()) {
           setTxState(other.getTxState());
+        }
+        if (other.hasHasProtoBufIndexMaintainer()) {
+          setHasProtoBufIndexMaintainer(other.getHasProtoBufIndexMaintainer());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -1699,6 +6697,39 @@ public final class ServerCachingProtos {
       public Builder clearTxState() {
         bitField0_ = (bitField0_ & ~0x00000010);
         txState_ = getDefaultInstance().getTxState();
+        onChanged();
+        return this;
+      }
+
+      // optional bool hasProtoBufIndexMaintainer = 6;
+      private boolean hasProtoBufIndexMaintainer_ ;
+      /**
+       * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+       */
+      public boolean hasHasProtoBufIndexMaintainer() {
+        return ((bitField0_ & 0x00000020) == 0x00000020);
+      }
+      /**
+       * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+       */
+      public boolean getHasProtoBufIndexMaintainer() {
+        return hasProtoBufIndexMaintainer_;
+      }
+      /**
+       * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+       */
+      public Builder setHasProtoBufIndexMaintainer(boolean value) {
+        bitField0_ |= 0x00000020;
+        hasProtoBufIndexMaintainer_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>optional bool hasProtoBufIndexMaintainer = 6;</code>
+       */
+      public Builder clearHasProtoBufIndexMaintainer() {
+        bitField0_ = (bitField0_ & ~0x00000020);
+        hasProtoBufIndexMaintainer_ = false;
         onChanged();
         return this;
       }
@@ -3445,6 +8476,21 @@ public final class ServerCachingProtos {
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
       internal_static_ImmutableBytesWritable_fieldAccessorTable;
   private static com.google.protobuf.Descriptors.Descriptor
+    internal_static_ColumnReference_descriptor;
+  private static
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_ColumnReference_fieldAccessorTable;
+  private static com.google.protobuf.Descriptors.Descriptor
+    internal_static_ColumnInfo_descriptor;
+  private static
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_ColumnInfo_fieldAccessorTable;
+  private static com.google.protobuf.Descriptors.Descriptor
+    internal_static_IndexMaintainer_descriptor;
+  private static
+    com.google.protobuf.GeneratedMessage.FieldAccessorTable
+      internal_static_IndexMaintainer_fieldAccessorTable;
+  private static com.google.protobuf.Descriptors.Descriptor
     internal_static_AddServerCacheRequest_descriptor;
   private static
     com.google.protobuf.GeneratedMessage.FieldAccessorTable
@@ -3476,21 +8522,42 @@ public final class ServerCachingProtos {
       "\n\032ServerCachingService.proto\032\030ServerCach" +
       "eFactory.proto\"K\n\026ImmutableBytesWritable" +
       "\022\021\n\tbyteArray\030\001 \002(\014\022\016\n\006offset\030\002 \002(\005\022\016\n\006l" +
-      "ength\030\003 \002(\005\"\241\001\n\025AddServerCacheRequest\022\020\n" +
-      "\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014\022)\n\010cach" +
-      "ePtr\030\003 \002(\0132\027.ImmutableBytesWritable\022)\n\014c" +
-      "acheFactory\030\004 \002(\0132\023.ServerCacheFactory\022\017" +
-      "\n\007txState\030\005 \001(\014\"(\n\026AddServerCacheRespons" +
-      "e\022\016\n\006return\030\001 \002(\010\"=\n\030RemoveServerCacheRe" +
-      "quest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007cacheId\030\002 \002(\014",
-      "\"+\n\031RemoveServerCacheResponse\022\016\n\006return\030" +
-      "\001 \002(\0102\245\001\n\024ServerCachingService\022A\n\016addSer" +
-      "verCache\022\026.AddServerCacheRequest\032\027.AddSe" +
-      "rverCacheResponse\022J\n\021removeServerCache\022\031" +
-      ".RemoveServerCacheRequest\032\032.RemoveServer" +
-      "CacheResponseBG\n(org.apache.phoenix.copr" +
-      "ocessor.generatedB\023ServerCachingProtosH\001" +
-      "\210\001\001\240\001\001"
+      "ength\030\003 \002(\005\"4\n\017ColumnReference\022\016\n\006family" +
+      "\030\001 \002(\014\022\021\n\tqualifier\030\002 \002(\014\"4\n\nColumnInfo\022" +
+      "\022\n\nfamilyName\030\001 \001(\t\022\022\n\ncolumnName\030\002 \002(\t\"" +
+      "\306\005\n\017IndexMaintainer\022\023\n\013saltBuckets\030\001 \002(\005" +
+      "\022\025\n\risMultiTenant\030\002 \002(\010\022\023\n\013viewIndexId\030\003" +
+      " \001(\014\022(\n\016indexedColumns\030\004 \003(\0132\020.ColumnRef" +
+      "erence\022 \n\030indexedColumnTypeOrdinal\030\005 \003(\005",
+      "\022:\n dataTableColRefForCoveredColumns\030\006 \003" +
+      "(\0132\020.ColumnReference\022;\n!indexTableColRef" +
+      "ForCoveredColumns\030\007 \003(\0132\020.ColumnReferenc" +
+      "e\022\024\n\014isLocalIndex\030\010 \002(\010\022\026\n\016indexTableNam" +
+      "e\030\t \002(\014\022\036\n\026rowKeyOrderOptimizable\030\n \002(\010\022" +
+      "\'\n\037dataTableEmptyKeyValueColFamily\030\013 \002(\014" +
+      "\0227\n\026emptyKeyValueColFamily\030\014 \002(\0132\027.Immut" +
+      "ableBytesWritable\022\032\n\022indexedExpressions\030" +
+      "\r \001(\014\022\026\n\016rowKeyMetadata\030\016 \002(\014\022\037\n\027numData" +
+      "TableColFamilies\030\017 \002(\005\022\030\n\020indexWalDisabl",
+      "ed\030\020 \002(\010\022\033\n\023indexRowKeyByteSize\030\021 \002(\005\022\021\n" +
+      "\timmutable\030\022 \002(\010\022&\n\021indexedColumnInfo\030\023 " +
+      "\003(\0132\013.ColumnInfo\022\026\n\016encodingScheme\030\024 \002(\005" +
+      "\022\036\n\026immutableStorageScheme\030\025 \002(\005\"\305\001\n\025Add" +
+      "ServerCacheRequest\022\020\n\010tenantId\030\001 \001(\014\022\017\n\007" +
+      "cacheId\030\002 \002(\014\022)\n\010cachePtr\030\003 \002(\0132\027.Immuta" +
+      "bleBytesWritable\022)\n\014cacheFactory\030\004 \002(\0132\023" +
+      ".ServerCacheFactory\022\017\n\007txState\030\005 \001(\014\022\"\n\032" +
+      "hasProtoBufIndexMaintainer\030\006 \001(\010\"(\n\026AddS" +
+      "erverCacheResponse\022\016\n\006return\030\001 \002(\010\"=\n\030Re",
+      "moveServerCacheRequest\022\020\n\010tenantId\030\001 \001(\014" +
+      "\022\017\n\007cacheId\030\002 \002(\014\"+\n\031RemoveServerCacheRe" +
+      "sponse\022\016\n\006return\030\001 \002(\0102\245\001\n\024ServerCaching" +
+      "Service\022A\n\016addServerCache\022\026.AddServerCac" +
+      "heRequest\032\027.AddServerCacheResponse\022J\n\021re" +
+      "moveServerCache\022\031.RemoveServerCacheReque" +
+      "st\032\032.RemoveServerCacheResponseBG\n(org.ap" +
+      "ache.phoenix.coprocessor.generatedB\023Serv" +
+      "erCachingProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -3503,26 +8570,44 @@ public final class ServerCachingProtos {
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_ImmutableBytesWritable_descriptor,
               new java.lang.String[] { "ByteArray", "Offset", "Length", });
-          internal_static_AddServerCacheRequest_descriptor =
+          internal_static_ColumnReference_descriptor =
             getDescriptor().getMessageTypes().get(1);
+          internal_static_ColumnReference_fieldAccessorTable = new
+            com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+              internal_static_ColumnReference_descriptor,
+              new java.lang.String[] { "Family", "Qualifier", });
+          internal_static_ColumnInfo_descriptor =
+            getDescriptor().getMessageTypes().get(2);
+          internal_static_ColumnInfo_fieldAccessorTable = new
+            com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+              internal_static_ColumnInfo_descriptor,
+              new java.lang.String[] { "FamilyName", "ColumnName", });
+          internal_static_IndexMaintainer_descriptor =
+            getDescriptor().getMessageTypes().get(3);
+          internal_static_IndexMaintainer_fieldAccessorTable = new
+            com.google.protobuf.GeneratedMessage.FieldAccessorTable(
+              internal_static_IndexMaintainer_descriptor,
+              new java.lang.String[] { "SaltBuckets", "IsMultiTenant", "ViewIndexId", "IndexedColumns", "IndexedColumnTypeOrdinal", "DataTableColRefForCoveredColumns", "IndexTableColRefForCoveredColumns", "IsLocalIndex", "IndexTableName", "RowKeyOrderOptimizable", "DataTableEmptyKeyValueColFamily", "EmptyKeyValueColFamily", "IndexedExpressions", "RowKeyMetadata", "NumDataTableColFamilies", "IndexWalDisabled", "IndexRowKeyByteSize", "Immutable", "IndexedColumnInfo", "EncodingScheme", "ImmutableStorageScheme", });
+          internal_static_AddServerCacheRequest_descriptor =
+            getDescriptor().getMessageTypes().get(4);
           internal_static_AddServerCacheRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_AddServerCacheRequest_descriptor,
-              new java.lang.String[] { "TenantId", "CacheId", "CachePtr", "CacheFactory", "TxState", });
+              new java.lang.String[] { "TenantId", "CacheId", "CachePtr", "CacheFactory", "TxState", "HasProtoBufIndexMaintainer", });
           internal_static_AddServerCacheResponse_descriptor =
-            getDescriptor().getMessageTypes().get(2);
+            getDescriptor().getMessageTypes().get(5);
           internal_static_AddServerCacheResponse_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_AddServerCacheResponse_descriptor,
               new java.lang.String[] { "Return", });
           internal_static_RemoveServerCacheRequest_descriptor =
-            getDescriptor().getMessageTypes().get(3);
+            getDescriptor().getMessageTypes().get(6);
           internal_static_RemoveServerCacheRequest_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_RemoveServerCacheRequest_descriptor,
               new java.lang.String[] { "TenantId", "CacheId", });
           internal_static_RemoveServerCacheResponse_descriptor =
-            getDescriptor().getMessageTypes().get(4);
+            getDescriptor().getMessageTypes().get(7);
           internal_static_RemoveServerCacheResponse_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_RemoveServerCacheResponse_descriptor,

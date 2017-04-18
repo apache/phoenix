@@ -3,6 +3,7 @@ package org.apache.phoenix.transaction;
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.phoenix.schema.PTable;
 import org.slf4j.Logger;
 
@@ -102,5 +103,17 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     public long getMaxTransactionsPerSecond() {
         // TODO Auto-generated method stub
         return 0;
+    }
+
+    @Override
+    public boolean isPreExistingVersion(long version) {
+        // TODO Auto-generated method stub
+        return false;
+    }
+
+    @Override
+    public BaseRegionObserver getCoProcessor() {
+        // TODO Auto-generated method stub
+        return null;
     }
 }

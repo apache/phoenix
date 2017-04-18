@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.SchemaUtil;
 
 public enum TableProperty {
@@ -145,6 +146,47 @@ public enum TableProperty {
         }       
 	    
 	},
+	
+	COLUMN_ENCODED_BYTES(PhoenixDatabaseMetaData.ENCODING_SCHEME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, false, false, false) {
+	    @Override
+        public Object getValue(Object value) {
+	        if (value instanceof String) {
+	            String strValue = (String) value;
+	            if ("NONE".equalsIgnoreCase(strValue)) {
+	                return (byte)0;
+	            } 
+	        } else {
+	            return value == null ? null : ((Number) value).byteValue();
+	        }
+	        return value;
+	    }
+
+		@Override
+		public Object getPTableValue(PTable table) {
+			return table.getEncodingScheme();
+		}	
+	    
+	},
+    
+    IMMUTABLE_STORAGE_SCHEME(PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME, COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY, true, false, false) {
+        @Override
+        public ImmutableStorageScheme getValue(Object value) {
+            if (value == null) {
+                return null;
+            } else if (value instanceof String) {
+                String strValue = (String) value;
+                return ImmutableStorageScheme.valueOf(strValue.toUpperCase());
+            } else {
+                throw new IllegalArgumentException("Immutable storage scheme table property must be a string");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getImmutableStorageScheme();
+        }   
+        
+    }
     ;
 	
 	private final String propertyName;

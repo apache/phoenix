@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>4.10.0-HBase-1.2-SNAPSHOT</version>
+  <version>4.10.0-HBase-1.2</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -65,7 +65,7 @@
     <top.dir>${project.basedir}</top.dir>
 
     <!-- Hadoop Versions -->
-    <hbase.version>1.2.0</hbase.version>
+    <hbase.version>1.2.3</hbase.version>
     <hadoop-two.version>2.7.1</hadoop-two.version>
 
     <!-- Dependency versions -->
@@ -299,7 +299,7 @@
                 <forkCount>${numForkedIT}</forkCount>
                 <runOrder>alphabetical</runOrder>
                 <reuseForks>true</reuseForks>
-                <argLine>-enableassertions -Xmx2000m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
+                <argLine>-enableassertions -Xmx2500m -XX:MaxPermSize=128m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
                 <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
                 <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
                 <groups>org.apache.phoenix.end2end.ClientManagedTimeTest</groups>

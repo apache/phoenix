@@ -77,7 +77,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     private IndexUpdate getIndexUpdateForGroup(ColumnGroup group, TableState state) {
         List<CoveredColumn> refs = group.getColumns();
         try {
-            Pair<Scanner, IndexUpdate> stateInfo = ((LocalTableState)state).getIndexedColumnsTableState(refs, false);
+            Pair<Scanner, IndexUpdate> stateInfo = ((LocalTableState)state).getIndexedColumnsTableState(refs, false, false);
             Scanner kvs = stateInfo.getFirst();
             Pair<Integer, List<ColumnEntry>> columns = getNextEntries(refs, kvs, state.getCurrentRowKey());
             // make sure we close the scanner
@@ -132,7 +132,7 @@ public class CoveredColumnIndexCodec extends BaseIndexCodec {
     private IndexUpdate getDeleteForGroup(ColumnGroup group, TableState state) {
         List<CoveredColumn> refs = group.getColumns();
         try {
-            Pair<Scanner, IndexUpdate> kvs = ((LocalTableState)state).getIndexedColumnsTableState(refs, false);
+            Pair<Scanner, IndexUpdate> kvs = ((LocalTableState)state).getIndexedColumnsTableState(refs, false, false);
             Pair<Integer, List<ColumnEntry>> columns = getNextEntries(refs, kvs.getFirst(), state.getCurrentRowKey());
             // make sure we close the scanner reference
             kvs.getFirst().close();

@@ -72,7 +72,7 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
           (Class<ServerCacheFactory>) Class.forName(request.getCacheFactory().getClassName());
       ServerCacheFactory cacheFactory = serverCacheFactoryClass.newInstance();
       tenantCache.addServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()),
-        cachePtr, txState, cacheFactory);
+        cachePtr, txState, cacheFactory, request.hasHasProtoBufIndexMaintainer() && request.getHasProtoBufIndexMaintainer());
     } catch (Throwable e) {
       ProtobufUtil.setControllerException(controller, new IOException(e));
     }
