@@ -372,7 +372,7 @@ public class Indexer extends BaseRegionObserver {
       super.postPut(e, put, edit, durability);
           return;
         }
-    doPost(edit, put, durability, true, false);
+    doPost(edit, put, durability);
   }
 
   @Override
@@ -382,28 +382,9 @@ public class Indexer extends BaseRegionObserver {
       super.postDelete(e, delete, edit, durability);
           return;
         }
-    doPost(edit, delete, durability, true, false);
+    doPost(edit, delete, durability);
   }
 
-  @Override
-  public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-      if (this.disabled) {
-        super.postBatchMutate(c, miniBatchOp);
-        return;
-      }
-      WALEdit edit = miniBatchOp.getWalEdit(0);
-      if (edit != null) {
-        IndexedKeyValue ikv = getFirstIndexedKeyValue(edit);
-        if (ikv != null) {
-          // This will prevent the postPut and postDelete hooks from doing anything
-          // We need to do this now, as the postBatchMutateIndispensably (where the
-          // actual index writing gets done) is called after the postPut and postDelete.
-          ikv.markBatchFinished();
-        }
-      }
-  }
-  
   @Override
   public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
@@ -417,17 +398,13 @@ public class Indexer extends BaseRegionObserver {
         //each batch operation, only the first one will have anything useful, so we can just grab that
         Mutation mutation = miniBatchOp.getOperation(0);
         WALEdit edit = miniBatchOp.getWalEdit(0);
-        // We're forcing the index writes here because we've marked the index batch as "finished"
-        // to prevent postPut and postDelete from doing anything, but hold off on writing them
-        // until now so we're outside of the MVCC lock (see PHOENIX-3789). Without this hacky
-        // forceWrite flag, we'd ignore them again here too.
-        doPost(edit, mutation, mutation.getDurability(), false, true);
+        doPost(edit, mutation, mutation.getDurability());
     }
   }
 
-  private void doPost(WALEdit edit, Mutation m, final Durability durability, boolean allowLocalUpdates, boolean forceWrite) throws IOException {
+  private void doPost(WALEdit edit, Mutation m, final Durability durability) throws IOException {
     try {
-      doPostWithExceptions(edit, m, durability, allowLocalUpdates, forceWrite);
+      doPostWithExceptions(edit, m, durability);
       return;
     } catch (Throwable e) {
       rethrowIndexingException(e);
@@ -436,7 +413,7 @@ public class Indexer extends BaseRegionObserver {
         "Somehow didn't complete the index update, but didn't return succesfully either!");
   }
 
-  private void doPostWithExceptions(WALEdit edit, Mutation m, final Durability durability, boolean allowLocalUpdates, boolean forceWrite)
+  private void doPostWithExceptions(WALEdit edit, Mutation m, final Durability durability)
           throws Exception {
       //short circuit, if we don't need to do any work
       if (durability == Durability.SKIP_WAL || !this.builder.isEnabled(m) || edit == null) {
@@ -470,30 +447,32 @@ public class Indexer extends BaseRegionObserver {
            * once (this hook gets called with the same WALEdit for each Put/Delete in a batch, which can
            * lead to writing all the index updates for each Put/Delete).
            */
-          if ((!ikv.getBatchFinished() || forceWrite) || allowLocalUpdates) {
+          if (!ikv.getBatchFinished()) {
               Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(edit);
 
               // the WAL edit is kept in memory and we already specified the factory when we created the
               // references originally - therefore, we just pass in a null factory here and use the ones
               // already specified on each reference
               try {
-            	  if (!ikv.getBatchFinished() || forceWrite) {
-            		  current.addTimelineAnnotation("Actually doing index update for first time");
-            		  writer.writeAndKillYourselfOnFailure(indexUpdates, allowLocalUpdates);
-            	  } else if (allowLocalUpdates) {
-            		  Collection<Pair<Mutation, byte[]>> localUpdates =
-            				  new ArrayList<Pair<Mutation, byte[]>>();
-            		  current.addTimelineAnnotation("Actually doing local index update for first time");
-            		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
-            			  if (Bytes.toString(mutation.getSecond()).equals(
-            					  environment.getRegion().getTableDesc().getNameAsString())) {
-            				  localUpdates.add(mutation);
-            			  }
-            		  }
-                      if(!localUpdates.isEmpty()) {
-                    	  writer.writeAndKillYourselfOnFailure(localUpdates, allowLocalUpdates);
-                      }
-            	  }
+        		  current.addTimelineAnnotation("Actually doing index update for first time");
+                  Collection<Pair<Mutation, byte[]>> localUpdates =
+                          new ArrayList<Pair<Mutation, byte[]>>();
+                  Collection<Pair<Mutation, byte[]>> remoteUpdates =
+                          new ArrayList<Pair<Mutation, byte[]>>();
+        		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
+        			  if (Bytes.toString(mutation.getSecond()).equals(
+        					  environment.getRegion().getTableDesc().getNameAsString())) {
+        				  localUpdates.add(mutation);
+        			  } else {
+                          remoteUpdates.add(mutation);
+        			  }
+        		  }
+                  if(!remoteUpdates.isEmpty()) {
+                      writer.writeAndKillYourselfOnFailure(remoteUpdates, false);
+                  }
+                  if(!localUpdates.isEmpty()) {
+                      writer.writeAndKillYourselfOnFailure(localUpdates, true);
+                  }
               } finally {                  // With a custom kill policy, we may throw instead of kill the server.
                   // Without doing this in a finally block (at least with the mini cluster),
                   // the region server never goes down.
