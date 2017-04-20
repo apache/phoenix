@@ -2521,6 +2521,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    List<TableName> getSystemTableNames(HBaseAdmin admin) throws IOException {
+        return Lists.newArrayList(admin.listTableNames(QueryConstants.SYSTEM_SCHEMA_NAME + "\\..*"));
+    }
+
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException {
         try {
             metaConnection.createStatement().execute(QueryConstants.CREATE_SEQUENCE_METADATA);
