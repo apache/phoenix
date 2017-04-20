@@ -2426,7 +2426,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 .build().buildException(); }
                                 createSysMutexTable(admin);
                             }
-                            Properties scnProps = PropertiesUtil.deepCopy(props);
+                            Properties scnProps = PrcreateSysMutexTableopertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                                     Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
@@ -2493,11 +2493,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             Throwables.propagate(e);
         }
     }
-    
+
     private void createSysMutexTable(HBaseAdmin admin) throws IOException, SQLException {
         try {
-            HTableDescriptor tableDesc = new HTableDescriptor(
-                    TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES));
+            final TableName mutexTableName = TableName.valueOf(
+                    PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME_BYTES);
+            List<TableName> systemTables = getSystemTableNames(admin);
+            if (systemTables.contains(mutexTableName)) {
+                logger.debug("System mutex table already appears to exist, not creating it");
+                return;
+            }
+            HTableDescriptor tableDesc = new HTableDescriptor(mutexTableName);
             HColumnDescriptor columnDesc = new HColumnDescriptor(
                     PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES);
             columnDesc.setTimeToLive(TTL_FOR_MUTEX); // Let mutex expire after some time
