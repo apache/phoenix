@@ -149,8 +149,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                     try {
                         // this may have been queued, but there was an abort/stop so we try to early exit
                         throwFailureIfDone();
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
+                        if (LOG.isTraceEnabled()) {
+                            LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                         }
                         if (allowLocalUpdates && env!=null && tableReference.getTableName().equals(
                             env.getRegion().getTableDesc().getNameAsString())) {
@@ -160,8 +160,8 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
                                 return Boolean.TRUE;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
-                                if (LOG.isDebugEnabled()) {
-                                    LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
+                                if (LOG.isTraceEnabled()) {
+                                    LOG.trace("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
                                             + ignord);
                                 }
                             }
