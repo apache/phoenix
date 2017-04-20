@@ -2426,7 +2426,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                                 .build().buildException(); }
                                 createSysMutexTable(admin);
                             }
-                            Properties scnProps = PrcreateSysMutexTableopertiesUtil.deepCopy(props);
+                            Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
                                     Long.toString(MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP));
                             scnProps.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
