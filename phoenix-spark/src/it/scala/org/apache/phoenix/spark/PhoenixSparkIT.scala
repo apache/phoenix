@@ -20,15 +20,38 @@ import org.apache.phoenix.util.{ColumnInfo, SchemaUtil}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
 import org.joda.time.DateTime
-
+import org.apache.spark.{SparkConf, SparkContext}
 import scala.collection.mutable.ListBuffer
-
+import org.apache.hadoop.conf.Configuration
 /**
   * Note: If running directly from an IDE, these are the recommended VM parameters:
   * -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
   */
 class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
+  test("Can persist data with case senstive columns (like in avro schema) using 'DataFrame.saveToPhoenix'") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.createDataFrame(
+      Seq(
+        (1, 1, "test_child_1"),
+        (2, 1, "test_child_2"))).toDF("ID", "TABLE3_ID", "t2col1")
+    df.saveToPhoenix("TABLE3", zkUrl = Some(quorumAddress),skipNormalizingIdentifier=true)
+
+    // Verify results
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT * FROM TABLE3")
+
+    val checkResults = List((1, 1, "test_child_1"), (2, 1, "test_child_2"))
+    val results = ListBuffer[(Long, Long, String)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getLong(2), rs.getString(3)))
+    }
+    stmt.close()
+
+    results.toList shouldEqual checkResults
+
+  }
+  
   test("Can convert Phoenix schema") {
     val phoenixSchema = List(
       new ColumnInfo("varcharColumn", PVarchar.INSTANCE.getSqlType)
