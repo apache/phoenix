@@ -1316,7 +1316,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
             stmt.executeUpdate();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -1426,7 +1426,7 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
             conn.commit();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
         }
     }
 

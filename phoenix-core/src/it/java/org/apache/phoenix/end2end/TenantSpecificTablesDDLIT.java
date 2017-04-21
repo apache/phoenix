@@ -58,6 +58,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -128,14 +129,14 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
                 conn.createStatement().execute("ALTER TABLE " + globalTable + " SET MULTI_TENANT = " + true);
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
             
             try {
                 conn.createStatement().execute("ALTER TABLE " + multiTenantTable + " SET MULTI_TENANT = " + false);
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
         }
     }
@@ -157,7 +158,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
                     "                ) ");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_CREATE_TENANT_SPECIFIC_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_CREATE_TENANT_SPECIFIC_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -174,7 +175,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             fail();
         }
         catch (SQLException expected) {
-            assertEquals(TABLE_UNDEFINED.getErrorCode(), expected.getErrorCode());
+            TestUtil.assertErrorCodeEquals(TABLE_UNDEFINED.getErrorCode(), expected.getErrorCode());
         }
         String newDDL =
         "CREATE TABLE DIFFSCHEMA." + PARENT_TABLE_NAME + " ( \n" + 
@@ -213,7 +214,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             fail();
         }
         catch (SQLException expected) {
-            assertEquals(SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS.getErrorCode(), expected.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS.getErrorCode(), expected.getErrorCode());
         }
     }
     
@@ -280,7 +281,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
                 fail();
             }
             catch (SQLException expected) {
-                assertEquals(CANNOT_DROP_PK.getErrorCode(), expected.getErrorCode());
+                TestUtil.assertErrorCodeEquals(CANNOT_DROP_PK.getErrorCode(), expected.getErrorCode());
             }
             
             // try removing a non-PK col, which is allowed
@@ -305,7 +306,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             fail("Should not have been allowed to drop a parent table to which tenant-specific tables still point.");
         }
         catch (SQLException expected) {
-            assertEquals(CANNOT_MUTATE_TABLE.getErrorCode(), expected.getErrorCode());
+            TestUtil.assertErrorCodeEquals(CANNOT_MUTATE_TABLE.getErrorCode(), expected.getErrorCode());
         }
         finally {
             conn.close();

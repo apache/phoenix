@@ -232,7 +232,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             }   
             catch (SQLException e) {
                 if (immutableRows) fail();
-                assertEquals(e.getErrorCode(), SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode());
+                TestUtil.assertErrorCodeEquals(e.getErrorCode(), SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode());
             }
         }
     }
@@ -382,7 +382,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX.getErrorCode(), e.getErrorCode());
         }
 
         HBaseAdmin admin = pconn.getQueryServices().getAdmin();
@@ -399,7 +399,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX.getErrorCode(), e.getErrorCode());
         }
         ddl += " transactional=true";
         conn.createStatement().execute(ddl);

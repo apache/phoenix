@@ -266,7 +266,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             connWithConflict.commit();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION.getErrorCode(), e.getErrorCode());
         } finally {
             connWithConflict.close();
         }

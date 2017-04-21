@@ -52,6 +52,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -137,7 +138,7 @@ public class QueryIT extends BaseQueryIT {
             rs.getDate(1);
             fail();
         } catch (SQLException e) { // Expected
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(),e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(),e.getErrorCode());
         } finally {
             conn.close();
         }

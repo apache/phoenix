@@ -96,7 +96,7 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
                 fail();
             } catch (SQLException e) {
                 e.printStackTrace();
-                assertEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_MUTATE_SCHEMA.getErrorCode());
+                TestUtil.assertErrorCodeEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_MUTATE_SCHEMA.getErrorCode());
             }
             assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
         }
@@ -142,7 +142,7 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute("DROP SCHEMA " + schema);
             fail();
         } catch (SQLException e) {
-            assertEquals(e.getErrorCode(), SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode());
+            TestUtil.assertErrorCodeEquals(e.getErrorCode(), SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode());
         }
         admin.close();
     }

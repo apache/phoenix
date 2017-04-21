@@ -31,6 +31,7 @@ import java.util.Calendar;
 import java.util.TimeZone;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -82,7 +83,7 @@ public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 			assertEquals(0, rs.getInt(3));
 			fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
 	}
 

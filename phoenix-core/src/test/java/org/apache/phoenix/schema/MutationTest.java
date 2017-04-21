@@ -35,6 +35,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class MutationTest extends BaseConnectionlessQueryTest {
@@ -93,19 +94,19 @@ public class MutationTest extends BaseConnectionlessQueryTest {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v1) VALUES('abcd','" + value + "')");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v2) VALUES('b','" + value + "')");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v3) VALUES('b','" + value + "')");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             value = "澴粖蟤य褻酃岤豦팑薰鄩脼ժ끦碉碉碉碉碉碉碉碉碉";
             assertTrue(value.length() > maxLength2);
@@ -113,13 +114,13 @@ public class MutationTest extends BaseConnectionlessQueryTest {
                 conn.createStatement().execute("UPSERT INTO t1(k1,k2) VALUES('a','" + value + "')");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             try {
                 conn.createStatement().execute("UPSERT INTO t1(k1,v1) VALUES('a','" + value + "')");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
         } finally {
             conn.close();

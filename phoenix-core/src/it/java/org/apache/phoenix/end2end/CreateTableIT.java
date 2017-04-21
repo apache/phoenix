@@ -411,7 +411,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute(ddl);    
             fail(" Non pk column ENTRY_POINT_NAME has a NOT NULL constraint");
         } catch( SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
         }
    }
 
@@ -426,7 +426,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute(ddl);    
             fail(" Non pk column V has a NOT NULL constraint");
         } catch( SQLException sqle) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(),sqle.getErrorCode());
         }
    }
     
@@ -445,7 +445,7 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         try {
             conn.createStatement().execute(ddl);
         } catch (SQLException sqle) {
-            assertEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),sqle.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_FOR_TTL.getErrorCode(),sqle.getErrorCode());
         }
     }
     

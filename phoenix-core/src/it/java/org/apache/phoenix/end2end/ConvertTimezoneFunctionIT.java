@@ -28,7 +28,10 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.util.TestUtil;
+
 import static org.junit.Assert.assertFalse;
+
 import org.junit.Test;
 
 /**
@@ -179,7 +182,7 @@ public class ConvertTimezoneFunctionIT extends ParallelStatsDisabledIT {
             rs.getDate(3).getTime();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
 

@@ -45,6 +45,7 @@ import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -885,7 +886,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             stmt.execute("upsert into PTSDB(INST,HOST,VAL) VALUES ('abc', 'abc-def-ghi', 0.5)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -1042,7 +1043,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             stmt.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -1081,7 +1082,7 @@ public class VariableLengthPKIT extends BaseClientManagedTimeIT {
             stmt.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
         } finally {
             conn.close();
         }

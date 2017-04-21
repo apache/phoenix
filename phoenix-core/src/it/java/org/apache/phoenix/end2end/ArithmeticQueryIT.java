@@ -34,6 +34,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 import com.google.common.primitives.Doubles;
@@ -111,7 +112,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
                 conn.commit();
                 fail("Should have caught bad values.");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             try {
                 query = "UPSERT INTO " + testDecimalArithmetic
@@ -126,7 +127,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
                 conn.commit();
                 fail("Should have caught bad values.");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
         } finally {
             conn.close();
@@ -194,7 +195,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
                 conn.commit();
                 fail("Should have caught bad upsert.");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             
             // Evaluate on server side.
@@ -233,7 +234,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
                 conn.commit();
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
             }
             query = "SELECT col4 FROM " + source;
             stmt = conn.prepareStatement(query);
@@ -575,7 +576,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
             	result = rs.getBigDecimal(1);
             	fail("Should have caught error.");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             
             try {
@@ -587,7 +588,7 @@ public class ArithmeticQueryIT extends ParallelStatsDisabledIT {
             	result = rs.getBigDecimal(1);
             	fail("Should have caught error.");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(),e.getErrorCode());
             }
             
             query = "SELECT col4 * col5 FROM " + testDecimalArithmetic + " WHERE pk='testValueOne'";

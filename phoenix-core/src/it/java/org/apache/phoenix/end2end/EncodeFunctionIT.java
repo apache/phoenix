@@ -133,7 +133,7 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
             conn.createStatement().executeQuery("SELECT * FROM " + tableName + " WHERE pk = ENCODE(1, 'HEX')");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
 

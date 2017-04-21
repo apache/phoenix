@@ -64,6 +64,7 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
@@ -876,7 +877,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
         } catch (SQLException se) {
             wasThrottled = true;
-            assertEquals(SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode(), se.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode(), se.getErrorCode());
         } finally {
             for (Connection c : connections) {
                 c.close();

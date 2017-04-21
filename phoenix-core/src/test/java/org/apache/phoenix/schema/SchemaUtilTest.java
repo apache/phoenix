@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class SchemaUtilTest {
@@ -29,7 +30,7 @@ public class SchemaUtilTest {
     @Test
     public void testExceptionCode() throws Exception {
         SQLExceptionCode code = SQLExceptionCode.fromErrorCode(SQLExceptionCode.AGGREGATE_IN_GROUP_BY.getErrorCode());
-        assertEquals(SQLExceptionCode.AGGREGATE_IN_GROUP_BY, code);
+        TestUtil.assertErrorCodeEquals(SQLExceptionCode.AGGREGATE_IN_GROUP_BY.getErrorCode(), code.getErrorCode());
     }
     
     @Test

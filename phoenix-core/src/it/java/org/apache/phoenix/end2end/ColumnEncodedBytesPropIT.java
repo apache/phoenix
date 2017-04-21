@@ -35,6 +35,7 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
@@ -90,7 +91,7 @@ public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals(SQLExceptionCode.MAX_COLUMNS_EXCEEDED.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.MAX_COLUMNS_EXCEEDED.getErrorCode(), e.getErrorCode());
             }
             
             // create table with number of cols equal to that supported by the encoding
@@ -104,7 +105,7 @@ public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals(SQLExceptionCode.MAX_COLUMNS_EXCEEDED.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.MAX_COLUMNS_EXCEEDED.getErrorCode(), e.getErrorCode());
             }
         } 
 	}

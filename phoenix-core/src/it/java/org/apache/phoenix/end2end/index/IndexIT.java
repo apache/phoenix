@@ -177,7 +177,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
                 rs = conn.createStatement().executeQuery(query);
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
             }
         }
     }

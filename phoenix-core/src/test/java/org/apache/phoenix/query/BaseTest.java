@@ -1847,4 +1847,5 @@ public abstract class BaseTest {
     protected static void assertEquals(Object[] expecteds, Object[] actuals) {
         org.junit.Assert.assertEquals(expecteds, actuals);
     }
+
 }

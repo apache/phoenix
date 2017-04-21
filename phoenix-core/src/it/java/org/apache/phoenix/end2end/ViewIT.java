@@ -48,6 +48,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -163,14 +164,14 @@ public class ViewIT extends BaseViewIT {
             conn.createStatement().execute("UPSERT INTO " + fullViewName + "(k2,k3) VALUES(123,3)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
         }
 
         try {
             conn.createStatement().execute("UPSERT INTO " + fullViewName + "(k2,k3) select k2, 3 from " + fullViewName);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -218,7 +219,7 @@ public class ViewIT extends BaseViewIT {
             conn.createStatement().execute("ALTER VIEW " + fullViewName1 + " DROP COLUMN v1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         
         String fullViewName2 = "V_" + generateUniqueName();
@@ -229,13 +230,13 @@ public class ViewIT extends BaseViewIT {
             conn.createStatement().execute("ALTER VIEW " + fullViewName2 + " DROP COLUMN v1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().execute("ALTER VIEW " + fullViewName2 + " DROP COLUMN v2");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         conn.createStatement().execute("ALTER VIEW " + fullViewName2 + " DROP COLUMN v3");
         
@@ -406,7 +407,7 @@ public class ViewIT extends BaseViewIT {
             conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
    
@@ -481,7 +482,7 @@ public class ViewIT extends BaseViewIT {
 	        conn.createStatement().execute(ddl);
 	        fail("Should not be able to drop table " + tableName + " with child views without explictly specifying CASCADE");
         }  catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
 	}
 
@@ -630,14 +631,14 @@ public class ViewIT extends BaseViewIT {
             conn.createStatement().execute(ddl);
             fail("View cannot extend PK if parent's last PK is variable length. See https://issues.apache.org/jira/browse/PHOENIX-978.");
         } catch (SQLException e) {
-            assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
         }
         String fullViewName2 = "V_" + generateUniqueName();
         ddl = "CREATE VIEW " + fullViewName2 + " (k3 VARCHAR PRIMARY KEY)  AS SELECT * FROM " + fullTableName + " WHERE v1 = 1.0";
         try {
         	conn.createStatement().execute(ddl);
         } catch (SQLException e) {
-            assertEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(CANNOT_MODIFY_VIEW_PK.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -666,7 +667,7 @@ public class ViewIT extends BaseViewIT {
             conn.createStatement().execute(ddl);
             fail("can only add nullable PKs via ALTER VIEW/TABLE");
         } catch (SQLException e) {
-            assertEquals(NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(NOT_NULLABLE_COLUMN_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
         }
     }
     

@@ -45,6 +45,7 @@ import java.util.List;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -258,7 +259,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
                 statement.executeUpdate();
                 fail("Should fail when bigger than expected character is inserted");
             } catch (SQLException ex) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), ex.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), ex.getErrorCode());
             }
             
             // upsert non-rowkey value greater than its limit
@@ -273,7 +274,7 @@ public class ExecuteStatementsIT extends ParallelStatsDisabledIT {
                 fail("Should fail when bigger than expected character is inserted");
             }
             catch (SQLException ex) {
-                assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), ex.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), ex.getErrorCode());
             }
                         
             //where selecting from a CHAR(x) and upserting into a CHAR(y) where x<=y.

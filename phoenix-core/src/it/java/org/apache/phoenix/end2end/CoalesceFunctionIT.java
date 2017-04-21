@@ -34,6 +34,7 @@ import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -269,7 +270,7 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
             assertEquals(0, rs.getLong(1));
             fail("Should not cast -2 to UNSIGNED_INT");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
 

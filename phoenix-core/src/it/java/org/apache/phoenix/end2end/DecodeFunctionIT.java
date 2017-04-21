@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PUnsignedLong;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
@@ -97,7 +98,7 @@ public class DecodeFunctionIT extends ParallelStatsDisabledIT {
 					"SELECT * FROM " + testTable + " WHERE some_column = DECODE('zzxxuuyyzzxxuuyy', 'hex')");
 	        fail();
 		} catch (SQLException e) {
-			assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+		    TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
 		}
 	}
 
@@ -115,7 +116,7 @@ public class DecodeFunctionIT extends ParallelStatsDisabledIT {
 					"SELECT * FROM " + testTable + " WHERE some_column = DECODE('8', 'hex')");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
 	}
 
@@ -146,7 +147,7 @@ public class DecodeFunctionIT extends ParallelStatsDisabledIT {
 			conn.createStatement().executeQuery("SELECT * FROM "+ testTable + " WHERE some_column = DECODE('8', 'someNonexistFormat')");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
 	}
 }

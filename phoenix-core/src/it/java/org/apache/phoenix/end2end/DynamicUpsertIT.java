@@ -35,6 +35,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -173,7 +174,7 @@ public class DynamicUpsertIT extends ParallelStatsDisabledIT {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH.getErrorCode(),e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH.getErrorCode(),e.getErrorCode());
         } finally {
             conn.close();
         }

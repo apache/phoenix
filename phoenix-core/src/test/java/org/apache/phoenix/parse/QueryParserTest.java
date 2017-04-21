@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 import com.google.common.base.Joiner;
@@ -214,7 +215,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -436,7 +437,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -473,7 +474,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
@@ -481,7 +482,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISSING_MAX_LENGTH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.MISSING_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -493,7 +494,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad varchar definition.");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -525,7 +526,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad binary definition.");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NONPOSITIVE_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
         try {
             String sql = ("CREATE TABLE IF NOT EXISTS testBadVarcharDef" + 
@@ -533,7 +534,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail("Should have caught bad char definition.");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISSING_MAX_LENGTH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.MISSING_MAX_LENGTH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -602,7 +603,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.MISSING_TOKEN.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -615,7 +616,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -734,7 +735,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -747,7 +748,7 @@ public class QueryParserTest {
             parseQuery(sql);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
     

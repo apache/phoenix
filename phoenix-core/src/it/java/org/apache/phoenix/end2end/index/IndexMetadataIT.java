@@ -199,14 +199,14 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
                 conn.createStatement().execute(ddl);
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION.getErrorCode(), e.getErrorCode());
             }
             try {
                 ddl = "ALTER INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable + " UNUSABLE";
                 conn.createStatement().execute(ddl);
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_INDEX_STATE_TRANSITION.getErrorCode(), e.getErrorCode());
             }
             
             ddl = "ALTER INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable + " REBUILD";
@@ -410,7 +410,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail("Should have caught exception.");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -428,7 +428,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail("Should have caught exception");
         } catch (ColumnAlreadyExistsException e) {
-            assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -447,7 +447,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail("Should have caught exception");
         } catch (ColumnAlreadyExistsException e) {
-            assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -473,7 +473,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             fail("Should have caught exception");
         } catch (AmbiguousColumnException e) {
-            assertEquals(SQLExceptionCode.AMBIGUOUS_COLUMN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.AMBIGUOUS_COLUMN.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -499,14 +499,14 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
                 conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + testTable  + " (v3) INCLUDE (v4)");
                 fail("Should have seen SQLExceptionCode.VARBINARY_IN_ROW_KEY");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
             }
 
             try {
                 conn.createStatement().execute("CREATE INDEX " + indexName + "3 ON " + testTable  + " (v2, v3) INCLUDE (v4)");
                 fail("Should have seen SQLExceptionCode.VARBINARY_IN_ROW_KEY");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
             }
             conn.createStatement().execute("CREATE INDEX " + indexName + "4 ON " + testTable  + " (v4) INCLUDE (v2)");
             conn.commit();

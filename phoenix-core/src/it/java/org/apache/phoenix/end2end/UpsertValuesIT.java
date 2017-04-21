@@ -312,7 +312,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
             stmt.execute("upsert into UpsertWithDesc values (to_char(100), to_char(100), to_char(100))");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH.getErrorCode(),e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH.getErrorCode(),e.getErrorCode());
         } finally {
             closeStmtAndConn(stmt, conn);
         }
@@ -948,7 +948,7 @@ public class UpsertValuesIT extends BaseClientManagedTimeIT {
             stmt.executeUpdate();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), e.getErrorCode());
         }
     }
     

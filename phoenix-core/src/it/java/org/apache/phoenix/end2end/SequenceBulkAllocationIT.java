@@ -39,6 +39,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -110,7 +111,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 "SELECT NEXT NULL VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("null is not allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -124,7 +125,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 "SELECT NEXT '89b' VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Only integers and longs are allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -139,7 +140,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 "SELECT NEXT '-1' VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("null is not allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -153,7 +154,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 "SELECT NEXT 0 VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Only integers and longs are allowed to be used for <n> in NEXT <n> VALUES FOR <seq>");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_MUST_BE_CONSTANT.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -418,7 +419,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                                 + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Invoking SELECT NEXT VALUES should have thrown Reached Max Value Exception");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -456,7 +457,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                                 + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Invoking SELECT NEXT VALUES should have thrown Reached Max Value Exception");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -545,7 +546,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                 "SELECT NEXT " + Long.MAX_VALUE
                         + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\"");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -647,7 +648,7 @@ public class SequenceBulkAllocationIT extends BaseClientManagedTimeIT {
                                 + " VALUES FOR bulkalloc.alpha FROM \"SYSTEM\".\"SEQUENCE\" LIMIT 1");
             fail("Invoking SELECT NEXT VALUES should have failed as operation is not supported for sequences with Cycles.");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_NOT_SUPPORTED.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NUM_SEQ_TO_ALLOCATE_NOT_SUPPORTED.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }

@@ -41,6 +41,7 @@ import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -93,7 +94,7 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
                 conn.createStatement().execute(ddl);
                 fail("Sequence value must be castable to the auto partition id column data type");
             } catch (SQLException e) {
-                assertEquals(
+                TestUtil.assertErrorCodeEquals(
                     SQLExceptionCode.SEQUENCE_NOT_CASTABLE_TO_AUTO_PARTITION_ID_COLUMN
                             .getErrorCode(),
                     e.getErrorCode());
@@ -135,7 +136,7 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
                     "CREATE VIEW " + metricView4 + " AS SELECT * FROM " + tableName);
                 fail("Creating a view with a partition id that is too large should fail");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.CANNOT_COERCE_AUTO_PARTITION_ID.getErrorCode(),
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_COERCE_AUTO_PARTITION_ID.getErrorCode(),
                     e.getErrorCode());
             }
 

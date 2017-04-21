@@ -166,7 +166,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(e.getErrorCode(), SQLExceptionCode.PRIMARY_KEY_WITH_FAMILY_NAME.getErrorCode());
+            TestUtil.assertErrorCodeEquals(e.getErrorCode(), SQLExceptionCode.PRIMARY_KEY_WITH_FAMILY_NAME.getErrorCode());
         } finally {
             conn.close();
         }
@@ -201,7 +201,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -222,7 +222,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.VARBINARY_IN_ROW_KEY.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -237,7 +237,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_NOT_NULL_CONSTRAINT.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -844,7 +844,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.executeQuery();
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.ORDER_BY_NOT_IN_SELECT_DISTINCT.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ORDER_BY_NOT_IN_SELECT_DISTINCT.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -862,7 +862,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.executeQuery();
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -881,14 +881,14 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.executeQuery();
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
         }
         try {
             PreparedStatement statement = conn.prepareStatement(query1);
             statement.executeQuery();
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
         }
         conn.close();
     }
@@ -905,7 +905,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.executeQuery();
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.ORDER_BY_NOT_IN_SELECT_DISTINCT.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ORDER_BY_NOT_IN_SELECT_DISTINCT.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -923,7 +923,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.executeQuery();
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -943,7 +943,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 statement.executeQuery();
                 fail();
             } catch (SQLException e) { // expected
-                assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
             }
         }
     }
@@ -1052,13 +1052,13 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().execute("ALTER TABLE atable SET SALT_BUCKETS=4");
             fail();
         } catch (SQLException e) { // expected
-            assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -1274,7 +1274,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
         }
         // Test with one index having the referenced key value column, but one not having it.
         // Still should fail
@@ -1284,7 +1284,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("DELETE FROM t WHERE v2 = 'foo'");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -1307,7 +1307,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             compileQuery(query, binds);
             fail("Compilation should have failed since VARCHAR is not a valid data type for ROUND");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -1341,7 +1341,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             compileQuery(query, binds);
             fail("Compilation should have failed since multiplier can be an INTEGER only");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -1353,7 +1353,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             compileQuery(query, binds);
             fail("Compilation should have failed since a row value constructor is not an array");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -1365,7 +1365,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             compileQuery(query, binds);
             fail("Compilation should have failed since ROUND does not return an array");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -1378,7 +1378,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             statement.execute();
             fail();
         } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode(), e.getErrorCode());
         } finally {
                 conn.close();
         }
@@ -1392,7 +1392,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t(k,a[2]) VALUES('A', 5)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.PARSER_ERROR.getErrorCode(), e.getErrorCode());
         }
         conn.close();
     }
@@ -1404,7 +1404,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("CREATE TABLE t (k VARCHAR PRIMARY KEY, a VARBINARY[10])");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.VARBINARY_ARRAY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
         }
         conn.close();
     }
@@ -1453,7 +1453,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.execute("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
         }
         try {
             Statement stmt = conn.createStatement();
@@ -1461,7 +1461,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.executeUpdate("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
         }
         try {
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO atable VALUES('000000000000000','000000000000000')");
@@ -1469,7 +1469,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.execute();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
         }
         conn.close();
         try {
@@ -1478,7 +1478,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.executeUpdate();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH.getErrorCode(), e.getErrorCode());
         }
         conn.close();
     }
@@ -1570,7 +1570,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 statement.execute("create local index my_idx on example (fn) DEFAULT_COLUMN_FAMILY='F'");
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE.getErrorCode(),e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.DEFAULT_COLUMN_FAMILY_ON_SHARED_TABLE.getErrorCode(),e.getErrorCode());
             }
             statement.execute("create local index my_idx on example (fn)");
        } finally {
@@ -1602,7 +1602,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.execute("CREATE INDEX i ON t (RAND())");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
         }
         finally {
             stmt.close();
@@ -1620,7 +1620,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.execute("CREATE INDEX i ON t (2)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
         }
         finally {
             stmt.close();
@@ -1638,7 +1638,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.execute("CREATE INDEX i ON t (SUM(k1))");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
         }
         finally {
             stmt.close();
@@ -1652,20 +1652,20 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("CREATE TABLE t (k VARBINARY PRIMARY KEY DESC)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().execute("CREATE TABLE t (k1 VARCHAR NOT NULL, k2 VARBINARY, CONSTRAINT pk PRIMARY KEY (k1,k2 DESC))");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().execute("CREATE TABLE t (k1 VARCHAR PRIMARY KEY)");
             conn.createStatement().execute("ALTER TABLE t ADD k2 VARBINARY PRIMARY KEY DESC");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DESC_VARBINARY_NOT_SUPPORTED.getErrorCode(), e.getErrorCode());
         }
         conn.close();
     }
@@ -1681,7 +1681,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             stmt.execute("CREATE INDEX i ON t (k1/0)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
         }
         finally {
             stmt.close();
@@ -2116,14 +2116,14 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                  conn.createStatement().executeQuery("SELECT *");
                  fail("Should have got SQLException");
              } catch (SQLException e) {
-                 assertEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
+                 TestUtil.assertErrorCodeEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
              }
              
              try {
                  conn.createStatement().executeQuery("SELECT A.*");
                  fail("Should have got SQLException");
              } catch (SQLException e) {
-                 assertEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
+                 TestUtil.assertErrorCodeEquals(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT.getErrorCode(), e.getErrorCode());
              }
          } finally {
              conn.close();
@@ -2216,28 +2216,28 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
             fail("Varchar column cannot be added as row_timestamp");
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
         }
         // Column of type INTEGER cannot be declared as ROW_TIMESTAMP
         try {
             conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 INTEGER NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
             fail("Integer column cannot be added as row_timestamp");
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
         }
         // Column of type DOUBLE cannot be declared as ROW_TIMESTAMP
         try {
             conn.createStatement().execute("CREATE TABLE T1 (PK1 VARCHAR NOT NULL, PK2 DOUBLE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1, PK2 ROW_TIMESTAMP)) ");
             fail("Double column cannot be added as row_timestamp");
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
         }
         // Invalid - two columns declared as row_timestamp in pk constraint
         try {
             conn.createStatement().execute("CREATE TABLE T2 (PK1 DATE NOT NULL, PK2 DATE NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP , PK2 ROW_TIMESTAMP)) ");
             fail("Creating table with two row_timestamp columns should fail");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ROWTIMESTAMP_ONE_PK_COL_ONLY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ROWTIMESTAMP_ONE_PK_COL_ONLY.getErrorCode(), e.getErrorCode());
         }
         
         // Invalid because only (unsigned)date, time, long, (unsigned)timestamp are valid data types for column to be declared as row_timestamp
@@ -2245,7 +2245,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("CREATE TABLE T5 (PK1 VARCHAR PRIMARY KEY ROW_TIMESTAMP, PK2 VARCHAR, KV1 VARCHAR)");
             fail("Creating table with a key value column as row_timestamp should fail");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ROWTIMESTAMP_COL_INVALID_TYPE.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -2257,31 +2257,31 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c2,c3");
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c3,c2");
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c2,c4");
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c3,c5");
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
         }
         try {
             conn.createStatement().executeQuery("SELECT c1 FROM t1 GROUP BY c1,c6,c5");
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UNSUPPORTED_GROUP_BY_EXPRESSIONS.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -2296,7 +2296,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                                 "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) TRANSACTIONAL=true");
                 fail();
             } catch (SQLException e) {
-                assertEquals("Unexpected Exception",
+                TestUtil.assertErrorCodeEquals("Unexpected Exception",
                         SQLExceptionCode.CANNOT_START_TRANSACTION_WITH_SCN_SET
                                 .getErrorCode(), e.getErrorCode());
             }
@@ -2312,7 +2312,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                         "CREATE TABLE t (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR) GUIDE_POSTS_WIDTH = -1");
                 fail();
             } catch (SQLException e) {
-                assertEquals("Unexpected Exception",
+                TestUtil.assertErrorCodeEquals("Unexpected Exception",
                         SQLExceptionCode.PARSER_ERROR
                                 .getErrorCode(), e.getErrorCode());
             }
@@ -2501,7 +2501,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_CREATE_DEFAULT.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_CREATE_DEFAULT.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -2518,7 +2518,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl2);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_CREATE_DEFAULT.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_CREATE_DEFAULT.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -2533,7 +2533,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -2550,7 +2550,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl2);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -2567,7 +2567,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl2);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
     }
 
@@ -2584,7 +2584,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(
+            TestUtil.assertErrorCodeEquals(
                     SQLExceptionCode.CANNOT_CREATE_DEFAULT_ROWTIMESTAMP.getErrorCode(),
                     e.getErrorCode());
         }
@@ -2601,7 +2601,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(
+            TestUtil.assertErrorCodeEquals(
                     SQLExceptionCode.CANNOT_CREATE_DEFAULT_ROWTIMESTAMP.getErrorCode(),
                     e.getErrorCode());
         }
@@ -2618,7 +2618,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -2635,7 +2635,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl2);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -2714,7 +2714,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v = v + 1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_FOR_IMMUTABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_FOR_IMMUTABLE.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -2728,7 +2728,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE k2 = v + 1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_UPDATE_PK_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_UPDATE_PK_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -2742,7 +2742,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v1 = v2 || 'a'");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -2756,7 +2756,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v1 = v1 + 1, v1 = v2 + 2");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DUPLICATE_COLUMN_IN_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.DUPLICATE_COLUMN_IN_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -2770,7 +2770,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v = sum(v)");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.AGGREGATION_NOT_ALLOWED_IN_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.AGGREGATION_NOT_ALLOWED_IN_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -2785,7 +2785,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v = next value for s1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_USE_OF_NEXT_VALUE_FOR.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_USE_OF_NEXT_VALUE_FOR.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }
@@ -2800,7 +2800,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute("UPSERT INTO t1 VALUES(0,0) ON DUPLICATE KEY UPDATE v = v + 1");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_SET_SCN_IN_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_SET_SCN_IN_ON_DUP_KEY.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }

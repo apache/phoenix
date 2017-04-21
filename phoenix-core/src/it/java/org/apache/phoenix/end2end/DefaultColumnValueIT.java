@@ -36,6 +36,7 @@ import java.sql.Timestamp;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -390,7 +391,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(dml);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
         }
 
         dml = "UPSERT INTO " + table + " VALUES (1, 2)";
@@ -398,7 +399,7 @@ public class DefaultColumnValueIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(dml);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CONSTRAINT_VIOLATION.getErrorCode(), e.getErrorCode());
         }
 
         dml = "UPSERT INTO " + table + " VALUES (1, 2, 3)";

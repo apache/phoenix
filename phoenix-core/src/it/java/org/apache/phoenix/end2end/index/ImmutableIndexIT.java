@@ -149,7 +149,7 @@ public class ImmutableIndexIT extends BaseUniqueNamesOwnClusterIT {
                 conn.createStatement().execute(dml);
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(),
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(),
                     e.getErrorCode());
             }
 

@@ -57,6 +57,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -299,7 +300,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                             + " APPEND_ONLY_SCHEMA = true");
                 fail("UPDATE_CACHE_FREQUENCY attribute must not be set to ALWAYS if APPEND_ONLY_SCHEMA is true");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.UPDATE_CACHE_FREQUENCY_INVALID.getErrorCode(),
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.UPDATE_CACHE_FREQUENCY_INVALID.getErrorCode(),
                     e.getErrorCode());
             }
             

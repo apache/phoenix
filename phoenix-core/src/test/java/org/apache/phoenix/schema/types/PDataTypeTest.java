@@ -1635,7 +1635,7 @@ public class PDataTypeTest {
         } catch (RuntimeException e) {
             assertTrue(e.getCause() instanceof SQLException);
             SQLException sqlE = (SQLException)e.getCause();
-            assertEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), sqlE.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.ILLEGAL_DATA.getErrorCode(), sqlE.getErrorCode());
         }
     }
 

@@ -28,6 +28,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
@@ -69,7 +70,7 @@ public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
             stmt.executeQuery();
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_QUERY_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.EXECUTE_QUERY_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -82,7 +83,7 @@ public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
             stmt.executeUpdate();
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.EXECUTE_UPDATE_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
         }
     }
     

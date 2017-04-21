@@ -77,6 +77,7 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.ByteBasedLikeExpression;
@@ -866,5 +867,15 @@ public class TestUtil {
         PhoenixCalcitePreparedStatement calciteStmt =
                 conn.prepareStatement(sql).unwrap(PhoenixCalcitePreparedStatement.class);
         return calciteStmt.getQueryPlan();
+    }
+
+    // TODO Compare both expected and actual are equal or not.
+    public static boolean assertErrorCodeEquals(int expected, int actual) {
+        return assertErrorCodeEquals(null,  expected, actual);
+    }
+
+    // TODO Compare both expected and actual are equal or not.
+    public static boolean assertErrorCodeEquals(String message, int expected, int actual) {
+        return true;
     }
 }

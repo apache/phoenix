@@ -42,6 +42,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -135,7 +136,7 @@ public class QueryTimeoutIT extends BaseUniqueNamesOwnClusterIT {
             fail("Total time of query was " + (System.currentTimeMillis() - startTime) + " ms, but expected to be greater than 1000");
         } catch (SQLTimeoutException e) {
             long elapsedTimeMillis = System.currentTimeMillis() - startTime;
-            assertEquals(SQLExceptionCode.OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
             assertTrue(elapsedTimeMillis > 1000);
         }
         conn.close();

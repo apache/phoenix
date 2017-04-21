@@ -45,6 +45,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SequenceUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -180,7 +181,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_CALL_CURRENT_BEFORE_NEXT_VALUE.getErrorCode(), e.getErrorCode());
             assertTrue(e.getNextException()==null);
         }
         
@@ -801,7 +802,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
                 "CREATE SEQUENCE foo.bar1 START WITH 1 INCREMENT BY 1 MINVALUE 2 MAXVALUE 3");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -811,7 +812,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
                 "CREATE SEQUENCE foo.bar2 START WITH 4 INCREMENT BY 1 MINVALUE 2 MAXVALUE 3");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.STARTS_WITH_MUST_BE_BETWEEN_MIN_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -824,7 +825,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute("CREATE SEQUENCE foo.bar MINVALUE abc");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MINVALUE_MUST_BE_CONSTANT.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.MINVALUE_MUST_BE_CONSTANT.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -837,7 +838,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute("CREATE SEQUENCE foo.bar MAXVALUE null");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.MAXVALUE_MUST_BE_CONSTANT.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.MAXVALUE_MUST_BE_CONSTANT.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -850,7 +851,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute("CREATE SEQUENCE foo.bar MINVALUE 2 MAXVALUE 1");
             fail();
         } catch (SQLException e) {
-            assertEquals(
+            TestUtil.assertErrorCodeEquals(
                 SQLExceptionCode.MINVALUE_MUST_BE_LESS_THAN_OR_EQUAL_TO_MAXVALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
@@ -864,7 +865,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute("CREATE SEQUENCE foo.bar INCREMENT null");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INCREMENT_BY_MUST_BE_CONSTANT.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INCREMENT_BY_MUST_BE_CONSTANT.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -877,7 +878,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             conn.createStatement().execute("CREATE SEQUENCE foo.bar INCREMENT 0");
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INCREMENT_BY_MUST_NOT_BE_ZERO.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INCREMENT_BY_MUST_NOT_BE_ZERO.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -916,7 +917,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -935,7 +936,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -974,7 +975,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -993,7 +994,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -1013,7 +1014,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -1032,7 +1033,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -1051,7 +1052,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -1082,7 +1083,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MIN_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -1117,7 +1118,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             assertTrue(rs.next());
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -1127,7 +1128,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             rs.next();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }
@@ -1224,7 +1225,7 @@ public class SequenceIT extends BaseClientManagedTimeIT {
             }
             fail("Expect to fail as we have arrived at the max sequence value " + val);
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SEQUENCE_VAL_REACHED_MAX_VALUE.getErrorCode(),
                 e.getErrorCode());
             assertTrue(e.getNextException() == null);
         }

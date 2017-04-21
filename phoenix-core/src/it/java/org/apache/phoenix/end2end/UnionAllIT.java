@@ -35,6 +35,7 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 public class UnionAllIT extends ParallelStatsDisabledIT {
@@ -297,7 +298,7 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
             conn.createStatement().executeQuery(ddl);
             fail();
         }  catch (SQLException e) {
-            assertEquals(SQLExceptionCode.SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.SELECT_COLUMN_NUM_IN_UNIONALL_DIFFS.getErrorCode(), e.getErrorCode());
         } finally {
             conn.close();
         }

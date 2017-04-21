@@ -45,6 +45,7 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -241,7 +242,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }           
             
             try {
@@ -355,7 +356,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
             
             try {
@@ -458,7 +459,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
             
             try {
@@ -542,7 +543,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
             
             try {
@@ -551,7 +552,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
             
             try {
@@ -560,7 +561,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals("Unexpected exception", CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
             
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
@@ -672,7 +673,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             try {
                 viewConn.createStatement().execute("SELECT V5 FROM " + grandChildView);
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
 
             // dropping column from the grand child view, however, should work.
@@ -718,7 +719,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             try {
                 viewConn.createStatement().execute(sql);
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
             
             // However, column V3 should have propagated to the non-diverged view.
@@ -783,7 +784,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
 	        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET IMMUTABLE_ROWS = true");
 	            fail();
 	        } catch (SQLException e) {
-	            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+	            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
 	        }
 	        
         	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET UPDATE_CACHE_FREQUENCY = 100");
@@ -795,7 +796,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
 	        	viewConn.createStatement().execute("ALTER VIEW " + viewOfTable + " SET APPEND_ONLY_SCHEMA = true");
 	            fail();
 	        } catch (SQLException e) {
-	            assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+	            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
 	        }
     	}
     }
@@ -828,7 +829,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch(SQLException e){
-                assertEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW.getErrorCode(), e.getErrorCode());
             }
             
             conn.createStatement().execute("ALTER TABLE " + baseTableName + " SET APPEND_ONLY_SCHEMA = true");

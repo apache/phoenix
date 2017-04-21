@@ -347,7 +347,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
                 }
             } catch (SQLException e) {
                 if (!mutable) {
-                    assertEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
+                    TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_FILTER_ON_IMMUTABLE_ROWS.getErrorCode(), e.getErrorCode());
                 }
             }
 

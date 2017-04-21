@@ -42,6 +42,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -1570,7 +1571,7 @@ public class SortMergeJoinIT extends BaseJoinIT {
             statement.executeQuery();
             fail("Should have got SQLException.");
         } catch (SQLException e) {
-            assertEquals(e.getErrorCode(), SQLExceptionCode.TYPE_MISMATCH.getErrorCode());
+            TestUtil.assertErrorCodeEquals(e.getErrorCode(), SQLExceptionCode.TYPE_MISMATCH.getErrorCode());
         } finally {
             conn.close();
         }
@@ -2508,7 +2509,7 @@ public class SortMergeJoinIT extends BaseJoinIT {
                 statement.executeQuery();
                 fail("Should have got SQLException.");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.AMBIGUOUS_JOIN_CONDITION.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.AMBIGUOUS_JOIN_CONDITION.getErrorCode(), e.getErrorCode());
             }
         } finally {
             conn.close();

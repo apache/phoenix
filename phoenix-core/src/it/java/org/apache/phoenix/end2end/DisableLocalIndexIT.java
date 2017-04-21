@@ -80,13 +80,13 @@ public class DisableLocalIndexIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName + "(k2)");
             fail("Should not allow creation of local index");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
         }
         try {
             tsconn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + viewName + "(k2, v1)");
             fail("Should not allow creation of local index");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.UNALLOWED_LOCAL_INDEXES.getErrorCode(), e.getErrorCode());
         }
     }
 

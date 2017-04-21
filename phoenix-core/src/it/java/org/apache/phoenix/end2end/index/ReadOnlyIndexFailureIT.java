@@ -208,7 +208,7 @@ public class ReadOnlyIndexFailureIT extends BaseOwnClusterIT {
                 conn.commit();
                 fail();
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.INDEX_FAILURE_BLOCK_WRITE.getErrorCode(), e.getErrorCode());
             }
 
             FAIL_WRITE = false;

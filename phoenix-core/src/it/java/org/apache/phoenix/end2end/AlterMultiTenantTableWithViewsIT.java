@@ -452,7 +452,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
                 try {
                     tenant2Conn.createStatement().execute("SELECT KV FROM " + divergedView);
                 } catch (SQLException e) {
-                    assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+                    TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
                 }
             }
             
@@ -480,7 +480,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
                 fail();
             }
             catch (SQLException e) {
-                assertEquals("Unexpected exception", SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+                TestUtil.assertErrorCodeEquals("Unexpected exception", SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
             }
         }
     }
@@ -543,13 +543,13 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
                     tenant1Conn.createStatement().execute("SELECT KV from " + view1);
                     fail();
                 } catch (SQLException e) {
-                    assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+                    TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
                 }
                 try {
                     tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
                     fail();
                 } catch (SQLException e) {
-                    assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+                    TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
                 }
             }
         }

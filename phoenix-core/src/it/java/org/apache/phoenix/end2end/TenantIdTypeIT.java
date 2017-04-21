@@ -34,6 +34,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -152,7 +153,7 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
                         .executeQuery("select * from " + table + " where tenantId = 2");
                 fail("TenantId column not hidden on multi-tenant connection");
             } catch (SQLException ex) {
-                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), ex.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), ex.getErrorCode());
             }
 
             conn.createStatement().execute("create view " + view +
@@ -190,7 +191,7 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
                 ResultSet rs = conn.createStatement().executeQuery("select * from " + view);
                 fail();
             } catch (SQLException ex) {
-                assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), ex.getErrorCode());
+                TestUtil.assertErrorCodeEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), ex.getErrorCode());
             }
 
         }
@@ -211,7 +212,7 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
                             " values ( 3 , 'invalid')");
                     fail();
                 } catch (SQLException ex) {
-                    assertEquals(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE.getErrorCode(), ex.getErrorCode());
+                    TestUtil.assertErrorCodeEquals(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE.getErrorCode(), ex.getErrorCode());
                 }
             }
 
@@ -221,7 +222,7 @@ public class TenantIdTypeIT extends ParallelStatsDisabledIT {
                     ResultSet rs = conn.createStatement().executeQuery("select * from " + view);
                     fail();
                 } catch (SQLException ex) {
-                    assertEquals(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE.getErrorCode(), ex.getErrorCode());
+                    TestUtil.assertErrorCodeEquals(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE.getErrorCode(), ex.getErrorCode());
                 }
             }
         }

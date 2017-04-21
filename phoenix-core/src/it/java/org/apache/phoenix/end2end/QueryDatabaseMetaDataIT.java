@@ -961,7 +961,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
             conn93.createStatement().execute(alterView);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         conn93.close();
 

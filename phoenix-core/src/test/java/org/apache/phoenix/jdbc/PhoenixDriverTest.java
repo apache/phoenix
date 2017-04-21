@@ -95,7 +95,7 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
             DriverManager.getConnection(getUrl(), props);
             fail("Creating a phoenix connection with negative scn is not allowed");
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_SCN.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.INVALID_SCN.getErrorCode(), e.getErrorCode());
         }
     }
     
@@ -111,7 +111,7 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
             conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
             fail();
         } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_ISOLATION_LEVEL.getErrorCode(), e.getErrorCode());
+            TestUtil.assertErrorCodeEquals(SQLExceptionCode.TX_MUST_BE_ENABLED_TO_SET_ISOLATION_LEVEL.getErrorCode(), e.getErrorCode());
         }
         try {
             conn = DriverManager.getConnection(getUrl());
