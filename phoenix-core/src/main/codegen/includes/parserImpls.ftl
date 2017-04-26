@@ -900,7 +900,7 @@ SqlColumnDefNode ColumnDef() :
         {isNull = true;}
     ]
     [
-        <DEFAULT_KW>
+        <DEFAULT_>
         expression = Expression(ExprContext.ACCEPT_NONQUERY)
     ]
     [
