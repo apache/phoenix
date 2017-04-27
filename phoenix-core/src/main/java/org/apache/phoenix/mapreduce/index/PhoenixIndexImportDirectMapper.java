@@ -65,6 +65,7 @@ public class PhoenixIndexImportDirectMapper extends
     private DirectHTableWriter writer;
 
     private int batchSize;
+    private long batchSizeBytes;
 
     private MutationState mutationState;
 
@@ -87,27 +88,29 @@ public class PhoenixIndexImportDirectMapper extends
             }
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
             connection.setAutoCommit(false);
-            // Get BatchSize
+            // Get BatchSize, which is in terms of rows
             ConnectionQueryServices services = ((PhoenixConnection) connection).getQueryServices();
             int maxSize =
                     services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                         QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
             batchSize = Math.min(((PhoenixConnection) connection).getMutateBatchSize(), maxSize);
+
+            //Get batch size in terms of bytes
+            batchSizeBytes = ((PhoenixConnection) connection).getMutateBatchSizeBytes();
+
             LOG.info("Mutation Batch Size = " + batchSize);
 
             final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             this.pStatement = connection.prepareStatement(upsertQuery);
 
         } catch (SQLException e) {
-            throw new RuntimeException(e.getMessage());
+            throw new RuntimeException(e);
         }
     }
 
     @Override
     protected void map(NullWritable key, PhoenixIndexDBWritable record, Context context)
             throws IOException, InterruptedException {
-
-        context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
 
         try {
             final List<Object> values = record.getValues();
@@ -119,7 +122,6 @@ public class PhoenixIndexImportDirectMapper extends
             MutationState currentMutationState = pconn.getMutationState();
             if (mutationState == null) {
                 mutationState = currentMutationState;
-                return;
             }
             // Keep accumulating Mutations till batch size
             mutationState.join(currentMutationState);
@@ -137,6 +139,7 @@ public class PhoenixIndexImportDirectMapper extends
             context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
             throw new RuntimeException(e);
         }
+        context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
     }
 
     private void writeBatch(MutationState mutationState, Context context) throws IOException,
@@ -144,8 +147,12 @@ public class PhoenixIndexImportDirectMapper extends
         final Iterator<Pair<byte[], List<Mutation>>> iterator = mutationState.toMutations(true, null);
         while (iterator.hasNext()) {
             Pair<byte[], List<Mutation>> mutationPair = iterator.next();
-
-            writer.write(mutationPair.getSecond());
+            List<Mutation> batchMutations = mutationPair.getSecond();
+            List<List<Mutation>> batchOfBatchMutations =
+                MutationState.getMutationBatchList(batchSize, batchSizeBytes, batchMutations);
+            for (List<Mutation> mutationList : batchOfBatchMutations) {
+                writer.write(mutationList);
+            }
             context.getCounter(PhoenixJobCounters.OUTPUT_RECORDS).increment(
                 mutationPair.getSecond().size());
         }

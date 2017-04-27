@@ -186,13 +186,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                     + "        colA2 VARCHAR " + "CONSTRAINT PK PRIMARY KEY" + "(pkA)" + ")";
 
             String ddlB = "CREATE TABLE " + tableB + "   (pkB INTEGER NOT NULL PRIMARY KEY, " + "    colB INTEGER)";
-            stmt = conn.prepareStatement(ddlA);
-            stmt.execute();
-            stmt.close();
-
-            stmt = conn.prepareStatement(ddlB);
-            stmt.execute();
-            stmt.close();
+            conn.createStatement().execute(ddlA);
+            conn.createStatement().execute(ddlB);
 
             String upsertA = "UPSERT INTO " + tableA + " (pkA, colA1, colA2) VALUES(?, ?, ?)";
             stmt = conn.prepareStatement(upsertA);
@@ -313,16 +308,16 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                     "CREATE TABLE IF NOT EXISTS " + eventCountTableName + " (\n" +
                     "        BUCKET VARCHAR,\n" +
                     "        TIMESTAMP_DATE TIMESTAMP,\n" +
-                    "        TIMESTAMP UNSIGNED_LONG NOT NULL,\n" +
+                    "        \"TIMESTAMP\" UNSIGNED_LONG NOT NULL,\n" +
                     "        LOCATION VARCHAR,\n" +
                     "        A VARCHAR,\n" +
                     "        B VARCHAR,\n" +
                     "        C VARCHAR,\n" +
                     "        D UNSIGNED_LONG,\n" +
                     "        E FLOAT\n" +
-                    "    CONSTRAINT pk PRIMARY KEY (BUCKET, TIMESTAMP DESC, LOCATION, A, B, C)\n" +
+                    "    CONSTRAINT pk PRIMARY KEY (BUCKET, \"TIMESTAMP\" DESC, LOCATION, A, B, C)\n" +
                     ") SALT_BUCKETS=2, COMPRESSION='GZ', TTL=31622400");
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + eventCountTableName + "(BUCKET, TIMESTAMP, LOCATION, A, B, C) VALUES(?,?,?,?,?,?)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + eventCountTableName + "(BUCKET, \"TIMESTAMP\", LOCATION, A, B, C) VALUES(?,?,?,?,?,?)");
             stmt.setString(1, "5SEC");
             stmt.setString(3, "Tr/Bal");
             stmt.setString(4, "A1");
@@ -374,7 +369,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "CREATE TABLE IF NOT EXISTS " + t[i] + " (\n" +
                                 "        BUCKET VARCHAR,\n" +
                                 "        TIMESTAMP_DATE TIMESTAMP,\n" +
-                                "        TIMESTAMP UNSIGNED_LONG NOT NULL,\n" +
+                                "        \"TIMESTAMP\" UNSIGNED_LONG NOT NULL,\n" +
                                 "        SRC_LOCATION VARCHAR,\n" +
                                 "        DST_LOCATION VARCHAR,\n" +
                                 "        B VARCHAR,\n" +
@@ -383,9 +378,9 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                                 "        G UNSIGNED_LONG,\n" +
                                 "        H UNSIGNED_LONG,\n" +
                                 "        I UNSIGNED_LONG\n" +
-                                "    CONSTRAINT pk PRIMARY KEY (BUCKET, TIMESTAMP" + (i == 0 ? " DESC" : "") + ", SRC_LOCATION, DST_LOCATION, B, C)\n" +
+                                "    CONSTRAINT pk PRIMARY KEY (BUCKET, \"TIMESTAMP\"" + (i == 0 ? " DESC" : "") + ", SRC_LOCATION, DST_LOCATION, B, C)\n" +
                         ") SALT_BUCKETS=2, COMPRESSION='GZ', TTL=31622400");
-                stmt = conn.prepareStatement("UPSERT INTO " + t[i] + "(BUCKET, TIMESTAMP, SRC_LOCATION, DST_LOCATION, B, C) VALUES(?,?,?,?,?,?)");
+                stmt = conn.prepareStatement("UPSERT INTO " + t[i] + "(BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION, B, C) VALUES(?,?,?,?,?,?)");
                 stmt.setString(1, "5SEC");
                 stmt.setString(3, "Tr/Bal");
                 stmt.setString(4, "Tr/Bal");
@@ -421,10 +416,10 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "             GROUP BY BUCKET, TIMESTAMP, LOCATION\n" +
                         "        ) E\n" +
                         "        JOIN\n" +
-                        "         (SELECT BUCKET, TIMESTAMP FROM "+ t[i] +"\n" +
+                        "         (SELECT BUCKET, \"TIMESTAMP\" FROM "+ t[i] +"\n" +
                         "             WHERE BUCKET = '5SEC' AND SRC_LOCATION = 'Tr/Bal' AND SRC_LOCATION = DST_LOCATION\n" +
-                        "                 AND TIMESTAMP <= 1462993520000000000 AND TIMESTAMP > 1462993420000000000\n" +
-                        "             GROUP BY BUCKET, TIMESTAMP, SRC_LOCATION, DST_LOCATION\n" +
+                        "                 AND \"TIMESTAMP\" <= 1462993520000000000 AND \"TIMESTAMP\" > 1462993420000000000\n" +
+                        "             GROUP BY BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION\n" +
                         "         ) L\n" +
                         "     ON L.BUCKET = E.BUCKET AND L.TIMESTAMP = E.TIMESTAMP\n" +
                         " ) C\n" +
@@ -441,10 +436,10 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "AND (SKIP MERGE)\n" +
                         "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i] + " [0,'5SEC',~1462993520000000000,'Tr/Bal'] - [1,'5SEC',~1462993420000000000,'Tr/Bal']\n" +
                         "        SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n" +
-                        "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, TIMESTAMP, SRC_LOCATION, DST_LOCATION]\n" +
-                        "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, TIMESTAMP, SRC_LOCATION, DST_LOCATION]\n" +
+                        "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
+                        "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
-                        "    CLIENT SORTED BY [BUCKET, TIMESTAMP]\n" +
+                        "    CLIENT SORTED BY [BUCKET, \"TIMESTAMP\"]\n" +
                         "CLIENT SORTED BY [E.BUCKET, E.TIMESTAMP]\n" +
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]"
                         :
@@ -458,8 +453,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "AND (SKIP MERGE)\n" +
                         "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i] + " [0,'5SEC',1462993420000000001,'Tr/Bal'] - [1,'5SEC',1462993520000000000,'Tr/Bal']\n" +
                         "        SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n" +
-                        "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, TIMESTAMP, SRC_LOCATION, DST_LOCATION]\n" +
-                        "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, TIMESTAMP, SRC_LOCATION, DST_LOCATION]\n" +
+                        "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
+                        "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
                         "CLIENT SORTED BY [E.BUCKET, E.TIMESTAMP]\n" +
                         "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]";
@@ -502,6 +497,141 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             }
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testSubQueryOrderByOverrideBug3745() throws Exception {
+        Connection conn = null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName1=generateUniqueName();
+            String tableName2=generateUniqueName();
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName1);
+
+            String sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY,"+
+                    "AGE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (1,11)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (2,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (3,33)");
+            conn.commit();
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName2);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY,"+
+                    "CODE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (1,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (2,55)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,44)");
+            conn.commit();
+
+            //test for simple scan
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33) a inner join "+
+                "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid ";
+
+            ResultSet rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(!rs.next());
+
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33) a inner join "+
+                "(select bid,code from "+tableName2+" order by code limit 2) b on a.aid=b.bid ";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(!rs.next());
+
+            //test for aggregate
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.codesum from (select aid,sum(age) agesum from "+tableName1+" where age >=11 and age<=33 group by aid order by agesum limit 3) a inner join "+
+                "(select bid,sum(code) codesum from "+tableName2+" group by bid order by codesum limit 2) b on a.aid=b.bid ";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(!rs.next());
+
+            String tableName3=generateUniqueName();;
+            conn.createStatement().execute("DROP TABLE if exists "+tableName3);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName3+" ( "+
+                    "CID INTEGER PRIMARY KEY,"+
+                    "REGION INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName3+"(CID,REGION) VALUES (1,77)");
+            conn.createStatement().execute("UPSERT INTO "+tableName3+"(CID,REGION) VALUES (2,88)");
+            conn.createStatement().execute("UPSERT INTO "+tableName3+"(CID,REGION) VALUES (3,99)");
+            conn.commit();
+
+            //test for join
+            sql="select t1.aid,t1.code,t2.region from "+
+                "(select a.aid,b.code from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 order by b.code limit 3) t1 inner join "+
+                "(select a.aid,c.region from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 order by c.region desc limit 1) t2 on t1.aid=t2.aid";
+
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(rs.getInt(3) == 99);
+            assertTrue(!rs.next());
+
+            //test for join and aggregate
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by regionsum desc limit 2) t2 on t1.aid=t2.aid";
+
+            rs=conn.prepareStatement(sql).executeQuery();
+
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.getInt(3) == 88);
+
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(rs.getInt(3) == 99);
+            assertTrue(!rs.next());
+
+            //test for if SubselectRewriter.isOrderByPrefix had take effect
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by a.aid,codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by a.aid desc,regionsum desc limit 2) t2 on t1.aid=t2.aid "+
+                "order by t1.aid desc";
+
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(rs.getInt(3) == 99);
+
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.getInt(3) == 88);
+            assertTrue(!rs.next());
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
         }
     }
 }

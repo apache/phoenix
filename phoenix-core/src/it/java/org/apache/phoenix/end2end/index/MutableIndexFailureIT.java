@@ -102,7 +102,7 @@ public class MutableIndexFailureIT extends BaseTest {
         this.tableDDLOptions = " SALT_BUCKETS=2 " + (transactional ? ", TRANSACTIONAL=true " : "");
         this.tableName = (localIndex ? "L_" : "") + TestUtil.DEFAULT_DATA_TABLE_NAME + (transactional ? "_TXN" : "")
                 + (isNamespaceMapped ? "_NM" : "");
-        this.indexName = INDEX_NAME;
+        this.indexName = FailingRegionObserver.INDEX_NAME;
         fullTableName = SchemaUtil.getTableName(schema, tableName);
         this.fullIndexName = SchemaUtil.getTableName(schema, indexName);
         this.isNamespaceMapped = isNamespaceMapped;
@@ -155,7 +155,7 @@ public class MutableIndexFailureIT extends BaseTest {
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
-            FAIL_WRITE = false;
+            FailingRegionObserver.FAIL_WRITE = false;
             conn.createStatement().execute(
                     "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE (v2)");
             // Create other index which should be local/global if the other index is global/local to
@@ -202,7 +202,7 @@ public class MutableIndexFailureIT extends BaseTest {
             assertEquals("z", rs.getString(2));
             assertFalse(rs.next());
 
-            FAIL_WRITE = true;
+            FailingRegionObserver.FAIL_WRITE = true;
             updateTable(conn, fullTableName);
             updateTable(conn, secondTableName);
             // Verify the metadata for index is correct.
@@ -259,7 +259,7 @@ public class MutableIndexFailureIT extends BaseTest {
             }
 
             // re-enable index table
-            FAIL_WRITE = false;
+            FailingRegionObserver.FAIL_WRITE = false;
             waitForIndexToBeActive(conn,indexName);
             waitForIndexToBeActive(conn,indexName+"_2");
             waitForIndexToBeActive(conn,secondIndexName);
@@ -284,6 +284,8 @@ public class MutableIndexFailureIT extends BaseTest {
             // verify index table has correct data
             validateDataWithIndex(conn, fullTableName, fullIndexName);
             validateDataWithIndex(conn, secondTableName, secondFullIndexName);
+        } finally {
+            FAIL_WRITE = false;
         }
     }
 
@@ -391,6 +393,8 @@ public class MutableIndexFailureIT extends BaseTest {
     }
 
     public static class FailingRegionObserver extends SimpleRegionObserver {
+        public static volatile boolean FAIL_WRITE = false;
+        public static final String INDEX_NAME = "IDX";
         @Override
         public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c, MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
             if (c.getEnvironment().getRegionInfo().getTable().getNameAsString().contains(INDEX_NAME) && FAIL_WRITE) {

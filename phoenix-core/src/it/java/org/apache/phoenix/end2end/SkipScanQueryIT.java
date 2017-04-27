@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -325,13 +326,15 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     public void testSkipScanIntersectionAtEnd() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String tableName = generateUniqueName();
-        PreparedStatement stmt = conn.prepareStatement("create table " + tableName 
-            + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, pk3 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
-            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SPLIT ON (?, ?, ?)");
-        stmt.setBytes(1, new byte[] {1, 1});
-        stmt.setBytes(2, new byte[] {2, 1});
-        stmt.setBytes(3, new byte[] {3, 1});
-        stmt.execute();
+        conn.createStatement()
+                .execute(
+                    "create table "
+                            + tableName
+                            + "(pk1 UNSIGNED_TINYINT NOT NULL, pk2 UNSIGNED_TINYINT NOT NULL, pk3 UNSIGNED_TINYINT NOT NULL, kv VARCHAR "
+                            + "CONSTRAINT pk PRIMARY KEY (pk1, pk2, pk3)) SPLIT ON ('"
+                            + Bytes.toString(new byte[] { 1, 1 }) + "', '"
+                            + Bytes.toString(new byte[] { 2, 1 }) + "', '"
+                            + Bytes.toString(new byte[] { 3, 1 }) + "')");
         
         conn.createStatement().execute("upsert into " + tableName + " values (0, 1, 1, 'a')");
         conn.createStatement().execute("upsert into " + tableName + " values (1, 1, 1, 'a')");

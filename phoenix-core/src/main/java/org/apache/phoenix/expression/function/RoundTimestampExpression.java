@@ -33,6 +33,11 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 
 import com.google.common.collect.Lists;
 
@@ -47,7 +52,14 @@ import com.google.common.collect.Lists;
  * 
  * @since 3.0.0
  */
-
+@BuiltInFunction(name = RoundFunction.NAME,
+        args = {
+                @Argument(allowedTypes={PTimestamp.class}),
+                @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
+                @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
+        },
+        classType = FunctionClassType.DERIVED
+)
 public class RoundTimestampExpression extends RoundDateExpression {
     
     private static final long HALF_OF_NANOS_IN_MILLI = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(1)/2;

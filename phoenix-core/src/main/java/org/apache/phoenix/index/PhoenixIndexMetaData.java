@@ -47,10 +47,15 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         if (attributes == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
         byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
         if (uuid == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
-        byte[] md = attributes.get(PhoenixIndexCodec.INDEX_MD);
+        boolean useProto = false;
+        byte[] md = attributes.get(PhoenixIndexCodec.INDEX_PROTO_MD);
+        useProto = md != null;
+        if (md == null) {
+            md = attributes.get(PhoenixIndexCodec.INDEX_MD);
+        }
         byte[] txState = attributes.get(BaseScannerRegionObserver.TX_STATE);
         if (md != null) {
-            final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md);
+            final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md, useProto);
             final Transaction txn = MutationState.decodeTransaction(txState);
             return new IndexMetaDataCache() {
 

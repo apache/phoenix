@@ -143,8 +143,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                     // early exit, if that's the case
                     throwFailureIfDone();
 
-                    if (LOG.isDebugEnabled()) {
-                        LOG.debug("Writing index update:" + mutations + " to table: " + tableReference);
+                    if (LOG.isTraceEnabled()) {
+                        LOG.trace("Writing index update:" + mutations + " to table: " + tableReference);
                     }
                     HTableInterface table = null;
                     try {
@@ -158,8 +158,8 @@ public class ParallelWriterIndexCommitter implements IndexCommitter {
                                 return null;
                             } catch (IOException ignord) {
                                 // when it's failed we fall back to the standard & slow way
-                                if (LOG.isDebugEnabled()) {
-                                    LOG.debug("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
+                                if (LOG.isTraceEnabled()) {
+                                    LOG.trace("indexRegion.batchMutate failed and fall back to HTable.batch(). Got error="
                                             + ignord);
                                 }
                             }

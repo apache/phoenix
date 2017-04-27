@@ -63,6 +63,21 @@ public final class FlumeConstants {
     public static final String IGNORE_CASE_CONFIG = "regexIgnoreCase";
     public static final boolean IGNORE_CASE_DEFAULT = false;
 
+    /** JSON expression used to parse groups from event data. */
+    public static final String CONFIG_COLUMNS_MAPPING = "columnsMapping";
+    public static final String CONFIG_PARTIAL_SCHEMA = "partialSchema";
+    public static final String JSON_DEFAULT = "{}";
+
+    /** CSV expression used to parse groups from event data. */
+    public static final String CSV_DELIMITER = "csvDelimiter";
+    public static final String CSV_DELIMITER_DEFAULT = ",";
+    public static final String CSV_QUOTE = "csvQuote";
+    public static final String CSV_QUOTE_DEFAULT = "\"";
+    public static final String CSV_ESCAPE = "csvEscape";
+    public static final String CSV_ESCAPE_DEFAULT = "\\";
+    public static final String CSV_ARRAY_DELIMITER = "csvArrayDelimiter";
+    public static final String CSV_ARRAY_DELIMITER_DEFAULT = ",";
+
     /** Comma separated list of column names . */
     public static final String CONFIG_COLUMN_NAMES = "columns";
 

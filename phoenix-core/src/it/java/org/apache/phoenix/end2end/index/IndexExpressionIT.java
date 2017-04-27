@@ -134,8 +134,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
                     + " ((UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(b.char_col2)),"
                     + " (decimal_pk+int_pk+decimal_col2+int_col1)," + " date_pk+1, date1+1, date2+1 )"
                     + " INCLUDE (long_col1, long_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             // run select query with expression in WHERE clause
             String whereSql = "SELECT long_col1, long_col2 from "
@@ -145,7 +144,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
                     // since a.date1 and b.date2 are NULLABLE and date is fixed width, these expressions are stored as
                     // DECIMAL in the index (which is not fixed width)
                     + " AND date_pk+1=? AND date1+1=? AND date2+1=?";
-            stmt = conn.prepareStatement(whereSql);
+            PreparedStatement stmt = conn.prepareStatement(whereSql);
             stmt.setString(1, "VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ");
             stmt.setInt(2, 3);
             Date date = DateUtil.parseDate("2015-01-02 00:00:00");
@@ -329,8 +328,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (2*long_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullDataTableName);
@@ -403,8 +401,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (long_pk, varchar_pk, 1+long_pk, UPPER(varchar_pk) )" + " INCLUDE (long_col1, long_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             ResultSet rs;
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullDataTableName);
@@ -413,7 +410,12 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + fullIndexTableName);
             assertTrue(rs.next());
             assertEquals(2, rs.getInt(1));
-
+            
+            String sql = "SELECT LONG_COL1 from " + fullDataTableName + " WHERE LONG_COL2 = 2";
+            rs = conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertFalse(rs.next());
+            
             String dml = "DELETE from " + fullDataTableName + " WHERE long_col2 = 2";
             assertEquals(1, conn.createStatement().executeUpdate(dml));
             conn.commit();
@@ -484,8 +486,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+int_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             String groupBySql = "SELECT (int_col1+int_col2), COUNT(*) FROM " + fullDataTableName
                     + " GROUP BY (int_col1+int_col2)";
@@ -540,8 +541,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             populateDataTable(conn, fullDataTableName);
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+1)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             String sql = "SELECT distinct int_col1+1 FROM " + fullDataTableName + " where int_col1+1 > 0";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             String expectedPlan = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
@@ -596,8 +596,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+1)";
 
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             String sql = "SELECT int_col1+1 FROM " + fullDataTableName + " where int_col1+1 IN (2)";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
@@ -647,8 +646,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullDataTableName
                     + " (int_col1+1)";
 
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             String sql = "SELECT int_col1+1 AS foo FROM " + fullDataTableName + " ORDER BY foo";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             assertEquals("CLIENT PARALLEL 1-WAY "
@@ -700,13 +698,12 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
             String ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + dataTableName + " (\"cf1\".\"V1\" || '_' || \"CF2\".\"v2\") INCLUDE (\"V1\",\"v2\")";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             query = "SELECT * FROM " + indexName;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
 
-            stmt = conn.prepareStatement("UPSERT INTO " + dataTableName + " VALUES(?,?,?)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dataTableName + " VALUES(?,?,?)");
             stmt.setString(1,"a");
             stmt.setString(2, "x");
             stmt.setString(3, "1");
@@ -814,8 +811,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
 
             conn = DriverManager.getConnection(getUrl(), props);
             conn.setAutoCommit(false);
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             String sql = "SELECT int_col1+1, int_col2 FROM " + fullDataTableName + " WHERE int_col1+1=2";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
             assertEquals("CLIENT PARALLEL 1-WAY "
@@ -870,8 +866,10 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
 	        conn.setAutoCommit(false);
 	
 	        // make sure that the tables are empty, but reachable
-	        conn.createStatement().execute(
-	          "CREATE TABLE " + dataTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            conn.createStatement().execute(
+                "CREATE TABLE " + dataTableName
+                        + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+                        + (!mutable ? " IMMUTABLE_ROWS=true" : ""));
 	        query = "SELECT * FROM " + dataTableName ;
 	        rs = conn.createStatement().executeQuery(query);
 	        assertFalse(rs.next());
@@ -1244,7 +1242,16 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testViewUsesTableIndex() throws Exception {
+    public void testViewUsesMutableTableIndex() throws Exception {
+        helpTestViewUsesTableIndex(false);
+    }
+    
+    @Test
+    public void testViewUsesImmutableTableIndex() throws Exception {
+        helpTestViewUsesTableIndex(true);
+    }
+    
+    private void helpTestViewUsesTableIndex(boolean immutable) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         try 
         {
@@ -1253,7 +1260,7 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
             String viewName = generateUniqueName();
             String indexName2 = generateUniqueName();
         	ResultSet rs;
-	        String ddl = "CREATE TABLE " + dataTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, s1 VARCHAR, s2 VARCHAR, s3 VARCHAR, s4 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2))";
+	        String ddl = "CREATE TABLE " + dataTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, s1 VARCHAR, s2 VARCHAR, s3 VARCHAR, s4 VARCHAR CONSTRAINT pk PRIMARY KEY (k1, k2)) " + (immutable ? "IMMUTABLE_ROWS = true" : "");
 	        conn.createStatement().execute(ddl);
 	        conn.createStatement().execute("CREATE INDEX " + indexName1 + " ON " + dataTableName + "(k2, s2, s3, s1)");
 	        conn.createStatement().execute("CREATE INDEX " + indexName2 + " ON " + dataTableName + "(k2, s2||'_'||s3, s1, s4)");
@@ -1350,19 +1357,18 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
 		try {
 			conn.createStatement().execute(
 					"CREATE TABLE " + dataTableName + " (k VARCHAR NOT NULL PRIMARY KEY, v VARCHAR) "
-							+ (mutable ? "IMMUTABLE_ROWS=true" : ""));
+							+ (!mutable ? "IMMUTABLE_ROWS=true" : ""));
 			String query = "SELECT * FROM  " + dataTableName;
 			ResultSet rs = conn.createStatement().executeQuery(query);
 			assertFalse(rs.next());
 			String ddl = "CREATE " + (localIndex ? "LOCAL" : "")
 					+ " INDEX " + indexName + " ON " + dataTableName + " (REGEXP_SUBSTR(v,'id:\\\\w+'))";
-			PreparedStatement stmt = conn.prepareStatement(ddl);
-			stmt.execute();
+			conn.createStatement().execute(ddl);
 			query = "SELECT * FROM " + indexName;
 			rs = conn.createStatement().executeQuery(query);
 			assertFalse(rs.next());
 
-			stmt = conn.prepareStatement("UPSERT INTO " + dataTableName + " VALUES(?,?)");
+			PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dataTableName + " VALUES(?,?)");
 			stmt.setString(1, "k1");
 			stmt.setString(2, "{id:id1}");
 			stmt.execute();

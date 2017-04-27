@@ -20,15 +20,38 @@ import org.apache.phoenix.util.{ColumnInfo, SchemaUtil}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{Row, SQLContext, SaveMode}
 import org.joda.time.DateTime
-
+import org.apache.spark.{SparkConf, SparkContext}
 import scala.collection.mutable.ListBuffer
-
+import org.apache.hadoop.conf.Configuration
 /**
   * Note: If running directly from an IDE, these are the recommended VM parameters:
   * -Xmx1536m -XX:MaxPermSize=512m -XX:ReservedCodeCacheSize=512m
   */
 class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
+  test("Can persist data with case senstive columns (like in avro schema) using 'DataFrame.saveToPhoenix'") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.createDataFrame(
+      Seq(
+        (1, 1, "test_child_1"),
+        (2, 1, "test_child_2"))).toDF("ID", "TABLE3_ID", "t2col1")
+    df.saveToPhoenix("TABLE3", zkUrl = Some(quorumAddress),skipNormalizingIdentifier=true)
+
+    // Verify results
+    val stmt = conn.createStatement()
+    val rs = stmt.executeQuery("SELECT * FROM TABLE3")
+
+    val checkResults = List((1, 1, "test_child_1"), (2, 1, "test_child_2"))
+    val results = ListBuffer[(Long, Long, String)]()
+    while (rs.next()) {
+      results.append((rs.getLong(1), rs.getLong(2), rs.getString(3)))
+    }
+    stmt.close()
+
+    results.toList shouldEqual checkResults
+
+  }
+  
   test("Can convert Phoenix schema") {
     val phoenixSchema = List(
       new ColumnInfo("varcharColumn", PVarchar.INSTANCE.getSqlType)
@@ -302,11 +325,21 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
     // Load TABLE1, save as TABLE1_COPY
     val sqlContext = new SQLContext(sc)
-    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "TABLE1",
-      "zkUrl" -> quorumAddress))
+    val df = sqlContext
+      .read
+      .format("org.apache.phoenix.spark")
+      .option("table", "TABLE1")
+      .option("zkUrl", quorumAddress)
+      .load()
 
     // Save to TABLE21_COPY
-    df.save("org.apache.phoenix.spark", SaveMode.Overwrite, Map("table" -> "TABLE1_COPY", "zkUrl" -> quorumAddress))
+    df
+      .write
+      .format("org.apache.phoenix.spark")
+      .mode(SaveMode.Overwrite)
+      .option("table", "TABLE1_COPY")
+      .option("zkUrl", quorumAddress)
+      .save()
 
     // Verify results
     stmt = conn.createStatement()
@@ -621,4 +654,30 @@ class PhoenixSparkIT extends AbstractPhoenixSparkIT {
 
     assert(Math.abs(epoch - ts) < 300000)
   }
+
+  test("Can load Phoenix Time columns through DataFrame API") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.read
+      .format("org.apache.phoenix.spark")
+      .options(Map("table" -> "TIME_TEST", "zkUrl" -> quorumAddress))
+      .load
+    val time = df.select("COL1").first().getTimestamp(0).getTime
+    val epoch = new Date().getTime
+    assert(Math.abs(epoch - time) < 86400000)
+  }
+
+  test("can read all Phoenix data types") {
+    val sqlContext = new SQLContext(sc)
+    val df = sqlContext.load("org.apache.phoenix.spark", Map("table" -> "GIGANTIC_TABLE",
+      "zkUrl" -> quorumAddress))
+
+    df.write
+      .format("org.apache.phoenix.spark")
+      .options(Map("table" -> "OUTPUT_GIGANTIC_TABLE", "zkUrl" -> quorumAddress))
+      .mode(SaveMode.Overwrite)
+      .save()
+
+    df.count() shouldEqual 1
+  }
+
 }

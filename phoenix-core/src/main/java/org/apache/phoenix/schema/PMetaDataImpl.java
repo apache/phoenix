@@ -144,30 +144,6 @@ public class PMetaDataImpl implements PMetaData {
     }
 
     @Override
-    public void addColumn(PName tenantId, String tableName, List<PColumn> columnsToAdd, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
-            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
-                    throws SQLException {
-        PTableRef oldTableRef = metaData.get(new PTableKey(tenantId, tableName));
-        if (oldTableRef == null) {
-            return;
-        }
-        List<PColumn> oldColumns = PTableImpl.getColumnsToClone(oldTableRef.getTable());
-        List<PColumn> newColumns;
-        if (columnsToAdd.isEmpty()) {
-            newColumns = oldColumns;
-        } else {
-            newColumns = Lists.newArrayListWithExpectedSize(oldColumns.size() + columnsToAdd.size());
-            newColumns.addAll(oldColumns);
-            newColumns.addAll(columnsToAdd);
-        }
-        PTable newTable = PTableImpl.makePTable(oldTableRef.getTable(), tableTimeStamp, tableSeqNum, newColumns,
-                isImmutableRows, isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency,
-                isNamespaceMapped);
-        addTable(newTable, resolvedTime);
-    }
-
-    @Override
     public void removeTable(PName tenantId, String tableName, String parentTableName, long tableTimeStamp) throws SQLException {
         PTableRef parentTableRef = null;
         PTableKey key = new PTableKey(tenantId, tableName);
@@ -223,7 +199,7 @@ public class PMetaDataImpl implements PMetaData {
             if (familyName == null) {
                 column = table.getPKColumn(columnToRemove.getName().getString());
             } else {
-                column = table.getColumnFamily(familyName).getColumn(columnToRemove.getName().getString());
+                column = table.getColumnFamily(familyName).getPColumnForColumnName(columnToRemove.getName().getString());
             }
             int positionOffset = 0;
             int position = column.getPosition();
@@ -238,7 +214,7 @@ public class PMetaDataImpl implements PMetaData {
             // Update position of columns that follow removed column
             for (int i = position+1; i < oldColumns.size(); i++) {
                 PColumn oldColumn = oldColumns.get(i);
-                PColumn newColumn = new PColumnImpl(oldColumn.getName(), oldColumn.getFamilyName(), oldColumn.getDataType(), oldColumn.getMaxLength(), oldColumn.getScale(), oldColumn.isNullable(), i-1+positionOffset, oldColumn.getSortOrder(), oldColumn.getArraySize(), oldColumn.getViewConstant(), oldColumn.isViewReferenced(), oldColumn.getExpressionStr(), oldColumn.isRowTimestamp(), oldColumn.isDynamic());
+                PColumn newColumn = new PColumnImpl(oldColumn.getName(), oldColumn.getFamilyName(), oldColumn.getDataType(), oldColumn.getMaxLength(), oldColumn.getScale(), oldColumn.isNullable(), i-1+positionOffset, oldColumn.getSortOrder(), oldColumn.getArraySize(), oldColumn.getViewConstant(), oldColumn.isViewReferenced(), oldColumn.getExpressionStr(), oldColumn.isRowTimestamp(), oldColumn.isDynamic(), oldColumn.getColumnQualifierBytes());
                 columns.add(newColumn);
             }
             

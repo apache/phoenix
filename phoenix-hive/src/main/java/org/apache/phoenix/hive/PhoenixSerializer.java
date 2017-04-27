@@ -63,6 +63,10 @@ public class PhoenixSerializer {
     private PhoenixResultWritable pResultWritable;
 
     public PhoenixSerializer(Configuration config, Properties tbl) throws SerDeException {
+        String mapping = tbl.getProperty(PhoenixStorageHandlerConstants.PHOENIX_COLUMN_MAPPING, null);
+        if(mapping!=null ) {
+            config.set(PhoenixStorageHandlerConstants.PHOENIX_COLUMN_MAPPING, mapping);
+        }
         try (Connection conn = PhoenixConnectionUtil.getInputConnection(config, tbl)) {
             List<ColumnInfo> columnMetadata = PhoenixUtil.getColumnInfoList(conn, tbl.getProperty
                     (PhoenixStorageHandlerConstants.PHOENIX_TABLE_NAME));

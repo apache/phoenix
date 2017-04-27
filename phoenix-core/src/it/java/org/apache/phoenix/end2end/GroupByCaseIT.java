@@ -412,21 +412,21 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
-        ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + "\"SYSTEM\".\"STATS\"" + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
         assertTrue(rs.next());
         assertEquals(0,rs.getInt(1));
         initAvgGroupTable(conn, tableName, PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH + "=20 ");
         testAvgGroupByOrderPreserving(conn, tableName, 13);
-        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
+        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + "\"SYSTEM\".\"STATS\"" + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
         assertTrue(rs.next());
         assertEquals(13,rs.getInt(1));
         conn.setAutoCommit(true);
-        conn.createStatement().execute("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
-        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
+        conn.createStatement().execute("DELETE FROM " + "\"SYSTEM\".\"STATS\"");
+        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + "\"SYSTEM\".\"STATS\"" + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
         assertTrue(rs.next());
         assertEquals(0,rs.getInt(1));
         TestUtil.doMajorCompaction(conn, tableName);
-        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
+        rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + "\"SYSTEM\".\"STATS\"" + " WHERE " + PhoenixDatabaseMetaData.PHYSICAL_NAME + " ='" + tableName + "'");
         assertTrue(rs.next());
         assertEquals(13,rs.getInt(1));
         testAvgGroupByOrderPreserving(conn, tableName, 13);
@@ -869,12 +869,72 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void assertResultSet(ResultSet rs,String[][] rows) throws Exception {
+    @Test
+    public void testGroupByCoerceExpressionBug3453() throws Exception {
+        final Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            //Type is INT
+            String intTableName=generateUniqueName();
+            String sql="CREATE TABLE "+ intTableName +"("+
+                    "ENTITY_ID INTEGER NOT NULL,"+
+                    "CONTAINER_ID INTEGER NOT NULL,"+
+                    "SCORE INTEGER NOT NULL,"+
+                    "CONSTRAINT TEST_PK PRIMARY KEY (ENTITY_ID DESC,CONTAINER_ID DESC,SCORE DESC))";
+
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (1,1,1)");
+            conn.commit();
+
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+intTableName+" limit 1)";
+            ResultSet rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,1}});
+
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (2,2,2)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (3,3,3)");
+            conn.commit();
+
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+intTableName+" limit 3) order by entity_id";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{1,1},{2,2},{3,3}});
+
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+intTableName+" limit 3) order by entity_id desc";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{3,3},{2,2},{1,1}});
+
+            //Type is CHAR
+            String charTableName=generateUniqueName();
+            sql="CREATE TABLE "+ charTableName +"("+
+                    "ENTITY_ID CHAR(15) NOT NULL,"+
+                    "CONTAINER_ID INTEGER NOT NULL,"+
+                    "SCORE INTEGER NOT NULL,"+
+                    "CONSTRAINT TEST_PK PRIMARY KEY (ENTITY_ID DESC,CONTAINER_ID DESC,SCORE DESC))";
+
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO "+charTableName+" VALUES ('entity1',1,1)");
+            conn.createStatement().execute("UPSERT INTO "+charTableName+" VALUES ('entity2',2,2)");
+            conn.createStatement().execute("UPSERT INTO "+charTableName+" VALUES ('entity3',3,3)");
+            conn.commit();
+
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+charTableName+" limit 3) order by entity_id";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"entity1",1},{"entity2",2},{"entity3",3}});
+
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+charTableName+" limit 3) order by entity_id desc";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertResultSet(rs, new Object[][]{{"entity3",3},{"entity2",2},{"entity1",1}});
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
+
+    private void assertResultSet(ResultSet rs,Object[][] rows) throws Exception {
         for(int rowIndex=0;rowIndex<rows.length;rowIndex++) {
             assertTrue(rs.next());
             for(int columnIndex=1;columnIndex<= rows[rowIndex].length;columnIndex++) {
-                String realValue=rs.getString(columnIndex);
-                String expectedValue=rows[rowIndex][columnIndex-1];
+                Object realValue=rs.getObject(columnIndex);
+                Object expectedValue=rows[rowIndex][columnIndex-1];
                 if(realValue==null) {
                     assertTrue(expectedValue==null);
                 }

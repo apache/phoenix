@@ -126,6 +126,8 @@ public class MutationState implements SQLCloseable {
     
     private final PhoenixConnection connection;
     private final long maxSize;
+    private final long maxSizeBytes;
+    private long batchCount = 0L;
     private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations;
     private final List<TransactionAware> txAwares;
     private final TransactionContext txContext;
@@ -140,7 +142,7 @@ public class MutationState implements SQLCloseable {
     
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
-    
+
     public MutationState(long maxSize, PhoenixConnection connection) {
         this(maxSize,connection, null, null);
     }
@@ -171,6 +173,7 @@ public class MutationState implements SQLCloseable {
             Transaction tx, TransactionContext txContext) {
         this.maxSize = maxSize;
         this.connection = connection;
+        this.maxSizeBytes = connection.getMutateBatchSizeBytes();
         this.mutations = mutations;
         boolean isMetricsEnabled = connection.isRequestLevelMetricsEnabled();
         this.mutationMetricQueue = isMetricsEnabled ? new MutationMetricQueue()
@@ -585,7 +588,7 @@ public class MutationState implements SQLCloseable {
                 List<Mutation> indexMutations;
                 try {
                     indexMutations =
-                    		IndexUtil.generateIndexData(table, index, mutationsPertainingToIndex,
+                    		IndexUtil.generateIndexData(table, index, values, mutationsPertainingToIndex,
                                 connection.getKeyValueBuilder(), connection);
                     // we may also have to include delete mutations for immutable tables if we are not processing all the tables in the mutations map
                     if (!sendAll) {
@@ -619,6 +622,7 @@ public class MutationState implements SQLCloseable {
         Iterator<Map.Entry<ImmutableBytesPtr, RowMutationState>> iterator =
                 values.entrySet().iterator();
         long timestampToUse = timestamp;
+        Map<ImmutableBytesPtr, RowMutationState> modifiedValues = Maps.newHashMap();
         while (iterator.hasNext()) {
             Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry = iterator.next();
             byte[] onDupKeyBytes = rowEntry.getValue().getOnDupKeyBytes();
@@ -628,6 +632,10 @@ public class MutationState implements SQLCloseable {
             if (tableWithRowTimestampCol) {
                 RowTimestampColInfo rowTsColInfo = state.getRowTimestampColInfo();
                 if (rowTsColInfo.useServerTimestamp()) {
+                	// since we are about to modify the byte[] stored in key (which changes its hashcode)
+                	// we need to remove the entry from the values map and add a new entry with the modified byte[]
+                	modifiedValues.put(key, state);
+                	iterator.remove();
                     // regenerate the key with this timestamp.
                     key = getNewRowKeyWithRowTimestamp(key, timestampToUse, table);
                 } else {
@@ -668,6 +676,7 @@ public class MutationState implements SQLCloseable {
             if (mutationsPertainingToIndex != null) mutationsPertainingToIndex
                     .addAll(rowMutationsPertainingToIndex);
         }
+        values.putAll(modifiedValues);
     }
     
     /**
@@ -743,12 +752,11 @@ public class MutationState implements SQLCloseable {
     public static long getMutationTimestamp(final Long tableTimestamp, Long scn) {
         return (tableTimestamp!=null && tableTimestamp!=QueryConstants.UNSET_TIMESTAMP) ? tableTimestamp : (scn == null ? HConstants.LATEST_TIMESTAMP : scn);
     }
-        
+
     /**
      * Validates that the meta data is valid against the server meta data if we haven't yet done so.
      * Otherwise, for every UPSERT VALUES call, we'd need to hit the server to see if the meta data
      * has changed.
-     * @param connection
      * @return the server time to use for the upsert
      * @throws SQLException if the table or any columns no longer exist
      */
@@ -806,7 +814,7 @@ public class MutationState implements SQLCloseable {
                 }
                 for (PColumn column : columns) {
                     if (column != null) {
-                        resolvedTable.getColumnFamily(column.getFamilyName().getString()).getColumn(column.getName().getString());
+                        resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(column.getName().getString());
                     }
                 }
             }
@@ -842,6 +850,15 @@ public class MutationState implements SQLCloseable {
             }
         }
     }
+
+    public long getMaxSizeBytes() {
+        return maxSizeBytes;
+    }
+
+    public long getBatchCount() {
+        return batchCount;
+    }
+
     private class MetaDataAwareHTable extends DelegateHTable {
         private final TableRef tableRef;
         
@@ -1068,7 +1085,11 @@ public class MutationState implements SQLCloseable {
                         
                         long startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
-                        hTable.batch(mutationList);
+                        List<List<Mutation>> mutationBatchList = getMutationBatchList(maxSize, maxSizeBytes, mutationList);
+                        for (List<Mutation> mutationBatch : mutationBatchList) {
+                            hTable.batch(mutationBatch);
+                            batchCount++;
+                        }
                         if (logger.isDebugEnabled()) logger.debug("Sent batch of " + numMutations + " for " + Bytes.toString(htableName));
                         child.stop();
                         child.stop();
@@ -1132,6 +1153,34 @@ public class MutationState implements SQLCloseable {
         }
     }
 
+    /**
+     * Split the list of mutations into multiple lists that don't exceed row and byte thresholds
+     * @param allMutationList List of HBase mutations
+     * @return List of lists of mutations
+     */
+    public static List<List<Mutation>> getMutationBatchList(long maxSize, long maxSizeBytes, List<Mutation> allMutationList) {
+        List<List<Mutation>> mutationBatchList = Lists.newArrayList();
+        List<Mutation> currentList = Lists.newArrayList();
+        long currentBatchSizeBytes = 0L;
+        for (Mutation mutation : allMutationList) {
+            long mutationSizeBytes = mutation.heapSize();
+            if (currentList.size() == maxSize || currentBatchSizeBytes + mutationSizeBytes > maxSizeBytes) {
+                if (currentList.size() > 0) {
+                    mutationBatchList.add(currentList);
+                    currentList = Lists.newArrayList();
+                    currentBatchSizeBytes = 0L;
+                }
+            }
+            currentList.add(mutation);
+            currentBatchSizeBytes += mutationSizeBytes;
+        }
+        if (currentList.size() > 0) {
+            mutationBatchList.add(currentList);
+        }
+        return mutationBatchList;
+
+    }
+
     public byte[] encodeTransaction() throws SQLException {
         try {
             return CODEC.encode(getTransaction());
@@ -1185,7 +1234,7 @@ public class MutationState implements SQLCloseable {
             }
             mutation.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
             if (attribValue != null) {
-                mutation.setAttribute(PhoenixIndexCodec.INDEX_MD, attribValue);
+                mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
                 if (txState.length > 0) {
                     mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                 }
@@ -1480,8 +1529,8 @@ public class MutationState implements SQLCloseable {
         byte[] getOnDupKeyBytes() {
             return onDupKeyBytes;
         }
-        
-        Map<PColumn, byte[]> getColumnValues() {
+
+        public Map<PColumn, byte[]> getColumnValues() {
             return columnValues;
         }
 

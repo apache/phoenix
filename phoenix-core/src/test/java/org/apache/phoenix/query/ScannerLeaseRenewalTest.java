@@ -18,7 +18,7 @@
 package org.apache.phoenix.query;
 
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
-import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NOT_RENEWED;
+import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.LOCK_NOT_ACQUIRED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.RENEWED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.THRESHOLD_NOT_REACHED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -48,7 +48,8 @@ public class ScannerLeaseRenewalTest extends BaseConnectionlessQueryTest {
         // create a scanner and add it to the queue
         int numLeaseRenewals = 4;
         int skipRenewLeaseCount = 2;
-        RenewLeaseOnlyTableIterator itr = new RenewLeaseOnlyTableIterator(numLeaseRenewals, skipRenewLeaseCount, -1);
+        int failToAcquireLockAt = 3;
+        RenewLeaseOnlyTableIterator itr = new RenewLeaseOnlyTableIterator(numLeaseRenewals, skipRenewLeaseCount, failToAcquireLockAt, -1);
         LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue = pconn.getScanners();
         scannerQueue.add(new WeakReference<TableResultIterator>(itr));
         
@@ -69,7 +70,7 @@ public class ScannerLeaseRenewalTest extends BaseConnectionlessQueryTest {
         task.run();
         assertTrue(scannerQueue.size() == 1);
         assertTrue(connectionsQueue.size() == 1);
-        assertEquals(RENEWED, itr.getLastRenewLeaseStatus()); // lease renewed
+        assertEquals(LOCK_NOT_ACQUIRED, itr.getLastRenewLeaseStatus()); // lock couldn't be acquired
         
         task.run();
         assertTrue(scannerQueue.size() == 1);
@@ -96,9 +97,10 @@ public class ScannerLeaseRenewalTest extends BaseConnectionlessQueryTest {
         
         // create a scanner and add it to the queue
         int numLeaseRenewals = 4;
+        int lockNotAcquiredAt = 1;
         int thresholdNotReachedCount = 2;
-        int leaseNotRenewedCount = 3;
-        RenewLeaseOnlyTableIterator itr = new RenewLeaseOnlyTableIterator(numLeaseRenewals, thresholdNotReachedCount, leaseNotRenewedCount);
+        int failLeaseRenewalAt = 3;
+        RenewLeaseOnlyTableIterator itr = new RenewLeaseOnlyTableIterator(numLeaseRenewals, thresholdNotReachedCount, lockNotAcquiredAt, failLeaseRenewalAt);
         LinkedBlockingQueue<WeakReference<TableResultIterator>> scannerQueue = pconn.getScanners();
         scannerQueue.add(new WeakReference<TableResultIterator>(itr));
         
@@ -108,8 +110,8 @@ public class ScannerLeaseRenewalTest extends BaseConnectionlessQueryTest {
         
         task.run();
         assertTrue(connectionsQueue.size() == 1); 
-        assertTrue(scannerQueue.size() == 1); // lease renewed
-        assertEquals(RENEWED, itr.getLastRenewLeaseStatus());
+        assertTrue(scannerQueue.size() == 1); // lock not acquired
+        assertEquals(LOCK_NOT_ACQUIRED, itr.getLastRenewLeaseStatus());
         
         task.run();
         assertTrue(scannerQueue.size() == 1);
@@ -118,10 +120,7 @@ public class ScannerLeaseRenewalTest extends BaseConnectionlessQueryTest {
         
         task.run();
         assertTrue(scannerQueue.size() == 0);
-        assertTrue(connectionsQueue.size() == 1);
-        // Lease not renewed due to error or some other reason.
-        // In this case we don't call renew lease on the scanner anymore.
-        assertEquals(NOT_RENEWED, itr.getLastRenewLeaseStatus());
+        assertTrue(connectionsQueue.size() == 0); // there was only one connection in the connectionsQueue and it wasn't added back because of error
         
         pconn.close();
         task.run();

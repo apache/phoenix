@@ -173,9 +173,12 @@ public final class QueryServer extends Configured implements Tool, Runnable {
     try {
       final boolean isKerberos = "kerberos".equalsIgnoreCase(getConf().get(
           QueryServices.QUERY_SERVER_HBASE_SECURITY_CONF_ATTRIB));
+      final boolean disableSpnego = getConf().getBoolean(QueryServices.QUERY_SERVER_SPNEGO_AUTH_DISABLED_ATTRIB,
+              QueryServicesOptions.DEFAULT_QUERY_SERVER_SPNEGO_AUTH_DISABLED);
+
 
       // handle secure cluster credentials
-      if (isKerberos) {
+      if (isKerberos && !disableSpnego) {
         String hostname = Strings.domainNamePointerToHostName(DNS.getDefaultHost(
             getConf().get(QueryServices.QUERY_SERVER_DNS_INTERFACE_ATTRIB, "default"),
             getConf().get(QueryServices.QUERY_SERVER_DNS_NAMESERVER_ATTRIB, "default")));

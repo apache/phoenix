@@ -31,6 +31,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Properties;
 
@@ -43,10 +44,13 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -129,8 +133,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             String ddl = "CREATE INDEX " + indexName + " ON " + fullIndexDataTable
                     + " (varchar_col1 ASC, varchar_col2 ASC, int_pk DESC)"
                     + " INCLUDE (int_col1, int_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             
             // Verify the metadata for index is correct.
             ResultSet rs = conn.getMetaData().getIndexInfo(null, INDEX_DATA_SCHEMA, indexDataTable, false, false);
@@ -216,10 +219,18 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             
             assertActiveIndex(conn, INDEX_DATA_SCHEMA, indexDataTable);
+            
+            ddl = "ALTER INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable + " REBUILD ASYNC";
+            conn.createStatement().execute(ddl);
+            // Verify the metadata for index is correct.
+            rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(INDEX_DATA_SCHEMA), indexName , new String[] {PTableType.INDEX.toString()});
+            assertTrue(rs.next());
+            assertEquals(indexName , rs.getString(3));
+            assertEquals(PIndexState.BUILDING.toString(), rs.getString("INDEX_STATE"));
+            assertFalse(rs.next());
 
             ddl = "DROP INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             
             assertNoActiveIndex(conn, INDEX_DATA_SCHEMA, indexDataTable);
 
@@ -236,14 +247,12 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             ddl = "CREATE INDEX " + indexName + "1 ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable
                     + " (varchar_col1 ASC, varchar_col2 ASC, int_pk DESC)"
                     + " INCLUDE (int_col1, int_col2)";
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             
             ddl = "CREATE INDEX " + indexName + "2 ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable
                     + " (varchar_col1 ASC, varchar_col2 ASC, int_pk DESC)"
                     + " INCLUDE (long_pk, int_col2)";
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             rs = conn.getMetaData().getIndexInfo(null, INDEX_DATA_SCHEMA, indexDataTable, false, false);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, indexDataTable, indexName + "1", 1, "A:VARCHAR_COL1", Order.ASC);
             assertIndexInfoMetadata(rs, INDEX_DATA_SCHEMA, indexDataTable, indexName + "1", 2, "B:VARCHAR_COL2", Order.ASC);
@@ -277,8 +286,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
                 
             }
             ddl = "DROP TABLE " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             
             rs = conn.getMetaData().getIndexInfo(null, INDEX_DATA_SCHEMA, indexDataTable, false, false);
             assertFalse(rs.next());
@@ -306,8 +314,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             String ddl = "CREATE INDEX " + indexName + " ON " + fullTableName
                     + " (char_col1 ASC, int_col2 ASC, long_col2 DESC)"
                     + " INCLUDE (int_col1)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             
             // Verify the CHAR, INT and LONG are converted to right type.
             ResultSet rs = conn.getMetaData().getIndexInfo(null, INDEX_DATA_SCHEMA, indexDataTable, false, false);
@@ -338,8 +345,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
             
             ddl = "DROP INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             
             // Assert the rows for index table is completely removed.
             rs = conn.getMetaData().getIndexInfo(null, INDEX_DATA_SCHEMA, indexDataTable, false, false);
@@ -367,8 +373,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             String ddl = "CREATE INDEX " + indexName + " ON " + fullTableName
                     + " (char_col1 ASC, int_col2 ASC, long_col2 DESC)"
                     + " INCLUDE (int_col1)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             ddl = "ALTER INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable + " UNUSABLE";
             conn.createStatement().execute(ddl);
@@ -378,8 +383,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             assertEquals("lowerCaseIndex", rs.getString(3));
             
             ddl = "DROP INDEX " + indexName + " ON " + INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + indexDataTable;
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             
             // Assert the rows for index table is completely removed.
             rs = conn.getMetaData().getIndexInfo(null, INDEX_DATA_SCHEMA, indexDataTable, false, false);
@@ -403,8 +407,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             String ddl = "CREATE INDEX " + indexName + " ON " + fullTableName
             		+ " (a.int_col1, a.long_col1, b.int_col2, b.long_col2)"
             		+ " INCLUDE(int_col1, int_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             fail("Should have caught exception.");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
@@ -422,8 +425,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
             String ddl = "create table test_table (char_pk varchar not null,"
         		+ " int_col integer, long_col integer, int_col integer"
         		+ " constraint pk primary key (char_pk))";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             fail("Should have caught exception");
         } catch (ColumnAlreadyExistsException e) {
             assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
@@ -442,8 +444,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         		+ " a.int_col integer, a.long_col integer,"
         		+ " a.int_col integer, b.long_col integer"
         		+ " constraint pk primary key (char_pk))";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             fail("Should have caught exception");
         } catch (ColumnAlreadyExistsException e) {
             assertEquals(SQLExceptionCode.COLUMN_EXIST_IN_DEF.getErrorCode(), e.getErrorCode());
@@ -463,16 +464,13 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         		+ " a.int_col integer, a.long_col integer,"
         		+ " b.int_col integer, b.long_col integer"
         		+ " constraint pk primary key (char_pk))";
-        PreparedStatement stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        conn.createStatement().execute(ddl);
         
         ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (a.int_col, b.int_col)";
-        stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        conn.createStatement().execute(ddl);
         try {
             ddl = "CREATE INDEX " + indexName + "2 ON " + testTable  + " (int_col)";
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
             fail("Should have caught exception");
         } catch (AmbiguousColumnException e) {
             assertEquals(SQLExceptionCode.AMBIGUOUS_COLUMN.getErrorCode(), e.getErrorCode());
@@ -538,23 +536,19 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
 
 
         String ddl = "create table " + testTable  + " (k varchar primary key, v1 varchar, v2 varchar, v3 varchar)";
-        PreparedStatement stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        conn.createStatement().execute(ddl);
         String indexName = "ASYNCIND_" + generateUniqueName();
         
         ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (v1) ASYNC";
-        stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        conn.createStatement().execute(ddl);
         ddl = "CREATE INDEX " + indexName + "2 ON " + testTable  + " (v2) ASYNC";
-        stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        conn.createStatement().execute(ddl);
         ddl = "CREATE INDEX " + indexName + "3 ON " + testTable  + " (v3)";
-        stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        conn.createStatement().execute(ddl);
         
         ResultSet rs = conn.createStatement().executeQuery(
             "select table_name, " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " +
-            "from system.catalog (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") " +
+            "from \"SYSTEM\".catalog (" + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " " + PDate.INSTANCE.getSqlTypeName() + ") " +
             "where " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE + " is not null and table_name like 'ASYNCIND_%' " +
             "order by " + PhoenixDatabaseMetaData.ASYNC_CREATED_DATE
         );
@@ -566,6 +560,51 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         assertEquals(indexName + "2", rs.getString(1));
         Date d2 = rs.getDate(2);
         assertTrue(d2.after(d1));
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testAsyncRebuildTimestamp() throws Exception {
+        long startTimestamp = System.currentTimeMillis();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        String testTable = generateUniqueName();
+
+
+        String ddl = "create table " + testTable  + " (k varchar primary key, v1 varchar, v2 varchar, v3 varchar)";
+        Statement stmt = conn.createStatement();
+        stmt.execute(ddl);
+        String indexName = "R_ASYNCIND_" + generateUniqueName();
+        
+        ddl = "CREATE INDEX " + indexName + "1 ON " + testTable  + " (v1) ";
+        stmt.execute(ddl);
+        ddl = "CREATE INDEX " + indexName + "2 ON " + testTable  + " (v2) ";
+        stmt.execute(ddl);
+        ddl = "CREATE INDEX " + indexName + "3 ON " + testTable  + " (v3)";
+        stmt.execute(ddl);
+        conn.createStatement().execute("ALTER INDEX "+indexName+"1 ON " + testTable +" DISABLE ");
+        conn.createStatement().execute("ALTER INDEX "+indexName+"2 ON " + testTable +" REBUILD ");
+        conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" REBUILD ASYNC");
+        
+        ResultSet rs = conn.createStatement().executeQuery(
+            "select table_name, " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +
+            "from \"SYSTEM\".catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
+            "where " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " !=0 and table_name like 'R_ASYNCIND_%' " +
+            "order by table_name");
+        assertTrue(rs.next());
+        assertEquals(indexName + "3", rs.getString(1));
+        long asyncTimestamp = rs.getLong(2);
+		assertTrue("Async timestamp is recent timestamp", asyncTimestamp > startTimestamp);
+        PTable table = PhoenixRuntime.getTable(conn, indexName+"3");
+        assertEquals(table.getTimeStamp(), asyncTimestamp);
+        assertFalse(rs.next());
+        conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" DISABLE");
+        rs = conn.createStatement().executeQuery(
+                "select table_name, " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " +
+                "from \"SYSTEM\".catalog (" + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " " + PLong.INSTANCE.getSqlTypeName() + ") " +
+                "where " + PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " !=0 and table_name like 'ASYNCIND_%' " +
+                "order by table_name" );
         assertFalse(rs.next());
     }
 }

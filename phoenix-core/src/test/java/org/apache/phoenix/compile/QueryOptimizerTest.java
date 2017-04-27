@@ -17,8 +17,13 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.MAX_QUALIFIER;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.MIN_QUALIFIER;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
+import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Array;
@@ -32,9 +37,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
@@ -750,4 +758,47 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         return Joiner.on(",").join(pkColsDataTypes);
     }
     
+    @Test
+    public void testMinMaxQualifierRangeWithOrderByOnKVColumn() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = "testMintestMinMaxQualifierRange".toUpperCase();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 VARCHAR) COLUMN_ENCODED_BYTES=4");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        ResultSet rs = stmt.executeQuery("SELECT K from " + tableName + " ORDER BY (v1)");
+        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE);
+        rs = stmt.executeQuery("SELECT K from " + tableName + " ORDER BY (v1, v2)");
+        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        rs = stmt.executeQuery("SELECT V2 from " + tableName + " ORDER BY (v1)");
+        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        rs = stmt.executeQuery("SELECT V1 from " + tableName + " ORDER BY (v1, v2)");
+        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+    }
+    
+    @Test
+    public void testMinMaxQualifierRangeWithNoOrderBy() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = "testMintestMinMaxQualifierRange".toUpperCase();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 VARCHAR) COLUMN_ENCODED_BYTES=4");
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        ResultSet rs = stmt.executeQuery("SELECT K from " + tableName);
+        assertQualifierRanges(rs, ENCODED_CQ_COUNTER_INITIAL_VALUE, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        rs = stmt.executeQuery("SELECT V2 from " + tableName);
+        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        rs = stmt.executeQuery("SELECT V1 from " + tableName);
+        assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE);
+    }
+    
+    private static void assertQualifierRanges(ResultSet rs, int minQualifier, int maxQualifier) throws SQLException {
+        Scan scan = rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getContext().getScan();
+        assertNotNull(scan.getAttribute(MIN_QUALIFIER));
+        assertNotNull(scan.getAttribute(MAX_QUALIFIER));
+        assertEquals(minQualifier, Bytes.toInt(scan.getAttribute(MIN_QUALIFIER)));
+        assertEquals(maxQualifier, Bytes.toInt(scan.getAttribute(MAX_QUALIFIER)));
+    }
+    
+//    private static void assertQualifierRangesNotPresent(ResultSet rs) throws SQLException {
+//        Scan scan = rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getContext().getScan();
+//        assertNull(scan.getAttribute(MIN_QUALIFIER));
+//        assertNull(scan.getAttribute(MAX_QUALIFIER));
+//    }
 }

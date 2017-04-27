@@ -25,6 +25,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
@@ -59,6 +60,19 @@ public class ToDateFunction extends ScalarFunction {
     protected String timeZoneId;
 
     public ToDateFunction() {
+    }
+
+    public ToDateFunction(List<Expression> children, StatementContext context) throws SQLException {
+        super(children);
+        String dateFormat = (String) ((LiteralExpression) children.get(1)).getValue();
+        String timeZoneId = (String) ((LiteralExpression) children.get(2)).getValue();
+        if (dateFormat == null) {
+            dateFormat = context.getDateFormat();
+        }
+        if (timeZoneId == null) {
+            timeZoneId = context.getDateFormatTimeZone().getID();
+        }
+        init(dateFormat, timeZoneId);
     }
 
     public ToDateFunction(List<Expression> children, String dateFormat, String timeZoneId) throws SQLException {

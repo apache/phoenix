@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
-import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
@@ -39,10 +38,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
@@ -53,7 +50,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import com.google.common.collect.Lists;
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Floats;
 
@@ -66,13 +62,13 @@ public class ScanQueryIT extends BaseQueryIT {
         return QueryIT.data();
     }
 
-    public ScanQueryIT(String indexDDL) {
-        super(indexDDL);
+    public ScanQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
+        super(indexDDL, mutable, columnEncoded);
     }
     
     @Test
     public void testScan() throws Exception {
-        String query = "SELECT a_string, /* comment ok? */ b_string FROM aTable WHERE ?=organization_id and 5=a_integer";
+        String query = "SELECT a_string, /* comment ok? */ b_string FROM " + tableName + " WHERE ?=organization_id and 5=a_integer";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -91,7 +87,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testScanByByteValue() throws Exception {
-        String query = "SELECT a_string, b_string, a_byte FROM aTable WHERE ?=organization_id and 1=a_byte";
+        String query = "SELECT a_string, b_string, a_byte FROM " + tableName + " WHERE ?=organization_id and 1=a_byte";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -111,7 +107,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testScanByShortValue() throws Exception {
-        String query = "SELECT a_string, b_string, a_short FROM aTable WHERE ?=organization_id and 128=a_short";
+        String query = "SELECT a_string, b_string, a_short FROM " + tableName + " WHERE ?=organization_id and 128=a_short";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -131,7 +127,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testScanByFloatValue() throws Exception {
-        String query = "SELECT a_string, b_string, a_float FROM aTable WHERE ?=organization_id and ?=a_float";
+        String query = "SELECT a_string, b_string, a_float FROM " + tableName + " WHERE ?=organization_id and ?=a_float";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -152,7 +148,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testScanByUnsignedFloatValue() throws Exception {
-        String query = "SELECT a_string, b_string, a_unsigned_float FROM aTable WHERE ?=organization_id and ?=a_unsigned_float";
+        String query = "SELECT a_string, b_string, a_unsigned_float FROM " + tableName + " WHERE ?=organization_id and ?=a_unsigned_float";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -173,7 +169,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testScanByDoubleValue() throws Exception {
-        String query = "SELECT a_string, b_string, a_double FROM aTable WHERE ?=organization_id and ?=a_double";
+        String query = "SELECT a_string, b_string, a_double FROM " + tableName + " WHERE ?=organization_id and ?=a_double";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -194,7 +190,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testScanByUnsigned_DoubleValue() throws Exception {
-        String query = "SELECT a_string, b_string, a_unsigned_double FROM aTable WHERE ?=organization_id and ?=a_unsigned_double";
+        String query = "SELECT a_string, b_string, a_unsigned_double FROM " + tableName + " WHERE ?=organization_id and ?=a_unsigned_double";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -215,7 +211,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testAllScan() throws Exception {
-        String query = "SELECT ALL a_string, b_string FROM aTable WHERE ?=organization_id and 5=a_integer";
+        String query = "SELECT ALL a_string, b_string FROM " + tableName + " WHERE ?=organization_id and 5=a_integer";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -234,7 +230,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testDistinctScan() throws Exception {
-        String query = "SELECT DISTINCT a_string FROM aTable WHERE organization_id=?";
+        String query = "SELECT DISTINCT a_string FROM " + tableName + " WHERE organization_id=?";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -256,7 +252,7 @@ public class ScanQueryIT extends BaseQueryIT {
 
     @Test
     public void testDistinctLimitScan() throws Exception {
-        String query = "SELECT DISTINCT a_string FROM aTable WHERE organization_id=? LIMIT 1";
+        String query = "SELECT DISTINCT a_string FROM " + tableName + " WHERE organization_id=? LIMIT 1";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -274,7 +270,7 @@ public class ScanQueryIT extends BaseQueryIT {
 
     @Test
     public void testInListSkipScan() throws Exception {
-        String query = "SELECT entity_id, b_string FROM aTable WHERE organization_id=? and entity_id IN (?,?)";
+        String query = "SELECT entity_id, b_string FROM " + tableName + " WHERE organization_id=? and entity_id IN (?,?)";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -301,7 +297,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testUnboundRangeScan1() throws Exception {
-        String query = "SELECT entity_id FROM aTable WHERE organization_id <= ?";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id <= ?";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -335,7 +331,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testUnboundRangeScan2() throws Exception {
-        String query = "SELECT entity_id FROM aTable WHERE organization_id >= ?";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id >= ?";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -369,7 +365,7 @@ public class ScanQueryIT extends BaseQueryIT {
     
     @Test
     public void testUpperLowerBoundRangeScan() throws Exception {
-        String query = "SELECT entity_id FROM aTable WHERE organization_id=? and substr(entity_id,1,3) > '00A' and substr(entity_id,1,3) < '00C'";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? and substr(entity_id,1,3) > '00A' and substr(entity_id,1,3) < '00C'";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -393,7 +389,7 @@ public class ScanQueryIT extends BaseQueryIT {
 
     @Test
     public void testUpperBoundRangeScan() throws Exception {
-        String query = "SELECT entity_id FROM aTable WHERE organization_id=? and substr(entity_id,1,3) >= '00B' ";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? and substr(entity_id,1,3) >= '00B' ";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -419,7 +415,7 @@ public class ScanQueryIT extends BaseQueryIT {
 
     @Test
     public void testLowerBoundRangeScan() throws Exception {
-        String query = "SELECT entity_id FROM aTable WHERE organization_id=? and substr(entity_id,1,3) < '00B' ";
+        String query = "SELECT entity_id FROM " + tableName + " WHERE organization_id=? and substr(entity_id,1,3) < '00B' ";
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2)); // Execute at timestamp 2
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -439,58 +435,5 @@ public class ScanQueryIT extends BaseQueryIT {
         } finally {
             conn.close();
         }
-    }
-    
-    @SuppressWarnings("unchecked")
-    @Test
-    public void testPointInTimeLimitedScan() throws Exception {
-        // Override value that was set at creation time
-        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 1); // Run query at timestamp 5
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection upsertConn = DriverManager.getConnection(url, props);
-        String upsertStmt =
-            "upsert into " +
-            "ATABLE(" +
-            "    ORGANIZATION_ID, " +
-            "    ENTITY_ID, " +
-            "    A_INTEGER) " +
-            "VALUES (?, ?, ?)";
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        PreparedStatement stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW1);
-        stmt.setInt(3, 6);
-        stmt.execute(); // should commit too
-        upsertConn.close();
-
-        // Override value again, but should be ignored since it's past the SCN
-        url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 3);
-        upsertConn = DriverManager.getConnection(url, props);
-        upsertConn.setAutoCommit(true); // Test auto commit
-        // Insert all rows at ts
-        stmt = upsertConn.prepareStatement(upsertStmt);
-        stmt.setString(1, tenantId);
-        stmt.setString(2, ROW1);
-        stmt.setInt(3, 0);
-        stmt.execute(); // should commit too
-        upsertConn.close();
-        
-        String query = "SELECT a_integer,b_string FROM atable WHERE organization_id=? and a_integer <= 5 limit 2";
-        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 2));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement statement = conn.prepareStatement(query);
-        statement.setString(1, tenantId);
-        ResultSet rs = statement.executeQuery();
-        List<List<Object>> expectedResultsA = Lists.newArrayList(
-                Arrays.<Object>asList(2, C_VALUE),
-                Arrays.<Object>asList( 3, E_VALUE));
-        List<List<Object>> expectedResultsB = Lists.newArrayList(
-                Arrays.<Object>asList( 5, C_VALUE),
-                Arrays.<Object>asList(4, B_VALUE));
-        // Since we're not ordering and we may be using a descending index, we don't
-        // know which rows we'll get back.
-        assertOneOfValuesEqualsResultSet(rs, expectedResultsA,expectedResultsB);
-       conn.close();
     }
 }

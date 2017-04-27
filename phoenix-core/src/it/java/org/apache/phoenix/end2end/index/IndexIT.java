@@ -61,8 +61,8 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.DateUtil;
@@ -85,27 +85,39 @@ public class IndexIT extends ParallelStatsDisabledIT {
     private final boolean mutable;
     private final String tableDDLOptions;
 
-
-    public IndexIT(boolean localIndex, boolean mutable, boolean transactional) {
+    public IndexIT(boolean localIndex, boolean mutable, boolean transactional, boolean columnEncoded) {
         this.localIndex = localIndex;
         this.transactional = transactional;
         this.mutable = mutable;
         StringBuilder optionBuilder = new StringBuilder();
-        if (!mutable)
-            optionBuilder.append(" IMMUTABLE_ROWS=true ");
+        if (!columnEncoded) {
+            if (optionBuilder.length()!=0)
+                optionBuilder.append(",");
+            optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+        }
+        if (!mutable) {
+            if (optionBuilder.length()!=0)
+                optionBuilder.append(",");
+            optionBuilder.append("IMMUTABLE_ROWS=true");
+            if (!columnEncoded) {
+                optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+            }
+        }
         if (transactional) {
-            if (!(optionBuilder.length()==0))
+            if (optionBuilder.length()!=0)
                 optionBuilder.append(",");
             optionBuilder.append(" TRANSACTIONAL=true ");
         }
         this.tableDDLOptions = optionBuilder.toString();
     }
 
-    @Parameters(name="IndexIT_localIndex={0},mutable={1},transactional={2}") // name is used by failsafe as file name in reports
+    @Parameters(name="IndexIT_localIndex={0},mutable={1},transactional={2},columnEncoded={3}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {
-                 { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },
-                 { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
+                { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
+                { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
+                { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
+                { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true } 
            });
     }
 
@@ -421,8 +433,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             stmt.execute(ddl);
             BaseTest.populateTestTable(fullTableName);
             ddl = "CREATE " + (localIndex ? "LOCAL" : "") + " INDEX " + indexName + " ON " + fullTableName + " (int_col2)";
-            PreparedStatement pstmt = conn.prepareStatement(ddl);
-            pstmt.execute();
+            conn.createStatement().execute(ddl);
             ResultSet rs = conn.createStatement().executeQuery("SELECT distinct int_col2 FROM " + fullTableName + " where int_col2 > 0");
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
@@ -516,8 +527,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName, date);
             String ddl = "CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName + " (date_col)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             String query = "SELECT int_pk from " + fullTableName ;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -745,8 +755,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
 
             String ddl = "DROP INDEX " + indexName + " ON " + fullTableName;
-            stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + "(k, v1) VALUES(?,?)");
             stmt.setString(1, "a");
@@ -782,7 +791,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(
                     "CREATE TABLE " + testTable
                     + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
-                    + (!tableDDLOptions.isEmpty() ? tableDDLOptions : "") + "SPLIT ON ('b')");
+                    + (!tableDDLOptions.isEmpty() ? tableDDLOptions : "") + " SPLIT ON ('b')");
             query = "SELECT * FROM " + testTable;
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
@@ -810,23 +819,23 @@ public class IndexIT extends ParallelStatsDisabledIT {
             stmt.execute();
             conn.commit();
 
-            // make sure the index is working as expected
-            query = "SELECT * FROM " + fullIndexName;
+            query = "SELECT /*+ NO_INDEX */ * FROM " + testTable;
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
-            assertEquals("x", rs.getString(1));
-            assertEquals("1", rs.getString(2));
-            assertEquals("a", rs.getString(3));
+            assertEquals("a", rs.getString(1));
+            assertEquals("x", rs.getString(2));
+            assertEquals("1", rs.getString(3));
             assertTrue(rs.next());
-            assertEquals("y", rs.getString(1));
-            assertEquals("2", rs.getString(2));
-            assertEquals("b", rs.getString(3));
+            assertEquals("b", rs.getString(1));
+            assertEquals("y", rs.getString(2));
+            assertEquals("2", rs.getString(3));
             assertTrue(rs.next());
-            assertEquals("z", rs.getString(1));
-            assertEquals("3", rs.getString(2));
-            assertEquals("c", rs.getString(3));
+            assertEquals("c", rs.getString(1));
+            assertEquals("z", rs.getString(2));
+            assertEquals("3", rs.getString(3));
             assertFalse(rs.next());
-
+            
+            // make sure the index is working as expected
             query = "SELECT * FROM " + testTable;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
@@ -899,7 +908,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + " ['1']", QueryUtil.getExplainPlan(rs));
             }
-
+            
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("a",rs.getString(1));
@@ -1011,8 +1020,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
             populateMultiCFTestTable(fullTableName, date);
             String ddl = null;
             ddl = "CREATE " + (localIndex ? "LOCAL " : "") + "INDEX " + indexName + " ON " + fullTableName + " (decimal_pk) INCLUDE (decimal_col1, decimal_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             query = "SELECT decimal_pk, decimal_col1, decimal_col2 from " + fullTableName ;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -1051,7 +1059,7 @@ public class IndexIT extends ParallelStatsDisabledIT {
         try (HBaseAdmin admin = driver.getConnectionQueryServices(null, null).getAdmin(); 
                 Connection c = DriverManager.getConnection(getUrl())) {
             ResultSet rs = c.getMetaData().getTables("", 
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA, 
+                    "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
                     null, 
                     new String[] {PTableType.SYSTEM.toString()});
             ReadOnlyProps p = c.unwrap(PhoenixConnection.class).getQueryServices().getProps();

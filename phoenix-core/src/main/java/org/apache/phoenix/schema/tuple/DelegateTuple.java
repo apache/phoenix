@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.schema.tuple;
 
+import java.util.List;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 
@@ -60,5 +62,10 @@ public class DelegateTuple implements Tuple {
     @Override
     public long getSequenceValue(int index) {
         return delegate.getSequenceValue(index);
+    }
+
+    @Override
+    public void setKeyValues(List<Cell> values) {
+        delegate.setKeyValues(values);
     }
 }

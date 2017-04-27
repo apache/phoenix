@@ -419,7 +419,7 @@ public class SortMergeJoinPlan implements QueryPlan {
                 return rhsBitSet == ValueBitSet.EMPTY_VALUE_BITSET ?
                         t : TupleProjector.mergeProjectedValue(
                                 t, joinedSchema, destBitSet,
-                                rhs, rhsSchema, rhsBitSet, rhsFieldPosition);
+                                rhs, rhsSchema, rhsBitSet, rhsFieldPosition, true);
             } catch (IOException e) {
                 throw new SQLException(e);
             }
@@ -675,5 +675,13 @@ public class SortMergeJoinPlan implements QueryPlan {
     @Override
     public Set<TableRef> getSourceRefs() {
         return tableRefs;
+    }
+
+    public QueryPlan getLhsPlan() {
+        return lhsPlan;
+    }
+
+    public QueryPlan getRhsPlan() {
+        return rhsPlan;
     }
 }

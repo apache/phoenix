@@ -142,4 +142,8 @@ public abstract class DelegateQueryPlan implements QueryPlan {
      public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
          return iterator(scanGrouper, null);
      }
+
+    public QueryPlan getDelegate() {
+        return delegate;
+    }
 }

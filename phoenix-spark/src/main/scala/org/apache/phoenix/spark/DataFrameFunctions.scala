@@ -18,19 +18,22 @@ import org.apache.hadoop.io.NullWritable
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.util.SchemaUtil
-import org.apache.spark.Logging
 import org.apache.spark.sql.DataFrame
 
 import scala.collection.JavaConversions._
 
-class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
 
+class DataFrameFunctions(data: DataFrame) extends Serializable {
+  def saveToPhoenix(parameters: Map[String, String]): Unit = {
+  		saveToPhoenix(parameters("table"), zkUrl = parameters.get("zkUrl"), tenantId = parameters.get("TenantId"), 
+  		skipNormalizingIdentifier=parameters.contains("skipNormalizingIdentifier"))
+   }
   def saveToPhoenix(tableName: String, conf: Configuration = new Configuration,
-                    zkUrl: Option[String] = None, tenantId: Option[String] = None): Unit = {
-
+                    zkUrl: Option[String] = None, tenantId: Option[String] = None, skipNormalizingIdentifier: Boolean = false): Unit = {
 
     // Retrieve the schema field names and normalize to Phoenix, need to do this outside of mapPartitions
-    val fieldArray = data.schema.fieldNames.map(x => SchemaUtil.normalizeIdentifier(x))
+    val fieldArray = getFieldArray(skipNormalizingIdentifier, data)
+    
 
     // Create a configuration object to use for saving
     @transient val outConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrl, tenantId, Some(conf))
@@ -39,7 +42,7 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
     val zkUrlFinal = ConfigurationUtil.getZookeeperURL(outConfig)
 
     // Map the row objects into PhoenixRecordWritable
-    val phxRDD = data.mapPartitions{ rows =>
+    val phxRDD = data.rdd.mapPartitions{ rows =>
  
        // Create a within-partition config to retrieve the ColumnInfo list
        @transient val partitionConfig = ConfigurationUtil.getOutputConfiguration(tableName, fieldArray, zkUrlFinal, tenantId)
@@ -60,5 +63,13 @@ class DataFrameFunctions(data: DataFrame) extends Logging with Serializable {
       classOf[PhoenixOutputFormat[PhoenixRecordWritable]],
       outConfig
     )
+  }
+
+  def getFieldArray(skipNormalizingIdentifier: Boolean = false, data: DataFrame) = {
+    if (skipNormalizingIdentifier) {
+      data.schema.fieldNames.map(x => x)
+    } else {
+      data.schema.fieldNames.map(x => SchemaUtil.normalizeIdentifier(x))
+    }
   }
 }

@@ -161,7 +161,7 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
         stmt.execute("UPSERT INTO T1 VALUES (3, 'NAME3')");
         conn.commit();
         stmt.execute("UPDATE STATISTICS T1");
-        ResultSet rs = stmt.executeQuery("SELECT * FROM SYSTEM.STATS");
+        ResultSet rs = stmt.executeQuery("SELECT * FROM \"SYSTEM\".STATS");
         assertFalse(rs.next());
         rs.close();
         stmt.close();

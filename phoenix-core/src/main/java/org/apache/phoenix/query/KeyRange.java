@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -356,10 +358,9 @@ public class KeyRange implements Writable {
         boolean newUpperInclusive;
         // Special case for null, is it is never included another range
         // except for null itself.
-        if (this == IS_NULL_RANGE) {
-            if (range == IS_NULL_RANGE) {
+        if (this == IS_NULL_RANGE && range == IS_NULL_RANGE) {
                 return IS_NULL_RANGE;
-            }
+        } else if(this == IS_NULL_RANGE || range == IS_NULL_RANGE) {
             return EMPTY_RANGE;
         }
         if (lowerUnbound()) {
@@ -517,32 +518,60 @@ public class KeyRange implements Writable {
         return Lists.transform(keys, POINT);
     }
 
-    public static List<KeyRange> intersect(List<KeyRange> keyRanges, List<KeyRange> keyRanges2) {
-        List<KeyRange> tmp = new ArrayList<KeyRange>();
-        for (KeyRange r1 : keyRanges) {
-            for (KeyRange r2 : keyRanges2) {
-                KeyRange r = r1.intersect(r2);
-                if (EMPTY_RANGE != r) {
-                    tmp.add(r);
+    private static int compareUpperRange(KeyRange rowKeyRange1,KeyRange rowKeyRange2) {
+        int result = Boolean.compare(rowKeyRange1.upperUnbound(), rowKeyRange2.upperUnbound());
+        if (result != 0) {
+            return result;
+        }
+        result = Bytes.BYTES_COMPARATOR.compare(rowKeyRange1.getUpperRange(), rowKeyRange2.getUpperRange());
+        if (result != 0) {
+            return result;
+        }
+        return Boolean.compare(rowKeyRange2.isUpperInclusive(), rowKeyRange1.isUpperInclusive());
+    }
+
+    public static List<KeyRange> intersect(List<KeyRange> rowKeyRanges1, List<KeyRange> rowKeyRanges2) {
+        List<KeyRange> newRowKeyRanges1=coalesce(rowKeyRanges1);
+        List<KeyRange> newRowKeyRanges2=coalesce(rowKeyRanges2);
+        Iterator<KeyRange> iter1=newRowKeyRanges1.iterator();
+        Iterator<KeyRange> iter2=newRowKeyRanges2.iterator();
+
+        List<KeyRange> result = new LinkedList<KeyRange>();
+        KeyRange rowKeyRange1=null;
+        KeyRange rowKeyRange2=null;
+        while(true) {
+            if(rowKeyRange1==null) {
+                if(!iter1.hasNext()) {
+                    break;
                 }
+                rowKeyRange1=iter1.next();
+            }
+            if(rowKeyRange2==null) {
+                if(!iter2.hasNext()) {
+                    break;
+                }
+                rowKeyRange2=iter2.next();
+            }
+            KeyRange intersectedRowKeyRange=rowKeyRange1.intersect(rowKeyRange2);
+            if(intersectedRowKeyRange!=EMPTY_RANGE) {
+                result.add(intersectedRowKeyRange);
+            }
+            int cmp=compareUpperRange(rowKeyRange1, rowKeyRange2);
+            if(cmp < 0) {
+                //move iter1
+                rowKeyRange1=null;
+            } else if(cmp > 0) {
+                //move iter2
+                rowKeyRange2=null;
+            } else {
+                //move iter1 and iter2
+                rowKeyRange1=rowKeyRange2=null;
             }
         }
-        if (tmp.size() == 0) {
+        if (result.size() == 0) {
             return Collections.singletonList(KeyRange.EMPTY_RANGE);
         }
-        Collections.sort(tmp, KeyRange.COMPARATOR);
-        List<KeyRange> tmp2 = new ArrayList<KeyRange>();
-        KeyRange r = tmp.get(0);
-        for (int i=1; i<tmp.size(); i++) {
-            if (EMPTY_RANGE == r.intersect(tmp.get(i))) {
-                tmp2.add(r);
-                r = tmp.get(i);
-            } else {
-                r = r.intersect(tmp.get(i));
-            }
-        }
-        tmp2.add(r);
-        return tmp2;
+        return result;
     }
     
     public KeyRange invert() {

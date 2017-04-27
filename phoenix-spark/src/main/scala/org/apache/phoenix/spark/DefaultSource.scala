@@ -44,7 +44,7 @@ class DefaultSource extends RelationProvider with CreatableRelationProvider {
     verifyParameters(parameters)
 
     // Save the DataFrame to Phoenix
-    data.saveToPhoenix(parameters("table"), zkUrl = parameters.get("zkUrl"), tenantId = parameters.get("TenantId"))
+    data.saveToPhoenix(parameters)
 
     // Return a relation of the saved data
     createRelation(sqlContext, parameters)

@@ -38,6 +38,7 @@ import org.apache.phoenix.expression.IsNullExpression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -239,7 +240,7 @@ public class CreateTableCompiler {
         }
     }
     
-    private static class ViewWhereExpressionVisitor extends StatelessTraverseNoExpressionVisitor<Boolean> {
+    public static class ViewWhereExpressionVisitor extends StatelessTraverseNoExpressionVisitor<Boolean> {
         private boolean isUpdatable = true;
         private final PTable table;
         private int position;
@@ -318,11 +319,16 @@ public class CreateTableCompiler {
         @Override
         public Boolean visit(KeyValueColumnExpression node) {
             try {
-                this.position = table.getColumnFamily(node.getColumnFamily()).getColumn(node.getColumnName()).getPosition();
+                this.position = table.getColumnFamily(node.getColumnFamily()).getPColumnForColumnQualifier(node.getColumnQualifier()).getPosition();
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible
             }
             return Boolean.TRUE;
+        }
+        
+        @Override
+        public Boolean visit(SingleCellColumnExpression node) {
+            return visit(node.getKeyValueExpression());
         }
         
     }

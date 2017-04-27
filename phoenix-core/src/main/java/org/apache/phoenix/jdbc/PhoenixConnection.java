@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -142,6 +143,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final Properties info;
     private final Map<PDataType<?>, Format> formatters = new HashMap<>();
     private final int mutateBatchSize;
+    private final long mutateBatchSizeBytes;
     private final Long scn;
     private MutationState mutationState;
     private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
@@ -213,6 +215,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, MutationState mutationState, boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade) throws SQLException {
+        GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
         this.url = url;
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
         // Copy so client cannot change
@@ -255,6 +258,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
                 this.services.getProps().get(QueryServices.SCHEMA_ATTRIB, QueryServicesOptions.DEFAULT_SCHEMA));
         this.tenantId = tenantId;
         this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
+        this.mutateBatchSizeBytes = JDBCUtil.getMutateBatchSizeBytes(url, this.info, this.services.getProps());
         datePattern = this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
         timePattern = this.services.getProps().get(QueryServices.TIME_FORMAT_ATTRIB, DateUtil.DEFAULT_TIME_FORMAT);
         timestampPattern = this.services.getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
@@ -443,7 +447,11 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     public int getMutateBatchSize() {
         return mutateBatchSize;
     }
-    
+
+    public long getMutateBatchSizeBytes(){
+        return mutateBatchSizeBytes;
+    }
+
     public PMetaData getMetaDataCache() {
         return metaData;
     }
@@ -457,7 +465,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     protected MutationState newMutationState(int maxSize) {
-        return new MutationState(maxSize, this); 
+        return new MutationState(maxSize, this);
     }
     
     public MutationState getMutationState() {
@@ -930,20 +938,6 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         metaData.addSchema(schema);
         // Cascade through to connectionQueryServices too
         getQueryServices().addSchema(schema);
-    }
-
-    @Override
-    public void addColumn(PName tenantId, String tableName, List<PColumn> columns, long tableTimeStamp,
-            long tableSeqNum, boolean isImmutableRows, boolean isWalDisabled, boolean isMultitenant, boolean storeNulls,
-            boolean isTransactional, long updateCacheFrequency, boolean isNamespaceMapped, long resolvedTime)
-                    throws SQLException {
-        metaData.addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
-                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
-                resolvedTime);
-        // Cascade through to connectionQueryServices too
-        getQueryServices().addColumn(tenantId, tableName, columns, tableTimeStamp, tableSeqNum, isImmutableRows,
-                isWalDisabled, isMultitenant, storeNulls, isTransactional, updateCacheFrequency, isNamespaceMapped,
-                resolvedTime);
     }
 
     @Override

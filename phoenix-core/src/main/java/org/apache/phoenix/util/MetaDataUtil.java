@@ -306,6 +306,23 @@ public class MetaDataUtil {
         return ByteUtil.concat(tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY, schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : schemaName, QueryConstants.SEPARATOR_BYTE_ARRAY, tableName, QueryConstants.SEPARATOR_BYTE_ARRAY, QueryConstants.SEPARATOR_BYTE_ARRAY, indexName);
     }
     
+    public static byte[] getChildLinkKey(PName parentTenantId, PName parentSchemaName, PName parentTableName, PName viewTenantId, PName viewName) {
+        return ByteUtil.concat(parentTenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : parentTenantId.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                        parentSchemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : parentSchemaName.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                        parentTableName.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY,
+                        viewTenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : viewTenantId.getBytes(), QueryConstants.SEPARATOR_BYTE_ARRAY, 
+                        viewName.getBytes());
+    }
+    
+    public static Cell getCell(List<Cell> cells, byte[] cq) {
+        for (Cell cell : cells) {
+            if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(), cq, 0, cq.length) == 0) {
+                return cell;
+            }
+        }
+        return null;
+    }
+    
     public static boolean isMultiTenant(Mutation m, KeyValueBuilder builder, ImmutableBytesWritable ptr) {
         if (getMutationValue(m, PhoenixDatabaseMetaData.MULTI_TENANT_BYTES, builder, ptr)) {
             return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
@@ -558,6 +575,10 @@ public class MetaDataUtil {
     public static final String IS_LOCAL_INDEX_TABLE_PROP_NAME = "IS_LOCAL_INDEX_TABLE";
     public static final byte[] IS_LOCAL_INDEX_TABLE_PROP_BYTES = Bytes.toBytes(IS_LOCAL_INDEX_TABLE_PROP_NAME);
 
+    public static final String DATA_TABLE_NAME_PROP_NAME = "DATA_TABLE_NAME";
+
+    public static final byte[] DATA_TABLE_NAME_PROP_BYTES = Bytes.toBytes(DATA_TABLE_NAME_PROP_NAME);
+
 
 
     public static Scan newTableRowsScan(byte[] key, long startTimeStamp, long stopTimeStamp){
@@ -642,5 +663,11 @@ public class MetaDataUtil {
     
     public static boolean isLocalIndexFamily(byte[] cf) {
         return Bytes.startsWith(cf, QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX_BYTES);
+    }
+    
+    public static final byte[] getPhysicalTableRowForView(PTable view) {
+        byte[] physicalTableSchemaName = Bytes.toBytes(SchemaUtil.getSchemaNameFromFullName(view.getPhysicalName().getString()));
+        byte[] physicalTableName = Bytes.toBytes(SchemaUtil.getTableNameFromFullName(view.getPhysicalName().getString()));
+        return SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY, physicalTableSchemaName, physicalTableName);
     }
 }

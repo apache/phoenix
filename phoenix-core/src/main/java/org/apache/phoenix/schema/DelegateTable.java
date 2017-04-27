@@ -96,8 +96,8 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public PColumn getColumn(String name) throws ColumnNotFoundException, AmbiguousColumnException {
-        return delegate.getColumn(name);
+    public PColumn getColumnForColumnName(String name) throws ColumnNotFoundException, AmbiguousColumnException {
+        return delegate.getColumnForColumnName(name);
     }
 
     @Override
@@ -289,5 +289,25 @@ public class DelegateTable implements PTable {
     @Override
     public boolean equals(Object obj) {
         return delegate.equals(obj);
+    }
+    
+    @Override
+    public ImmutableStorageScheme getImmutableStorageScheme() {
+        return delegate.getImmutableStorageScheme();
+    }
+
+    @Override
+    public PColumn getColumnForColumnQualifier(byte[] cf, byte[] cq) throws ColumnNotFoundException, AmbiguousColumnException {
+        return delegate.getColumnForColumnQualifier(cf, cq);
+    }
+
+    @Override
+    public EncodedCQCounter getEncodedCQCounter() {
+        return delegate.getEncodedCQCounter();
+    }
+
+    @Override
+    public QualifierEncodingScheme getEncodingScheme() {
+        return delegate.getEncodingScheme();
     }
 }

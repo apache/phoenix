@@ -24,6 +24,7 @@ import java.sql.ParameterMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
@@ -85,6 +86,7 @@ import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.ViewType;
@@ -98,12 +100,14 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -116,7 +120,7 @@ public class UpsertCompiler {
     private static void setValues(byte[][] values, int[] pkSlotIndex, int[] columnIndexes,
             PTable table, Map<ImmutableBytesPtr, RowMutationState> mutation,
             PhoenixStatement statement, boolean useServerTimestamp, IndexMaintainer maintainer,
-            byte[][] viewConstants, byte[] onDupKeyBytes) throws SQLException {
+            byte[][] viewConstants, byte[] onDupKeyBytes, int numSplColumns) throws SQLException {
         Map<PColumn,byte[]> columnValues = Maps.newHashMapWithExpectedSize(columnIndexes.length);
         byte[][] pkValues = new byte[table.getPKColumns().size()][];
         // If the table uses salting, the first byte is the salting byte, set to an empty array
@@ -124,10 +128,13 @@ public class UpsertCompiler {
         if (table.getBucketNum() != null) {
             pkValues[0] = new byte[] {0};
         }
+        for(int i = 0; i < numSplColumns; i++) {
+            pkValues[i + (table.getBucketNum() != null ? 1 : 0)] = values[i];
+        }
         Long rowTimestamp = null; // case when the table doesn't have a row timestamp column
         RowTimestampColInfo rowTsColInfo = new RowTimestampColInfo(useServerTimestamp, rowTimestamp);
-        for (int i = 0; i < values.length; i++) {
-            byte[] value = values[i];
+        for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
+            byte[] value = values[j];
             PColumn column = table.getColumns().get(columnIndexes[i]);
             if (SchemaUtil.isPKColumn(column)) {
                 pkValues[pkSlotIndex[i]] = value;
@@ -163,8 +170,8 @@ public class UpsertCompiler {
         mutation.put(ptr, new RowMutationState(columnValues, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
     }
     
-    private static MutationState upsertSelect(StatementContext childContext, TableRef tableRef, RowProjector projector,
-            ResultIterator iterator, int[] columnIndexes, int[] pkSlotIndexes, boolean useServerTimestamp) throws SQLException {
+    public static MutationState upsertSelect(StatementContext childContext, TableRef tableRef, RowProjector projector,
+            ResultIterator iterator, int[] columnIndexes, int[] pkSlotIndexes, boolean useServerTimestamp, boolean prefixSysColValues) throws SQLException {
         PhoenixStatement statement = childContext.getStatement();
         PhoenixConnection connection = statement.getConnection();
         ConnectionQueryServices services = connection.getQueryServices();
@@ -172,7 +179,19 @@ public class UpsertCompiler {
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
         int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         boolean isAutoCommit = connection.getAutoCommit();
-        byte[][] values = new byte[columnIndexes.length][];
+        int numSplColumns =
+                (tableRef.getTable().isMultiTenant() ? 1 : 0)
+                        + (tableRef.getTable().getViewIndexId() != null ? 1 : 0);
+        byte[][] values = new byte[columnIndexes.length + numSplColumns][];
+        if(prefixSysColValues) {
+            int i = 0;
+            if(tableRef.getTable().isMultiTenant()) {
+                values[i++] = connection.getTenantId().getBytes();
+            }
+            if(tableRef.getTable().getViewIndexId() != null) {
+                values[i++] = PSmallint.INSTANCE.toBytes(tableRef.getTable().getViewIndexId());
+            }
+        }
         int rowCount = 0;
         Map<ImmutableBytesPtr, RowMutationState> mutation = Maps.newHashMapWithExpectedSize(batchSize);
         PTable table = tableRef.getTable();
@@ -192,7 +211,7 @@ public class UpsertCompiler {
         try (ResultSet rs = new PhoenixResultSet(iterator, projector, childContext)) {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             while (rs.next()) {
-                for (int i = 0; i < values.length; i++) {
+                for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
                     PColumn column = table.getColumns().get(columnIndexes[i]);
                     byte[] bytes = rs.getBytes(i + 1);
                     ptr.set(bytes == null ? ByteUtil.EMPTY_BYTE_ARRAY : bytes);
@@ -212,9 +231,9 @@ public class UpsertCompiler {
                             precision, scale, SortOrder.getDefault(), 
                             column.getMaxLength(), column.getScale(), column.getSortOrder(),
                             table.rowKeyOrderOptimizable());
-                    values[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
+                    values[j] = ByteUtil.copyKeyBytesIfNecessary(ptr);
                 }
-                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants, null);
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants, null, numSplColumns);
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (isAutoCommit && rowCount % batchSize == 0) {
@@ -256,7 +275,7 @@ public class UpsertCompiler {
             StatementContext childContext = new StatementContext(statement, false);
             // Clone the row projector as it's not thread safe and would be used simultaneously by
             // multiple threads otherwise.
-            MutationState state = upsertSelect(childContext, tableRef, projector.cloneIfNecessary(), iterator, columnIndexes, pkSlotIndexes, useSeverTimestamp);
+            MutationState state = upsertSelect(childContext, tableRef, projector.cloneIfNecessary(), iterator, columnIndexes, pkSlotIndexes, useSeverTimestamp, false);
             return state;
         }
         
@@ -486,7 +505,7 @@ public class UpsertCompiler {
                         && tableRefToBe.equals(selectResolver.getTables().get(0));
                     tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
                     /* We can run the upsert in a coprocessor if:
-                     * 1) from has only 1 table and the into table matches from table
+                     * 1) from has only 1 table
                      * 2) the select query isn't doing aggregation (which requires a client-side final merge)
                      * 3) autoCommit is on
                      * 4) the table is not immutable with indexes, as the client is the one that figures out the additional
@@ -503,9 +522,10 @@ public class UpsertCompiler {
                         parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe, useServerTimestampToBe);
                         // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
                         // so we might be able to run it entirely on the server side.
-                        // For a table with row timestamp column, we can't guarantee that the row key will reside in the
                         // region space managed by region servers. So we bail out on executing on server side.
-                        runOnServer = sameTable && isAutoCommit && !table.isTransactional() && !(table.isImmutableRows() && !table.getIndexes().isEmpty()) && table.getRowTimestampColPos() == -1;
+                        runOnServer = isAutoCommit && !table.isTransactional()
+                                && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
+                                && !select.isJoin() && table.getRowTimestampColPos() == -1;
                     }
                     // If we may be able to run on the server, add a hint that favors using the data table
                     // if all else is equal.
@@ -579,7 +599,6 @@ public class UpsertCompiler {
         if (valueNodes == null) {
             queryPlanToBe = new QueryOptimizer(services).optimize(queryPlanToBe, statement, targetColumns, parallelIteratorFactoryToBe);
             projectorToBe = queryPlanToBe.getProjector();
-            runOnServer &= queryPlanToBe.getTableRef().equals(tableRefToBe);
         }
         final List<PColumn> allColumns = allColumnsToBe;
         final RowProjector projector = projectorToBe;
@@ -637,41 +656,34 @@ public class UpsertCompiler {
                         Expression literalNull = LiteralExpression.newConstant(null, column.getDataType(), Determinism.ALWAYS);
                         projectedExpressions.add(literalNull);
                         allColumnsIndexes[pos] = column.getPosition();
-                    } 
+                    }
                     // Swap select expression at pos with i
                     Collections.swap(projectedExpressions, i, pos);
                     // Swap column indexes and reverse column indexes too
                     int tempPos = allColumnsIndexes[i];
                     allColumnsIndexes[i] = allColumnsIndexes[pos];
                     allColumnsIndexes[pos] = tempPos;
-                    reverseColumnIndexes[tempPos] = reverseColumnIndexes[i];
+                    reverseColumnIndexes[tempPos] = pos;
                     reverseColumnIndexes[i] = i;
                 }
-                // If any pk slots are changing, be conservative and don't run this server side.
-                // If the row ends up living in a different region, we'll get an error otherwise.
-                for (int i = 0; i < table.getPKColumns().size(); i++) {
-                    PColumn column = table.getPKColumns().get(i);
-                    Expression source = projectedExpressions.get(i);
-                    if (source == null || !source.equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) {
-                        // TODO: we could check the region boundaries to see if the pk will still be in it.
-                        runOnServer = false; // bail on running server side, since PK may be changing
-                        break;
-                    }
-                }
-                
+
                 ////////////////////////////////////////////////////////////////////
                 // UPSERT SELECT run server-side
                 /////////////////////////////////////////////////////////////////////
                 if (runOnServer) {
                     // Iterate through columns being projected
                     List<PColumn> projectedColumns = Lists.newArrayListWithExpectedSize(projectedExpressions.size());
-                    for (int i = 0; i < projectedExpressions.size(); i++) {
+                    int posOff = table.getBucketNum() != null ? 1 : 0;
+                    for (int i = 0 ; i < projectedExpressions.size(); i++) {
                         // Must make new column if position has changed
                         PColumn column = allColumns.get(allColumnsIndexes[i]);
-                        projectedColumns.add(column.getPosition() == i ? column : new PColumnImpl(column, i));
+                        projectedColumns.add(column.getPosition() == i + posOff ? column : new PColumnImpl(column, i));
                     }
                     // Build table from projectedColumns
-                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns);
+                    // Hack to add default column family to be used on server in case no value column is projected.
+                    PTable projectedTable = PTableImpl.makePTable(table, projectedColumns,
+                            PNameFactory.newName(SchemaUtil.getEmptyColumnFamily(table)));  
+                    
                     
                     SelectStatement select = SelectStatement.create(SelectStatement.COUNT_ONE, upsert.getHint());
                     StatementContext statementContext = queryPlan.getContext();
@@ -697,7 +709,7 @@ public class UpsertCompiler {
                     scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(projectedExpressions));
                     
                     // Ignore order by - it has no impact
-                    final QueryPlan aggPlan = new AggregatePlan(context, select, tableRef, aggProjector, (select.getCursorName() == null ? null : select.getCursorName().getName()), null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
+                    final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, (select.getCursorName() == null ? null : select.getCursorName().getName()), null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null);
                     return new MutationPlan() {
                         @Override
                         public ParameterMetaData getParameterMetaData() {
@@ -734,7 +746,7 @@ public class UpsertCompiler {
                             if (ptr.getLength() > 0) {
                                 byte[] uuidValue = ServerCacheClient.generateId();
                                 scan.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
-                                scan.setAttribute(PhoenixIndexCodec.INDEX_MD, ptr.get());
+                                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
                                 scan.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
                             }
                             ResultIterator iterator = aggPlan.iterator();
@@ -742,6 +754,10 @@ public class UpsertCompiler {
                                 Tuple row = iterator.next();
                                 final long mutationCount = (Long)aggProjector.getColumnProjector(0).getValue(row,
                                         PLong.INSTANCE, ptr);
+                                for (PTable index : getNewIndexes(table)) {
+                                    new MetaDataClient(connection).buildIndex(index, tableRef,
+                                            scan.getTimeRange().getMax(), scan.getTimeRange().getMax() + 1);
+                                }
                                 return new MutationState(maxSize, connection) {
                                     @Override
                                     public long getUpdateCount() {
@@ -753,7 +769,19 @@ public class UpsertCompiler {
                             }
                             
                         }
-    
+
+                        private List<PTable> getNewIndexes(PTable table) throws SQLException {
+                            List<PTable> indexes = table.getIndexes();
+                            List<PTable> newIndexes = new ArrayList<PTable>(2);
+                            PTable newTable = PhoenixRuntime.getTableNoCache(connection, table.getName().getString());
+                            for (PTable index : newTable.getIndexes()) {
+                                if (!indexes.contains(index)) {
+                                    newIndexes.add(index);
+                                }
+                            }
+                            return newIndexes;
+                        }
+
                         @Override
                         public ExplainPlan getExplainPlan() throws SQLException {
                             List<String> queryPlanSteps =  aggPlan.getExplainPlan().getPlanSteps();
@@ -798,7 +826,7 @@ public class UpsertCompiler {
                 public MutationState execute() throws SQLException {
                     ResultIterator iterator = queryPlan.iterator();
                     if (parallelIteratorFactory == null) {
-                        return upsertSelect(new StatementContext(statement), tableRef, projector, iterator, columnIndexes, pkSlotIndexes, useServerTimestamp);
+                        return upsertSelect(new StatementContext(statement), tableRef, projector, iterator, columnIndexes, pkSlotIndexes, useServerTimestamp, false);
                     }
                     try {
                         parallelIteratorFactory.setRowProjector(projector);
@@ -903,10 +931,10 @@ public class UpsertCompiler {
                 UpdateColumnCompiler compiler = new UpdateColumnCompiler(context);
                 int nColumns = onDupKeyPairs.size();
                 List<Expression> updateExpressions = Lists.newArrayListWithExpectedSize(nColumns);
-                LinkedHashSet<PColumn>updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
+                LinkedHashSet<PColumn> updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
                 updateColumns.add(new PColumnImpl(
                         table.getPKColumns().get(0).getName(), // Use first PK column name as we know it won't conflict with others
-                        null, PVarbinary.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null, false, null, false, false));
+                        null, PVarbinary.INSTANCE, null, null, false, 0, SortOrder.getDefault(), 0, null, false, null, false, false, null));
                 for (Pair<ColumnName,ParseNode> columnPair : onDupKeyPairs) {
                     ColumnName colName = columnPair.getFirst();
                     PColumn updateColumn = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName()).getColumn();
@@ -1043,7 +1071,7 @@ public class UpsertCompiler {
                     indexMaintainer = table.getIndexMaintainer(parentTable, connection);
                     viewConstants = IndexUtil.getViewConstants(parentTable);
                 }
-                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants, onDupKeyBytes);
+                setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants, onDupKeyBytes, 0);
                 return new MutationState(tableRef, mutation, 0, maxSize, connection);
             }
 

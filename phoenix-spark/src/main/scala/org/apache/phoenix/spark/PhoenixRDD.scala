@@ -18,7 +18,7 @@ import java.sql.DriverManager
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.{HBaseConfiguration, HConstants}
 import org.apache.hadoop.io.NullWritable
-import org.apache.phoenix.jdbc.{PhoenixDriver, PhoenixEmbeddedDriver}
+import org.apache.phoenix.jdbc.PhoenixDriver
 import org.apache.phoenix.mapreduce.PhoenixInputFormat
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil
 import org.apache.phoenix.schema.types._
@@ -26,15 +26,18 @@ import org.apache.phoenix.util.ColumnInfo
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 import scala.collection.JavaConverters._
 
 class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
-                 predicate: Option[String] = None, zkUrl: Option[String] = None,
-                 @transient conf: Configuration, dateAsTimestamp: Boolean = false)
-  extends RDD[PhoenixRecordWritable](sc, Nil) with Logging {
+                 predicate: Option[String] = None,
+                 zkUrl: Option[String] = None,
+                 @transient conf: Configuration, dateAsTimestamp: Boolean = false,
+                 tenantId: Option[String] = None
+                )
+  extends RDD[PhoenixRecordWritable](sc, Nil) {
 
   // Make sure to register the Phoenix driver
   DriverManager.registerDriver(new PhoenixDriver)
@@ -50,6 +53,10 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
 
   override protected def getPartitions: Array[Partition] = {
     phoenixRDD.partitions
+  }
+
+  override protected def getPreferredLocations(split: Partition): Seq[String] = {
+    phoenixRDD.preferredLocations(split)
   }
 
   @DeveloperApi
@@ -97,6 +104,11 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       }
     }
 
+    tenantId match {
+      case Some(tid) => ConfigurationUtil.setTenantId(config, tid)
+      case _ =>
+    }
+
     config
   }
 
@@ -121,14 +133,14 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
       // Create a sequence of column data
       val rowSeq = columns.map { case (name, sqlType) =>
         val res = pr.resultMap(name)
-
-        // Special handling for data types
-        if(dateAsTimestamp && sqlType == 91) { // 91 is the defined type for Date
-          new java.sql.Timestamp(res.asInstanceOf[java.sql.Date].getTime)
-        }
-        else {
-          res
-        }
+          // Special handling for data types
+          if (dateAsTimestamp && (sqlType == 91 || sqlType == 19) && res!=null) { // 91 is the defined type for Date and 19 for UNSIGNED_DATE
+            new java.sql.Timestamp(res.asInstanceOf[java.sql.Date].getTime)
+          } else if ((sqlType == 92 || sqlType == 18) && res!=null) { // 92 is the defined type for Time and 18 for UNSIGNED_TIME
+            new java.sql.Timestamp(res.asInstanceOf[java.sql.Time].getTime)
+          } else {
+            res
+          }
       }
 
       // Create a Spark Row from the sequence
@@ -155,7 +167,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     case t if t.isInstanceOf[PDouble] || t.isInstanceOf[PUnsignedDouble] => DoubleType
     // Use Spark system default precision for now (explicit to work with < 1.5)
     case t if t.isInstanceOf[PDecimal] => 
-      if (columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale)
+      if (columnInfo.getPrecision == null || columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale)
     case t if t.isInstanceOf[PTimestamp] || t.isInstanceOf[PUnsignedTimestamp] => TimestampType
     case t if t.isInstanceOf[PTime] || t.isInstanceOf[PUnsignedTime] => TimestampType
     case t if (t.isInstanceOf[PDate] || t.isInstanceOf[PUnsignedDate]) && !dateAsTimestamp => DateType
@@ -172,7 +184,7 @@ class PhoenixRDD(sc: SparkContext, table: String, columns: Seq[String],
     case t if t.isInstanceOf[PFloatArray] || t.isInstanceOf[PUnsignedFloatArray] => ArrayType(FloatType, containsNull = true)
     case t if t.isInstanceOf[PDoubleArray] || t.isInstanceOf[PUnsignedDoubleArray] => ArrayType(DoubleType, containsNull = true)
     case t if t.isInstanceOf[PDecimalArray] => ArrayType(
-      if (columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale), containsNull = true)
+      if (columnInfo.getPrecision == null || columnInfo.getPrecision < 0) DecimalType(38, 18) else DecimalType(columnInfo.getPrecision, columnInfo.getScale), containsNull = true)
     case t if t.isInstanceOf[PTimestampArray] || t.isInstanceOf[PUnsignedTimestampArray] => ArrayType(TimestampType, containsNull = true)
     case t if t.isInstanceOf[PDateArray] || t.isInstanceOf[PUnsignedDateArray] => ArrayType(TimestampType, containsNull = true)
     case t if t.isInstanceOf[PTimeArray] || t.isInstanceOf[PUnsignedTimeArray] => ArrayType(TimestampType, containsNull = true)

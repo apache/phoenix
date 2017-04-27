@@ -143,6 +143,7 @@ tokens
     DEFAULT = 'default';
     DUPLICATE = 'duplicate';
     IGNORE = 'ignore';
+    IMMUTABLE = 'immutable';
 }
 
 
@@ -444,11 +445,11 @@ explain_node returns [BindableStatement ret]
 
 // Parse a create table statement.
 create_table_node returns [CreateTableStatement ret]
-    :   CREATE TABLE (IF NOT ex=EXISTS)? t=from_table_name 
+    :   CREATE (im=IMMUTABLE)? TABLE (IF NOT ex=EXISTS)? t=from_table_name 
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)
         (p=fam_properties)?
         (SPLIT ON s=value_expression_list)?
-        {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount()); }
+        {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null); }
     ;
    
 // Parse a create schema statement.
@@ -465,7 +466,7 @@ create_view_node returns [CreateTableStatement ret]
           FROM bt=from_table_name
           (WHERE w=expression)? )?
         (p=fam_properties)?
-        { ret = factory.createTable(t, p, c, pk, null, PTableType.VIEW, ex!=null, bt==null ? t : bt, w, getBindCount()); }
+        { ret = factory.createTable(t, p, c, pk, null, PTableType.VIEW, ex!=null, bt==null ? t : bt, w, getBindCount(), null); }
     ;
 
 // Parse a create index statement.
@@ -575,8 +576,8 @@ drop_index_node returns [DropIndexStatement ret]
 
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
-    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name s=(USABLE | UNUSABLE | REBUILD | DISABLE | ACTIVE)
-      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText()))); }
+    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name s=(USABLE | UNUSABLE | REBUILD | DISABLE | ACTIVE) (async=ASYNC)?
+      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), async!=null); }
     ;
 
 // Parse a trace statement.

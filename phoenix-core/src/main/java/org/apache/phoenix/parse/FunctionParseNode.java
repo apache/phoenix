@@ -283,6 +283,8 @@ public class FunctionParseNode extends CompoundParseNode {
         String name();
         Argument[] args() default {};
         Class<? extends FunctionParseNode> nodeClass() default FunctionParseNode.class;
+        Class<? extends FunctionExpression>[] derivedFunctions() default {};
+        FunctionClassType classType() default FunctionClassType.NONE;
     }
 
     @Retention(RetentionPolicy.RUNTIME)
@@ -297,20 +299,32 @@ public class FunctionParseNode extends CompoundParseNode {
         String maxValue() default "";
     }
 
+    public enum FunctionClassType {
+        NONE,
+        ABSTRACT,
+        DERIVED,
+        ALIAS,
+        UDF
+    }
+
     /**
      * Structure used to hold parse-time information about Function implementation classes
      */
     @Immutable
     public static final class BuiltInFunctionInfo {
         private final String name;
+        private final Class<? extends FunctionExpression> func;
         private final Constructor<? extends FunctionExpression> funcCtor;
         private final Constructor<? extends FunctionParseNode> nodeCtor;
         private final BuiltInFunctionArgInfo[] args;
         private final boolean isAggregate;
         private final int requiredArgCount;
+        private final FunctionClassType classType;
+        private final Class<? extends FunctionExpression>[] derivedFunctions;
 
         public BuiltInFunctionInfo(Class<? extends FunctionExpression> f, BuiltInFunction d) {
             this.name = SchemaUtil.normalizeIdentifier(d.name());
+            this.func = f;
             this.funcCtor = d.nodeClass() == FunctionParseNode.class ? getExpressionCtor(f, null) : null;
             this.nodeCtor = d.nodeClass() == FunctionParseNode.class ? null : getParseNodeCtor(d.nodeClass());
             this.args = new BuiltInFunctionArgInfo[d.args().length];
@@ -323,10 +337,13 @@ public class FunctionParseNode extends CompoundParseNode {
             }
             this.requiredArgCount = requiredArgCount;
             this.isAggregate = AggregateFunction.class.isAssignableFrom(f);
+            this.classType = d.classType();
+            this.derivedFunctions = d.derivedFunctions();
         }
 
         public BuiltInFunctionInfo(PFunction function) {
             this.name = SchemaUtil.normalizeIdentifier(function.getFunctionName());
+            this.func = null;
             this.funcCtor = getExpressionCtor(UDFExpression.class, function);
             this.nodeCtor = getParseNodeCtor(UDFParseNode.class);
             this.args = new BuiltInFunctionArgInfo[function.getFunctionArguments().size()];
@@ -339,6 +356,8 @@ public class FunctionParseNode extends CompoundParseNode {
             }
             this.requiredArgCount = requiredArgCount;
             this.isAggregate = AggregateFunction.class.isAssignableFrom(UDFExpression.class);
+            this.classType = FunctionClassType.UDF;
+            this.derivedFunctions = null;
         }
 
         public int getRequiredArgCount() {
@@ -347,6 +366,10 @@ public class FunctionParseNode extends CompoundParseNode {
 
         public String getName() {
             return name;
+        }
+
+        public Class<? extends FunctionExpression> getFunc() {
+            return func;
         }
 
         public Constructor<? extends FunctionExpression> getFuncCtor() {
@@ -363,6 +386,14 @@ public class FunctionParseNode extends CompoundParseNode {
 
         public BuiltInFunctionArgInfo[] getArgs() {
             return args;
+        }
+
+        public FunctionClassType getClassType() {
+            return classType;
+        }
+
+        public Class<? extends FunctionExpression>[] getDerivedFunctions() {
+            return derivedFunctions;
         }
     }
 

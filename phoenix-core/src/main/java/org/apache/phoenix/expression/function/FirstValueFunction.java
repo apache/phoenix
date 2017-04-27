@@ -44,6 +44,10 @@ public class FirstValueFunction extends FirstLastValueBaseFunction {
     public FirstValueFunction() {
     }
 
+    public FirstValueFunction(List<Expression> childExpressions) {
+        this(childExpressions, null);
+    }
+
     public FirstValueFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {
         super(childExpressions, delegate);
     }

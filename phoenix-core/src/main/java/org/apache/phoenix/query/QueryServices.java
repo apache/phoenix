@@ -86,13 +86,17 @@ public interface QueryServices extends SQLCloseable {
     public static final String CALL_QUEUE_ROUND_ROBIN_ATTRIB = "ipc.server.callqueue.roundrobin";
     public static final String SCAN_CACHE_SIZE_ATTRIB = "hbase.client.scanner.caching";
     public static final String MAX_MUTATION_SIZE_ATTRIB = "phoenix.mutate.maxSize";
+
+    @Deprecated //USE MUTATE_BATCH_SIZE_BYTES_ATTRIB instead
     public static final String MUTATE_BATCH_SIZE_ATTRIB = "phoenix.mutate.batchSize";
+    public static final String MUTATE_BATCH_SIZE_BYTES_ATTRIB = "phoenix.mutate.batchSizeBytes";
     public static final String MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB = "phoenix.coprocessor.maxServerCacheTimeToLiveMs";
     
     @Deprecated // Use FORCE_ROW_KEY_ORDER instead.
     public static final String ROW_KEY_ORDER_SALTED_TABLE_ATTRIB  = "phoenix.query.rowKeyOrderSaltedTable";
     
     public static final String USE_INDEXES_ATTRIB  = "phoenix.query.useIndexes";
+    @Deprecated // use the IMMUTABLE keyword while creating the table
     public static final String IMMUTABLE_ROWS_ATTRIB  = "phoenix.mutate.immutableRows";
     public static final String INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB  = "phoenix.index.mutableBatchSizeThreshold";
     public static final String DROP_METADATA_ATTRIB  = "phoenix.schema.dropMetaData";
@@ -126,10 +130,13 @@ public interface QueryServices extends SQLCloseable {
 
     // A master switch if to enable auto rebuild an index which failed to be updated previously
     public static final String INDEX_FAILURE_HANDLING_REBUILD_ATTRIB = "phoenix.index.failure.handling.rebuild";
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_PERIOD = "phoenix.index.failure.handling.rebuild.period";
 
     // Time interval to check if there is an index needs to be rebuild
     public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB =
         "phoenix.index.failure.handling.rebuild.interval";
+    
+    public static final String INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE = "phoenix.index.rebuild.batch.perTable";
 
     // A master switch if to block writes when index build failed
     public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
@@ -209,7 +216,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String QUERY_SERVER_UGI_CACHE_INITIAL_SIZE = "phoenix.queryserver.ugi.cache.initial.size";
     public static final String QUERY_SERVER_UGI_CACHE_CONCURRENCY = "phoenix.queryserver.ugi.cache.concurrency";
     public static final String QUERY_SERVER_KERBEROS_ALLOWED_REALMS = "phoenix.queryserver.kerberos.allowed.realms";
-    
+    public static final String QUERY_SERVER_SPNEGO_AUTH_DISABLED_ATTRIB = "phoenix.queryserver.spnego.auth.disabled";
+
     public static final String RENEW_LEASE_ENABLED = "phoenix.scanner.lease.renew.enabled";
     public static final String RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS = "phoenix.scanner.lease.renew.interval";
     public static final String RENEW_LEASE_THRESHOLD_MILLISECONDS = "phoenix.scanner.lease.threshold";
@@ -221,11 +229,25 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_POPULATION_SLEEP_TIME = "phoenix.index.population.wait.time";
     public static final String LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB = "phoenix.client.localIndexUpgrade";
     public static final String LIMITED_QUERY_SERIAL_THRESHOLD = "phoenix.limited.query.serial.threshold";
+    
+    //currently BASE64 and ASCII is supported
+    public static final String UPLOAD_BINARY_DATA_TYPE_ENCODING = "phoenix.upload.binaryDataType.encoding";
 
     public static final String INDEX_ASYNC_BUILD_ENABLED = "phoenix.index.async.build.enabled";
     
     public static final String CLIENT_CACHE_ENCODING = "phoenix.table.client.cache.encoding";
     public static final String AUTO_UPGRADE_ENABLED = "phoenix.autoupgrade.enabled";
+
+    public static final String CLIENT_CONNECTION_CACHE_MAX_DURATION_MILLISECONDS =
+        "phoenix.client.connection.max.duration";
+
+    //max number of connections from a single client to a single cluster. 0 is unlimited.
+    public static final String CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS =
+        "phoenix.client.connection.max.allowed.connections";
+    public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
+    public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
+    public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
+
     /**
      * Get executor service used for parallel scans
      */

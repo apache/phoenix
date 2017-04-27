@@ -28,7 +28,6 @@ import java.util.NavigableSet;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -62,8 +61,10 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.RepairUtil;
+
+import com.google.common.collect.Lists;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     
@@ -145,7 +146,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             try {
                 conn = QueryUtil.getConnectionOnServer(ctx.getEnvironment().getConfiguration()).unwrap(
                             PhoenixConnection.class);
-                PTable dataTable = PhoenixRuntime.getTableNoCache(conn, tableName.getNameAsString());
+                PTable dataTable = IndexUtil.getPDataTable(conn, ctx.getEnvironment().getRegion().getTableDesc());
                 List<PTable> indexes = dataTable.getIndexes();
                 Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
                         new HashMap<ImmutableBytesWritable, IndexMaintainer>();
@@ -184,15 +185,26 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     public InternalScanner preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c,
             Store store, List<? extends KeyValueScanner> scanners, ScanType scanType,
             long earliestPutTs, InternalScanner s, CompactionRequest request) throws IOException {
-        if (!store.getFamily().getNameAsString()
-                .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
-                || s != null
-                || !store.hasReferences()) {
-            return s;
+        if (!IndexUtil.isLocalIndexStore(store)) { return s; }
+        Scan scan = null;
+        if (s!=null) {
+        	scan = ((StoreScanner)s).scan;
+        } else  {
+        	scan = new Scan();
+        	scan.setMaxVersions(store.getFamily().getMaxVersions());
+        }
+        if (!store.hasReferences()) {
+            InternalScanner repairScanner = null;
+            if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
+                repairScanner = getRepairScanner(c.getEnvironment(), store);
+            }
+            if (repairScanner != null) {
+                return repairScanner;
+            } else {
+                return s;
+            }
         }
         List<StoreFileScanner> newScanners = new ArrayList<StoreFileScanner>(scanners.size());
-        Scan scan = new Scan();
-        scan.setMaxVersions(store.getFamily().getMaxVersions());
         boolean scanUsePread = c.getEnvironment().getConfiguration().getBoolean("hbase.storescanner.use.pread", scan.isSmall());
         for(KeyValueScanner scanner: scanners) {
             Reader reader = ((StoreFileScanner) scanner).getReader();
@@ -238,7 +250,47 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         }
         return viewConstants;
     }
+    
+    /**
+     * @param env
+     * @param store Local Index store 
+     * @param scan
+     * @param scanType
+     * @param earliestPutTs
+     * @param request
+     * @return StoreScanner for new Local Index data for a passed store and Null if repair is not possible
+     * @throws IOException
+     */
+    private InternalScanner getRepairScanner(RegionCoprocessorEnvironment env, Store store) throws IOException {
+        //List<KeyValueScanner> scannersForStoreFiles = Lists.newArrayListWithExpectedSize(store.getStorefilesCount());
+        Scan scan = new Scan();
+        scan.setMaxVersions(store.getFamily().getMaxVersions());
+        for (Store s : env.getRegion().getStores()) {
+            if (!IndexUtil.isLocalIndexStore(s)) {
+                scan.addFamily(s.getFamily().getName());
+            }
+        }
+        try {
+            PhoenixConnection conn = QueryUtil.getConnection(env.getConfiguration())
+                    .unwrap(PhoenixConnection.class);
+            PTable dataPTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDesc());
+            final List<IndexMaintainer> maintainers = Lists
+                    .newArrayListWithExpectedSize(dataPTable.getIndexes().size());
+            for (PTable index : dataPTable.getIndexes()) {
+                if (index.getIndexType() == IndexType.LOCAL) {
+                    maintainers.add(index.getIndexMaintainer(dataPTable, conn));
+                }
+            }
+            return new DataTableLocalIndexRegionScanner(env.getRegion().getScanner(scan), env.getRegion(),
+                    maintainers, store.getFamily().getName());
+            
 
+        } catch (ClassNotFoundException | SQLException e) {
+            throw new IOException(e);
+
+        }
+    }
+    
     @Override
     public KeyValueScanner preStoreScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
         final Store store, final Scan scan, final NavigableSet<byte[]> targetCols,

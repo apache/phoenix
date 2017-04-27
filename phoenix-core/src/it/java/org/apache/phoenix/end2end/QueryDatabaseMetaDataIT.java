@@ -655,7 +655,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testCreateDropTable() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
         
         ensureTableCreated(getUrl(), BTABLE_NAME, BTABLE_NAME, ts-2);
         ensureTableCreated(getUrl(), PTSDB_NAME, PTSDB_NAME, ts-2);
@@ -842,7 +842,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         createStmt = "create view " + MDTEST_NAME + 
         "   (id char(1) not null primary key,\n" + 
         "    b.col1 integer,\n" +
-        "    \"c\".col2 bigint) \n";
+        "    \"c\".col2 bigint) IMMUTABLE_ROWS=true \n";
         // should be ok now
         conn1.createStatement().execute(createStmt);
         conn1.close();
@@ -875,7 +875,6 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         } catch (ReadOnlyTableException e) {
             // expected to fail b/c table is read-only
         }
-        conn2.createStatement().execute("ALTER VIEW " + MDTEST_NAME + " SET IMMUTABLE_ROWS=TRUE");
 
         HTableInterface htable = conn2.getQueryServices().getTable(SchemaUtil.getTableNameAsBytes(MDTEST_SCHEMA_NAME,MDTEST_NAME));
         Put put = new Put(Bytes.toBytes("0"));
@@ -978,7 +977,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testAddKVColumnToExistingFamily() throws Throwable {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1009,7 +1008,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testAddKVColumnToNewFamily() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
@@ -1035,7 +1034,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testAddPKColumn() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1068,7 +1067,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testDropKVColumn() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1108,7 +1107,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testDropPKColumn() throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));
@@ -1126,7 +1125,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     public void testDropAllKVCols() throws Exception {
         ResultSet rs;
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), MDTEST_NAME, MDTEST_NAME, null, ts);
+        ensureTableCreated(getUrl(), MDTEST_NAME, MDTEST_NAME, null, ts, null);
         
         Properties props = new Properties();
         
@@ -1172,7 +1171,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
     @Test
     public void testNewerTableDisallowed() throws Exception {
         long ts = nextTimestamp();
-        ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, null, ts);
+        ensureTableCreated(getUrl(), ATABLE_NAME, ATABLE_NAME, null, ts, null);
         
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 5));

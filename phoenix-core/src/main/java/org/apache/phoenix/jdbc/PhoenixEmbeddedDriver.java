@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
+import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Driver;
@@ -36,6 +37,7 @@ import javax.annotation.concurrent.Immutable;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -199,6 +201,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     public static class ConnectionInfo {
         private static final org.slf4j.Logger logger = LoggerFactory.getLogger(ConnectionInfo.class);
         private static final Object KERBEROS_LOGIN_LOCK = new Object();
+        private static final char WINDOWS_SEPARATOR_CHAR = '\\';
         private static SQLException getMalFormedUrlException(String url) {
             return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
             .setMessage(url).build().buildException();
@@ -249,8 +252,18 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                 }
                 tokens[nTokens++] = token;
             }
+            // Look-forward to see if the last token is actually the C:\\ path
             if (tokenizer.hasMoreTokens() && !TERMINATOR.equals(token)) {
-                throw getMalFormedUrlException(url);
+                String extraToken = tokenizer.nextToken();
+                if (WINDOWS_SEPARATOR_CHAR == extraToken.charAt(0)) {
+                  String prevToken = tokens[nTokens - 1];
+                  tokens[nTokens - 1] = prevToken + ":" + extraToken;
+                  if (tokenizer.hasMoreTokens() && !(token=tokenizer.nextToken()).equals(TERMINATOR)) {
+                      throw getMalFormedUrlException(url);
+                  }
+                } else {
+                    throw getMalFormedUrlException(url);
+                }
             }
             String quorum = null;
             Integer port = null;
@@ -280,6 +293,15 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                             principal = tokens[tokenIndex++]; // Found principal
                             if (nTokens > tokenIndex) {
                                 keytabFile = tokens[tokenIndex++]; // Found keytabFile
+                                // There's still more after, try to see if it's a windows file path
+                                if (tokenIndex < tokens.length) {
+                                    String nextToken = tokens[tokenIndex++];
+                                    // The next token starts with the directory separator, assume
+                                    // it's still the keytab path.
+                                    if (null != nextToken && WINDOWS_SEPARATOR_CHAR == nextToken.charAt(0)) {
+                                        keytabFile = keytabFile + ":" + nextToken;
+                                    }
+                                }
                             }
                         }
                     }
@@ -350,7 +372,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                     try {
                         // Check if we need to authenticate with kerberos so that we cache the correct ConnectionInfo
                         UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
-                        if (!currentUser.hasKerberosCredentials() || !currentUser.getUserName().equals(principal)) {
+                        if (!currentUser.hasKerberosCredentials() || !isSameName(currentUser.getUserName(), principal)) {
                             synchronized (KERBEROS_LOGIN_LOCK) {
                                 // Double check the current user, might have changed since we checked last. Don't want
                                 // to re-login if it's the same user.
@@ -378,6 +400,19 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
             } // else, no connection, no need to login
             // Will use the current User from UGI
             return new ConnectionInfo(zookeeperQuorum, port, rootNode, principal, keytab);
+        }
+
+        // Visible for testing
+        static boolean isSameName(String currentName, String newName) throws IOException {
+            return isSameName(currentName, newName, null);
+        }
+
+        static boolean isSameName(String currentName, String newName, String hostname) throws IOException {
+            // Make sure to replace "_HOST" if it exists before comparing the principals.
+            if (newName.contains(org.apache.hadoop.security.SecurityUtil.HOSTNAME_PATTERN)) {
+                newName = org.apache.hadoop.security.SecurityUtil.getServerPrincipal(newName, hostname);
+            }
+            return currentName.equals(newName);
         }
 
         /**

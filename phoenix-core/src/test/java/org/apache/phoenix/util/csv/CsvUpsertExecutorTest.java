@@ -18,23 +18,19 @@
 package org.apache.phoenix.util.csv;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.phoenix.util.AbstractUpsertExecutorTest;
 import org.apache.phoenix.util.UpsertExecutor;
 import org.junit.Before;
-import org.junit.Test;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.verify;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Iterables;
 
 public class CsvUpsertExecutorTest extends AbstractUpsertExecutorTest<CSVRecord, String> {
 
@@ -46,7 +42,13 @@ public class CsvUpsertExecutorTest extends AbstractUpsertExecutorTest<CSVRecord,
     public UpsertExecutor<CSVRecord, String> getUpsertExecutor() {
         return upsertExecutor;
     }
-
+    
+    @Override
+    public UpsertExecutor<CSVRecord, String> getUpsertExecutor(Connection conn) {
+        return new CsvUpsertExecutor(conn, columnInfoList, preparedStatement,
+                upsertListener, ARRAY_SEP);
+    }
+    
     @Override
     public CSVRecord createRecord(Object... columnValues) throws IOException {
         for (int i = 0; i < columnValues.length; i++) {
@@ -69,11 +71,5 @@ public class CsvUpsertExecutorTest extends AbstractUpsertExecutorTest<CSVRecord,
                 upsertListener, ARRAY_SEP);
     }
 
-    @Test
-    public void testExecute_InvalidBoolean() throws Exception {
-        CSVRecord csvRecordWithInvalidType = createRecord("123,NameValue,42,1:2:3,NotABoolean");
-        upsertExecutor.execute(ImmutableList.of(csvRecordWithInvalidType));
-
-        verify(upsertListener).errorOnRecord(eq(csvRecordWithInvalidType), any(Throwable.class));
-    }
+    
 }

@@ -46,6 +46,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -144,6 +146,8 @@ public class Indexer extends BaseRegionObserver {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
         this.environment = env;
+        env.getConfiguration().setClass(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
+                ServerRpcControllerFactory.class, RpcControllerFactory.class);
         String serverName = env.getRegionServerServices().getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
           // make sure the right version <-> combinations are allowed.
@@ -368,7 +372,7 @@ public class Indexer extends BaseRegionObserver {
       super.postPut(e, put, edit, durability);
           return;
         }
-    doPost(edit, put, durability, true);
+    doPost(edit, put, durability);
   }
 
   @Override
@@ -378,27 +382,29 @@ public class Indexer extends BaseRegionObserver {
       super.postDelete(e, delete, edit, durability);
           return;
         }
-    doPost(edit, delete, durability, true);
+    doPost(edit, delete, durability);
   }
 
   @Override
-  public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
+      MiniBatchOperationInProgress<Mutation> miniBatchOp, final boolean success) throws IOException {
       if (this.disabled) {
-          super.postBatchMutate(c, miniBatchOp);
+          super.postBatchMutateIndispensably(c, miniBatchOp, success);
           return;
         }
     this.builder.batchCompleted(miniBatchOp);
-
-    //each batch operation, only the first one will have anything useful, so we can just grab that
-    Mutation mutation = miniBatchOp.getOperation(0);
-    WALEdit edit = miniBatchOp.getWalEdit(0);
-    doPost(edit, mutation, mutation.getDurability(), false);
+    
+    if (success) { // if miniBatchOp was successfully written, write index updates
+        //each batch operation, only the first one will have anything useful, so we can just grab that
+        Mutation mutation = miniBatchOp.getOperation(0);
+        WALEdit edit = miniBatchOp.getWalEdit(0);
+        doPost(edit, mutation, mutation.getDurability());
+    }
   }
 
-  private void doPost(WALEdit edit, Mutation m, final Durability durability, boolean allowLocalUpdates) throws IOException {
+  private void doPost(WALEdit edit, Mutation m, final Durability durability) throws IOException {
     try {
-      doPostWithExceptions(edit, m, durability, allowLocalUpdates);
+      doPostWithExceptions(edit, m, durability);
       return;
     } catch (Throwable e) {
       rethrowIndexingException(e);
@@ -407,7 +413,7 @@ public class Indexer extends BaseRegionObserver {
         "Somehow didn't complete the index update, but didn't return succesfully either!");
   }
 
-  private void doPostWithExceptions(WALEdit edit, Mutation m, final Durability durability, boolean allowLocalUpdates)
+  private void doPostWithExceptions(WALEdit edit, Mutation m, final Durability durability)
           throws Exception {
       //short circuit, if we don't need to do any work
       if (durability == Durability.SKIP_WAL || !this.builder.isEnabled(m) || edit == null) {
@@ -441,30 +447,32 @@ public class Indexer extends BaseRegionObserver {
            * once (this hook gets called with the same WALEdit for each Put/Delete in a batch, which can
            * lead to writing all the index updates for each Put/Delete).
            */
-          if (!ikv.getBatchFinished() || allowLocalUpdates) {
+          if (!ikv.getBatchFinished()) {
               Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(edit);
 
               // the WAL edit is kept in memory and we already specified the factory when we created the
               // references originally - therefore, we just pass in a null factory here and use the ones
               // already specified on each reference
               try {
-            	  if (!ikv.getBatchFinished()) {
-            		  current.addTimelineAnnotation("Actually doing index update for first time");
-            		  writer.writeAndKillYourselfOnFailure(indexUpdates, allowLocalUpdates);
-            	  } else if (allowLocalUpdates) {
-            		  Collection<Pair<Mutation, byte[]>> localUpdates =
-            				  new ArrayList<Pair<Mutation, byte[]>>();
-            		  current.addTimelineAnnotation("Actually doing local index update for first time");
-            		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
-            			  if (Bytes.toString(mutation.getSecond()).equals(
-            					  environment.getRegion().getTableDesc().getNameAsString())) {
-            				  localUpdates.add(mutation);
-            			  }
-            		  }
-                      if(!localUpdates.isEmpty()) {
-                    	  writer.writeAndKillYourselfOnFailure(localUpdates, allowLocalUpdates);
-                      }
-            	  }
+        		  current.addTimelineAnnotation("Actually doing index update for first time");
+                  Collection<Pair<Mutation, byte[]>> localUpdates =
+                          new ArrayList<Pair<Mutation, byte[]>>();
+                  Collection<Pair<Mutation, byte[]>> remoteUpdates =
+                          new ArrayList<Pair<Mutation, byte[]>>();
+        		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
+        			  if (Bytes.toString(mutation.getSecond()).equals(
+        					  environment.getRegion().getTableDesc().getNameAsString())) {
+        				  localUpdates.add(mutation);
+        			  } else {
+                          remoteUpdates.add(mutation);
+        			  }
+        		  }
+                  if(!remoteUpdates.isEmpty()) {
+                      writer.writeAndKillYourselfOnFailure(remoteUpdates, false);
+                  }
+                  if(!localUpdates.isEmpty()) {
+                      writer.writeAndKillYourselfOnFailure(localUpdates, true);
+                  }
               } finally {                  // With a custom kill policy, we may throw instead of kill the server.
                   // Without doing this in a finally block (at least with the mini cluster),
                   // the region server never goes down.
@@ -529,7 +537,8 @@ public class Indexer extends BaseRegionObserver {
     try {
         writer.writeAndKillYourselfOnFailure(updates, true);
     } catch (IOException e) {
-        LOG.error("Exception thrown instead of killing server during index writing", e);
+            LOG.error("During WAL replay of outstanding index updates, "
+                    + "Exception is thrown instead of killing server during index writing", e);
     }
   }
 

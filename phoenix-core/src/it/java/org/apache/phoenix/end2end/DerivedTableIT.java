@@ -74,7 +74,7 @@ public class DerivedTableIT extends BaseClientManagedTimeIT {
     @Before
     public void initTable() throws Exception {
          ts = nextTimestamp();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl());
+        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts, getUrl(), null);
         if (indexDDL != null && indexDDL.length > 0) {
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));

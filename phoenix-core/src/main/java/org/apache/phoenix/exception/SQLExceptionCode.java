@@ -87,6 +87,7 @@ public enum SQLExceptionCode {
     SUBQUERY_RETURNS_DIFFERENT_NUMBER_OF_FIELDS(216, "22016", "Sub-query must return the same number of fields as the left-hand-side expression of 'IN'."),
     AMBIGUOUS_JOIN_CONDITION(217, "22017", "Ambiguous or non-equi join condition specified. Consider using table list with where clause."),
     CONSTRAINT_VIOLATION(218, "23018", "Constraint violation."),
+    SUBQUERY_SELECT_LIST_COLUMN_MUST_HAS_ALIAS(219,"23019","Every column in subquery select lists must has alias when used for join."),
 
     CONCURRENT_TABLE_MUTATION(301, "23000", "Concurrent modification to table.", new Factory() {
         @Override
@@ -363,7 +364,15 @@ public enum SQLExceptionCode {
     
     UPDATE_CACHE_FREQUENCY_INVALID(1130, "XCL30", "UPDATE_CACHE_FREQUENCY cannot be set to ALWAYS if APPEND_ONLY_SCHEMA is true."),
     CANNOT_DROP_COL_APPEND_ONLY_SCHEMA(1131, "XCL31", "Cannot drop column from table that with append only schema."),
-    VIEW_APPEND_ONLY_SCHEMA(1132, "XCL32", "APPEND_ONLY_SCHEMA property of view must match the base table"),
+    
+    CANNOT_ALTER_IMMUTABLE_ROWS_PROPERTY(1133, "XCL33", "IMMUTABLE_ROWS property can be changed only if the table storage scheme is ONE_CELL_PER_KEYVALUE_COLUMN"),
+    CANNOT_ALTER_TABLE_PROPERTY_ON_VIEW(1134, "XCL34", "Altering this table property on a view is not allowed"),
+    
+    IMMUTABLE_TABLE_PROPERTY_INVALID(1135, "XCL35", "IMMUTABLE table property cannot be used with CREATE IMMUTABLE TABLE statement "),
+    
+    MAX_COLUMNS_EXCEEDED(1136, "XCL36", "The number of columns exceed the maximum supported by the table's qualifier encoding scheme"),
+    INVALID_IMMUTABLE_STORAGE_SCHEME_AND_COLUMN_QUALIFIER_BYTES(1137, "XCL37", "If IMMUTABLE_STORAGE_SCHEME property is not set to ONE_CELL_PER_COLUMN COLUMN_ENCODED_BYTES cannot be 0"),
+    INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE(1138, "XCL38", "IMMUTABLE_STORAGE_SCHEME property cannot be changed from/to ONE_CELL_PER_COLUMN "),
 
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
@@ -417,7 +426,11 @@ public enum SQLExceptionCode {
             724, "43M07", "Schema name not allowed!!"), CREATE_SCHEMA_NOT_ALLOWED(725, "43M08",
                     "Cannot create schema because config " + QueryServices.IS_NAMESPACE_MAPPING_ENABLED
                             + " for enabling name space mapping isn't enabled."), INCONSISTENET_NAMESPACE_MAPPING_PROPERTIES(
-                                    726, "43M10", " Inconsistent namespace mapping properites..");
+                                    726, "43M10", " Inconsistent namespace mapping properites.."), ASYNC_NOT_ALLOWED(
+                                    727, "43M11", " ASYNC option is not allowed.. "),
+    NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
+        "because this client already has the maximum number" +
+        " of connections to the target cluster.");
 
     private final int errorCode;
     private final String sqlState;

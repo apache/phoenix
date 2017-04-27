@@ -76,7 +76,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     
     private String initAtable() throws SQLException {
         String tableName = generateUniqueName();
-        ensureTableCreated(getUrl(), tableName, ATABLE_NAME, (byte[][])null);
+        ensureTableCreated(getUrl(), tableName, ATABLE_NAME, (byte[][])null, null);
         PreparedStatement stmt = conn.prepareStatement(
             "upsert into " + tableName +
             "(" +
@@ -395,7 +395,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         Statement stmt = conn.createStatement();
         ResultSet rs =
                 stmt.executeQuery(String
-                    .format("SELECT %s FROM SYSTEM.CATALOG LIMIT 1", invocation));
+                    .format("SELECT %s FROM \"SYSTEM\".\"CATALOG\" LIMIT 1", invocation));
         assertTrue(rs.next());
         int returnValue = rs.getInt(1);
         assertFalse(rs.next());
@@ -411,45 +411,45 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     @Test
     public void testYearFunctionDate() throws SQLException {
 
-        assertEquals(2008, callYearFunction("YEAR(TO_DATE('2008-01-01', 'yyyy-MM-dd', 'local'))"));
+        assertEquals(2008, callYearFunction("\"YEAR\"(TO_DATE('2008-01-01', 'yyyy-MM-dd', 'local'))"));
 
         assertEquals(2004,
-            callYearFunction("YEAR(TO_DATE('2004-12-13 10:13:18', 'yyyy-MM-dd hh:mm:ss'))"));
+            callYearFunction("\"YEAR\"(TO_DATE('2004-12-13 10:13:18', 'yyyy-MM-dd hh:mm:ss'))"));
 
-        assertEquals(2015, callYearFunction("YEAR(TO_DATE('2015-01-27T16:17:57+00:00'))"));
+        assertEquals(2015, callYearFunction("\"YEAR\"(TO_DATE('2015-01-27T16:17:57+00:00'))"));
 
-        assertEquals(2005, callYearFunction("YEAR(TO_DATE('2005-12-13 10:13:18'))"));
+        assertEquals(2005, callYearFunction("\"YEAR\"(TO_DATE('2005-12-13 10:13:18'))"));
 
-        assertEquals(2006, callYearFunction("YEAR(TO_DATE('2006-12-13'))"));
+        assertEquals(2006, callYearFunction("\"YEAR\"(TO_DATE('2006-12-13'))"));
 
-        assertEquals(2015, callYearFunction("YEAR(TO_DATE('2015-W05'))"));
+        assertEquals(2015, callYearFunction("\"YEAR\"(TO_DATE('2015-W05'))"));
 
         assertEquals(
             2008,
-            callYearFunction("YEAR(TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'))"));
+            callYearFunction("\"YEAR\"(TO_DATE('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'))"));
     }
 
     @Test
     public void testYearFunctionTimestamp() throws SQLException {
 
-        assertEquals(2015, callYearFunction("YEAR(TO_TIMESTAMP('2015-01-27T16:17:57+00:00'))"));
+        assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-01-27T16:17:57+00:00'))"));
 
-        assertEquals(2015, callYearFunction("YEAR(TO_TIMESTAMP('2015-01-27T16:17:57Z'))"));
+        assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-01-27T16:17:57Z'))"));
 
-        assertEquals(2015, callYearFunction("YEAR(TO_TIMESTAMP('2015-W10-3'))"));
+        assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-W10-3'))"));
 
-        assertEquals(2015, callYearFunction("YEAR(TO_TIMESTAMP('2015-W05'))"));
+        assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-W05'))"));
 
-        assertEquals(2015, callYearFunction("YEAR(TO_TIMESTAMP('2015-063'))"));
+        assertEquals(2015, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2015-063'))"));
 
-        assertEquals(2006, callYearFunction("YEAR(TO_TIMESTAMP('2006-12-13'))"));
+        assertEquals(2006, callYearFunction("\"YEAR\"(TO_TIMESTAMP('2006-12-13'))"));
 
         assertEquals(2004,
-            callYearFunction("YEAR(TO_TIMESTAMP('2004-12-13 10:13:18', 'yyyy-MM-dd hh:mm:ss'))"));
+            callYearFunction("\"YEAR\"(TO_TIMESTAMP('2004-12-13 10:13:18', 'yyyy-MM-dd hh:mm:ss'))"));
 
         assertEquals(
             2008,
-            callYearFunction("YEAR(TO_TIMESTAMP('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'))"));
+            callYearFunction("\"YEAR\"(TO_TIMESTAMP('Sat, 3 Feb 2008 03:05:06 GMT', 'EEE, d MMM yyyy HH:mm:ss z', 'UTC'))"));
     }
 
     @Test
@@ -470,8 +470,8 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, YEAR(timestamps), YEAR(times), Year(unsignedDates), YEAR(unsignedTimestamps), " +
-                "YEAR(unsignedTimes) FROM " + tableName + " where YEAR(dates) = 2004");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, \"YEAR\"(timestamps), \"YEAR\"(times), \"YEAR\"(unsignedDates), \"YEAR\"(unsignedTimestamps), " +
+                "\"YEAR\"(unsignedTimes) FROM " + tableName + " where \"YEAR\"(dates) = 2004");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(2006, rs.getInt(2));
@@ -500,8 +500,8 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, MONTH(timestamps), MONTH(times), MONTH(unsignedDates), MONTH(unsignedTimestamps), " +
-                "MONTH(unsignedTimes) FROM " + tableName + " where MONTH(dates) = 3");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, \"MONTH\"(timestamps), \"MONTH\"(times), \"MONTH\"(unsignedDates), \"MONTH\"(unsignedTimestamps), " +
+                "\"MONTH\"(unsignedTimes) FROM " + tableName + " where \"MONTH\"(dates) = 3");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(4, rs.getInt(2));
@@ -577,7 +577,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, WEEK(dates), WEEK(times) FROM " + tableName + " where WEEK(timestamps)=15");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, \"WEEK\"(dates), \"WEEK\"(times) FROM " + tableName + " where \"WEEK\"(timestamps)=15");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(2, rs.getInt(2));
@@ -602,7 +602,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, HOUR(dates), HOUR(times) FROM " + tableName + " where HOUR(timestamps)=15");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, \"HOUR\"(dates), \"HOUR\"(times) FROM " + tableName + " where \"HOUR\"(timestamps)=15");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(3, rs.getInt(2));
@@ -649,8 +649,8 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(dml);
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, MINUTE(dates), MINUTE(times), MINUTE(unsignedDates), MINUTE(unsignedTimestamps), " +
-                "MINUTE(unsignedTimes) FROM " + tableName + " where MINUTE(timestamps)=20");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, \"MINUTE\"(dates), \"MINUTE\"(times), \"MINUTE\"(unsignedDates), \"MINUTE\"(unsignedTimestamps), " +
+                "\"MINUTE\"(unsignedTimes) FROM " + tableName + " where \"MINUTE\"(timestamps)=20");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
         assertEquals(10, rs.getInt(2));
@@ -815,7 +815,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     public void testLiteralDateTimestampComparison() throws Exception {
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "select DATE '2016-05-10 00:00:00' > TIMESTAMP '2016-05-11 00:00:00'");
+                    "select \"DATE\" '2016-05-10 00:00:00' > \"TIMESTAMP\" '2016-05-11 00:00:00'");
 
         assertTrue(rs.next());
         assertEquals(false, rs.getBoolean(1));
@@ -826,7 +826,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     public void testLiteralDateTimestampComparison2() throws Exception {
         ResultSet rs =
                 conn.createStatement().executeQuery(
-                    "select TIMESTAMP '2016-05-10 00:00:00' > DATE '2016-05-11 00:00:00'");
+                    "select \"TIMESTAMP\" '2016-05-10 00:00:00' > \"DATE\" '2016-05-11 00:00:00'");
 
         assertTrue(rs.next());
         assertEquals(false, rs.getBoolean(1));
@@ -835,7 +835,7 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
     
     @Test
     public void testFunctionOnNullDate() throws Exception {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT YEAR(a_date), entity_id from " + this.tableName + " WHERE entity_id = '" + ROW10 + "'");
+        ResultSet rs = conn.createStatement().executeQuery("SELECT \"YEAR\"(a_date), entity_id from " + this.tableName + " WHERE entity_id = '" + ROW10 + "'");
         assertNotNull(rs);
         assertTrue(rs.next());
         assertEquals(ROW10, rs.getString(2));

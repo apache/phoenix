@@ -10,12 +10,16 @@
 package org.apache.phoenix.monitoring;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_COMMIT_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_NUM_PARALLEL_SCANS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_REJECTED_TASK_COUNTER;
@@ -28,6 +32,7 @@ import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -44,10 +49,17 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -67,6 +79,8 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             .newArrayList(MetricType.MUTATION_COMMIT_TIME.name());
     private static final List<String> readMetricsToSkip = Lists.newArrayList(MetricType.TASK_QUEUE_WAIT_TIME.name(),
             MetricType.TASK_EXECUTION_TIME.name(), MetricType.TASK_END_TO_END_TIME.name());
+    private static final String CUSTOM_URL_STRING = "SESSION";
+    private static final AtomicInteger numConnections = new AtomicInteger(0); 
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -76,6 +90,8 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         // disable renewing leases as this will force spooling to happen.
         props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        // need the non-test driver for some tests that check number of hconnections, etc.
+        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     }
 
     @Test
@@ -426,17 +442,30 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
     public void testMetricsForUpsertSelectWithAutoCommit() throws Exception {
         String tableName1 = generateUniqueName();
         long table1SaltBuckets = 6;
-        String ddl = "CREATE TABLE " + tableName1 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
-                + table1SaltBuckets;
+        String ddl = "CREATE TABLE " + tableName1 + " (K BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, V VARCHAR)"
+                + " SALT_BUCKETS = " + table1SaltBuckets + ", IMMUTABLE_ROWS = true";
         Connection ddlConn = DriverManager.getConnection(getUrl());
         ddlConn.createStatement().execute(ddl);
         ddlConn.close();
         int numRows = 10;
-        insertRowsInTable(tableName1, numRows);
+        String dml = "UPSERT INTO " + tableName1 + " VALUES (?, ?)";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            for (int i = 1; i <= numRows; i++) {
+                stmt.setLong(1, i);
+                stmt.setString(2, "value" + i);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+        }
 
         String tableName2 = generateUniqueName();
-        ddl = "CREATE TABLE " + tableName2 + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = 10";
+        ddl = "CREATE TABLE " + tableName2 + " (K BIGINT NOT NULL PRIMARY KEY ROW_TIMESTAMP, V VARCHAR)"
+                + " SALT_BUCKETS = 10" + ", IMMUTABLE_ROWS = true";
         ddlConn = DriverManager.getConnection(getUrl());
+        ddlConn.createStatement().execute(ddl);
+        String indexName = generateUniqueName();
+        ddl = "CREATE INDEX " + indexName + " ON " + tableName2 + " (V)";
         ddlConn.createStatement().execute(ddl);
         ddlConn.close();
 
@@ -586,41 +615,6 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             assertTrue(metrics.get(index3).size() > 0);
             assertMetricsHaveSameValues(metrics.get(index1), metrics.get(index3), mutationMetricsToSkip);
         }
-    }
-    
-    @Test
-    public void testMetricsForUpsertSelectSameTable() throws Exception {
-        String tableName = generateUniqueName();
-        long table1SaltBuckets = 6;
-        String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)" + " SALT_BUCKETS = "
-                + table1SaltBuckets;
-        Connection ddlConn = DriverManager.getConnection(getUrl());
-        ddlConn.createStatement().execute(ddl);
-        ddlConn.close();
-        int numRows = 10;
-        insertRowsInTable(tableName, numRows);
-
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.setAutoCommit(false);
-        String upsertSelect = "UPSERT INTO " + tableName + " SELECT * FROM " + tableName;
-        conn.createStatement().executeUpdate(upsertSelect);
-        conn.commit();
-        PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
-        
-        Map<String, Map<String, Long>> mutationMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(pConn);
-        // Because auto-commit is off, upsert select into the same table will run on the client.
-        // So we should have client side read and write metrics available.
-        assertMutationMetrics(tableName, numRows, mutationMetrics);
-        Map<String, Map<String, Long>> readMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(pConn);
-        assertReadMetricsForMutatingSql(tableName, table1SaltBuckets, readMetrics);
-        PhoenixRuntime.resetMetrics(pConn);
-        // With autocommit on, still, this upsert select runs on the client side.
-        conn.setAutoCommit(true);
-        conn.createStatement().executeUpdate(upsertSelect);
-        Map<String, Map<String, Long>> autoCommitMutationMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(pConn);
-        Map<String, Map<String, Long>> autoCommitReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(pConn);
-        assertMetricsAreSame(mutationMetrics, autoCommitMutationMetrics, mutationMetricsToSkip);
-        assertMetricsAreSame(readMetrics, autoCommitReadMetrics, readMetricsToSkip);
     }
     
     @Test
@@ -825,6 +819,162 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     assertTrue("Mutation bytes size should be greater than zero", metricValue > 0);
                 }
             }
+        }
+    }
+    
+    @Test
+    public void testGetConnectionsForSameUrlConcurrently()  throws Exception {
+        // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
+        String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
+        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        ExecutorService exec = Executors.newFixedThreadPool(10);
+        try {
+            GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
+            GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
+            assertEquals(0, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
+            assertEquals(0, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+            List<Callable<Connection>> callables = new ArrayList<>(100);
+            List<Future<Connection>> futures = new ArrayList<>(100);
+            int expectedHConnections = numConnections.get() > 0 ? 0 : 1;
+            for (int i = 1; i <= 100; i++) {
+                Callable<Connection> c = new GetConnectionCallable(url);
+                callables.add(c);
+                futures.add(exec.submit(c));
+            }
+            for (int i = 0; i < futures.size(); i++) {
+                Connection c = futures.get(i).get();
+                try {
+                    c.close();
+                } catch (Exception ignore) {}
+            }
+            assertEquals(expectedHConnections, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
+            assertEquals(expectedHConnections, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+        } finally {
+            exec.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testGetConnectionsThrottledForSameUrl() throws Exception {
+        int expectedPhoenixConnections = 11;
+        List<Connection> connections = Lists.newArrayList();
+        String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
+        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+        ':' +  CUSTOM_URL_STRING + '=' + "throttletest";
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, "10");
+
+        GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
+        GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
+        GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().reset();
+        GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().reset();
+        boolean wasThrottled = false;
+        try {
+            for (int k = 0; k < expectedPhoenixConnections; k++) {
+                connections.add(DriverManager.getConnection(url, props));
+            }
+        } catch (SQLException se) {
+            wasThrottled = true;
+            assertEquals(SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode(), se.getErrorCode());
+        } finally {
+            for (Connection c : connections) {
+                c.close();
+            }
+        }
+        assertEquals(1, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+        assertTrue("No connection was throttled!", wasThrottled);
+        assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
+        assertEquals(expectedPhoenixConnections, GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+    }
+
+    @Test
+    public void testGetConnectionsForDifferentTenantsConcurrently()  throws Exception {
+        // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
+        String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
+        String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        ExecutorService exec = Executors.newFixedThreadPool(10);
+        try {
+            GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
+            GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
+            assertEquals(0, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
+            assertEquals(0, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+            int expectedHConnections = numConnections.get() > 0 ? 0 : 1;
+            List<Callable<Connection>> callables = new ArrayList<>(100);
+            List<Future<Connection>> futures = new ArrayList<>(100);
+            for (int i = 1; i <= 100; i++) {
+                String tenantUrl = url + ';' + TENANT_ID_ATTRIB + '=' + i;
+                Callable<Connection> c = new GetConnectionCallable(tenantUrl + ";");
+                callables.add(c);
+                futures.add(exec.submit(c));
+            }
+            for (int i = 0; i < futures.size(); i++) {
+                Connection c = futures.get(i).get();
+                try {
+                    c.close();
+                } catch (Exception ignore) {}
+            }
+            assertEquals(expectedHConnections, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
+            assertEquals(expectedHConnections, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+        } finally {
+            exec.shutdownNow();
+        }
+    }
+    
+    @Test
+    public void testGetConnectionsWithDifferentJDBCParamsConcurrently()  throws Exception {
+        DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        ExecutorService exec = Executors.newFixedThreadPool(4);
+        // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
+        String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
+        String baseUrl = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        int numConnections = 20;
+        List<Callable<Connection>> callables = new ArrayList<>(numConnections);
+        List<Future<Connection>> futures = new ArrayList<>(numConnections);
+        try {
+            GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
+            GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
+            assertEquals(0, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
+            assertEquals(0, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+            for (int i = 1; i <= numConnections; i++) {
+                String customUrl = baseUrl + ':' +  CUSTOM_URL_STRING + '=' + i;
+                Callable<Connection> c = new GetConnectionCallable(customUrl + ";");
+                callables.add(c);
+                futures.add(exec.submit(c));
+            }
+            for (int i = 0; i < futures.size(); i++) {
+                futures.get(i).get();
+            }
+            assertEquals(numConnections, GLOBAL_HCONNECTIONS_COUNTER.getMetric().getValue());
+            assertEquals(numConnections, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
+        } finally {
+            exec.shutdownNow();
+            for (int i = 0; i < futures.size(); i++) {
+                try {
+                    Connection c = futures.get(i).get();
+                    // close the query services instance because we created a lot of HConnections.
+                    c.unwrap(PhoenixConnection.class).getQueryServices().close();
+                    c.close();
+                } catch (Exception ignore) {}
+            }
+        } 
+    }
+    
+    private static class GetConnectionCallable implements Callable<Connection> {
+        private final String url;
+        GetConnectionCallable(String url) {
+            this.url = url;
+        }
+        @Override
+        public Connection call() throws Exception {
+            Connection c = DriverManager.getConnection(url);
+            if (!url.contains(CUSTOM_URL_STRING)) {
+                // check to detect whether a connection was established using the PhoenixDriver
+                // This is used in our tests to figure out whether a new hconnection and query
+                // services will be created.
+                numConnections.incrementAndGet();
+            }
+            return c;
         }
     }
 

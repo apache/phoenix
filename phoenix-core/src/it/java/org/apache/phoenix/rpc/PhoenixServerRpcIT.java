@@ -153,6 +153,12 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             
             // verify that that index queue is used only once (for the first upsert)
             Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
+            
+            TestPhoenixIndexRpcSchedulerFactory.reset();
+            conn.createStatement().execute(
+                    "CREATE INDEX " + indexName + "_1 ON " + dataTableFullName + " (v1) INCLUDE (v2)");
+            // verify that that index queue is used and only once (during Upsert Select on server to build the index)
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();

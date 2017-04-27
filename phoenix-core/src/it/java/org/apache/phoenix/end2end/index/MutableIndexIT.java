@@ -41,10 +41,17 @@ import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.ByteUtil;
@@ -53,6 +60,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -66,12 +74,17 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     protected final boolean localIndex;
     private final String tableDDLOptions;
 	
-    public MutableIndexIT(boolean localIndex, boolean transactional) {
+    public MutableIndexIT(boolean localIndex, boolean transactional, boolean columnEncoded) {
 		this.localIndex = localIndex;
 		StringBuilder optionBuilder = new StringBuilder();
 		if (transactional) {
 			optionBuilder.append("TRANSACTIONAL=true");
 		}
+		if (!columnEncoded) {
+            if (optionBuilder.length()!=0)
+                optionBuilder.append(",");
+            optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+        }
 		this.tableDDLOptions = optionBuilder.toString();
 	}
     
@@ -86,11 +99,13 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         return getConnection(props);
     }
     
-	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1}") // name is used by failsafe as file name in reports
+	@Parameters(name="MutableIndexIT_localIndex={0},transactional={1},columnEncoded={2}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                { false, false }, { false, true }, { true, false }, { true, true }
-           });
+        return Arrays.asList(new Boolean[][] { 
+                { false, false, false }, { false, false, true },
+                { false, true, false }, { false, true, true },
+                { true, false, false }, { true, false, true },
+                { true, true, false }, { true, true, true } });
     }
     
     @Test
@@ -104,9 +119,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 
 			TestUtil.createMultiCFTestTable(conn, fullTableName, tableDDLOptions);
             populateMultiCFTestTable(fullTableName);
-            PreparedStatement stmt = conn.prepareStatement("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName 
+            conn.createStatement().execute("CREATE " + (localIndex ? " LOCAL " : "") + " INDEX " + indexName + " ON " + fullTableName 
             		+ " (char_col1 ASC, int_col1 ASC) INCLUDE (long_col1, long_col2)");
-            stmt.execute();
             
             String query = "SELECT char_col1, int_col1, long_col2 from " + fullTableName;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
@@ -131,7 +145,7 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             assertEquals(5L, rs.getLong(3));
             assertFalse(rs.next());
             
-            stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
                     + "(varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2) SELECT varchar_pk, char_pk, int_pk, long_pk , decimal_pk, long_col2*2 FROM "
                     + fullTableName + " WHERE long_col2=?");
             stmt.setLong(1,4L);
@@ -678,7 +692,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testIndexHalfStoreFileReader() throws Exception {
         Connection conn1 = getConnection();
-        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
+        ConnectionQueryServices connectionQueryServices = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES);
+		HBaseAdmin admin = connectionQueryServices.getAdmin();
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
         try {
@@ -690,55 +705,53 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
             conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
             conn1.commit();
+            
 
             String query = "SELECT count(*) FROM " + tableName +" where v1<='z'";
             ResultSet rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals(4, rs.getInt(1));
 
-            TableName table = TableName.valueOf(localIndex?tableName: indexName);
             TableName indexTable = TableName.valueOf(localIndex?tableName: indexName);
             admin.flush(indexTable);
             boolean merged = false;
+            HTableInterface table = connectionQueryServices.getTable(indexTable.getName());
             // merge regions until 1 left
-            end: while (true) {
-              long numRegions = 0;
-              while (true) {
-                rs = conn1.createStatement().executeQuery(query);
-                assertTrue(rs.next());
-                assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
-                try {
-                  List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);
-                  numRegions = indexRegions.size();
-                  if (numRegions==1) {
-                    break end;
-                  }
-                  if(!merged) {
-                            List<HRegionInfo> regions =
-                                    admin.getTableRegions(localIndex ? table : indexTable);
-                      Log.info("Merging: " + regions.size());
-                      admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
-                          regions.get(1).getEncodedNameAsBytes(), false);
-                      merged = true;
-                      Threads.sleep(10000);
-                  }
+            long numRegions = 0;
+            while (true) {
+              rs = conn1.createStatement().executeQuery(query);
+              assertTrue(rs.next());
+              assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
+              try {
+                List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);
+                numRegions = indexRegions.size();
+                if (numRegions==1) {
                   break;
-                } catch (Exception ex) {
-                  Log.info(ex);
                 }
-                if(!localIndex) {
-                    long waitStartTime = System.currentTimeMillis();
-                    // wait until merge happened
-                    while (System.currentTimeMillis() - waitStartTime < 10000) {
-                      List<HRegionInfo> regions = admin.getTableRegions(indexTable);
-                      Log.info("Waiting:" + regions.size());
-                      if (regions.size() < numRegions) {
-                        break;
-                      }
-                      Threads.sleep(1000);
-                    }
+                if(!merged) {
+                          List<HRegionInfo> regions =
+                                  admin.getTableRegions(indexTable);
+                    Log.info("Merging: " + regions.size());
+                    admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
+                        regions.get(1).getEncodedNameAsBytes(), false);
+                    merged = true;
+                    Threads.sleep(10000);
                 }
+              } catch (Exception ex) {
+                Log.info(ex);
               }
+              long waitStartTime = System.currentTimeMillis();
+              // wait until merge happened
+              while (System.currentTimeMillis() - waitStartTime < 10000) {
+                List<HRegionInfo> regions = admin.getTableRegions(indexTable);
+                Log.info("Waiting:" + regions.size());
+                if (regions.size() < numRegions) {
+                  break;
+                }
+                Threads.sleep(1000);
+              }
+              SnapshotTestingUtils.waitForTableToBeOnline(BaseTest.getUtility(), indexTable);
+              assertTrue("Index table should be online ", admin.isTableAvailable(indexTable));
             }
         } finally {
             dropTable(admin, conn1);

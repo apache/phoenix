@@ -132,6 +132,17 @@ public class DropSchemaIT extends BaseClientManagedTimeIT {
             admin.createNamespace(NamespaceDescriptor.create(normalizeSchemaIdentifier).build());
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
             assertNotNull(admin.getNamespaceDescriptor(normalizeSchemaIdentifier));
+            conn.createStatement().execute("CREATE SCHEMA " + schema);
+        }
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 80));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute("DROP SCHEMA " + schema);
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+            conn.createStatement().execute("DROP SCHEMA " + schema);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(e.getErrorCode(), SQLExceptionCode.SCHEMA_NOT_FOUND.getErrorCode());
         }
         admin.close();
     }

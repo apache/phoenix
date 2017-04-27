@@ -18,13 +18,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.regionserver.KeyValueScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.data.IndexMemStore;
@@ -147,7 +143,7 @@ public class LocalTableState implements TableState {
      * @throws IOException
      */
     public Pair<Scanner, IndexUpdate> getIndexedColumnsTableState(
-        Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations) throws IOException {
+        Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound) throws IOException {
         ensureLocalStateInitialized(indexedColumns, ignoreNewerMutations);
         // filter out things with a newer timestamp and track the column references to which it applies
         ColumnTracker tracker = new ColumnTracker(indexedColumns);
@@ -158,7 +154,7 @@ public class LocalTableState implements TableState {
             }
         }
 
-        Scanner scanner = this.scannerBuilder.buildIndexedColumnScanner(indexedColumns, tracker, ts);
+        Scanner scanner = this.scannerBuilder.buildIndexedColumnScanner(indexedColumns, tracker, ts, returnNullScannerIfRowNotFound);
 
         return new Pair<Scanner, IndexUpdate>(scanner, new IndexUpdate(tracker));
     }
@@ -222,7 +218,7 @@ public class LocalTableState implements TableState {
         this.kvs.clear();
         this.kvs.addAll(update);
     }
-
+    
     /**
      * Apply the {@link KeyValue}s set in {@link #setPendingUpdates(Collection)}.
      */
@@ -242,9 +238,9 @@ public class LocalTableState implements TableState {
     }
 
     @Override
-    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations)
+    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound)
             throws IOException {
-        Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations);
+        Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations, returnNullScannerIfRowNotFound);
         ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(pair.getFirst(), getCurrentRowKey());
         return new Pair<ValueGetter, IndexUpdate>(valueGetter, pair.getSecond());
     }

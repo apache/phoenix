@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertDegenerate;
 import static org.junit.Assert.assertArrayEquals;
@@ -49,7 +51,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.AggregatePlan;
+import org.apache.phoenix.execute.ClientScanPlan;
 import org.apache.phoenix.execute.HashJoinPlan;
+import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.execute.SortMergeJoinPlan;
+import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
@@ -57,6 +64,7 @@ import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
+import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -70,6 +78,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
@@ -170,7 +179,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             String query = "CREATE TABLE t1 (k integer not null primary key, a.k decimal, b.k decimal)";
             conn.createStatement().execute(query);
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-            PColumn c = pconn.getTable(new PTableKey(pconn.getTenantId(), "T1")).getColumn("K");
+            PColumn c = pconn.getTable(new PTableKey(pconn.getTenantId(), "T1")).getColumnForColumnName("K");
             assertTrue(SchemaUtil.isPKColumn(c));
         } finally {
             conn.close();
@@ -500,7 +509,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             "SELECT count(1) FROM atable GROUP BY organization_id,substr(entity_id,1,3),entity_id",
             "SELECT count(1) FROM atable GROUP BY entity_id,organization_id",
             "SELECT count(1) FROM atable GROUP BY substr(entity_id,1,3),organization_id",
-            "SELECT count(1) FROM ptsdb GROUP BY host,inst,round(date,'HOUR')",
+            "SELECT count(1) FROM ptsdb GROUP BY host,inst,round(\"DATE\",'HOUR')",
             "SELECT count(1) FROM atable GROUP BY organization_id",
         };
         List<Object> binds = Collections.emptyList();
@@ -920,6 +929,25 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testAggregateOnColumnsNotInGroupByForImmutableEncodedTable() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl = "CREATE IMMUTABLE TABLE  " + tableName +
+                "  (a_string varchar not null, col1 integer, col2 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string))";
+        String query = "SELECT col1, max(a_string) from " + tableName + " group by col2";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            try {
+                PreparedStatement statement = conn.prepareStatement(query);
+                statement.executeQuery();
+                fail();
+            } catch (SQLException e) { // expected
+                assertEquals(SQLExceptionCode.AGGREGATE_WITH_NOT_GROUP_BY_COLUMN.getErrorCode(), e.getErrorCode());
+            }
+        }
+    }
+
     @Test 
     public void testRegexpSubstrSetScanKeys() throws Exception {
         // First test scan keys are set when the offset is 0 or 1. 
@@ -1021,15 +1049,13 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
         Connection conn = DriverManager.getConnection(url);
         try {
-            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
-            statement.execute();
+            conn.createStatement().execute("ALTER TABLE atable ADD xyz INTEGER SALT_BUCKETS=4");
             fail();
         } catch (SQLException e) { // expected
             assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
         }
         try {
-            PreparedStatement statement = conn.prepareStatement("ALTER TABLE atable SET SALT_BUCKETS=4");
-            statement.execute();
+            conn.createStatement().execute("ALTER TABLE atable SET SALT_BUCKETS=4");
             fail();
         } catch (SQLException e) { // expected
             assertEquals(SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE.getErrorCode(), e.getErrorCode());
@@ -1539,7 +1565,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         try{
             Statement statement = conn1.createStatement();
             statement.execute("create table example (id integer not null,fn varchar,"
-                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+                    + "\"ln\" varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
             try {
                 statement.execute("create local index my_idx on example (fn) DEFAULT_COLUMN_FAMILY='F'");
                 fail();
@@ -1701,7 +1727,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             Integer.MAX_VALUE + "," + Long.MAX_VALUE + "," +
             (Integer.MAX_VALUE - 1) + "," + (Long.MAX_VALUE - 1) + "," +
             ((long)Integer.MAX_VALUE + 1) + "," + oneMoreThanMaxLong +
-        " FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " LIMIT 1";
+        " FROM " + "\""+ SYSTEM_CATALOG_SCHEMA + "\".\"" + SYSTEM_STATS_TABLE + "\"" + " LIMIT 1";
         List<Object> binds = Collections.emptyList();
         QueryPlan plan = getQueryPlan(query, binds);
         RowProjector p = plan.getProjector();
@@ -2321,7 +2347,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Iterator<Filter> iterator = ScanUtil.getFilterIterator(scan);
         while (iterator.hasNext()) {
             Filter filter = iterator.next();
-            if (filter instanceof ColumnProjectionFilter) {
+            if (filter instanceof EncodedQualifiersColumnProjectionFilter) {
                 return true;
             }
         }
@@ -2623,7 +2649,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute(ddl);
         PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache()
                 .getTableRef(new PTableKey(null,"TABLE_WITH_DEFAULT")).getTable();
-        assertNull(table.getColumn("V").getExpressionStr());
+        assertNull(table.getColumnForColumnName("V").getExpressionStr());
     }
 
     @Test
@@ -2638,7 +2664,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute(ddl2);
         PTable table = conn.unwrap(PhoenixConnection.class).getMetaDataCache()
                 .getTableRef(new PTableKey(null,"TABLE_WITH_DEFAULT")).getTable();
-        assertNull(table.getColumn("V").getExpressionStr());
+        assertNull(table.getColumnForColumnName("V").getExpressionStr());
     }
 
     @Test
@@ -3879,10 +3905,233 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testGroupByCoerceExpressionBug3453() throws Exception {
+        Connection conn = null;
+        try {
+            conn= DriverManager.getConnection(getUrl());
+            String tableName="GROUPBY3453_INT";
+            String sql="CREATE TABLE "+ tableName +"("+
+                    "ENTITY_ID INTEGER NOT NULL,"+
+                    "CONTAINER_ID INTEGER NOT NULL,"+
+                    "SCORE INTEGER NOT NULL,"+
+                    "CONSTRAINT TEST_PK PRIMARY KEY (ENTITY_ID DESC,CONTAINER_ID DESC,SCORE DESC))";
+            conn.createStatement().execute(sql);
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+tableName+" limit 1)";
+            QueryPlan queryPlan=getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().getExpressions().get(0).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getExpressions().get(1).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getKeyExpressions().get(0).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getKeyExpressions().get(1).getSortOrder()==SortOrder.DESC);
+
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+tableName+" limit 3) order by entity_id";
+            queryPlan=getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().getExpressions().get(0).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getExpressions().get(1).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getKeyExpressions().get(0).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getKeyExpressions().get(1).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getOrderBy().getOrderByExpressions().get(0).getExpression().getSortOrder()==SortOrder.DESC);
+
+            sql="select DISTINCT entity_id, score from ( select entity_id, score from "+tableName+" limit 3) order by entity_id desc";
+            queryPlan=getQueryPlan(conn, sql);
+            assertTrue(queryPlan.getGroupBy().getExpressions().get(0).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getExpressions().get(1).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getKeyExpressions().get(0).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getGroupBy().getKeyExpressions().get(1).getSortOrder()==SortOrder.DESC);
+            assertTrue(queryPlan.getOrderBy()==OrderBy.FWD_ROW_KEY_ORDER_BY);
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
+
     private static QueryPlan getQueryPlan(Connection conn,String sql) throws SQLException {
         PhoenixPreparedStatement statement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
         QueryPlan queryPlan = statement.optimizeQuery(sql);
         queryPlan.iterator();
         return queryPlan;
+    }
+
+    @Test
+    public void testSortMergeJoinSubQueryOrderByOverrideBug3745() throws Exception {
+        Connection conn = null;
+        try {
+            conn= DriverManager.getConnection(getUrl());
+
+            String tableName1="MERGE1";
+            String tableName2="MERGE2";
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName1);
+
+            String sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY,"+
+                    "AGE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName2);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY,"+
+                    "CODE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            //test for simple scan
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33 order by age limit 3) a inner join "+
+                    "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid ";
+
+            QueryPlan queryPlan=getQueryPlan(conn, sql);
+            SortMergeJoinPlan sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            ClientScanPlan lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            OrderBy orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            ScanPlan innerScanPlan=(ScanPlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AGE"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 3);
+
+            ClientScanPlan rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("BID"));
+            innerScanPlan=(ScanPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("CODE"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 1);
+
+            //test for aggregate
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.codesum from (select aid,sum(age) agesum from "+tableName1+" where age >=11 and age<=33 group by aid order by agesum limit 3) a inner join "+
+                    "(select bid,sum(code) codesum from "+tableName2+" group by bid order by codesum limit 1) b on a.aid=b.bid ";
+
+
+            queryPlan=getQueryPlan(conn, sql);
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            AggregatePlan innerAggregatePlan=(AggregatePlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(AGE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("BID"));
+            innerAggregatePlan=(AggregatePlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(CODE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 1);
+
+            String tableName3="merge3";
+            conn.createStatement().execute("DROP TABLE if exists "+tableName3);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName3+" ( "+
+                    "CID INTEGER PRIMARY KEY,"+
+                    "REGION INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            //test for join
+            sql="select t1.aid,t1.code,t2.region from "+
+                "(select a.aid,b.code from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 order by b.code limit 3) t1 inner join "+
+                "(select a.aid,c.region from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 order by c.region desc limit 1) t2 on t1.aid=t2.aid";
+
+            PhoenixPreparedStatement phoenixPreparedStatement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+            queryPlan = phoenixPreparedStatement.optimizeQuery(sql);
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerScanPlan=(ScanPlan)((HashJoinPlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("B.CODE"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerScanPlan=(ScanPlan)((HashJoinPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerScanPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("C.REGION DESC"));
+            assertTrue(innerScanPlan.getLimit().intValue() == 1);
+
+            //test for join and aggregate
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by regionsum desc limit 2) t2 on t1.aid=t2.aid";
+
+            phoenixPreparedStatement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+            queryPlan = phoenixPreparedStatement.optimizeQuery(sql);
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            lhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getLhsPlan())).getDelegate();
+            orderBy=lhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)((TupleProjectionPlan)lhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(B.CODE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("SUM(C.REGION) DESC"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 2);
+
+            //test for if SubselectRewriter.isOrderByPrefix had take effect
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by a.aid,codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by a.aid desc,regionsum desc limit 2) t2 on t1.aid=t2.aid "+
+                 "order by t1.aid desc";
+
+            phoenixPreparedStatement = conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class);
+            queryPlan = phoenixPreparedStatement.optimizeQuery(sql);
+            orderBy=queryPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("T1.AID DESC"));
+            sortMergeJoinPlan=(SortMergeJoinPlan)((ClientScanPlan)queryPlan).getDelegate();
+
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)(((TupleProjectionPlan)sortMergeJoinPlan.getLhsPlan()).getDelegate())).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 2);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("A.AID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("SUM(B.CODE)"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 3);
+
+            rhsOuterPlan=(ClientScanPlan)((TupleProjectionPlan)(sortMergeJoinPlan.getRhsPlan())).getDelegate();
+            orderBy=rhsOuterPlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 1);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("AID"));
+            innerAggregatePlan=(AggregatePlan)((HashJoinPlan)((TupleProjectionPlan)rhsOuterPlan.getDelegate()).getDelegate()).getDelegate();
+            orderBy=innerAggregatePlan.getOrderBy();
+            assertTrue(orderBy.getOrderByExpressions().size() == 2);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("A.AID DESC"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("SUM(C.REGION) DESC"));
+            assertTrue(innerAggregatePlan.getLimit().intValue() == 2);
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
     }
 }

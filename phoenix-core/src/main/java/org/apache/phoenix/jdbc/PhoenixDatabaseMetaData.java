@@ -30,6 +30,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnProjector;
@@ -78,7 +79,6 @@ import com.google.common.collect.Lists;
  * 
  */
 public class PhoenixDatabaseMetaData implements DatabaseMetaData {
-    public static final int INDEX_NAME_INDEX = 4; // Shared with FAMILY_NAME_INDEX
     public static final int FAMILY_NAME_INDEX = 4;
     public static final int COLUMN_NAME_INDEX = 3;
     public static final int TABLE_NAME_INDEX = 2;
@@ -98,6 +98,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_CATALOG = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"";
     public static final String SYSTEM_CATALOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA,
             SYSTEM_CATALOG_TABLE);
+    public static final TableName SYSTEM_CATALOG_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_CATALOG_NAME);
     public static final byte[] SYSTEM_CATALOG_NAME_BYTES = Bytes.toBytes(SYSTEM_CATALOG_NAME);
     public static final String SYSTEM_STATS_TABLE = "STATS";
     public static final String SYSTEM_STATS_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_STATS_TABLE);
@@ -124,6 +125,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] PHYSICAL_NAME_BYTES = Bytes.toBytes(PHYSICAL_NAME);
 
     public static final String COLUMN_FAMILY = "COLUMN_FAMILY";
+    public static final byte[] COLUMN_FAMILY_BYTES = Bytes.toBytes(COLUMN_FAMILY);
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
     public static final String TABLE_SCHEM = "TABLE_SCHEM";
@@ -205,7 +207,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] BASE_COLUMN_COUNT_BYTES = Bytes.toBytes(BASE_COLUMN_COUNT);
     public static final String IS_ROW_TIMESTAMP = "IS_ROW_TIMESTAMP";
     public static final byte[] IS_ROW_TIMESTAMP_BYTES = Bytes.toBytes(IS_ROW_TIMESTAMP);
-
+    
     public static final String TABLE_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY;
     public static final byte[] TABLE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 
@@ -279,6 +281,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String LAST_STATS_UPDATE_TIME = "LAST_STATS_UPDATE_TIME";
     public static final byte[] LAST_STATS_UPDATE_TIME_BYTES = Bytes.toBytes(LAST_STATS_UPDATE_TIME);
     public static final String GUIDE_POST_KEY = "GUIDE_POST_KEY";
+    public static final String ASYNC_REBUILD_TIMESTAMP = "ASYNC_REBUILD_TIMESTAMP";
+    public static final byte[] ASYNC_REBUILD_TIMESTAMP_BYTES = Bytes.toBytes(ASYNC_REBUILD_TIMESTAMP);
 
     public static final String PARENT_TENANT_ID = "PARENT_TENANT_ID";
     public static final byte[] PARENT_TENANT_ID_BYTES = Bytes.toBytes(PARENT_TENANT_ID);
@@ -303,6 +307,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String SYSTEM_MUTEX_TABLE_NAME = "MUTEX";
     public static final String SYSTEM_MUTEX_NAME = SchemaUtil.getTableName(QueryConstants.SYSTEM_SCHEMA_NAME, SYSTEM_MUTEX_TABLE_NAME);
+    public static final TableName SYSTEM_MUTEX_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_MUTEX_NAME);
     public static final byte[] SYSTEM_MUTEX_NAME_BYTES = Bytes.toBytes(SYSTEM_MUTEX_NAME);
     public static final byte[] SYSTEM_MUTEX_FAMILY_NAME_BYTES = TABLE_FAMILY_BYTES;
     
@@ -320,6 +325,15 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     /** Version below which we fall back on the generic KeyValueBuilder */
     public static final int CLIENT_KEY_VALUE_BUILDER_THRESHOLD = VersionUtil.encodeVersion("0", "94", "14");
     
+    public static final String IMMUTABLE_STORAGE_SCHEME = "IMMUTABLE_STORAGE_SCHEME";
+    public static final byte[] STORAGE_SCHEME_BYTES = Bytes.toBytes(IMMUTABLE_STORAGE_SCHEME);
+    public static final String ENCODING_SCHEME = "ENCODING_SCHEME";
+    public static final byte[] ENCODING_SCHEME_BYTES = Bytes.toBytes(ENCODING_SCHEME);
+    public static final String COLUMN_QUALIFIER = "COLUMN_QUALIFIER";
+    public static final byte[] COLUMN_QUALIFIER_BYTES = Bytes.toBytes(COLUMN_QUALIFIER);
+    public static final String COLUMN_QUALIFIER_COUNTER = "QUALIFIER_COUNTER";
+    public static final byte[] COLUMN_QUALIFIER_COUNTER_BYTES = Bytes.toBytes(COLUMN_QUALIFIER_COUNTER);
+
     PhoenixDatabaseMetaData(PhoenixConnection connection) throws SQLException {
         this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
         this.connection = connection;
@@ -503,6 +517,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (colPattern == null || colPattern.length() == 0) {
             appendConjunction(where);
             where.append(COLUMN_NAME + " is not null" );
+            appendConjunction(where);
+            where.append(LINK_TYPE + " is null" );
         }
         boolean isTenantSpecificConnection = connection.getTenantId() != null;
         if (isTenantSpecificConnection) {
@@ -593,9 +609,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 newCells.addAll(cells);
                 newCells.add(kv);
                 Collections.sort(newCells, KeyValue.COMPARATOR);
-                resultTuple.setResult(Result.create(newCells));
+                tuple = new ResultTuple(Result.create(newCells));
             }
-
             return tuple;
         }
 
