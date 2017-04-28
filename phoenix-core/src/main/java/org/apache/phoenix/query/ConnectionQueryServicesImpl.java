@@ -420,7 +420,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                          RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
                      )
                 );
-        txZKClientService.startAndWait();
+        txZKClientService.awaitRunning();
         ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(txZKClientService);
         PooledClientProvider pooledClientProvider = new PooledClientProvider(
                 config, zkDiscoveryService);
@@ -523,7 +523,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             renewLeaseExecutor.shutdownNow();
                         }
                         // shut down the tx client service if we created one to support transactions
-                        if (this.txZKClientService != null) this.txZKClientService.stopAndWait();
+                        if (this.txZKClientService != null) this.txZKClientService.awaitTerminated();
                     }
                 } catch (IOException e) {
                     if (sqlE == null) {

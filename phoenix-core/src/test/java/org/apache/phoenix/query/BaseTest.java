@@ -438,10 +438,10 @@ public abstract class BaseTest {
     
     private static void tearDownTxManager() throws SQLException {
         try {
-            if (txService != null) txService.stopAndWait();
+            if (txService != null) txService.awaitTerminated();
         } finally {
             try {
-                if (zkClient != null) zkClient.stopAndWait();
+                if (zkClient != null) zkClient.awaitTerminated();
             } finally {
                 txService = null;
                 zkClient = null;
@@ -475,12 +475,12 @@ public abstract class BaseTest {
             )
           )
         );
-        zkClient.startAndWait();
+        zkClient.awaitRunning();
 
         DiscoveryService discovery = new ZKDiscoveryService(zkClient);
         txManager = new TransactionManager(config, new HDFSTransactionStateStorage(config, new SnapshotCodecProvider(config), new TxMetricsCollector()), new TxMetricsCollector());
         txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
-        txService.startAndWait();
+        txService.awaitRunning();
     }
 
     private static String checkClusterInitialized(ReadOnlyProps serverProps) throws Exception {

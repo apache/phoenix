@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.visitor;
 
+import java.util.Collections;
 import java.util.Iterator;
 
 import org.apache.phoenix.expression.Expression;
@@ -27,7 +28,7 @@ public abstract class TraverseNoExpressionVisitor<E> extends BaseExpressionVisit
 
     @Override
     public Iterator<Expression> defaultIterator(Expression node) {
-        return Iterators.emptyIterator();
+        return Collections.emptyIterator();
     }
 
 }

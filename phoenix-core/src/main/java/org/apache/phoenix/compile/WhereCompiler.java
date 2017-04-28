@@ -257,7 +257,7 @@ public class WhereCompiler {
                 public Iterator<Expression> defaultIterator(Expression node) {
                     // Stop traversal once we've found multiple KeyValue columns
                     if (counter.getCount() == Counter.Count.MULTIPLE) {
-                        return Iterators.emptyIterator();
+                        return Collections.emptyIterator();
                     }
                     return super.defaultIterator(node);
                 }

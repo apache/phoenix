@@ -38,6 +38,7 @@ import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
+import com.google.common.collect.*;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
@@ -108,10 +109,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Predicate;
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 /**
  * 
@@ -566,7 +563,8 @@ public class MutationState implements SQLCloseable {
                      IndexMaintainer.nonDisabledIndexIterator(table.getIndexes().iterator()) :
                          table.isImmutableRows() ?
                             IndexMaintainer.enabledGlobalIndexIterator(table.getIndexes().iterator()) :
-                                Iterators.<PTable>emptyIterator();
+                                Collections.<PTable>emptyIterator();
+
         final List<Mutation> mutationList = Lists.newArrayListWithExpectedSize(values.size());
         final List<Mutation> mutationsPertainingToIndex = indexes.hasNext() ? Lists.<Mutation>newArrayListWithExpectedSize(values.size()) : null;
         generateMutations(tableRef, timestamp, values, mutationList, mutationsPertainingToIndex);
@@ -698,7 +696,7 @@ public class MutationState implements SQLCloseable {
     public Iterator<Pair<byte[],List<Mutation>>> toMutations(final boolean includeMutableIndexes, final Long tableTimestamp) {
         final Iterator<Map.Entry<TableRef, Map<ImmutableBytesPtr,RowMutationState>>> iterator = this.mutations.entrySet().iterator();
         if (!iterator.hasNext()) {
-            return Iterators.emptyIterator();
+            return Collections.emptyIterator();
         }
         Long scn = connection.getSCN();
         final long timestamp = getMutationTimestamp(tableTimestamp, scn);
