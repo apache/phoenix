@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -39,6 +40,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -50,7 +52,10 @@ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.RequestConverter;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
+import org.apache.hadoop.hbase.util.ByteRange;
+import org.apache.hadoop.hbase.util.ByteRangeUtils;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.SimpleByteRange;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -224,6 +229,20 @@ public class MetaDataUtil {
             }
             familyCellMap.put(family, newCells);
         }
+    }
+
+    public static Put cloneDeleteToPutAndAddColumn(Delete delete, byte[] family, byte[] qualifier, byte[] value) {
+        NavigableMap<byte[], List<Cell>> familyCellMap = delete.getFamilyCellMap();
+        List<Cell> cells = familyCellMap.get(family);
+        Cell cell = Iterables.getFirst(cells, null);
+        if (cell == null) {
+            throw new RuntimeException("Empty cells for delete for family: " + Bytes.toStringBinary(family));
+        }
+        byte[] rowArray = new byte[cell.getRowLength()];
+        System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowArray, 0, cell.getRowLength());
+        Put put = new Put(rowArray);
+        put.addColumn(family, qualifier, delete.getTimeStamp(), value);
+        return put;
     }
 
 

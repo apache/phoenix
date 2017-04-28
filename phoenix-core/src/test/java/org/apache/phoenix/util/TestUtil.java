@@ -731,6 +731,11 @@ public class TestUtil {
                 }
 
                 @Override
+                public boolean isDerived() {
+                    return false;
+                }
+
+                @Override
                 public boolean isExcluded() {
                     return false;
                 }

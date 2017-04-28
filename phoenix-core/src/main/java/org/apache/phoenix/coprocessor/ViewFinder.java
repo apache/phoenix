@@ -40,12 +40,6 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
 class ViewFinder {
 
-    // get the table names from the results
-    // byte[] viewtenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-    // byte[] viewSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
-    // byte[] viewTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
-    // combine this MetaDataEndpointImpl.doGetTable(SchemaUtil.getTableKey().....)
-
    static TableViewFinderResult findBaseTable(Table systemCatalog, byte[] tenantId, byte[] schema, byte[] table) throws IOException {
         return findRelatedViews(systemCatalog, tenantId, schema, table, PTable.LinkType.PHYSICAL_TABLE, HConstants.LATEST_TIMESTAMP);
     }

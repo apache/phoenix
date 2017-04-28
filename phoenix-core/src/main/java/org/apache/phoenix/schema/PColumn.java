@@ -59,6 +59,11 @@ public interface PColumn extends PDatum {
      */
     long getTimestamp();
 
+    /**
+     * @return is the column derived from some other table / view or not
+     */
+    boolean isDerived();
+
     boolean isExcluded();
     
     /**

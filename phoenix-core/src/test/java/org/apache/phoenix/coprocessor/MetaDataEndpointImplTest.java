@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -59,10 +60,10 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
     @Test
     public void testGettingChildrenAndParentViews() throws Exception {
         TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
-        String baseTable = "PARENT_TABLE";
-        String leftChild = "LEFT_CHILD";
-        String rightChild = "RIGHT_CHILD";
-        String leftGrandChild = "LEFT_GRANDCHILD";
+        String baseTable = generateUniqueName();
+        String leftChild = generateUniqueName();
+        String rightChild = generateUniqueName();
+        String leftGrandChild = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -101,9 +102,8 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
 
     @Test
     public void testGettingOneChild() throws Exception {
-        TableName catalogTable = TableName.valueOf("SYSTEM.CATALOG");
-        String baseTable = "PARENT_TABLE";
-        String leftChild = "LEFT_CHILD";
+        String baseTable = generateUniqueName();
+        String leftChild = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -111,17 +111,33 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddlFormat);
         conn.createStatement().execute("CREATE VIEW " + leftChild + " (carrier VARCHAR) AS SELECT * FROM " + baseTable);
 
-        PTable childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
+
         // now lets check and make sure the columns are correct
-        PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
+        PTable grandChildPTable = PhoenixRuntime.getTable(conn, leftChild.toUpperCase());
         assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "CARRIER");
+    }
+
+    @Test
+    public void testDroppingAColumn() throws Exception {
+        String baseTable = generateUniqueName();
+        String childView = generateUniqueName();
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddlFormat = "CREATE TABLE " + baseTable + " (A VARCHAR PRIMARY KEY, B VARCHAR, C VARCHAR)";
+        conn.createStatement().execute(ddlFormat);
+        conn.createStatement().execute("CREATE VIEW " + childView + " (D VARCHAR) AS SELECT * FROM " + baseTable);
+        assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childView.toUpperCase()), "A", "B", "C", "D");
+        conn.createStatement().execute("ALTER VIEW " + childView + " DROP COLUMN C");
+
+        // now lets check and make sure the columns are correct
+        dropTableCache(conn, childView, baseTable);
+        assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childView.toUpperCase()), "A", "B", "D");
 
     }
 
     @Test
     public void testAlteringBaseColumns() throws Exception {
-        String baseTable = "PARENT_TABLE";
-        String leftChild = "CHILD_TABLE";
+        String baseTable = generateUniqueName();
+        String leftChild = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -129,28 +145,20 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddlFormat);
         conn.createStatement().execute("CREATE VIEW " + leftChild + " (carrier VARCHAR) AS SELECT * FROM " + baseTable);
 
-        ResultSet resultset = conn.getMetaData().getColumns("", "", leftChild.toUpperCase(), null);
-        int i = 1;
-        while (resultset.next()) {
-            String column_name = resultset.getString("COLUMN_NAME");
-            System.out.println("column_name = " + column_name);
-        }
+//        ResultSet resultset = conn.getMetaData().getColumns("", "", leftChild.toUpperCase(), null);
+//        int i = 1;
+//        while (resultset.next()) {
+//            String column_name = resultset.getString("COLUMN_NAME");
+//            System.out.println("column_name = " + column_name);
+//        }
 
-        conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
+//        conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
 
-        PTable childMostView = PhoenixRuntime.getTable(conn , leftChild.toUpperCase());
         // now lets check and make sure the columns are correct
-        PTable grandChildPTable = PhoenixRuntime.getTable(conn, childMostView.getName().getString());
-        List<PColumn> columns = grandChildPTable.getColumns();
-        List<String> columnNames = Lists.newArrayList();
-        List<String> expectedColumnNames = Lists.newArrayList("PK2", "V1", "V2", "CARRIER");
-        for (PColumn column : columns) {
-            columnNames.add(column.getName().getString().trim());
-        }
-        assertEquals(Joiner.on(", ").join(expectedColumnNames), Joiner.on(", ").join(columnNames));
+        PTable childPTable = PhoenixRuntime.getTable(conn, leftChild.toUpperCase());
+        assertColumnNamesEqual(childPTable, "PK2", "V1", "V2", "CARRIER");
 
         // now lets alter the base table by adding a column
-        // conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
         conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD V3 integer");
 
         // make sure that column was added to the base table
@@ -158,15 +166,16 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
 
         // now lets check and make sure the columns are correct
-        conn.unwrap(PhoenixConnection.class).removeTable(null, leftChild.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
-        grandChildPTable = PhoenixRuntime.getTable(conn, leftChild.toUpperCase());
-        assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "V3", "CARRIER");
+        dropTableCache(conn, leftChild, baseTable);
+
+        childPTable = PhoenixRuntime.getTable(conn, leftChild.toUpperCase());
+        assertColumnNamesEqual(childPTable, "PK2", "V1", "V2", "V3", "CARRIER");
     }
 
     @Test
     public void testAddingAColumnWithADifferentDefinition() throws Exception {
-        String baseTable = "PARENT_TABLE";
-        String view = "CHILD_VIEW";
+        String baseTable = generateUniqueName();
+        String view = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
         String ddlFormat =
             "CREATE TABLE IF NOT EXISTS " + baseTable + "  (" + " PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -244,6 +253,10 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
             actual.put(column.getName().getString().trim(), column.getDataType().getSqlTypeName());
         }
         assertEquals(Joiner.on(", ").withKeyValueSeparator(" => ").join(expected), Joiner.on(", ").withKeyValueSeparator(" => ").join(actual));
+    }
+
+    private void dropTableCache(Connection conn, String child, String baseTable) throws SQLException {
+        conn.unwrap(PhoenixConnection.class).removeTable(null, child.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
     }
 
     private HTable getTable(TableName catalogTable) throws IOException {

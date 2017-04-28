@@ -81,6 +81,11 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     }
 
     @Override
+    public boolean isDerived() {
+        return getDelegate().isDerived();
+    }
+
+    @Override
     public boolean isExcluded() {
         return getDelegate().isExcluded();
     }

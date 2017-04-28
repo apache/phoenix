@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -508,8 +509,20 @@ public class PTableImpl implements PTable {
             allColumns = new PColumn[columns.size()];
             pkColumns = Lists.newArrayListWithExpectedSize(columns.size());
         }
-        for (PColumn column : columns) {
-            allColumns[column.getPosition()] = column;
+        // Must do this as with the new method of storing diffs, we just care about ordinal position
+        // relative order and not the true ordinal value itself.
+        List<PColumn> sortedColumns = Lists.newArrayList(columns);
+        Collections.sort(sortedColumns, new Comparator<PColumn>() {
+            @Override
+            public int compare(PColumn o1, PColumn o2) {
+                return Integer.valueOf(o1.getPosition()).compareTo(o2.getPosition());
+            }
+        });
+
+        int newOrdinal = 0;
+        for (PColumn column : sortedColumns) {
+            allColumns[newOrdinal] = column;
+            newOrdinal++;
             PName familyName = column.getFamilyName();
             if (familyName == null) {
                 ++numPKColumns;
