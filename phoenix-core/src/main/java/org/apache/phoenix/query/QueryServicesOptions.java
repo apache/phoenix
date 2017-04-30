@@ -286,7 +286,6 @@ public class QueryServicesOptions {
                                                                                     // 4.10, psql and CSVBulkLoad
                                                                                     // expects binary data to be base 64
                                                                                     // encoded
-
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
