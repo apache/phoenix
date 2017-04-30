@@ -286,9 +286,6 @@ public class QueryServicesOptions {
                                                                                     // 4.10, psql and CSVBulkLoad
                                                                                     // expects binary data to be base 64
                                                                                     // encoded
-    public static final boolean DEFAULT_PHOENIX_QUERY_SERVER_METRICS = false;
-    public static final int DEFAULT_PHOENIX_PQS_GLOBAL_INITIAL_DELAY = 5;
-    public static final int DEFAULT_PHOENIX_PQS_GLOBAL_PERIOD = 10;
 
     private final Configuration config;
 
