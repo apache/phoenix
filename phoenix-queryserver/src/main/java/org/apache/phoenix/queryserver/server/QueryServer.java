@@ -22,9 +22,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
-import com.google.inject.Binding;
-import com.google.inject.Guice;
-import com.google.inject.Injector;
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.remote.Driver;
 import org.apache.calcite.avatica.remote.LocalService;
@@ -44,12 +41,8 @@ import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.monitoring.GlobalMetric;
-import org.apache.phoenix.monitoring.PhoenixQueryServerSink;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.queryserver.metrics.MetricsBindingModule;
-import org.apache.phoenix.queryserver.metrics.PhoenixQueryServerGlobalMetrics;
 
 import java.io.File;
 import java.lang.management.ManagementFactory;
@@ -348,11 +341,7 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   }
 
   public static void main(String[] argv) throws Exception {
-      Injector injector=Guice.createInjector(new MetricsBindingModule());
-      PhoenixQueryServerGlobalMetrics phoenixQueryServerGlobalMetrics = injector
-              .getInstance(PhoenixQueryServerGlobalMetrics.class);
-      phoenixQueryServerGlobalMetrics.scheduleGlobalMetricsCollection();
-      int ret = ToolRunner.run(HBaseConfiguration.create(), new QueryServer(), argv);
-      System.exit(ret);
+    int ret = ToolRunner.run(HBaseConfiguration.create(), new QueryServer(), argv);
+    System.exit(ret);
   }
 }

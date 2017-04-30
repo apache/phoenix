@@ -175,7 +175,6 @@ import org.apache.phoenix.index.PhoenixTransactionalIndexer;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixConnectionPQS;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.parse.PFunction;
@@ -713,14 +712,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         PMetaData metadata = latestMetaData;
         throwConnectionClosedIfNullMetaData();
         metadata = metadata.clone();
-        Boolean ifPQS=Boolean.getBoolean(JDBCUtil.findProperty(url,info,QueryServices.PHOENIX_QUERY_SERVER_METRICS));
-        if (ifPQS)
-        {
-            return new PhoenixConnectionPQS(this,url,info,metadata);
-        } else {
-            return new PhoenixConnection(this, url, info, metadata);
-        }
-
+        return new PhoenixConnection(this, url, info, metadata);
     }
 
 

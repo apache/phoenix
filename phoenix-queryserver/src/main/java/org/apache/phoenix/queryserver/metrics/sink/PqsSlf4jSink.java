@@ -16,24 +16,28 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.queryserver.metrics;
-
-import com.google.inject.AbstractModule;
-import com.google.inject.Provides;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.monitoring.PhoenixQueryServerSink;
+package org.apache.phoenix.queryserver.metrics.sink;
 
 
-public class MetricsBindingModule extends AbstractModule {
-    @Override
-    protected void configure() {
-        bind(PhoenixQueryServerSink.class).to(PhoenixQueryServerFileSink.class);
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+
+public class PqsSlf4jSink extends PqsSink {
+
+    private Logger logger = LoggerFactory.getLogger(PqsSlf4jSink.class);;
+
+    public PqsSlf4jSink(){
     }
 
-    @Provides
-    Configuration getConfiguration() {
-        Configuration conf=HBaseConfiguration.create();
-        return conf;
+    @Override
+    public void close()  {}
+
+    @Override
+    public void writeJson(String json){
+        if (json != null)
+        {
+            logger.info(json);
+        }
     }
 }

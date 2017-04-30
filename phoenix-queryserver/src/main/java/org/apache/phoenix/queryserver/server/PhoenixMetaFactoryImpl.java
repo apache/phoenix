@@ -19,22 +19,14 @@ package org.apache.phoenix.queryserver.server;
 
 import com.google.common.base.Preconditions;
 import org.apache.calcite.avatica.Meta;
-import org.apache.calcite.avatica.jdbc.JdbcMeta;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.util.QueryUtil;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -68,7 +60,7 @@ public class PhoenixMetaFactoryImpl extends Configured implements PhoenixMetaFac
             "0 or 1 argument expected. Received " + Arrays.toString(args.toArray()));
       }
       // TODO: what about -D configs passed in from cli? How do they get pushed down?
-      return new JdbcMeta(url, info);
+      return new PQSMetricsMeta(url, info);
     } catch (SQLException | ClassNotFoundException e) {
       throw new RuntimeException(e);
     }
