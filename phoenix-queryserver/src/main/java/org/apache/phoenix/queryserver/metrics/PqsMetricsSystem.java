@@ -19,7 +19,7 @@
 package org.apache.phoenix.queryserver.metrics;
 
 
-import org.apache.phoenix.queryserver.metrics.sink.PqsFilePqsSink;
+import org.apache.phoenix.queryserver.metrics.sink.PqsFileSink;
 import org.apache.phoenix.queryserver.metrics.sink.PqsSink;
 import org.apache.phoenix.queryserver.metrics.sink.PqsSlf4jSink;
 import org.slf4j.Logger;
@@ -32,11 +32,16 @@ public class PqsMetricsSystem {
     public final static String connectionMetrics = "connection";
     protected static final Logger LOG = LoggerFactory.getLogger(PqsMetricsSystem.class);
 
+    public Thread getGlobalMetricThread() {
+        return globalMetricThread;
+    }
+
+    private Thread globalMetricThread = null;
     public PqsSink pqsSink;
 
 
     public PqsMetricsSystem(){
-        Thread globalMetricThread = null;
+
         PqsGlobalMetrics pqsGlobalMetricsToJMX = null;
         try {
             pqsSink = getSinkObject();
@@ -61,7 +66,7 @@ public class PqsMetricsSystem {
         String typeOfSink = PqsConfiguration.getTypeOfSink();
         switch(typeOfSink) {
             case "file":
-                pqsSink = new PqsFilePqsSink();
+                pqsSink = new PqsFileSink();
                 break;
             case "slf4j": pqsSink = new PqsSlf4jSink() ; break;
             //default is also LOG file.

@@ -26,6 +26,8 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.queryserver.metrics.PqsConfiguration;
 import org.apache.phoenix.util.QueryUtil;
 
 import java.sql.Connection;
@@ -68,6 +70,9 @@ public class PhoenixMetaFactoryImpl extends Configured implements PhoenixMetaFac
             "0 or 1 argument expected. Received " + Arrays.toString(args.toArray()));
       }
       // TODO: what about -D configs passed in from cli? How do they get pushed down?
+      if (PqsConfiguration.isMetricsTurnedOn()) {
+        info.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+      }
       return new PQSMetricsMeta(url, info);
     } catch (SQLException | ClassNotFoundException e) {
       throw new RuntimeException(e);

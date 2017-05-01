@@ -56,12 +56,13 @@ public class PqsGlobalMetrics implements Runnable {
     @Override
     public void run() {
         while (true) {
+            int delay = PqsConfiguration.getReportingInterval();
             //besides writing to JMX, the global metrics is also written to pqsSink
             //default pqsSink is slf4j ( logger)
             phoenixGlobalMetricsCollection = PhoenixRuntime.getGlobalPhoenixClientMetrics();
             this.pqsSink.writeGlobal(phoenixGlobalMetricsCollection);
             try {
-                Thread.sleep(PqsConfiguration.getReportingInterval());
+                Thread.sleep(delay);
             } catch (InterruptedException e) {
                 LOG.error(" Sleep thread interrupted for metrics collection ");
             }

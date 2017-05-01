@@ -37,7 +37,8 @@ public class PqsSlf4jSink extends PqsSink {
     public void writeJson(String json){
         if (json != null)
         {
-            logger.info(json);
+            if (logger.isInfoEnabled())
+                logger.info(json);
         }
     }
 }

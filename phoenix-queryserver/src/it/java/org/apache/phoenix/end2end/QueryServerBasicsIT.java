@@ -29,6 +29,11 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -43,6 +48,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
+import org.apache.phoenix.queryserver.metrics.PqsConfiguration;
+import org.apache.phoenix.queryserver.server.PQSMetricsMeta;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -57,10 +64,17 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private static QueryServerThread AVATICA_SERVER;
   private static Configuration CONF;
   private static String CONN_STRING;
+  private static FileReader fileReader;
 
   @BeforeClass
   public static void beforeClass() throws Exception {
+    //clear up old file in /tmp directory
+    PrintWriter writer = new PrintWriter(new File(PqsConfiguration.DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME));
+    writer.print("");
+    writer.close();
+    fileReader = new FileReader(PqsConfiguration.DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME);
     CONF = getTestClusterConfig();
+    assertTrue("no log message in the file ", checkIfTempFileIsEmpty());
     CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
@@ -83,6 +97,13 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       }
       assertEquals("query server didn't exit cleanly", 0, AVATICA_SERVER.getQueryServer()
         .getRetCode());
+    }
+    if (fileReader != null) {
+      fileReader.close();
+    }
+    Thread globalMetricThread = PQSMetricsMeta.pqsMetricsSystem.getGlobalMetricThread();
+    if (globalMetricThread!=null) {
+      globalMetricThread.interrupt();
     }
   }
 
@@ -123,8 +144,10 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
 
   @Test
   public void smokeTest() throws Exception {
+    Properties props=new Properties();
+    props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
     final String tableName = getClass().getSimpleName().toUpperCase() + System.currentTimeMillis();
-    try (final Connection connection = DriverManager.getConnection(CONN_STRING)) {
+    try (final Connection connection = DriverManager.getConnection(CONN_STRING,props)) {
       assertThat(connection.isClosed(), is(false));
       connection.setAutoCommit(true);
       try (final Statement stmt = connection.createStatement()) {
@@ -161,5 +184,19 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
         }
       }
     }
+    assertFalse(" metrics file should not be empty", checkIfTempFileIsEmpty());
+
   }
-}
+
+  private static boolean checkIfTempFileIsEmpty() throws Exception {
+    BufferedReader br = new BufferedReader(fileReader);
+    String st;
+    if (( st = br.readLine() ) == null) {
+      return true;
+    }
+    br.close();
+    return false;
+  }
+
+  }
+

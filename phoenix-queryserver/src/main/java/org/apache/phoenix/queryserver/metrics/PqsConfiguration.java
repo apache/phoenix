@@ -24,21 +24,21 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 
 public class PqsConfiguration {
 
-    private static final Configuration configuration= HBaseConfiguration.create();
+    public static final Configuration configuration= HBaseConfiguration.create();
     public static final String PHOENIX_QUERY_SERVER_METRICS = "phoenix.query.server.metrics";
     public static final String PHOENIX_PQS_METRIC_REPORTING_INTERVAL_MS = "phoenix.query.server.metrics.report.interval.ms";
-    public static final String PHOENIX_PQS_TYPE_OF_SINK = "phoenix.query.server.metrics.type.of.pqsSink";
-    public static final String PHOENIX_PQS_FILE_SINK_FILENAME = "phoenix.query.server.file.pqsSink.filename";
+    public static final String PHOENIX_PQS_TYPE_OF_SINK = "phoenix.query.server.metrics.type.of.sink";
+    public static final String PHOENIX_PQS_FILE_SINK_FILENAME = "phoenix.query.server.filesink.filename";
 
     public enum typeOfSink {
         file,
         slf4j
     }
 
-    public static final Integer DEFAULT_PHOENIX_PQS_REPORTING_INTERVAL_MS = 360;
-    public static final typeOfSink DEFAULT_PHOENIX_PQS_TYPE_OF_SINK = typeOfSink.slf4j;
+    public static final Integer DEFAULT_PHOENIX_PQS_REPORTING_INTERVAL_MS = 30000; // 30 sec
+    public static final typeOfSink DEFAULT_PHOENIX_PQS_TYPE_OF_SINK = typeOfSink.file;
     public static final boolean DEFAULT_PHOENIX_QUERY_SERVER_METRICS = true;
-    public static final String DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME = "filename";
+    public static final String DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME = "/tmp/pqsSinkFile";
 
 
     public static int getReportingInterval(){
@@ -57,4 +57,11 @@ public class PqsConfiguration {
         return configuration.get(PHOENIX_PQS_FILE_SINK_FILENAME,DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME);
     }
 
+    public static void setFileSinkFilename(String fileName){
+        configuration.set(PHOENIX_PQS_FILE_SINK_FILENAME,fileName);
+    }
+
+    public static void setTypeOfSink(String typeOfSink) {
+        configuration.set(PHOENIX_PQS_TYPE_OF_SINK,typeOfSink);
+    }
 }

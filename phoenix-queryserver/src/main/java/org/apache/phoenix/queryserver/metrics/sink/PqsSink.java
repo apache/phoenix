@@ -32,7 +32,7 @@ import java.util.Map;
 
 public abstract class PqsSink implements Closeable {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PqsFilePqsSink.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PqsFileSink.class);
 
     public void writeMapOfMap(Map<String, Map<String, Long>> metricsData,
                               String metricsType) {

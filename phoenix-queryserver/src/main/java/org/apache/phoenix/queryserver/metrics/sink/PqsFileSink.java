@@ -30,13 +30,13 @@ import java.io.FileOutputStream;
 import java.io.PrintStream;
 
 
-public class PqsFilePqsSink extends PqsSink {
-    private static final String FILENAME_KEY = "filename";
+public class PqsFileSink extends PqsSink {
+
     private PrintStream writer;
-    private static final Logger LOG = LoggerFactory.getLogger(PqsFilePqsSink.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PqsFileSink.class);
     private String filename = PqsConfiguration.getFileSinkFilename();
 
-    public PqsFilePqsSink() {
+    public PqsFileSink() {
         try {
             writer = filename == null ? System.out
                     : new PrintStream(new FileOutputStream(new File(filename)),
