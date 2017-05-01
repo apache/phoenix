@@ -240,7 +240,7 @@ public class MetaDataUtil {
         }
         byte[] rowArray = new byte[cell.getRowLength()];
         System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowArray, 0, cell.getRowLength());
-        Put put = new Put(rowArray);
+        Put put = new Put(rowArray, delete.getTimeStamp());
         put.addColumn(family, qualifier, delete.getTimeStamp(), value);
         return put;
     }

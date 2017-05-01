@@ -118,7 +118,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testDroppingAColumn() throws Exception {
+    public void testDroppingADerivedColumn() throws Exception {
         String baseTable = generateUniqueName();
         String childView = generateUniqueName();
         Connection conn = DriverManager.getConnection(getUrl());
@@ -132,6 +132,22 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         dropTableCache(conn, childView, baseTable);
         assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childView.toUpperCase()), "A", "B", "D");
 
+    }
+
+    @Test
+    public void testDroppingAColumn() throws Exception {
+        String baseTable = generateUniqueName();
+        String childView = generateUniqueName();
+        Connection conn = DriverManager.getConnection(getUrl());
+        String ddlFormat = "CREATE TABLE " + baseTable + " (A VARCHAR PRIMARY KEY, B VARCHAR, C VARCHAR)";
+        conn.createStatement().execute(ddlFormat);
+        conn.createStatement().execute("CREATE VIEW " + childView + " (D VARCHAR) AS SELECT * FROM " + baseTable);
+        assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childView.toUpperCase()), "A", "B", "C", "D");
+        conn.createStatement().execute("ALTER TABLE " + baseTable + " DROP COLUMN C");
+
+        // now lets check and make sure the columns are correct
+        dropTableCache(conn, childView, baseTable);
+        assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childView.toUpperCase()), "A", "B", "D");
     }
 
     @Test

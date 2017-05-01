@@ -590,11 +590,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     for (int j = someTablesColumns.size() - 1; j >= 0; j--) {
                         PColumn column = someTablesColumns.get(j);
                         // NEED TO CHECK IF THIS COLUMN IS IN THE EXCLUDED LIST AS WELL!
+                        int existingIndex = excludedColumns.indexOf(column);
+                        if (existingIndex != -1) {
+                            if (column.getTimestamp() <= excludedColumns.get(existingIndex).getTimestamp()) {
+                                continue;
+                            }
+                        }
                         if (column.isExcluded()) {
                             excludedColumns.add(column);
                         } else {
-                            int existingIndex = allColumns.indexOf(column);
-                            if (existingIndex != -1) {
+                            int excludedMyself = allColumns.indexOf(column);
+                            if (excludedMyself != -1) {
                                 // we keep the older column
                                 PColumn existingColumn = allColumns.get(existingIndex);
                                 if (column.getTimestamp() < existingColumn.getTimestamp()) {
@@ -756,7 +762,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
     }
 
     private void addExcludedColumnToTable(List<PColumn> pColumns, PName colName, PName famName, long timestamp) {
-        PColumnImpl pColumn = PColumnImpl.createExcludedColumn(colName, famName, timestamp);
+        PColumnImpl pColumn = PColumnImpl.createExcludedColumn(famName, colName, timestamp);
         pColumns.add(pColumn);
     }
 
