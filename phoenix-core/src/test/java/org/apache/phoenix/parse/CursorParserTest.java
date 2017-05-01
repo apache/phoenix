@@ -1,4 +1,4 @@
-/*
+ /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -364,10 +364,4 @@ public class CursorParserTest {
         parseFetch(sql);
     }
 
-    @Test
-    public void testFetchPrior() throws Exception {
-        String expectedNameToken = "testCursor";
-        String sql = "FETCH PRIOR FROM " + expectedNameToken;
-        parseFetch(sql);
-    }
 }
