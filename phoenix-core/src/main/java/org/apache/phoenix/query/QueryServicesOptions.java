@@ -82,6 +82,9 @@ import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_PQS_GLOBAL_INITIAL_DELAY;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_METRICS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_PQS_GLOBAL_PERIOD;
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -290,7 +293,10 @@ public class QueryServicesOptions {
                                                                                     // 4.10, psql and CSVBulkLoad
                                                                                     // expects binary data to be base 64
                                                                                     // encoded
-    
+    public static final boolean DEFAULT_PHOENIX_QUERY_SERVER_METRICS = false;
+    public static final int DEFAULT_PHOENIX_PQS_GLOBAL_INITIAL_DELAY = 5;
+    public static final int DEFAULT_PHOENIX_PQS_GLOBAL_PERIOD = 10;
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -358,7 +364,10 @@ public class QueryServicesOptions {
             .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
             .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)
             .setIfUnset(AUTO_UPGRADE_ENABLED, DEFAULT_AUTO_UPGRADE_ENABLED)
-            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING);
+            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
+            .setIfUnset(PHOENIX_QUERY_SERVER_METRICS,DEFAULT_PHOENIX_QUERY_SERVER_METRICS)
+            .setIfUnset(PHOENIX_PQS_GLOBAL_INITIAL_DELAY,DEFAULT_PHOENIX_PQS_GLOBAL_INITIAL_DELAY)
+            .setIfUnset(PHOENIX_PQS_GLOBAL_PERIOD,DEFAULT_PHOENIX_PQS_GLOBAL_PERIOD);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
