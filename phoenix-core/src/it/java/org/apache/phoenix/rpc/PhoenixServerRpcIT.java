@@ -45,11 +45,12 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.BaseUniqueNamesOwnClusterIT;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -67,14 +68,14 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
     	Map<String, String> serverProps = Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS, 
         		TestPhoenixIndexRpcSchedulerFactory.class.getName());
         // use the standard rpc controller for client rpc, so that we can isolate server rpc and ensure they use the correct queue  
-    	Map<String, String> clientProps = Collections.singletonMap(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY, 
-    			RpcControllerFactory.class.getName());      
+    	Map<String, String> clientProps = Collections.singletonMap(RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY,
+    			RpcControllerFactory.class.getName());
         NUM_SLAVES_BASE = 2;
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
     
-    @AfterClass
-    public static void cleanUpAfterTestSuite() throws Exception {
+    @After
+    public void cleanUpAfterTest() throws Exception {
         TestPhoenixIndexRpcSchedulerFactory.reset();
     }
     
@@ -91,26 +92,19 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = driver.connect(getUrl(), props);
         try {
-            // create the table 
-            conn.createStatement().execute(
-                    "CREATE TABLE " + dataTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            // create the table
+            createTable(conn, dataTableFullName);
     
-            // create the index 
-            conn.createStatement().execute(
-                    "CREATE INDEX " + indexName + " ON " + dataTableFullName + " (v1) INCLUDE (v2)");
+            // create the index
+            createIndex(conn, indexName);
 
             ensureTablesOnDifferentRegionServers(dataTableFullName, indexTableFullName);
     
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
-            stmt.setString(1, "k1");
-            stmt.setString(2, "v1");
-            stmt.setString(3, "v2");
-            stmt.execute();
-            conn.commit();
+            upsertRow(conn, dataTableFullName);
     
             // run select query that should use the index
             String selectSql = "SELECT k, v2 from " + dataTableFullName + " WHERE v1=?";
-            stmt = conn.prepareStatement(selectSql);
+            PreparedStatement stmt = conn.prepareStatement(selectSql);
             stmt.setString(1, "v1");
     
             // verify that the query does a range scan on the index table
@@ -127,17 +121,11 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             // drop index table 
             conn.createStatement().execute(
                     "DROP INDEX " + indexName + " ON " + dataTableFullName );
-            // create a data table with the same name as the index table 
-            conn.createStatement().execute(
-                    "CREATE TABLE " + indexTableFullName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+            // create a data table with the same name as the index table
+            createTable(conn, indexTableFullName);
             
             // upsert one row to the table (which has the same table name as the previous index table)
-            stmt = conn.prepareStatement("UPSERT INTO " + indexTableFullName + " VALUES(?,?,?)");
-            stmt.setString(1, "k1");
-            stmt.setString(2, "v1");
-            stmt.setString(3, "v2");
-            stmt.execute();
-            conn.commit();
+            upsertRow(conn, indexTableFullName);
             
             // run select query on the new table
             selectSql = "SELECT k, v2 from " + indexTableFullName + " WHERE v1=?";
@@ -155,14 +143,61 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
             Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
             
             TestPhoenixIndexRpcSchedulerFactory.reset();
-            conn.createStatement().execute(
-                    "CREATE INDEX " + indexName + "_1 ON " + dataTableFullName + " (v1) INCLUDE (v2)");
+            createIndex(conn, indexName + "_1");
             // verify that that index queue is used and only once (during Upsert Select on server to build the index)
             Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor()).dispatch(Mockito.any(CallRunner.class));
         }
         finally {
             conn.close();
         }
+    }
+
+    @Test
+    public void testUpsertSelectServerDisabled() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        // disable server side upsert select
+        props.setProperty(QueryServices.ENABLE_SERVER_UPSERT_SELECT, "false");
+        try (Connection conn = driver.connect(getUrl(), props)) {
+            // create two tables with identical schemas
+            createTable(conn, dataTableFullName);
+            upsertRow(conn, dataTableFullName);
+            String tableName2 = dataTableFullName + "_2";
+            createTable(conn, tableName2);
+            ensureTablesOnDifferentRegionServers(dataTableFullName, tableName2);
+            // copy the row from the first table using upsert select
+            upsertSelectRows(conn, dataTableFullName, tableName2);
+            Mockito.verify(TestPhoenixIndexRpcSchedulerFactory.getIndexRpcExecutor(),
+                    Mockito.never()).dispatch(Mockito.any(CallRunner.class));
+
+        }
+    }
+
+    private void createTable(Connection conn, String tableName) throws SQLException {
+        conn.createStatement().execute(
+                "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+    }
+
+    private void createIndex(Connection conn, String indexName) throws SQLException {
+        conn.createStatement().execute(
+                "CREATE INDEX " + indexName + " ON " + dataTableFullName + " (v1) INCLUDE (v2)");
+    }
+
+    private void upsertRow(Connection conn, String tableName) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?,?)");
+        stmt.setString(1, "k1");
+        stmt.setString(2, "v1");
+        stmt.setString(3, "v2");
+        stmt.execute();
+        conn.commit();
+    }
+
+    private void upsertSelectRows(Connection conn, String tableName1, String tableName2) throws SQLException {
+        PreparedStatement stmt =
+                conn.prepareStatement(
+                        "UPSERT INTO " + tableName2 + " (k, v1, v2) SELECT k, v1, v2 FROM "
+                                + tableName1);
+        stmt.execute();
+        conn.commit();
     }
 
 	/**
