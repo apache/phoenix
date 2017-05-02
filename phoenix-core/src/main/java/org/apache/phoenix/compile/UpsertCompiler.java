@@ -105,6 +105,7 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -335,6 +336,9 @@ public class UpsertCompiler {
         int nValuesToSet;
         boolean sameTable = false;
         boolean runOnServer = false;
+        boolean serverUpsertSelectEnabled =
+                services.getProps().getBoolean(QueryServices.ENABLE_SERVER_UPSERT_SELECT,
+                        QueryServicesOptions.DEFAULT_ENABLE_SERVER_UPSERT_SELECT);
         UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
         // Retry once if auto commit is off, as the meta data may
         // be out of date. We do not retry if auto commit is on, as we
@@ -505,7 +509,7 @@ public class UpsertCompiler {
                         && tableRefToBe.equals(selectResolver.getTables().get(0));
                     tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
                     /* We can run the upsert in a coprocessor if:
-                     * 1) from has only 1 table
+                     * 1) from has only 1 table or server UPSERT SELECT is enabled
                      * 2) the select query isn't doing aggregation (which requires a client-side final merge)
                      * 3) autoCommit is on
                      * 4) the table is not immutable with indexes, as the client is the one that figures out the additional
@@ -523,7 +527,7 @@ public class UpsertCompiler {
                         // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
                         // so we might be able to run it entirely on the server side.
                         // region space managed by region servers. So we bail out on executing on server side.
-                        runOnServer = isAutoCommit && !table.isTransactional()
+                        runOnServer = (sameTable || serverUpsertSelectEnabled) && isAutoCommit && !table.isTransactional()
                                 && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
                                 && !select.isJoin() && table.getRowTimestampColPos() == -1;
                     }
@@ -666,7 +670,11 @@ public class UpsertCompiler {
                     reverseColumnIndexes[tempPos] = pos;
                     reverseColumnIndexes[i] = i;
                 }
-
+                // If any pk slots are changing and server side UPSERT SELECT is disabled, do not run on server
+                if (!serverUpsertSelectEnabled && ExpressionUtil
+                        .isPkPositionChanging(new TableRef(table), projectedExpressions)) {
+                    runOnServer = false;
+                }
                 ////////////////////////////////////////////////////////////////////
                 // UPSERT SELECT run server-side
                 /////////////////////////////////////////////////////////////////////
