@@ -248,6 +248,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
 
+    // whether to enable server side RS -> RS calls for upsert select statements
+    public static final String ENABLE_SERVER_UPSERT_SELECT ="phoenix.client.enable.server.upsert.select";
+
     /**
      * Get executor service used for parallel scans
      */
