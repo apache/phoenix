@@ -13,6 +13,7 @@ import org.apache.calcite.rel.RelDistributions;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelFieldCollation.Direction;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelReferentialConstraint;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
@@ -188,6 +189,12 @@ public class PhoenixTable extends AbstractTable
             @Override
             public RelDistribution getDistribution() {
                 return RelDistributions.RANDOM_DISTRIBUTED;
+            }
+
+            @Override
+            public List<RelReferentialConstraint> getReferentialConstraints() {
+                // TODO: As we don't support any referential constraints in Phoenix
+                return ImmutableList.<RelReferentialConstraint> of();
             }
         };
     }

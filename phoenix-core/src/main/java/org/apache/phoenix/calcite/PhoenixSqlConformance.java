@@ -65,4 +65,9 @@ public class PhoenixSqlConformance implements SqlConformance {
     public boolean isInsertSubsetColumnsAllowed() {
         return true;
     }
+
+    @Override
+    public boolean allowNiladicParentheses() {
+        return true;
+    }
 }
