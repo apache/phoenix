@@ -9,6 +9,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -22,14 +23,19 @@ import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
+import org.apache.calcite.prepare.Prepare.PreparedResult;
 import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.convert.ConverterRule;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.runtime.Hook.Closeable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
+import org.apache.calcite.sql.SqlExplainFormat;
+import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlFunctionArguementNode;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlIndexExpressionNode;
@@ -38,12 +44,14 @@ import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.SqlOptionNode;
+import org.apache.calcite.sql.SqlSetOption;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.parser.SqlParserUtil;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.util.Holder;
 import org.apache.calcite.util.NlsString;
+import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.calcite.parse.SqlAlterIndex;
 import org.apache.phoenix.calcite.parse.SqlAlterTable;
@@ -111,6 +119,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 import com.google.common.base.Function;
@@ -233,6 +242,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
             }
         }
     }
+    
     
     private List<Closeable> addHooks(final CalciteSchema rootSchema,
             boolean materializationEnabled, final boolean forceDecorrelate) {
@@ -530,6 +540,34 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 client.alterIndex(alterIndex);
                 break;
             }
+            case SET_OPTION: {
+                SqlSetOption alterSessionNode = (SqlSetOption) node;
+                if (SqlKind.SESSION.toString().equals(alterSessionNode.getScope())
+                        && alterSessionNode.getName().getSimple().equalsIgnoreCase(
+                            PhoenixRuntime.CONSISTENCY_ATTRIB.toUpperCase())) {
+                    SqlNode value = alterSessionNode.getValue();
+                    if (value != null) {
+                        Consistency consistency = null;
+                        try {
+                            consistency =
+                                    Consistency
+                                            .valueOf(((SqlLiteral) value).toValue().toUpperCase());
+                        } catch (IllegalArgumentException e) {
+                            throw new SQLException("Illegal consistency value:" + value
+                                    + ". Expecting values out of : "
+                                    + Arrays.asList(Consistency.values()));
+                        }
+                        if (consistency != null) {
+                            connection.setConsistency(consistency);
+                        }
+                    } else {
+                        // reset
+                        connection.setConsistency(Consistency.STRONG);
+                    }
+                }
+                break;
+            }
+
             case OTHER_DDL: {
                 if (node instanceof SqlUpdateStatistics) {
                     SqlUpdateStatistics updateStatsNode = (SqlUpdateStatistics) node;
@@ -741,4 +779,5 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
         }
         return CONNECTIONLESS_PHOENIX_CONNECTION;
     }
+
 }

@@ -2246,49 +2246,47 @@ public abstract class SqlOperatorBaseTest {
         false);
   }
 
-  @Test public void testOverlapsOperator() {
-    tester.setFor(SqlStdOperatorTable.OVERLAPS, VM_EXPAND);
-    if (Bug.FRG187_FIXED) {
-      tester.checkBoolean(
-          "(date '1-2-3', date '1-2-3') overlaps (date '1-2-3', interval '1' year)",
-          Boolean.TRUE);
-      tester.checkBoolean(
-          "(date '1-2-3', date '1-2-3') overlaps (date '4-5-6', interval '1' year)",
-          Boolean.FALSE);
-      tester.checkBoolean(
-          "(date '1-2-3', date '4-5-6') overlaps (date '2-2-3', date '3-4-5')",
-          Boolean.TRUE);
-      tester.checkNull(
-          "(cast(null as date), date '1-2-3') overlaps (date '1-2-3', interval '1' year)");
-      tester.checkNull(
-          "(date '1-2-3', date '1-2-3') overlaps (date '1-2-3', cast(null as date))");
+    @Test
+    public void testOverlapsOperator() {
+        tester.setFor(SqlStdOperatorTable.OVERLAPS, VM_EXPAND);
+        tester.checkBoolean(
+            "(date '1-2-3', date '1-2-3') overlaps (date '1-2-3', interval '1' year)",
+            Boolean.TRUE);
+        tester.checkBoolean(
+            "(date '1-2-3', date '1-2-3') overlaps (date '4-5-6', interval '1' year)",
+            Boolean.FALSE);
+        tester.checkBoolean("(date '1-2-3', date '4-5-6') overlaps (date '2-2-3', date '3-4-5')",
+            Boolean.TRUE);
+        tester.checkNull(
+            "(cast(null as date), date '1-2-3') overlaps (date '1-2-3', interval '1' year)");
+        tester.checkNull(
+            "(date '1-2-3', date '1-2-3') overlaps (date '1-2-3', cast(null as date))");
 
-      tester.checkBoolean(
-          "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', time '1:2:3')",
-          Boolean.TRUE);
-      tester.checkBoolean(
-          "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', time '1:2:2')",
-          Boolean.FALSE);
-      tester.checkBoolean(
-          "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', interval '2' hour)",
-          Boolean.TRUE);
-      tester.checkNull(
-          "(time '1:2:3', cast(null as time)) overlaps (time '23:59:59', time '1:2:3')");
-      tester.checkNull(
-          "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', cast(null as interval hour))");
+        tester.checkBoolean(
+            "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', time '1:2:3')",
+            Boolean.TRUE);
+        tester.checkBoolean(
+            "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', time '1:2:2')",
+            Boolean.FALSE);
+        tester.checkBoolean(
+            "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', interval '2' hour)",
+            Boolean.TRUE);
+        tester.checkNull(
+            "(time '1:2:3', cast(null as time)) overlaps (time '23:59:59', time '1:2:3')");
+        tester.checkNull(
+            "(time '1:2:3', interval '1' second) overlaps (time '23:59:59', cast(null as interval hour))");
 
-      tester.checkBoolean(
-          "(timestamp '1-2-3 4:5:6', timestamp '1-2-3 4:5:6' ) overlaps (timestamp '1-2-3 4:5:6', interval '1 2:3:4.5' day to second)",
-          Boolean.TRUE);
-      tester.checkBoolean(
-          "(timestamp '1-2-3 4:5:6', timestamp '1-2-3 4:5:6' ) overlaps (timestamp '2-2-3 4:5:6', interval '1 2:3:4.5' day to second)",
-          Boolean.FALSE);
-      tester.checkNull(
-          "(timestamp '1-2-3 4:5:6', cast(null as interval day) ) overlaps (timestamp '1-2-3 4:5:6', interval '1 2:3:4.5' day to second)");
-      tester.checkNull(
-          "(timestamp '1-2-3 4:5:6', timestamp '1-2-3 4:5:6' ) overlaps (cast(null as timestamp), interval '1 2:3:4.5' day to second)");
+        tester.checkBoolean(
+            "(timestamp '1-2-3 4:5:6', timestamp '1-2-3 4:5:6' ) overlaps (timestamp '1-2-3 4:5:6', interval '1 2:3:4.5' day to second)",
+            Boolean.TRUE);
+        tester.checkBoolean(
+            "(timestamp '1-2-3 4:5:6', timestamp '1-2-3 4:5:6' ) overlaps (timestamp '2-2-3 4:5:6', interval '1 2:3:4.5' day to second)",
+            Boolean.FALSE);
+        tester.checkNull(
+            "(timestamp '1-2-3 4:5:6', cast(null as interval day) ) overlaps (timestamp '1-2-3 4:5:6', interval '1 2:3:4.5' day to second)");
+        tester.checkNull(
+            "(timestamp '1-2-3 4:5:6', timestamp '1-2-3 4:5:6' ) overlaps (cast(null as timestamp), interval '1 2:3:4.5' day to second)");
     }
-  }
 
   @Test public void testLessThanOperator() {
     tester.setFor(SqlStdOperatorTable.LESS_THAN);
