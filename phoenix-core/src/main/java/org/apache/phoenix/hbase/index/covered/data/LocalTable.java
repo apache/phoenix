@@ -33,6 +33,10 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Ordering;
+import com.google.common.primitives.Longs;
+
 /**
  * Wrapper around a lazily instantiated, local HTable.
  * <p>
@@ -61,7 +65,8 @@ public class LocalTable implements LocalHBaseState {
     if (ignoreNewerMutations) {
         // Provides a means of client indicating that newer cells should not be considered,
         // enabling mutations to be replayed to partially rebuild the index when a write fails.
-        long ts = m.getFamilyCellMap().firstEntry().getValue().get(0).getTimestamp();
+        // When replaying mutations we want the oldest timestamp (as anything newer we be replayed)
+        long ts = getOldestTimestamp(m.getFamilyCellMap().values());
         s.setTimeRange(0,ts);
     }
     Region region = this.env.getRegion();
@@ -74,4 +79,19 @@ public class LocalTable implements LocalHBaseState {
     scanner.close();
     return r;
   }
+
+    // Returns the smallest timestamp in the given cell lists.
+    // It is assumed that the lists have cells ordered from largest to smallest timestamp
+    protected long getOldestTimestamp(Collection<List<Cell>> cellLists) {
+        Ordering<List<Cell>> cellListOrdering = new Ordering<List<Cell>>() {
+            @Override
+            public int compare(List<Cell> left, List<Cell> right) {
+                // compare the last element of each list, since that is the smallest in that list
+                return Longs.compare(Iterables.getLast(left).getTimestamp(),
+                    Iterables.getLast(right).getTimestamp());
+            }
+        };
+        List<Cell> minList = cellListOrdering.min(cellLists);
+        return Iterables.getLast(minList).getTimestamp();
+    }
 }
