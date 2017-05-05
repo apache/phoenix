@@ -677,7 +677,7 @@ public class UpsertCompiler {
                     for (int i = 0 ; i < projectedExpressions.size(); i++) {
                         // Must make new column if position has changed
                         PColumn column = allColumns.get(allColumnsIndexes[i]);
-                        projectedColumns.add(column.getPosition() == i + posOff ? column : new PColumnImpl(column, i));
+                        projectedColumns.add(column.getPosition() == i + posOff ? column : new PColumnImpl(column, i + posOff));
                     }
                     // Build table from projectedColumns
                     // Hack to add default column family to be used on server in case no value column is projected.
