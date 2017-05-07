@@ -47,7 +47,6 @@ import org.apache.phoenix.transaction.PhoenixTransactionalTable;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.apache.tephra.TransactionSystemClient;
 import org.junit.Test;
 
 /**
@@ -213,8 +212,6 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         String fullTableName = generateUniqueName();
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         
-        TransactionSystemClient txServiceClient = pconn.getQueryServices().getTransactionSystemClient();
-
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true");
         HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
@@ -227,7 +224,6 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             assertEquals(1,rs.getInt(1));
         }
 
-        // Use HBase level Tephra APIs to start a new transaction
         //TransactionAwareHTable txAware = new TransactionAwareHTable(htable, TxConstants.ConflictDetection.ROW);
         PhoenixTransactionContext txContext = TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
         PhoenixTransactionalTable txTable = TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
@@ -260,7 +256,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(3,rs.getInt(1));
         
-        // Use Tephra APIs directly to finish (i.e. commit) the transaction
+        // Use TM APIs directly to finish (i.e. commit) the transaction
         txContext.commit();
         
         // Confirm that attempt to commit row with conflict fails
@@ -306,7 +302,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(4,rs.getInt(1));
 
-        // Use Tephra APIs directly to abort (i.e. rollback) the transaction
+        // Use TM APIs directly to abort (i.e. rollback) the transaction
         txContext.abort();
         
         rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);

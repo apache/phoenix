@@ -1,7 +1,11 @@
 package org.apache.phoenix.transaction;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
 
 import java.sql.SQLException;
@@ -25,6 +29,22 @@ public interface PhoenixTransactionContext {
     public static final String PROPERTY_TTL = "dataset.table.ttl";
 
     public static final String READ_NON_TX_DATA = "data.tx.read.pre.existing";
+
+    /**
+     * Set the in memory client connection to the transaction manager (for testing purpose)
+     *
+     * @param config
+     */
+    public void setInMemoryTransactionClient(Configuration config);
+
+    /**
+     * Set the client connection to the transaction manager
+     *
+     * @param config
+     * @param props
+     * @param connectionInfo
+     */
+    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo);
 
     /**
      * Starts a transaction
@@ -138,4 +158,10 @@ public interface PhoenixTransactionContext {
      * @return the coprocessor
      */
     public BaseRegionObserver getCoProcessor();
+
+    /**
+     * 
+     * @return the family delete marker
+     */
+    public byte[] get_famility_delete_marker(); 
 }

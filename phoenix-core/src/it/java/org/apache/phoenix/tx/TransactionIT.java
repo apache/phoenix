@@ -47,7 +47,6 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.apache.tephra.TxConstants;
 import org.junit.Test;
 
 public class TransactionIT  extends ParallelStatsDisabledIT {

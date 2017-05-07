@@ -219,6 +219,8 @@ import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
@@ -232,11 +234,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.UpgradeUtil;
-import org.apache.tephra.TransactionSystemClient;
-import org.apache.tephra.TxConstants;
-import org.apache.tephra.distributed.PooledClientProvider;
-import org.apache.tephra.distributed.TransactionServiceClient;
-import org.apache.tephra.zookeeper.TephraZKClientService;
 import org.apache.twill.discovery.ZKDiscoveryService;
 import org.apache.twill.zookeeper.RetryStrategies;
 import org.apache.twill.zookeeper.ZKClientService;
@@ -287,7 +284,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private HConnection connection;
     private ZKClientService txZKClientService;
-    private TransactionServiceClient txServiceClient;
     private volatile boolean initialized;
     private volatile int nSequenceSaltBuckets;
 
@@ -396,32 +392,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     }
 
-    @Override
-    public TransactionSystemClient getTransactionSystemClient() {
-        return txServiceClient;
-    }
-
     private void initTxServiceClient() {
-        String zkQuorumServersString = this.getProps().get(TxConstants.Service.CFG_DATA_TX_ZOOKEEPER_QUORUM);
-        if (zkQuorumServersString==null) {
-            zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
-        }
-
-        int timeOut = props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
-        // Create instance of the tephra zookeeper client
-        txZKClientService = ZKClientServices.delegate(
-            ZKClients.reWatchOnExpire(
-                ZKClients.retryOnFailure(
-                     new TephraZKClientService(zkQuorumServersString, timeOut, null,
-                             ArrayListMultimap.<String, byte[]>create()), 
-                         RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
-                     )
-                );
-        txZKClientService.startAndWait();
-        ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(txZKClientService);
-        PooledClientProvider pooledClientProvider = new PooledClientProvider(
-                config, zkDiscoveryService);
-        this.txServiceClient = new TransactionServiceClient(config,pooledClientProvider);
+        txZKClientService = TransactionFactory.getTransactionFactory().getTransactionContext().setTransactionClient(config, props, connectionInfo);
     }
 
     private void openConnection() throws SQLException {
@@ -862,7 +834,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
             boolean isTransactional =
                     Boolean.TRUE.equals(tableProps.get(TableProperty.TRANSACTIONAL.name())) ||
-                    Boolean.TRUE.equals(tableProps.get(TxConstants.READ_NON_TX_DATA)); // For ALTER TABLE
+                    Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA)); // For ALTER TABLE
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
             // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
@@ -1125,7 +1097,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 // If mapping an existing table as transactional, set property so that existing
                 // data is correctly read.
                 if (willBeTx) {
-                    newDesc.setValue(TxConstants.READ_NON_TX_DATA, Boolean.TRUE.toString());
+                    newDesc.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.TRUE.toString());
                 } else {
                     // If we think we're creating a non transactional table when it's already
                     // transactional, don't allow.
@@ -1134,7 +1106,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         .setSchemaName(SchemaUtil.getSchemaNameFromFullName(tableName))
                         .setTableName(SchemaUtil.getTableNameFromFullName(tableName)).build().buildException();
                     }
-                    newDesc.remove(TxConstants.READ_NON_TX_DATA);
+                    newDesc.remove(PhoenixTransactionContext.READ_NON_TX_DATA);
                 }
                 if (existingDesc.equals(newDesc)) {
                     return null; // Indicate that no metadata was changed
@@ -1754,7 +1726,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             origTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
             tableDescriptors.add(tableDescriptor);
             origTableDescriptors.add(origTableDescriptor);
-            nonTxToTx = Boolean.TRUE.equals(tableProps.get(TxConstants.READ_NON_TX_DATA));
+            nonTxToTx = Boolean.TRUE.equals(tableProps.get(PhoenixTransactionContext.READ_NON_TX_DATA));
             /*
              * If the table was transitioned from non transactional to transactional, we need
              * to also transition the index tables.
@@ -1864,7 +1836,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 indexTableProps = Collections.<String,Object>emptyMap();
             } else {
                 indexTableProps = Maps.newHashMapWithExpectedSize(1);
-                indexTableProps.put(TxConstants.READ_NON_TX_DATA, Boolean.valueOf(txValue));
+                indexTableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, Boolean.valueOf(txValue));
             }
             for (PTable index : table.getIndexes()) {
                 HTableDescriptor indexDescriptor = admin.getTableDescriptor(index.getPhysicalName().getBytes());
@@ -1877,7 +1849,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(indexFamilyName);
                     HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(dataFamilyName);
                     indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-                    indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
+                    indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
                 } else {
                     for (PColumnFamily family : index.getColumnFamilies()) {
                         byte[] familyName = family.getName().getBytes();
@@ -1885,7 +1857,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
                         HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
                         indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-                        indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
+                        indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
                     }
                 }
                 setTransactional(indexDescriptor, index.getType(), txValue, indexTableProps);
@@ -1921,7 +1893,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             HColumnDescriptor indexColDescriptor = indexDescriptor.getFamily(familyName);
             HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
             indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-            indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
+            indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
         } else {
             for (PColumnFamily family : table.getColumnFamilies()) {
                 byte[] familyName = family.getName().getBytes();
@@ -1929,7 +1901,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (indexColDescriptor != null) {
                     HColumnDescriptor tableColDescriptor = tableDescriptor.getFamily(familyName);
                     indexColDescriptor.setMaxVersions(tableColDescriptor.getMaxVersions());
-                    indexColDescriptor.setValue(TxConstants.PROPERTY_TTL, tableColDescriptor.getValue(TxConstants.PROPERTY_TTL));
+                    indexColDescriptor.setValue(PhoenixTransactionContext.PROPERTY_TTL, tableColDescriptor.getValue(PhoenixTransactionContext.PROPERTY_TTL));
                 }
             }
         }
@@ -1957,9 +1929,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
     private void setTransactional(HTableDescriptor tableDescriptor, PTableType tableType, String txValue, Map<String, Object> tableProps) throws SQLException {
         if (txValue == null) {
-            tableDescriptor.remove(TxConstants.READ_NON_TX_DATA);
+            tableDescriptor.remove(PhoenixTransactionContext.READ_NON_TX_DATA);
         } else {
-            tableDescriptor.setValue(TxConstants.READ_NON_TX_DATA, txValue);
+            tableDescriptor.setValue(PhoenixTransactionContext.READ_NON_TX_DATA, txValue);
         }
         this.addCoprocessors(tableDescriptor.getName(), tableDescriptor, tableType, tableProps);
     }
@@ -2005,7 +1977,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 commonFamilyProps.put(propName, prop.getSecond());
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
-                                tableProps.put(TxConstants.READ_NON_TX_DATA, propValue);
+                                tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
                             }
                         } else {
                             if (MetaDataUtil.isHColumnProperty(propName)) {
@@ -2172,10 +2144,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         if (props == null) {
                             props = new HashMap<String, Object>();
                         }
-                        props.put(TxConstants.PROPERTY_TTL, ttl);
+                        props.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
                         // Remove HBase TTL if we're not transitioning an existing table to become transactional
                         // or if the existing transactional table wasn't originally non transactional.
-                        if (!willBeTransactional && !Boolean.valueOf(newTableDescriptor.getValue(TxConstants.READ_NON_TX_DATA))) {
+                        if (!willBeTransactional && !Boolean.valueOf(newTableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA))) {
                             props.remove(TTL);
                         }
                     }

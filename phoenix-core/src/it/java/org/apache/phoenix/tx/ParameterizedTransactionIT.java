@@ -53,10 +53,10 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.apache.tephra.TxConstants;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -391,7 +391,7 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         admin.createTable(desc);
         ddl = "CREATE TABLE " + t2 + " (k varchar primary key) transactional=true";
         conn.createStatement().execute(ddl);
-        assertEquals(Boolean.TRUE.toString(), admin.getTableDescriptor(TableName.valueOf(t2)).getValue(TxConstants.READ_NON_TX_DATA));
+        assertEquals(Boolean.TRUE.toString(), admin.getTableDescriptor(TableName.valueOf(t2)).getValue(PhoenixTransactionContext.READ_NON_TX_DATA));
         
         // Should be ok, as HBase metadata should match existing metadata.
         ddl = "CREATE TABLE IF NOT EXISTS " + t1 + " (k varchar primary key)"; 

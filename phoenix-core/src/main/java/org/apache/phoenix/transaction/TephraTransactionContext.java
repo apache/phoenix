@@ -10,12 +10,13 @@ import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.tephra.Transaction;
 import org.apache.tephra.TransactionAware;
 import org.apache.tephra.TransactionCodec;
@@ -26,12 +27,21 @@ import org.apache.tephra.TransactionManager;
 import org.apache.tephra.TransactionSystemClient;
 import org.apache.tephra.Transaction.VisibilityLevel;
 import org.apache.tephra.TxConstants;
+import org.apache.tephra.distributed.PooledClientProvider;
+import org.apache.tephra.distributed.TransactionServiceClient;
 import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
 import org.apache.tephra.inmemory.InMemoryTxSystemClient;
 import org.apache.tephra.util.TxUtils;
 import org.apache.tephra.visibility.FenceWait;
 import org.apache.tephra.visibility.VisibilityFence;
+import org.apache.tephra.zookeeper.TephraZKClientService;
+import org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.twill.zookeeper.RetryStrategies;
+import org.apache.twill.zookeeper.ZKClientService;
+import org.apache.twill.zookeeper.ZKClientServices;
+import org.apache.twill.zookeeper.ZKClients;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 
 import org.slf4j.Logger;
@@ -39,6 +49,8 @@ import org.slf4j.Logger;
 public class TephraTransactionContext implements PhoenixTransactionContext {
 
     private static final TransactionCodec CODEC = new TransactionCodec();
+
+    private static TransactionSystemClient txClient = null;
 
     private final List<TransactionAware> txAwares;
     private final TransactionContext txContext;
@@ -59,17 +71,16 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     public TephraTransactionContext(PhoenixConnection connection) {
-        this.txServiceClient = connection.getQueryServices()
-                .getTransactionSystemClient();
+        assert(txClient != null);
+        this.txServiceClient = txClient;  
         this.txAwares = Collections.emptyList();
         this.txContext = new TransactionContext(txServiceClient);
     }
 
     public TephraTransactionContext(PhoenixTransactionContext ctx,
             PhoenixConnection connection, boolean subTask) {
-        this.txServiceClient = connection.getQueryServices()
-                .getTransactionSystemClient();
-
+        assert(txClient != null);
+        this.txServiceClient = txClient;  
         assert (ctx instanceof TephraTransactionContext);
         TephraTransactionContext tephraTransactionContext = (TephraTransactionContext) ctx;
 
@@ -83,6 +94,38 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         }
 
         this.e = null;
+    }
+
+    @Override
+    public void setInMemoryTransactionClient(Configuration config) {
+        TransactionManager txnManager = new TransactionManager(config);
+        txClient = this.txServiceClient = new InMemoryTxSystemClient(txnManager);
+    }
+
+    @Override
+    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props, ConnectionInfo connectionInfo) {
+        String zkQuorumServersString = props.get(TxConstants.Service.CFG_DATA_TX_ZOOKEEPER_QUORUM);
+        if (zkQuorumServersString==null) {
+            zkQuorumServersString = connectionInfo.getZookeeperQuorum()+":"+connectionInfo.getPort();
+        }
+
+        int timeOut = props.getInt(HConstants.ZK_SESSION_TIMEOUT, HConstants.DEFAULT_ZK_SESSION_TIMEOUT);
+        // Create instance of the tephra zookeeper client
+        ZKClientService txZKClientService  = ZKClientServices.delegate(
+            ZKClients.reWatchOnExpire(
+                ZKClients.retryOnFailure(
+                     new TephraZKClientService(zkQuorumServersString, timeOut, null,
+                             ArrayListMultimap.<String, byte[]>create()), 
+                         RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS))
+                     )
+                );
+        txZKClientService.startAndWait();
+        ZKDiscoveryService zkDiscoveryService = new ZKDiscoveryService(txZKClientService);
+        PooledClientProvider pooledClientProvider = new PooledClientProvider(
+                config, zkDiscoveryService);
+        txClient = this.txServiceClient = new TransactionServiceClient(config,pooledClientProvider);
+        
+        return txZKClientService;
     }
 
     @Override
@@ -360,6 +403,11 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     @Override
     public BaseRegionObserver getCoProcessor() {
         return new TransactionProcessor();
+    }
+
+    @Override
+    public byte[] get_famility_delete_marker() { 
+        return TxConstants.FAMILY_DELETE_QUALIFIER;
     }
 
     /**

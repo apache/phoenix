@@ -3,8 +3,12 @@ package org.apache.phoenix.transaction;
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
 
 public class OmidTransactionContext implements PhoenixTransactionContext {
@@ -113,6 +117,27 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
 
     @Override
     public BaseRegionObserver getCoProcessor() {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public void setInMemoryTransactionClient(Configuration config) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public ZKClientService setTransactionClient(Configuration config, ReadOnlyProps props,
+            ConnectionInfo connectionInfo) {
+        // TODO Auto-generated method stub
+        
+        return null;
+        
+    }
+
+    @Override
+    public byte[] get_famility_delete_marker() {
         // TODO Auto-generated method stub
         return null;
     }
