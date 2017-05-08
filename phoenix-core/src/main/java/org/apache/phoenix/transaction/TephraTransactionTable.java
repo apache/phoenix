@@ -311,4 +311,23 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
         return transactionAwareHTable.checkAndMutate(row, family, qualifier, compareOp, value, mutation);
     }
 
+    @Override
+    public void setOperationTimeout(int i) {
+//        transactionAwareHTable.setOperationTimeout(i);
+    }
+
+    @Override
+    public int getOperationTimeout() {
+        return 0; //transactionAwareHTable.getOperationTimeout();
+    }
+
+    @Override
+    public void setRpcTimeout(int i) {
+//        transactionAwareHTable.setRpcTimeout(i);
+    }
+
+    @Override
+    public int getRpcTimeout() {
+        return 0; //transactionAwareHTable.getRpcTimeout();
+    }
 }

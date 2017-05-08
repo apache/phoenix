@@ -320,4 +320,28 @@ public class OmidTransactionTable implements PhoenixTransactionalTable {
         return false;
     }
 
+    @Override
+    public int getOperationTimeout() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public int getRpcTimeout() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public void setOperationTimeout(int arg0) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void setRpcTimeout(int arg0) {
+        // TODO Auto-generated method stub
+        
+    }
+
 }
