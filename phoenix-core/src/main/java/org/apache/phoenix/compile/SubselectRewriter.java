@@ -19,11 +19,16 @@
 package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.ColumnParseNode;
@@ -60,11 +65,11 @@ public class SubselectRewriter extends ParseNodeRewriter {
         return statement.getLimit() == null && (!statement.isAggregate() || !statement.getGroupBy().isEmpty());        
     }
     
-    public static SelectStatement applyOrderBy(SelectStatement statement, List<OrderByNode> orderBy, String subqueryAlias) throws SQLException {
+    public static SelectStatement applyOrderBy(SelectStatement statement, List<OrderByNode> orderBy, String subqueryAlias,TableNode tableNode) throws SQLException {
         if (orderBy == null)
             return statement;
         
-        return new SubselectRewriter(null, statement.getSelect(), subqueryAlias).applyOrderBy(statement, orderBy);
+        return new SubselectRewriter(null, statement.getSelect(), subqueryAlias).applyOrderBy(statement, orderBy, tableNode);
     }
     
     public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection) throws SQLException {
@@ -248,17 +253,127 @@ public class SubselectRewriter extends ParseNodeRewriter {
         }
         return NODE_FACTORY.select(statement, statement.getWhere(), combine(postFiltersRewrite));
     }
-    
-    private SelectStatement applyOrderBy(SelectStatement statement, List<OrderByNode> orderBy) throws SQLException {
-        List<OrderByNode> orderByRewrite = Lists.<OrderByNode> newArrayListWithExpectedSize(orderBy.size());
-        for (OrderByNode orderByNode : orderBy) {
-            ParseNode node = orderByNode.getNode();
-            orderByRewrite.add(NODE_FACTORY.orderBy(node.accept(this), orderByNode.isNullsLast(), orderByNode.isAscending()));
+
+    private SelectStatement applyOrderBy(SelectStatement subselectStatement,List<OrderByNode> newOrderByNodes, TableNode subselectAsTableNode) throws SQLException {
+        ArrayList<OrderByNode> rewrittenNewOrderByNodes = Lists.<OrderByNode> newArrayListWithExpectedSize(newOrderByNodes.size());
+        for (OrderByNode newOrderByNode : newOrderByNodes) {
+            ParseNode parseNode = newOrderByNode.getNode();
+            rewrittenNewOrderByNodes.add(NODE_FACTORY.orderBy(
+                    parseNode.accept(this),
+                    newOrderByNode.isNullsLast(),
+                    newOrderByNode.isAscending()));
         }
-        
-        return NODE_FACTORY.select(statement, orderByRewrite);
+
+        // in these case,we can safely override subselect's orderBy
+        if(subselectStatement.getLimit()==null ||
+           subselectStatement.getOrderBy() == null ||
+           subselectStatement.getOrderBy().isEmpty()) {
+            return NODE_FACTORY.select(subselectStatement, rewrittenNewOrderByNodes);
+        }
+
+        //if rewrittenNewOrderByNodes is prefix of subselectStatement's orderBy,
+        //then subselectStatement no need to modify
+        if(this.isOrderByPrefix(subselectStatement, rewrittenNewOrderByNodes)) {
+            return subselectStatement;
+        }
+
+        //modify the subselect "(select id,code from tableName order by code limit 3) as a" to
+        //"(select id,code from (select id,code from tableName order by code limit 3) order by id) as a"
+        List<AliasedNode> newSelectAliasedNodes = createAliasedNodesFromSubselect(subselectStatement,rewrittenNewOrderByNodes);
+        assert subselectAsTableNode instanceof DerivedTableNode;
+        //set the subselect alias to null.
+        subselectAsTableNode=NODE_FACTORY.derivedTable(null, ((DerivedTableNode)subselectAsTableNode).getSelect());
+
+        return NODE_FACTORY.select(
+                subselectAsTableNode,
+                HintNode.EMPTY_HINT_NODE,
+                false,
+                newSelectAliasedNodes,
+                null,
+                null,
+                null,
+                rewrittenNewOrderByNodes,
+                null,
+                null,
+                0,
+                false,
+                subselectStatement.hasSequence(),
+                Collections.<SelectStatement> emptyList(),
+                subselectStatement.getUdfParseNodes());
     }
-    
+
+    /**
+     * create new aliasedNodes from subSelectStatement's select alias.
+     * @param subSelectStatement
+     * @param rewrittenOrderByNodes
+     * @return
+     */
+    private List<AliasedNode> createAliasedNodesFromSubselect(SelectStatement subSelectStatement,ArrayList<OrderByNode> rewrittenOrderByNodes) throws SQLException {
+        List<AliasedNode> selectAliasedNodes=subSelectStatement.getSelect();
+        List<AliasedNode> newSelectAliasedNodes = new ArrayList<AliasedNode>(selectAliasedNodes.size());
+        Map<ParseNode,Integer> rewrittenOrderByParseNodeToIndex=new HashMap<ParseNode, Integer>(rewrittenOrderByNodes.size());
+        for(int index=0;index < rewrittenOrderByNodes.size();index++) {
+            OrderByNode rewrittenOrderByNode=rewrittenOrderByNodes.get(index);
+            rewrittenOrderByParseNodeToIndex.put(rewrittenOrderByNode.getNode(), Integer.valueOf(index));
+        }
+
+        for (AliasedNode selectAliasedNode : selectAliasedNodes) {
+            String selectAliasName = selectAliasedNode.getAlias();
+            ParseNode oldSelectAliasParseNode = selectAliasedNode.getNode();
+            if (selectAliasName == null) {
+                selectAliasName = SchemaUtil.normalizeIdentifier(oldSelectAliasParseNode.getAlias());
+            }
+            //in order to convert the subselect "select id,sum(code) codesum from table group by id order by codesum limit 3"
+            //to "select id,codesum from (select id,sum(code) codesum from table group by id order by codesum limit 3) order by id"
+            //we must has alias for sum(code)
+            if(selectAliasName== null) {
+                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.SUBQUERY_SELECT_LIST_COLUMN_MUST_HAS_ALIAS)
+                 .setMessage("the subquery is:"+subSelectStatement)
+                 .build()
+                 .buildException();
+            }
+
+            ColumnParseNode newColumnParseNode=NODE_FACTORY.column(null, selectAliasName, selectAliasName);
+            Integer index=rewrittenOrderByParseNodeToIndex.get(oldSelectAliasParseNode);
+            if(index !=null) {
+                //replace the rewrittenOrderByNode's child to newColumnParseNode
+                OrderByNode oldOrderByNode=rewrittenOrderByNodes.get(index);
+                rewrittenOrderByNodes.set(index,
+                        NODE_FACTORY.orderBy(
+                                newColumnParseNode,
+                                oldOrderByNode.isNullsLast(),
+                                oldOrderByNode.isAscending()));
+            }
+
+            AliasedNode newSelectAliasNode=NODE_FACTORY.aliasedNode(null,newColumnParseNode);
+            newSelectAliasedNodes.add(newSelectAliasNode);
+        }
+        return newSelectAliasedNodes;
+    }
+
+    /**
+     * check if rewrittenNewOrderByNodes is prefix of selectStatement's order by.
+     * @param selectStatement
+     * @param rewrittenNewOrderByNodes
+     * @return
+     */
+    private boolean isOrderByPrefix(SelectStatement selectStatement,List<OrderByNode> rewrittenNewOrderByNodes) {
+        List<OrderByNode> existingOrderByNodes=selectStatement.getOrderBy();
+        if(rewrittenNewOrderByNodes.size() > existingOrderByNodes.size()) {
+            return false;
+        }
+
+        Iterator<OrderByNode> existingOrderByNodeIter=existingOrderByNodes.iterator();
+        for(OrderByNode rewrittenNewOrderByNode : rewrittenNewOrderByNodes) {
+            assert existingOrderByNodeIter.hasNext();
+            OrderByNode existingOrderByNode=existingOrderByNodeIter.next();
+            if(!existingOrderByNode.equals(rewrittenNewOrderByNode)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public ParseNode visit(ColumnParseNode node) throws SQLException {
         if (node.getTableName() == null)

@@ -562,7 +562,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             String tableName = generateUniqueName();
             String indexName = generateUniqueName();
             statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
-                    + "ln varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
+                    + "\"ln\" varchar constraint pk primary key(id)) DEFAULT_COLUMN_FAMILY='F'");
             statement.execute("upsert into " + tableName + "  values(1,'fn','ln')");
             statement
                     .execute("create local index " + indexName + " on " + tableName + "  (fn)");
@@ -599,22 +599,61 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             admin.disableTable(tableName);
             copyLocalIndexHFiles(config, tableRegions.get(0), tableRegions.get(1), false);
             copyLocalIndexHFiles(config, tableRegions.get(3), tableRegions.get(0), false);
-
             admin.enableTable(tableName);
 
             int count=getCount(conn, tableName, "L#0");
             assertTrue(count > 14);
-            admin.majorCompact(tableName);
+            admin.majorCompact(TableName.valueOf(tableName));
             int tryCount = 5;// need to wait for rebuilding of corrupted local index region
             while (tryCount-- > 0 && count != 14) {
-                Thread.sleep(30000);
+                Thread.sleep(15000);
                 count = getCount(conn, tableName, "L#0");
             }
             assertEquals(14, count);
             rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName1);
             assertTrue(rs.next());
             assertEquals(7, rs.getLong(1));
+            statement.execute("DROP INDEX " + indexName1 + " ON " + tableName);
+            admin.majorCompact(TableName.valueOf(tableName));
+            statement.execute("DROP INDEX " + indexName + " ON " + tableName);
+            admin.majorCompact(TableName.valueOf(tableName));
+            Thread.sleep(15000);
+            admin.majorCompact(TableName.valueOf(tableName));
+            Thread.sleep(15000);
+            rs = statement.executeQuery("SELECT COUNT(*) FROM " + tableName);
+            assertTrue(rs.next());
+            
         }
+    }
+
+    @Test
+    public void testLocalGlobalIndexMix() throws Exception {
+        if (isNamespaceMapped) { return; }
+        String tableName = generateUniqueName();
+        Connection conn1 = DriverManager.getConnection(getUrl());
+        String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
+                "k1 INTEGER NOT NULL,\n" +
+                "k2 INTEGER NOT NULL,\n" +
+                "k3 INTEGER,\n" +
+                "v1 VARCHAR,\n" +
+                "v2 VARCHAR,\n" +
+                "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n";
+        conn1.createStatement().execute(ddl);
+        conn1.createStatement().execute("CREATE LOCAL INDEX LV1 ON " + tableName + "(v1)");
+        conn1.createStatement().execute("CREATE INDEX GV2 ON " + tableName + "(v2)");
+
+        conn1.createStatement().execute("UPSERT INTO " + tableName + " values('b',1,2,4,'z','3')");
+        conn1.createStatement().execute("UPSERT INTO " + tableName + " values('f',1,2,3,'a','0')");
+        conn1.createStatement().execute("UPSERT INTO " + tableName + " values('j',2,4,2,'a','2')");
+        conn1.createStatement().execute("UPSERT INTO " + tableName + " values('q',3,1,1,'c','1')");
+        conn1.commit();
+        ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName + " WHERE v1 = 'c'");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName + " WHERE v2 = '2'");
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        conn1.close();
     }
 
     private void copyLocalIndexHFiles(Configuration conf, HRegionInfo fromRegion, HRegionInfo toRegion, boolean move)
