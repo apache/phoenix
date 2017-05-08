@@ -297,7 +297,7 @@ public class MutationState implements SQLCloseable {
     public HTableInterface getHTable(PTable table) throws SQLException {
         HTableInterface htable = this.getConnection().getQueryServices().getTable(table.getPhysicalName().getBytes());
         if (table.isTransactional() && phoenixTransactionContext.isTransactionRunning()) {
-            PhoenixTransactionalTable phoenixTransactionTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, htable, table.isImmutableRows());
+            PhoenixTransactionalTable phoenixTransactionTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, htable, table);
             // Using cloned mutationState as we may have started a new transaction already
             // if auto commit is true and we need to use the original one here.
             htable = phoenixTransactionTable;
@@ -970,7 +970,7 @@ public class MutationState implements SQLCloseable {
                         if (table.isTransactional()) {
                             // Track tables to which we've sent uncommitted data
                             txTableRefs.add(origTableRef);
-                            addDMLFence(table);
+//                            addDMLFence(table);
                             uncommittedPhysicalNames.add(table.getPhysicalName().getString());
 
                             // If we have indexes, wrap the HTable in a delegate HTable that
@@ -980,7 +980,7 @@ public class MutationState implements SQLCloseable {
                                 hTable = new MetaDataAwareHTable(hTable, origTableRef);
                             }
 
-                            hTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, hTable, table.isImmutableRows());                          
+                            hTable = TransactionUtil.getPhoenixTransactionTable(phoenixTransactionContext, hTable, table);
                         }
                         
                         long numMutations = mutationList.size();
@@ -1231,10 +1231,10 @@ public class MutationState implements SQLCloseable {
                             startTransaction();
                             // Add back read fences
                             Set<TableRef> txTableRefs = txMutations.keySet();
-                            for (TableRef tableRef : txTableRefs) {
-                                PTable dataTable = tableRef.getTable();
-                                addDMLFence(dataTable);
-                            }
+//                            for (TableRef tableRef : txTableRefs) {
+//                                PTable dataTable = tableRef.getTable();
+//                                addDMLFence(dataTable);
+//                            }
                             try {
                                 // Only retry if an index was added
                                 retryCommit = shouldResubmitTransaction(txTableRefs);

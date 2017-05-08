@@ -25,6 +25,8 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
 import org.apache.tephra.TxConstants;
 import org.apache.tephra.hbase.TransactionAwareHTable;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 
 import com.google.protobuf.Descriptors.MethodDescriptor;
 import com.google.protobuf.Message;
@@ -38,18 +40,22 @@ public class TephraTransactionTable implements PhoenixTransactionalTable {
     private TephraTransactionContext tephraTransactionContext;
 
     public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable) {
-        this(ctx, hTable, false);
+        this(ctx, hTable, null);
     }
 
-    public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable, boolean isImmutableRows) {
+    public TephraTransactionTable(PhoenixTransactionContext ctx, HTableInterface hTable, PTable pTable) {
 
         assert(ctx instanceof TephraTransactionContext);
 
         tephraTransactionContext = (TephraTransactionContext) ctx;
 
-        transactionAwareHTable = new TransactionAwareHTable(hTable, isImmutableRows ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+        transactionAwareHTable = new TransactionAwareHTable(hTable, (pTable != null && pTable.isImmutableRows()) ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
 
         tephraTransactionContext.addTransactionAware(transactionAwareHTable);
+
+        if (pTable != null && pTable.getType() != PTableType.INDEX) {
+            tephraTransactionContext.markDMLFence(pTable);
+        }
     }
 
     @Override

@@ -50,8 +50,8 @@ public class TransactionUtil {
         return serverTimeStamp / TransactionFactory.getTransactionFactory().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
-    public static PhoenixTransactionalTable getPhoenixTransactionTable(PhoenixTransactionContext phoenixTransactionContext, HTableInterface htable, boolean isImmutableRows) {
-        return new TephraTransactionTable(phoenixTransactionContext, htable, isImmutableRows);
+    public static PhoenixTransactionalTable getPhoenixTransactionTable(PhoenixTransactionContext phoenixTransactionContext, HTableInterface htable, PTable pTable) {
+        return new TephraTransactionTable(phoenixTransactionContext, htable, pTable);
     }
     
     // we resolve transactional tables at the txn read pointer

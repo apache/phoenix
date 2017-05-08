@@ -35,7 +35,13 @@ import org.apache.tephra.util.TxUtils;
 import org.apache.tephra.visibility.FenceWait;
 import org.apache.tephra.visibility.VisibilityFence;
 import org.apache.tephra.zookeeper.TephraZKClientService;
+import org.apache.tephra.distributed.TransactionService;
+import org.apache.tephra.metrics.TxMetricsCollector;
+import org.apache.tephra.persist.HDFSTransactionStateStorage;
+import org.apache.tephra.snapshot.SnapshotCodecProvider;
+import org.apache.twill.discovery.DiscoveryService;
 import org.apache.twill.discovery.ZKDiscoveryService;
+import org.apache.twill.internal.utils.Networks;
 import org.apache.twill.zookeeper.RetryStrategies;
 import org.apache.twill.zookeeper.ZKClientService;
 import org.apache.twill.zookeeper.ZKClientServices;
@@ -43,6 +49,7 @@ import org.apache.twill.zookeeper.ZKClients;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
+import com.google.inject.util.Providers;
 
 import org.slf4j.Logger;
 
@@ -51,6 +58,9 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     private static final TransactionCodec CODEC = new TransactionCodec();
 
     private static TransactionSystemClient txClient = null;
+    private static ZKClientService zkClient = null;
+    private static TransactionService txService = null;
+    private static TransactionManager txManager = null;
 
     private final List<TransactionAware> txAwares;
     private final TransactionContext txContext;
@@ -408,6 +418,60 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     @Override
     public byte[] get_famility_delete_marker() { 
         return TxConstants.FAMILY_DELETE_QUALIFIER;
+    }
+
+    @Override
+    public void setTxnConfigs(Configuration config, String tmpFolder, int defaultTxnTimeoutSeconds) throws IOException {
+        config.setBoolean(TxConstants.Manager.CFG_DO_PERSIST, false);
+        config.set(TxConstants.Service.CFG_DATA_TX_CLIENT_RETRY_STRATEGY, "n-times");
+        config.setInt(TxConstants.Service.CFG_DATA_TX_CLIENT_ATTEMPTS, 1);
+        config.setInt(TxConstants.Service.CFG_DATA_TX_BIND_PORT, Networks.getRandomPort());
+        config.set(TxConstants.Manager.CFG_TX_SNAPSHOT_DIR, tmpFolder);
+        config.setInt(TxConstants.Manager.CFG_TX_TIMEOUT, defaultTxnTimeoutSeconds);
+        config.unset(TxConstants.Manager.CFG_TX_HDFS_USER);
+        config.setLong(TxConstants.Manager.CFG_TX_SNAPSHOT_INTERVAL, 5L);
+    }
+
+    @Override
+    public void setupTxManager(Configuration config, String url) throws SQLException {
+
+        if (txService != null) {
+            return;
+        }
+
+        ConnectionInfo connInfo = ConnectionInfo.create(url);
+        zkClient = ZKClientServices.delegate(
+          ZKClients.reWatchOnExpire(
+            ZKClients.retryOnFailure(
+              ZKClientService.Builder.of(connInfo.getZookeeperConnectionString())
+                .setSessionTimeout(config.getInt(HConstants.ZK_SESSION_TIMEOUT,
+                        HConstants.DEFAULT_ZK_SESSION_TIMEOUT))
+                .build(),
+              RetryStrategies.exponentialDelay(500, 2000, TimeUnit.MILLISECONDS)
+            )
+          )
+        );
+        zkClient.startAndWait();
+
+        DiscoveryService discovery = new ZKDiscoveryService(zkClient);
+        txManager = new TransactionManager(config, new HDFSTransactionStateStorage(config, new SnapshotCodecProvider(config), new TxMetricsCollector()), new TxMetricsCollector());
+        txService = new TransactionService(config, zkClient, discovery, Providers.of(txManager));
+        txService.startAndWait();
+    }
+
+    @Override
+    public void tearDownTxManager() {
+        try {
+            if (txService != null) txService.stopAndWait();
+        } finally {
+            try {
+                if (zkClient != null) zkClient.stopAndWait();
+            } finally {
+                txService = null;
+                zkClient = null;
+                txManager = null;
+            }
+        }
     }
 
     /**

@@ -8,6 +8,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.twill.zookeeper.ZKClientService;
 import org.slf4j.Logger;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
@@ -164,4 +165,19 @@ public interface PhoenixTransactionContext {
      * @return the family delete marker
      */
     public byte[] get_famility_delete_marker(); 
+
+    /**
+     * Setup transaction manager's configuration for testing
+     */
+     public void setTxnConfigs(Configuration config, String tmpFolder, int defaultTxnTimeoutSeconds) throws IOException;
+
+    /**
+     * Setup transaction manager for testing
+     */
+    public void setupTxManager(Configuration config, String url) throws SQLException;
+
+    /**
+     * Tear down transaction manager for testing
+     */
+    public void tearDownTxManager();
 }

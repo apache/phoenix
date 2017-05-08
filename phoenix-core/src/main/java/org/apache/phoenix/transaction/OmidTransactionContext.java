@@ -1,5 +1,6 @@
 package org.apache.phoenix.transaction;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.TimeoutException;
 
@@ -140,5 +141,23 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     public byte[] get_famility_delete_marker() {
         // TODO Auto-generated method stub
         return null;
+    }
+
+    @Override
+    public void setTxnConfigs(Configuration config, String tmpFolder, int defaultTxnTimeoutSeconds) throws IOException {
+        // TODO Auto-generated method stub
+
+    }
+
+    @Override
+    public void setupTxManager(Configuration config, String url) throws SQLException {
+        // TODO Auto-generated method stub
+
+    }
+
+    @Override
+    public void tearDownTxManager() {
+        // TODO Auto-generated method stub
+
     }
 }
