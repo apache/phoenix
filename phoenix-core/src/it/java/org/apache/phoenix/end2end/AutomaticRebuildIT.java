@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -156,7 +158,7 @@ public class AutomaticRebuildIT extends BaseOwnClusterIT {
 				rs = conn.createStatement()
 						.executeQuery(String.format("SELECT " + PhoenixDatabaseMetaData.INDEX_STATE + ","
 								+ PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP + " FROM "
-								+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " ("
+								+"\""+ SYSTEM_CATALOG_SCHEMA + "\"." + SYSTEM_CATALOG_TABLE + " ("
 								+ PhoenixDatabaseMetaData.ASYNC_REBUILD_TIMESTAMP + " bigint) where "
 								+ PhoenixDatabaseMetaData.TABLE_SCHEM + "='" + schemaName + "' and "
 								+ PhoenixDatabaseMetaData.TABLE_NAME + "='" + indxTable + "'"));

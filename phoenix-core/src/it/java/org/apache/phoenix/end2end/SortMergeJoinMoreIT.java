@@ -499,4 +499,139 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testSubQueryOrderByOverrideBug3745() throws Exception {
+        Connection conn = null;
+        try {
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            conn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName1=generateUniqueName();
+            String tableName2=generateUniqueName();
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName1);
+
+            String sql="CREATE TABLE IF NOT EXISTS "+tableName1+" ( "+
+                    "AID INTEGER PRIMARY KEY,"+
+                    "AGE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (1,11)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (2,22)");
+            conn.createStatement().execute("UPSERT INTO "+tableName1+"(AID,AGE) VALUES (3,33)");
+            conn.commit();
+
+            conn.createStatement().execute("DROP TABLE if exists "+tableName2);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName2+" ( "+
+                    "BID INTEGER PRIMARY KEY,"+
+                    "CODE INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (1,66)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (2,55)");
+            conn.createStatement().execute("UPSERT INTO "+tableName2+"(BID,CODE) VALUES (3,44)");
+            conn.commit();
+
+            //test for simple scan
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33) a inner join "+
+                "(select bid,code from "+tableName2+" order by code limit 1) b on a.aid=b.bid ";
+
+            ResultSet rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(!rs.next());
+
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.code from (select aid,age from "+tableName1+" where age >=11 and age<=33) a inner join "+
+                "(select bid,code from "+tableName2+" order by code limit 2) b on a.aid=b.bid ";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(!rs.next());
+
+            //test for aggregate
+            sql="select /*+ USE_SORT_MERGE_JOIN */ a.aid,b.codesum from (select aid,sum(age) agesum from "+tableName1+" where age >=11 and age<=33 group by aid order by agesum limit 3) a inner join "+
+                "(select bid,sum(code) codesum from "+tableName2+" group by bid order by codesum limit 2) b on a.aid=b.bid ";
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(!rs.next());
+
+            String tableName3=generateUniqueName();;
+            conn.createStatement().execute("DROP TABLE if exists "+tableName3);
+            sql="CREATE TABLE IF NOT EXISTS "+tableName3+" ( "+
+                    "CID INTEGER PRIMARY KEY,"+
+                    "REGION INTEGER"+
+                    ")";
+            conn.createStatement().execute(sql);
+
+            conn.createStatement().execute("UPSERT INTO "+tableName3+"(CID,REGION) VALUES (1,77)");
+            conn.createStatement().execute("UPSERT INTO "+tableName3+"(CID,REGION) VALUES (2,88)");
+            conn.createStatement().execute("UPSERT INTO "+tableName3+"(CID,REGION) VALUES (3,99)");
+            conn.commit();
+
+            //test for join
+            sql="select t1.aid,t1.code,t2.region from "+
+                "(select a.aid,b.code from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 order by b.code limit 3) t1 inner join "+
+                "(select a.aid,c.region from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 order by c.region desc limit 1) t2 on t1.aid=t2.aid";
+
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(rs.getInt(3) == 99);
+            assertTrue(!rs.next());
+
+            //test for join and aggregate
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by regionsum desc limit 2) t2 on t1.aid=t2.aid";
+
+            rs=conn.prepareStatement(sql).executeQuery();
+
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.getInt(3) == 88);
+
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(rs.getInt(3) == 99);
+            assertTrue(!rs.next());
+
+            //test for if SubselectRewriter.isOrderByPrefix had take effect
+            sql="select t1.aid,t1.codesum,t2.regionsum from "+
+                "(select a.aid,sum(b.code) codesum from "+tableName1+" a inner join "+tableName2+" b on a.aid=b.bid where b.code >=44 and b.code<=66 group by a.aid order by a.aid,codesum limit 3) t1 inner join "+
+                "(select a.aid,sum(c.region) regionsum from "+tableName1+" a inner join "+tableName3+" c on a.aid=c.cid where c.region>=77 and c.region<=99 group by a.aid order by a.aid desc,regionsum desc limit 2) t2 on t1.aid=t2.aid "+
+                "order by t1.aid desc";
+
+            rs=conn.prepareStatement(sql).executeQuery();
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 3);
+            assertTrue(rs.getInt(2) == 44);
+            assertTrue(rs.getInt(3) == 99);
+
+            assertTrue(rs.next());
+            assertTrue(rs.getInt(1) == 2);
+            assertTrue(rs.getInt(2) == 55);
+            assertTrue(rs.getInt(3) == 88);
+            assertTrue(!rs.next());
+        } finally {
+            if(conn!=null) {
+                conn.close();
+            }
+        }
+    }
 }

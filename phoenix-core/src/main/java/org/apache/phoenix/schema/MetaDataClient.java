@@ -313,7 +313,16 @@ public class MetaDataClient {
             COLUMN_QUALIFIER_COUNTER + 
             ") VALUES (?, ?, ?, ?, ?)";
 
-    public static final String INCREMENT_SEQ_NUM =
+    private static final String CREATE_CHILD_LINK =
+            "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
+                    TENANT_ID + "," +
+                    TABLE_SCHEM + "," +
+                    TABLE_NAME + "," +
+                    COLUMN_NAME + "," +
+                    COLUMN_FAMILY + "," +
+                    LINK_TYPE + 
+                    ") VALUES (?, ?, ?, ?, ?, ?)";
+    private static final String INCREMENT_SEQ_NUM =
             "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
                     TENANT_ID + "," +
                     TABLE_SCHEM + "," +
@@ -2063,9 +2072,7 @@ public class MetaDataClient {
                     }
                     pkColumns = newLinkedHashSet(parent.getPKColumns());
 
-                    // Add row linking from view to its parent table
-                    // FIXME: not currently used, but see PHOENIX-1367
-                    // as fixing that will require it's usage.
+                    // Add row linking view to its parent 
                     PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK);
                     linkStatement.setString(1, tenantIdStr);
                     linkStatement.setString(2, schemaName);
@@ -2073,6 +2080,15 @@ public class MetaDataClient {
                     linkStatement.setString(4, parent.getName().getString());
                     linkStatement.setByte(5, LinkType.PARENT_TABLE.getSerializedValue());
                     linkStatement.setString(6, parent.getTenantId() == null ? null : parent.getTenantId().getString());
+                    linkStatement.execute();
+                    // Add row linking parent to view
+                    linkStatement = connection.prepareStatement(CREATE_CHILD_LINK);
+                    linkStatement.setString(1, parent.getTenantId() == null ? null : parent.getTenantId().getString());
+                    linkStatement.setString(2, parent.getSchemaName() == null ? null : parent.getSchemaName().getString());
+                    linkStatement.setString(3, parent.getTableName().getString());
+                    linkStatement.setString(4, tenantIdStr);
+                    linkStatement.setString(5, SchemaUtil.getTableName(schemaName, tableName));
+                    linkStatement.setByte(6, LinkType.CHILD_TABLE.getSerializedValue());
                     linkStatement.execute();
                 }
             } else {

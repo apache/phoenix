@@ -30,6 +30,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnProjector;
@@ -78,7 +79,6 @@ import com.google.common.collect.Lists;
  * 
  */
 public class PhoenixDatabaseMetaData implements DatabaseMetaData {
-    public static final int INDEX_NAME_INDEX = 4; // Shared with FAMILY_NAME_INDEX
     public static final int FAMILY_NAME_INDEX = 4;
     public static final int COLUMN_NAME_INDEX = 3;
     public static final int TABLE_NAME_INDEX = 2;
@@ -98,6 +98,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_CATALOG = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"";
     public static final String SYSTEM_CATALOG_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA,
             SYSTEM_CATALOG_TABLE);
+    public static final TableName SYSTEM_CATALOG_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_CATALOG_NAME);
     public static final byte[] SYSTEM_CATALOG_NAME_BYTES = Bytes.toBytes(SYSTEM_CATALOG_NAME);
     public static final String SYSTEM_STATS_TABLE = "STATS";
     public static final String SYSTEM_STATS_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_STATS_TABLE);
@@ -124,6 +125,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] PHYSICAL_NAME_BYTES = Bytes.toBytes(PHYSICAL_NAME);
 
     public static final String COLUMN_FAMILY = "COLUMN_FAMILY";
+    public static final byte[] COLUMN_FAMILY_BYTES = Bytes.toBytes(COLUMN_FAMILY);
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
     public static final String TABLE_SCHEM = "TABLE_SCHEM";
@@ -305,6 +307,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String SYSTEM_MUTEX_TABLE_NAME = "MUTEX";
     public static final String SYSTEM_MUTEX_NAME = SchemaUtil.getTableName(QueryConstants.SYSTEM_SCHEMA_NAME, SYSTEM_MUTEX_TABLE_NAME);
+    public static final TableName SYSTEM_MUTEX_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_MUTEX_NAME);
     public static final byte[] SYSTEM_MUTEX_NAME_BYTES = Bytes.toBytes(SYSTEM_MUTEX_NAME);
     public static final byte[] SYSTEM_MUTEX_FAMILY_NAME_BYTES = TABLE_FAMILY_BYTES;
     
@@ -514,6 +517,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (colPattern == null || colPattern.length() == 0) {
             appendConjunction(where);
             where.append(COLUMN_NAME + " is not null" );
+            appendConjunction(where);
+            where.append(LINK_TYPE + " is null" );
         }
         boolean isTenantSpecificConnection = connection.getTenantId() != null;
         if (isTenantSpecificConnection) {

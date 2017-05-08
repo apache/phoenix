@@ -480,8 +480,9 @@ public class PTableImpl implements PTable {
         this.isNamespaceMapped = isNamespaceMapped;
         this.autoPartitionSeqName = autoPartitionSeqName;
         this.isAppendOnlySchema = isAppendOnlySchema;
-        this.immutableStorageScheme = storageScheme;
-        this.qualifierEncodingScheme = qualifierEncodingScheme;
+        // null check for backward compatibility and sanity. If any of the two below is null, then it means the table is a non-encoded table.
+        this.immutableStorageScheme = storageScheme == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : storageScheme;
+        this.qualifierEncodingScheme = qualifierEncodingScheme == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : qualifierEncodingScheme;
         List<PColumn> pkColumns;
         PColumn[] allColumns;
         
@@ -586,7 +587,7 @@ public class PTableImpl implements PTable {
                 .orderedBy(Bytes.BYTES_COMPARATOR);
         for (int i = 0; i < families.length; i++) {
             Map.Entry<PName,List<PColumn>> entry = iterator.next();
-            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue());//, qualifierEncodingScheme);
+            PColumnFamily family = new PColumnFamilyImpl(entry.getKey(), entry.getValue());
             families[i] = family;
             familyByString.put(family.getName().getString(), family);
             familyByBytes.put(family.getName().getBytes(), family);
@@ -896,7 +897,7 @@ public class PTableImpl implements PTable {
                 mutations.add(deleteRow);
             } else {
                 // store all columns for a given column family in a single cell instead of one column per cell in order to improve write performance
-                if (immutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+                if (immutableStorageScheme != null && immutableStorageScheme != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
                     Put put = new Put(this.key);
                     if (isWALDisabled()) {
                         put.setDurability(Durability.SKIP_WAL);
@@ -1300,11 +1301,13 @@ public class PTableImpl implements PTable {
         if (table.hasIsAppendOnlySchema()) {
             isAppendOnlySchema = table.getIsAppendOnlySchema();
         }
-        ImmutableStorageScheme storageScheme = null;
+        // For backward compatibility. Clients older than 4.10 will always have non-encoded immutable tables.
+        ImmutableStorageScheme storageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
         if (table.hasStorageScheme()) {
             storageScheme = ImmutableStorageScheme.fromSerializedValue(table.getStorageScheme().toByteArray()[0]);
         }
-        QualifierEncodingScheme qualifierEncodingScheme = null;
+        // For backward compatibility. Clients older than 4.10 will always have non-encoded qualifiers.
+        QualifierEncodingScheme qualifierEncodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
         if (table.hasEncodingScheme()) {
             qualifierEncodingScheme = QualifierEncodingScheme.fromSerializedValue(table.getEncodingScheme().toByteArray()[0]);
         }
