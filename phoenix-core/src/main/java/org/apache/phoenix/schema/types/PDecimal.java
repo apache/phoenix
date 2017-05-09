@@ -31,7 +31,7 @@ import org.apache.phoenix.util.NumberUtil;
 
 import com.google.common.base.Preconditions;
 
-public class PDecimal extends PDataType<BigDecimal> {
+public class PDecimal extends PRealNumber<BigDecimal> {
 
   public static final PDecimal INSTANCE = new PDecimal();
 
@@ -402,4 +402,20 @@ public class PDecimal extends PDataType<BigDecimal> {
   public Object getSampleValue(Integer maxLength, Integer arrayLength) {
     return new BigDecimal((Long) PLong.INSTANCE.getSampleValue(maxLength, arrayLength));
   }
+
+    // take details from org.apache.phoenix.schema.types.PDataType#toBigDecimal(byte[], int, int)
+    @Override
+    public int signum(byte[] bytes, int offset, int length, SortOrder sortOrder, Integer maxLength,
+            Integer scale) {
+        byte signByte;
+        if (sortOrder == SortOrder.DESC) {
+            signByte = SortOrder.invert(bytes[offset]);
+        } else {
+            signByte = bytes[offset];
+        }
+        if (length == 1 && signByte == ZERO_BYTE) {
+            return 0;
+        }
+        return ((signByte & 0x80) == 0) ? -1 : 1;
+    }
 }

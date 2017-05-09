@@ -17,11 +17,12 @@
  */
 package org.apache.phoenix.schema.types;
 
-import com.google.common.base.Preconditions;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 
-public class PUnsignedFloat extends PDataType<PFloat> {
+import com.google.common.base.Preconditions;
+
+public class PUnsignedFloat extends PRealNumber<PFloat> {
 
   public static final PUnsignedFloat INSTANCE = new PUnsignedFloat();
 

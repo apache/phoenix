@@ -25,7 +25,7 @@ import org.apache.phoenix.schema.SortOrder;
 
 import com.google.common.base.Preconditions;
 
-public class PTinyint extends PDataType<Byte> {
+public class PTinyint extends PWholeNumber<Byte> {
 
   public static final PTinyint INSTANCE = new PTinyint();
 

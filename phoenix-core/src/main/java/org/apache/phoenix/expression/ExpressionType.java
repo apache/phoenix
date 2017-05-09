@@ -67,6 +67,7 @@ import org.apache.phoenix.expression.function.RoundTimestampExpression;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
 import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
+import org.apache.phoenix.expression.function.SignFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.StddevPopFunction;
 import org.apache.phoenix.expression.function.StddevSampFunction;
@@ -191,6 +192,7 @@ public enum ExpressionType {
     RandomFunction(RandomFunction.class),
     ToTimeFunction(ToTimeFunction.class),
     ToTimestampFunction(ToTimestampFunction.class),
+    SignFunction(SignFunction.class),
     ;
     
     ExpressionType(Class<? extends Expression> clazz) {
