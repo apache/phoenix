@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.TreeSet;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
@@ -109,7 +110,7 @@ public class IndexUpdateManager {
     ImmutableBytesPtr key = new ImmutableBytesPtr(tableName);
     Collection<Mutation> updates = map.get(key);
     if (updates == null) {
-      updates = new SortedCollection<Mutation>(COMPARATOR);
+      updates = new TreeSet<Mutation>(COMPARATOR);
       map.put(key, updates);
     }
     fixUpCurrentUpdates(updates, m);
@@ -167,9 +168,12 @@ public class IndexUpdateManager {
         break;
       }
     }
-    
-    updates.remove(toRemove);
-    updates.add(pendingMutation);
+    if (toRemove != null) {
+        updates.remove(toRemove);
+    }
+    if (pendingMutation != null) {
+        updates.add(pendingMutation);
+    }
   }
 
   private void markMutationForRemoval(Mutation m) {
