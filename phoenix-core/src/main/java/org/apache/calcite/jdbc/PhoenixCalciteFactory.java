@@ -6,13 +6,13 @@ import java.io.Reader;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
 import java.sql.NClob;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLXML;
 import java.sql.Savepoint;
-import java.sql.ResultSet;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +31,8 @@ import org.apache.calcite.avatica.AvaticaStatement;
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.Meta.Signature;
 import org.apache.calcite.avatica.Meta.StatementHandle;
+import org.apache.calcite.avatica.QueryState;
+import org.apache.calcite.avatica.UnregisteredDriver;
 import org.apache.calcite.avatica.remote.AvaticaHttpClientFactory;
 import org.apache.calcite.avatica.remote.Service.Factory;
 import org.apache.calcite.avatica.remote.TypedValue;
@@ -39,11 +41,6 @@ import org.apache.calcite.avatica.util.Quoting;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.Lex;
 import org.apache.calcite.config.NullCollation;
-import org.apache.calcite.avatica.QueryState;
-import org.apache.calcite.avatica.UnregisteredDriver;
-import org.apache.calcite.jdbc.CalciteConnectionImpl;
-import org.apache.calcite.jdbc.CalciteFactory;
-import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.model.JsonSchema.Type;
@@ -128,7 +125,7 @@ public class PhoenixCalciteFactory extends CalciteFactory {
     private static class PhoenixCalciteConnection extends CalciteConnectionImpl {
         private final Map<Meta.StatementHandle, ImmutableList<RuntimeContext>> runtimeContextMap =
                 new ConcurrentHashMap<Meta.StatementHandle, ImmutableList<RuntimeContext>>();
-        
+
         public PhoenixCalciteConnection(Driver driver, AvaticaFactory factory, String url,
                 Properties info, final CalciteSchema rootSchema,
                 JavaTypeFactory typeFactory) {
@@ -731,6 +728,16 @@ public class PhoenixCalciteFactory extends CalciteFactory {
         @Override
         public boolean approximateDecimal() {
             return delegate.approximateDecimal();
+        }
+
+        @Override
+        public File truststore() {
+            return delegate.truststore();
+        }
+
+        @Override
+        public String truststorePassword() {
+            return delegate.truststorePassword();
         }
     }
 }
