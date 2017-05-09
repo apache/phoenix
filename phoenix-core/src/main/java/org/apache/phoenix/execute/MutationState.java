@@ -203,7 +203,7 @@ public class MutationState implements SQLCloseable {
      * when a data table transaction is started before the create index
      * but completes after it. In this case, we need to rerun the data
      * table transaction after the index creation so that the index rows
-     * are generated. See {@link #addDMLFence(PTable)} and TEPHRA-157
+     * are generated. See TEPHRA-157
      * for more information.
      * @param dataTable the data table upon which an index is being added
      * @throws SQLException
@@ -220,22 +220,6 @@ public class MutationState implements SQLCloseable {
                 phoenixTransactionContext.begin();
             }
         }
-    }
-    
-    /**
-     * Add an entry to the change set representing the DML operation that is starting.
-     * These entries will not conflict with each other, but they will conflict with a
-     * DDL operation of creating an index. See {@link #addDMLFence(PTable)} and TEPHRA-157
-     * for more information.
-     * @param table the table which is doing DML
-     * @throws SQLException
-     */
-    private void addDMLFence(PTable table) throws SQLException {
-        if (table.getType() == PTableType.INDEX || !table.isTransactional()) {
-            return;
-        }
-
-        phoenixTransactionContext.markDMLFence(table);
     }
     
     public boolean checkpointIfNeccessary(MutationPlan plan) throws SQLException {
@@ -970,7 +954,6 @@ public class MutationState implements SQLCloseable {
                         if (table.isTransactional()) {
                             // Track tables to which we've sent uncommitted data
                             txTableRefs.add(origTableRef);
-//                            addDMLFence(table);
                             uncommittedPhysicalNames.add(table.getPhysicalName().getString());
 
                             // If we have indexes, wrap the HTable in a delegate HTable that
@@ -1231,10 +1214,6 @@ public class MutationState implements SQLCloseable {
                             startTransaction();
                             // Add back read fences
                             Set<TableRef> txTableRefs = txMutations.keySet();
-//                            for (TableRef tableRef : txTableRefs) {
-//                                PTable dataTable = tableRef.getTable();
-//                                addDMLFence(dataTable);
-//                            }
                             try {
                                 // Only retry if an index was added
                                 retryCommit = shouldResubmitTransaction(txTableRefs);

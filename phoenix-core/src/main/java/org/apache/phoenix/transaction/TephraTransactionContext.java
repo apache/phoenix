@@ -261,7 +261,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
         }
     }
 
-    @Override
     public void markDMLFence(PTable table) {
         byte[] logicalKey = table.getName().getBytes();
         TransactionAware logicalTxAware = VisibilityFence.create(logicalKey);

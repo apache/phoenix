@@ -87,14 +87,6 @@ public interface PhoenixTransactionContext {
             throws SQLException;
 
     /**
-     * mark DML with table information for conflict detection of concurrent
-     * DDL operation, as explained in [PHOENIX-2478], [TEPHRA-157] and [OMID-56].
-     *
-     * @param table  the table that the DML command works on
-     */
-    public void markDMLFence(PTable table);
-
-    /**
      * Augment the current context with ctx modified keys
      *
      * @param ctx

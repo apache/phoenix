@@ -36,6 +36,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -48,12 +49,25 @@ import org.junit.runners.Parameterized.Parameters;
 public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	
 	private final boolean localIndex;
-	private final boolean mutable;
+	private final String tableDDLOptions;
 
-	public TxCheckpointIT(boolean localIndex, boolean mutable) {
-		this.localIndex = localIndex;
-		this.mutable = mutable;
-
+	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded) {
+	    StringBuilder optionBuilder = new StringBuilder();
+	    this.localIndex = localIndex;
+	    if (!columnEncoded) {
+	        if (optionBuilder.length()!=0)
+	            optionBuilder.append(",");
+	        optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+	    }
+	    if (!mutable) {
+	        if (optionBuilder.length()!=0)
+	            optionBuilder.append(",");
+	        optionBuilder.append("IMMUTABLE_ROWS=true");
+	        if (!columnEncoded) {
+	            optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+	        }
+	    }
+	    this.tableDDLOptions = optionBuilder.toString();
 	}
 	
     private static Connection getConnection() throws SQLException {
@@ -66,10 +80,11 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         return conn;
     }
 	
-	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1}") // name is used by failsafe as file name in reports
+	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, false }, { false, true }, { true, false }, { true, true }  
+                { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },
+                { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
            });
     }
     
@@ -86,7 +101,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         Connection conn = getConnection(props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("CREATE SEQUENCE "+seqName);
-        conn.createStatement().execute("CREATE TABLE " + fullTableName + "(pk INTEGER PRIMARY KEY, val INTEGER)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+        conn.createStatement().execute("CREATE TABLE " + fullTableName + "(pk INTEGER PRIMARY KEY, val INTEGER)"+tableDDLOptions);
         conn.createStatement().execute("CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + "(val)");
 
         conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES (NEXT VALUE FOR " + seqName + ",1)");
@@ -122,7 +137,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+(!mutable? " IMMUTABLE_ROWS=true" : ""));
+            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+tableDDLOptions);
             stmt.execute(indexDDL);
             
             stmt.executeUpdate("upsert into " + fullTableName + " values('x1', 'y1', 'a1')");
@@ -212,7 +227,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 			Statement stmt = conn.createStatement();
 
 			stmt.execute("CREATE TABLE " + fullTableName + "(ID BIGINT NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
-					+ (!mutable ? " IMMUTABLE_ROWS=true" : ""));
+					+ tableDDLOptions);
 			stmt.execute("CREATE " + (localIndex ? "LOCAL " : "")
 					+ "INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)");
 
@@ -302,9 +317,9 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 			conn.setAutoCommit(false);
 			Statement stmt = conn.createStatement();
 			stmt.execute("CREATE TABLE " + fullTableName + "1(ID1 BIGINT NOT NULL PRIMARY KEY, FK1A INTEGER, FK1B INTEGER)"
-					+ (!mutable ? " IMMUTABLE_ROWS=true" : ""));
+					+ tableDDLOptions);
 			stmt.execute("CREATE TABLE " + fullTableName + "2(ID2 BIGINT NOT NULL PRIMARY KEY, FK2 INTEGER)"
-					+ (!mutable ? " IMMUTABLE_ROWS=true" : ""));
+					+ tableDDLOptions);
 			stmt.execute("CREATE " + (localIndex ? "LOCAL " : "")
 					+ "INDEX " + indexName + " ON " + fullTableName + "1 (FK1B)");
 			

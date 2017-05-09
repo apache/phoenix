@@ -45,12 +45,6 @@ public class OmidTransactionContext implements PhoenixTransactionContext {
     }
 
     @Override
-    public void markDMLFence(PTable table) {
-        // TODO Auto-generated method stub
-
-    }
-
-    @Override
     public void join(PhoenixTransactionContext ctx) {
         // TODO Auto-generated method stub
 
