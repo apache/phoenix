@@ -145,8 +145,9 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private final int mutateBatchSize;
     private final long mutateBatchSizeBytes;
     private final Long scn;
+    private final boolean replayMutations;
     private MutationState mutationState;
-    private List<SQLCloseable> statements = new ArrayList<SQLCloseable>();
+    private List<PhoenixStatement> statements = new ArrayList<>();
     private boolean isAutoFlush = false;
     private boolean isAutoCommit = false;
     private PMetaData metaData;
@@ -179,7 +180,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     public PhoenixConnection(PhoenixConnection connection, boolean isDescRowKeyOrderUpgrade, boolean isRunningUpgrade) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState(), isDescRowKeyOrderUpgrade, isRunningUpgrade);
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.metaData, connection.getMutationState(), isDescRowKeyOrderUpgrade, isRunningUpgrade, connection.replayMutations);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -191,7 +192,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
     
     public PhoenixConnection(PhoenixConnection connection, MutationState mutationState) throws SQLException {
-        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), mutationState, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade());
+        this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(), connection.getMetaDataCache(), mutationState, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(), connection.replayMutations);
     }
     
     public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
@@ -199,7 +200,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
     
     public PhoenixConnection(ConnectionQueryServices services, PhoenixConnection connection, long scn) throws SQLException {
-        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState(), connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade());
+        this(services, connection.getURL(), newPropsWithSCN(scn,connection.getClientInfo()), connection.metaData, connection.getMutationState(), connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(), connection.replayMutations);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
         this.sampler = connection.sampler;
@@ -207,14 +208,14 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
     
     public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData) throws SQLException {
-        this(services, url, info, metaData, null, false, false);
+        this(services, url, info, metaData, null, false, false, false);
     }
     
     public PhoenixConnection(PhoenixConnection connection, ConnectionQueryServices services, Properties info) throws SQLException {
-        this(services, connection.url, info, connection.metaData, null, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade());
+        this(services, connection.url, info, connection.metaData, null, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(), connection.replayMutations);
     }
     
-    public PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, MutationState mutationState, boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade) throws SQLException {
+    private PhoenixConnection(ConnectionQueryServices services, String url, Properties info, PMetaData metaData, MutationState mutationState, boolean isDescVarLengthRowKeyUpgrade, boolean isRunningUpgrade, boolean replayMutations) throws SQLException {
         GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
         this.url = url;
         this.isDescVarLengthRowKeyUpgrade = isDescVarLengthRowKeyUpgrade;
@@ -241,7 +242,12 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         
         Long scnParam = JDBCUtil.getCurrentSCN(url, this.info);
         checkScn(scnParam);
-        this.scn = scnParam;
+        Long replayAtParam = JDBCUtil.getReplayAt(url, this.info);
+        checkReplayAt(replayAtParam);
+        checkScnAndReplayAtEquality(scnParam,replayAtParam);
+        
+        this.scn = scnParam != null ? scnParam : replayAtParam;
+        this.replayMutations = replayMutations || replayAtParam != null;
         this.isAutoFlush = this.services.getProps().getBoolean(QueryServices.TRANSACTIONS_ENABLED, QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED)
                 && this.services.getProps().getBoolean(QueryServices.AUTO_FLUSH_ATTRIB, QueryServicesOptions.DEFAULT_AUTO_FLUSH) ;
         this.isAutoCommit = JDBCUtil.getAutoCommit(
@@ -312,6 +318,18 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     private static void checkScn(Long scnParam) throws SQLException {
         if (scnParam != null && scnParam < 0) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_SCN).build().buildException();
+        }
+    }
+
+    private static void checkReplayAt(Long replayAtParam) throws SQLException {
+        if (replayAtParam != null && replayAtParam < 0) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_REPLAY_AT).build().buildException();
+        }
+    }
+
+    private static void checkScnAndReplayAtEquality(Long scnParam, Long replayAt) throws SQLException {
+        if (scnParam != null && replayAt != null && !scnParam.equals(replayAt)) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNEQUAL_SCN_AND_REPLAY_AT).build().buildException();
         }
     }
 
@@ -444,6 +462,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         return scn;
     }
     
+    public boolean isReplayMutations() {
+        return replayMutations;
+    }
+    
     public int getMutateBatchSize() {
         return mutateBatchSize;
     }
@@ -493,7 +515,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     }
 
     private void closeStatements() throws SQLException {
-        List<SQLCloseable> statements = this.statements;
+        List<? extends PhoenixStatement> statements = this.statements;
         // create new list to prevent close of statements
         // from modifying this list.
         this.statements = Lists.newArrayList();
@@ -569,6 +591,10 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         throw new SQLFeatureNotSupportedException();
     }
 
+    public List<PhoenixStatement> getStatements() {
+        return statements;
+    }
+    
     @Override
     public Statement createStatement() throws SQLException {
         PhoenixStatement statement = new PhoenixStatement(this);

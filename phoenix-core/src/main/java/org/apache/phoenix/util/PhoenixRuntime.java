@@ -124,6 +124,20 @@ public class PhoenixRuntime {
     public static final String CURRENT_SCN_ATTRIB = "CurrentSCN";
 
     /**
+     * Use this connection property to set the long time stamp value at
+     * which to replay DML statements after a write failure. The time
+     * stamp value must match the value returned by 
+     * {@link org.apache.phoenix.execute.CommitException#getServerTimestamp()}
+     * when the exception occurred. Used in conjunction with the 
+     * {@link org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy}
+     * index write failure policy to provide a means of the client replaying
+     * updates to ensure that secondary indexes are correctly caught up
+     * with any data updates when a write failure occurs. The updates
+     * should be replayed in ascending time stamp order.
+     */
+    public static final String REPLAY_AT_ATTRIB = "ReplayAt";
+
+    /**
      * Use this connection property to help with fairness of resource allocation
      * for the client and server. The value of the attribute determines the
      * bucket used to rollup resource usage for a particular tenant/organization. Each tenant

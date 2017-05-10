@@ -3418,7 +3418,11 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     Cell newDisableTimeStampCell = newKVs.get(disableTimeStampKVIndex);
                     long newDisableTimeStamp = (Long) PLong.INSTANCE.toObject(newDisableTimeStampCell.getValueArray(),
                             newDisableTimeStampCell.getValueOffset(), newDisableTimeStampCell.getValueLength());
-                    if(curTimeStampVal > 0 && curTimeStampVal < newDisableTimeStamp){
+                    // We use the sign of the INDEX_DISABLE_TIMESTAMP to differentiate the keep-index-active (negative)
+                    // from block-writes-to-data-table case. In either case, we want to keep the oldest timestamp to
+                    // drive the partial index rebuild rather than update it with each attempt to update the index
+                    // when a new data table write occurs.
+                    if (curTimeStampVal != 0 && Math.abs(curTimeStampVal) < Math.abs(newDisableTimeStamp)) {
                         // not reset disable timestamp
                         newKVs.remove(disableTimeStampKVIndex);
                         disableTimeStampKVIndex = -1;
