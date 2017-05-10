@@ -156,7 +156,7 @@ public interface PhoenixTransactionContext {
      * 
      * @return the family delete marker
      */
-    public byte[] get_famility_delete_marker(); 
+    public byte[] getFamilyDeleteMarker();
 
     /**
      * Setup transaction manager's configuration for testing
