@@ -70,4 +70,19 @@ public class PhoenixSqlConformance implements SqlConformance {
     public boolean allowNiladicParentheses() {
         return true;
     }
+
+    @Override
+    public boolean isGroupByAlias() {
+        return true;
+    }
+
+    @Override
+    public boolean isGroupByOrdinal() {
+        return true;
+    }
+
+    @Override
+    public boolean isHavingAlias() {
+        return true;
+    }
 }
