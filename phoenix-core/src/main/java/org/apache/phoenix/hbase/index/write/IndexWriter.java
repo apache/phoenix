@@ -61,6 +61,10 @@ public class IndexWriter implements Stoppable {
     this(getCommitter(env), getFailurePolicy(env), env, name);
   }
 
+  public IndexWriter(IndexFailurePolicy failurePolicy, RegionCoprocessorEnvironment env, String name) throws IOException {
+      this(getCommitter(env), failurePolicy, env, name);
+    }
+
   public static IndexCommitter getCommitter(RegionCoprocessorEnvironment env) throws IOException {
     Configuration conf = env.getConfiguration();
     try {
