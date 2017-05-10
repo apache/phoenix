@@ -456,7 +456,7 @@ public class GroupByIT extends BaseQueryIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table test1(\"time\" integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(\"time\", hostname))";
+        String ddl = "create table test1(\"time\" integer not null, hostname varchar not null,usage float,\"period\" integer constraint pk PRIMARY KEY(\"time\", hostname))";
         conn.createStatement().execute(ddl);
         conn.close();
 
@@ -492,7 +492,7 @@ public class GroupByIT extends BaseQueryIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table test1(\"time\" integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(\"time\", hostname))";
+        String ddl = "create table test1(\"time\" integer not null, hostname varchar not null,usage float,\"period\" integer constraint pk PRIMARY KEY(\"time\", hostname))";
         conn.createStatement().execute(ddl);
         conn.close();
 
@@ -512,7 +512,7 @@ public class GroupByIT extends BaseQueryIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
-        stmt = conn.prepareStatement("select period/10 as tm, hostname, avg(usage) from test1 group by hostname, tm");
+        stmt = conn.prepareStatement("select \"period\"/10 as tm, hostname, avg(usage) from test1 group by hostname, tm");
         rs = stmt.executeQuery();
         assertTrue(rs.next());
         assertEquals(143985345, rs.getInt(1));
