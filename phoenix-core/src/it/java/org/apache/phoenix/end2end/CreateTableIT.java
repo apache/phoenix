@@ -35,6 +35,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -114,6 +115,9 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         }
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         assertNotNull(admin.getTableDescriptor(Bytes.toBytes(tableName)));
+        HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
@@ -382,6 +386,24 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
     	assertEquals(1, columnFamilies.length);
     	assertEquals("a", columnFamilies[0].getNameAsString());
     	assertEquals(10000, columnFamilies[0].getTimeToLive());
+    }
+    
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs8() throws Exception {
+        String ddl = "create table IF NOT EXISTS TEST8 ("
+                + " id char(1) NOT NULL,"
+                + " col1 integer NOT NULL,"
+                + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+                + " ) BLOOMFILTER = 'ROW', SALT_BUCKETS = 4";
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST8")).getColumnFamilies();
+        assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
     }
     
     
