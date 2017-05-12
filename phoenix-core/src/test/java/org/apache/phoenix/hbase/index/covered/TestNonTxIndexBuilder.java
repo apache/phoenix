@@ -98,6 +98,7 @@ public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
     private static final byte[] VALUE_1 = Bytes.toBytes(111);
     private static final byte[] VALUE_2 = Bytes.toBytes(222);
     private static final byte[] VALUE_3 = Bytes.toBytes(333);
+    private static final byte[] VALUE_4 = Bytes.toBytes(444);
     private static final byte PUT_TYPE = KeyValue.Type.Put.getCode();
 
     private NonTxIndexBuilder indexBuilder;
@@ -217,6 +218,8 @@ public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
     /**
      * Tests a partial rebuild of a row with multiple versions. 3 versions of the row in data table,
      * and we rebuild the index starting from time t=2
+     *
+     * There should be one index row version per data row version.
      */
     @Test
     public void testRebuildMultipleVersionRow() throws IOException {
@@ -229,11 +232,15 @@ public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
         Cell currentCell1 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 1, PUT_TYPE, VALUE_1);
         Cell currentCell2 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 2, PUT_TYPE, VALUE_2);
         Cell currentCell3 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 3, PUT_TYPE, VALUE_3);
-        setCurrentRowState(Arrays.asList(currentCell3, currentCell2, currentCell1));
+        Cell currentCell4 = CellUtil.createCell(ROW, FAM, INDEXED_QUALIFIER, 4, PUT_TYPE, VALUE_4);
+        setCurrentRowState(Arrays.asList(currentCell4, currentCell3, currentCell2, currentCell1));
 
         // rebuilder replays mutations starting from t=2
         MultiMutation mutation = new MultiMutation(new ImmutableBytesPtr(ROW));
         Put put = new Put(ROW);
+        put.addImmutable(FAM, INDEXED_QUALIFIER, 4, VALUE_4);
+        mutation.addAll(put);
+        put = new Put(ROW);
         put.addImmutable(FAM, INDEXED_QUALIFIER, 3, VALUE_3);
         mutation.addAll(put);
         put = new Put(ROW);
@@ -242,11 +249,22 @@ public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
 
         Collection<Pair<Mutation, byte[]>> indexUpdates =
                 indexBuilder.getIndexUpdate(mutation, mockIndexMetaData);
-        assertEquals(2, indexUpdates.size());
+        // 3 puts and 3 deletes (one to hide existing index row for VALUE_1, and two to hide index
+        // rows for VALUE_2, VALUE_3)
+        assertEquals(6, indexUpdates.size());
+
         assertContains(indexUpdates, 2, ROW, KeyValue.Type.DeleteFamily, FAM,
             new byte[0] /* qual not needed */, 2);
         assertContains(indexUpdates, ColumnTracker.NO_NEWER_PRIMARY_TABLE_ENTRY_TIMESTAMP, ROW,
+            KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 2);
+        assertContains(indexUpdates, 3, ROW, KeyValue.Type.DeleteFamily, FAM,
+            new byte[0] /* qual not needed */, 3);
+        assertContains(indexUpdates, ColumnTracker.NO_NEWER_PRIMARY_TABLE_ENTRY_TIMESTAMP, ROW,
             KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 3);
+        assertContains(indexUpdates, 4, ROW, KeyValue.Type.DeleteFamily, FAM,
+            new byte[0] /* qual not needed */, 4);
+        assertContains(indexUpdates, ColumnTracker.NO_NEWER_PRIMARY_TABLE_ENTRY_TIMESTAMP, ROW,
+            KeyValue.Type.Put, FAM, QueryConstants.EMPTY_COLUMN_BYTES, 4);
     }
 
     /**
