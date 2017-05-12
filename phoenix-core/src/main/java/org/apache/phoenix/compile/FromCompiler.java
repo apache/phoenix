@@ -172,7 +172,11 @@ public class FromCompiler {
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
         // Always use non-tenant-specific connection here
         try {
-            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
+            // We need to always get the latest meta data for the parent table of a create view call to ensure that
+            // that we're copying the current table meta data as of when the view is created. Once we no longer
+            // copy the parent meta data, but store only the local diffs (PHOENIX-3534), we will no longer need
+            // to do this.
+            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true, true);
             return visitor;
         } catch (TableNotFoundException e) {
             // Used for mapped VIEW, since we won't be able to resolve that.
@@ -365,13 +369,22 @@ public class FromCompiler {
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
             this(connection, tableNode, updateCacheImmediately, 0, new HashMap<String,UDFParseNode>(1));
         }
+        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode,
+            boolean updateCacheImmediately, boolean alwaysHitServer) throws SQLException {
+          this(connection, tableNode, updateCacheImmediately, 0, new HashMap<String,UDFParseNode>(1), alwaysHitServer);
+      }
+        public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode,
+            boolean updateCacheImmediately, int tsAddition,
+            Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+          this(connection, tableNode, updateCacheImmediately, tsAddition, udfParseNodes, false);
+        }
 
         public SingleTableColumnResolver(PhoenixConnection connection, NamedTableNode tableNode,
                 boolean updateCacheImmediately, int tsAddition,
-                Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+                Map<String, UDFParseNode> udfParseNodes, boolean alwaysHitServer) throws SQLException {
             super(connection, tsAddition, updateCacheImmediately, udfParseNodes);
             alias = tableNode.getAlias();
-            TableRef tableRef = createTableRef(tableNode.getName().getSchemaName(), tableNode, updateCacheImmediately);
+            TableRef tableRef = createTableRef(tableNode.getName().getSchemaName(), tableNode, updateCacheImmediately, alwaysHitServer);
 			PSchema schema = new PSchema(tableRef.getTable().getSchemaName().toString());
             tableRefs = ImmutableList.of(tableRef);
             schemas = ImmutableList.of(schema);
@@ -532,7 +545,8 @@ public class FromCompiler {
             return theSchema;
         }
 
-        protected TableRef createTableRef(String connectionSchemaName, NamedTableNode tableNode, boolean updateCacheImmediately) throws SQLException {
+        protected TableRef createTableRef(String connectionSchemaName, NamedTableNode tableNode,
+            boolean updateCacheImmediately, boolean alwaysHitServer) throws SQLException {
             String tableName = tableNode.getName().getTableName();
             String schemaName = tableNode.getName().getSchemaName();
             schemaName = connection.getSchema() != null && schemaName == null ? connection.getSchema() : schemaName;
@@ -541,7 +555,7 @@ public class FromCompiler {
             PName tenantId = connection.getTenantId();
             PTable theTable = null;
             if (updateCacheImmediately) {
-                MetaDataMutationResult result = client.updateCache(schemaName, tableName);
+                MetaDataMutationResult result = client.updateCache(tenantId, schemaName, tableName, alwaysHitServer);
                 timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
                 theTable = result.getTable();
                 if (theTable == null) {
@@ -746,7 +760,7 @@ public class FromCompiler {
         @Override
         public Void visit(NamedTableNode tableNode) throws SQLException {
             String alias = tableNode.getAlias();
-            TableRef tableRef = createTableRef(connectionSchemaName, tableNode, true);
+            TableRef tableRef = createTableRef(connectionSchemaName, tableNode, true, false);
             PTable theTable = tableRef.getTable();
 
             if (alias != null) {
