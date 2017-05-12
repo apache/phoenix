@@ -24,11 +24,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.NavigableMap;
-import java.util.TreeMap;
 
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
@@ -45,6 +42,7 @@ import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -52,10 +50,7 @@ import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.RequestConverter;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.protobuf.generated.AdminProtos.GetRegionInfoRequest;
-import org.apache.hadoop.hbase.util.ByteRange;
-import org.apache.hadoop.hbase.util.ByteRangeUtils;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.SimpleByteRange;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -66,7 +61,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
@@ -187,6 +181,18 @@ public class MetaDataUtil {
         return version;
     }
     
+    public static byte[] getTenantIdAndSchemaAndTableName(Mutation someRow) {
+        byte[][] rowKeyMetaData = new byte[3][];
+        getVarChars(someRow.getRow(), 3, rowKeyMetaData);
+        return ByteUtil.concat(rowKeyMetaData[0], rowKeyMetaData[1], rowKeyMetaData[2]);
+    }
+
+    public static byte[] getTenantIdAndSchemaAndTableName(Result result) {
+        byte[][] rowKeyMetaData = new byte[3][];
+        getVarChars(result.getRow(), 3, rowKeyMetaData);
+        return ByteUtil.concat(rowKeyMetaData[0], rowKeyMetaData[1], rowKeyMetaData[2]);
+    }
+
     public static void getTenantIdAndSchemaAndTableName(List<Mutation> tableMetadata, byte[][] rowKeyMetaData) {
         Mutation m = getTableHeaderRow(tableMetadata);
         getVarChars(m.getRow(), 3, rowKeyMetaData);
@@ -693,17 +699,27 @@ public class MetaDataUtil {
 	}
 
     public static LinkType getLinkType(Mutation tableMutation) {
-        List<Cell> kvs = tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
+        return getLinkType(tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES));
+    }
+
+    public static LinkType getLinkType(Collection<Cell> kvs) {
         if (kvs != null) {
             for (Cell kv : kvs) {
                 if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
-                        PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0,
-                        PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) { return LinkType
-                                .fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(),
-                                        kv.getValueOffset(), SortOrder.getDefault())); }
+                    PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0,
+                    PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) { return LinkType
+                    .fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(),
+                        kv.getValueOffset(), SortOrder.getDefault())); }
             }
         }
         return null;
+    }
+
+    public static boolean isLinkingRow(Mutation tableMutation) {
+        byte[][] array = new byte[5][];
+        getVarChars(tableMutation.getRow(), array);
+        return array[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX] != null && Bytes
+            .equals(array[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX], HConstants.EMPTY_BYTE_ARRAY);
     }
 
     public static boolean isLocalIndex(String physicalName) {
