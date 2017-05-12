@@ -121,7 +121,7 @@ public class CoveredColumnIndexer extends NonTxIndexBuilder {
   public Collection<Pair<Mutation, byte[]>> getIndexUpdateForFilteredRows(
       Collection<KeyValue> filtered, IndexMetaData indexMetaData) throws IOException {
     // stores all the return values
-    IndexUpdateManager updateMap = new IndexUpdateManager();
+    IndexUpdateManager updateMap = new IndexUpdateManager(indexMetaData);
     // batch the updates by row to make life easier and ordered
     Collection<Batch> batches = batchByRow(filtered);
 

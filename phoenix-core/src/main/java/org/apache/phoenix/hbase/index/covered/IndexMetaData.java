@@ -23,7 +23,14 @@ public interface IndexMetaData {
         @Override
         public boolean isImmutableRows() {
             return false;
+        }
+
+        @Override
+        public boolean ignoreNewerMutations() {
+          return false;
         }};
-    
+
     public boolean isImmutableRows();
+
+    public boolean ignoreNewerMutations();
 }
