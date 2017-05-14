@@ -79,6 +79,7 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -533,6 +534,10 @@ public class DeleteCompiler {
             } else if (runOnServer) {
                 // TODO: better abstraction
                 Scan scan = context.getScan();
+                // Propagate IGNORE_NEWER_MUTATIONS when replaying mutations since there will be
+                // future dated data row mutations that will get in the way of generating the
+                // correct index rows on replay.
+                scan.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
                 scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
     
                 // Build an ungrouped aggregate query: select COUNT(*) from <table> where <where>

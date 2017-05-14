@@ -24,10 +24,16 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 public class CommitException extends SQLException {
     private static final long serialVersionUID = 2L;
     private final int[] uncommittedStatementIndexes;
+    private final long serverTimestamp;
 
-    public CommitException(Exception e, int[] uncommittedStatementIndexes) {
+    public CommitException(Exception e, int[] uncommittedStatementIndexes, long serverTimestamp) {
         super(e);
         this.uncommittedStatementIndexes = uncommittedStatementIndexes;
+        this.serverTimestamp = serverTimestamp;
+    }
+    
+    public long getServerTimestamp() {
+        return this.serverTimestamp;
     }
 
     /**

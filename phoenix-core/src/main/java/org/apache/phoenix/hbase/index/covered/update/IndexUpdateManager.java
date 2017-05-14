@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 import com.google.common.collect.Lists;
@@ -99,6 +100,12 @@ public class IndexUpdateManager {
 
   protected final Map<ImmutableBytesPtr, Collection<Mutation>> map =
       new HashMap<ImmutableBytesPtr, Collection<Mutation>>();
+  private IndexMetaData indexMetaData;
+
+  public IndexUpdateManager(IndexMetaData indexMetaData) {
+    this.indexMetaData = indexMetaData;
+
+  }
 
   /**
    * Add an index update. Keeps the latest {@link Put} for a given timestamp
@@ -113,7 +120,12 @@ public class IndexUpdateManager {
       updates = new TreeSet<Mutation>(COMPARATOR);
       map.put(key, updates);
     }
-    fixUpCurrentUpdates(updates, m);
+    if (indexMetaData.ignoreNewerMutations()) {
+      // if we're replaying mutations, we don't need to worry about out-of-order updates
+      updates.add(m);
+    } else {
+      fixUpCurrentUpdates(updates, m);
+    }
   }
 
   /**
