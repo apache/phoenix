@@ -82,6 +82,7 @@ import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
@@ -569,6 +570,14 @@ public class MutationState implements SQLCloseable {
                 rowMutationsPertainingToIndex = rowMutations;
             }
             mutationList.addAll(rowMutations);
+            if (connection.isReplayMutations()) {
+                // Propagate IGNORE_NEWER_MUTATIONS when replaying mutations since there will be
+                // future dated data row mutations that will get in the way of generating the
+                // correct index rows on replay.
+                for (Mutation mutation : rowMutations) {
+                    mutation.setAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                }
+            }
             if (mutationsPertainingToIndex != null) mutationsPertainingToIndex
                     .addAll(rowMutationsPertainingToIndex);
         }
@@ -926,6 +935,7 @@ public class MutationState implements SQLCloseable {
                     joinMutationState(new TableRef(tableRef), valuesMap, txMutations);
                 }
             }
+            long serverTimestamp = HConstants.LATEST_TIMESTAMP;
             Iterator<Entry<TableInfo, List<Mutation>>> mutationsIterator = physicalTableMutationMap.entrySet().iterator();
             while (mutationsIterator.hasNext()) {
                 Entry<TableInfo, List<Mutation>> pair = mutationsIterator.next();
@@ -992,6 +1002,7 @@ public class MutationState implements SQLCloseable {
                         // Remove batches as we process them
                         mutations.remove(origTableRef);
                     } catch (Exception e) {
+                        serverTimestamp = ServerUtil.parseServerTimestamp(e);
                         SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
                         if (inferredE != null) {
                             if (shouldRetry && retryCount == 0 && inferredE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND.getErrorCode()) {
@@ -1013,7 +1024,7 @@ public class MutationState implements SQLCloseable {
                         }
                         // Throw to client an exception that indicates the statements that
                         // were not committed successfully.
-                        sqlE = new CommitException(e, getUncommittedStatementIndexes());
+                        sqlE = new CommitException(e, getUncommittedStatementIndexes(), serverTimestamp);
                     } finally {
                         try {
                             if (cache!=null) 
