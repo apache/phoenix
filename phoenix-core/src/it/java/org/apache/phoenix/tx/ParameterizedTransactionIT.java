@@ -391,7 +391,10 @@ public class ParameterizedTransactionIT extends ParallelStatsDisabledIT {
         admin.createTable(desc);
         ddl = "CREATE TABLE " + t2 + " (k varchar primary key) transactional=true";
         conn.createStatement().execute(ddl);
-        assertEquals(Boolean.TRUE.toString(), admin.getTableDescriptor(TableName.valueOf(t2)).getValue(PhoenixTransactionContext.READ_NON_TX_DATA));
+
+        HTableDescriptor htableDescriptor = admin.getTableDescriptor(TableName.valueOf(t2));
+        String str = htableDescriptor.getValue(PhoenixTransactionContext.READ_NON_TX_DATA);
+        assertEquals(Boolean.TRUE.toString(), str);
         
         // Should be ok, as HBase metadata should match existing metadata.
         ddl = "CREATE TABLE IF NOT EXISTS " + t1 + " (k varchar primary key)"; 

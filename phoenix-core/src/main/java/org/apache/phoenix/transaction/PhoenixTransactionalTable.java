@@ -19,7 +19,6 @@ public interface PhoenixTransactionalTable extends HTableInterface {
     /**
      * Transaction version of {@link HTableInterface#get(Get get)}
      * @param get
-     * @return
      * @throws IOException
      */
     public Result get(Get get) throws IOException;

@@ -224,9 +224,10 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             assertEquals(1,rs.getInt(1));
         }
 
-        //TransactionAwareHTable txAware = new TransactionAwareHTable(htable, TxConstants.ConflictDetection.ROW);
-        PhoenixTransactionContext txContext = TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
-        PhoenixTransactionalTable txTable = TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
+        PhoenixTransactionContext txContext =
+              TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
+        PhoenixTransactionalTable txTable =
+              TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
 
         txContext.begin();
 
@@ -277,8 +278,10 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         }
         
         // Repeat the same as above, but this time abort the transaction
-        txContext = TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
-        txTable = TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
+        txContext =
+              TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
+        txTable =
+              TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
 
         txContext.begin();
         

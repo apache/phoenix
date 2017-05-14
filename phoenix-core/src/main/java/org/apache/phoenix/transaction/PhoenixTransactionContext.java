@@ -142,7 +142,6 @@ public interface PhoenixTransactionContext {
     /**
      *
      * @param version
-     * @return
      */
     public boolean isPreExistingVersion(long version);
 
