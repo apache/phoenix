@@ -48,6 +48,8 @@ message PColumn {
   optional bool isRowTimestamp = 13;
   optional bool isDynamic = 14;
   optional bytes columnQualifierBytes = 15;
+  optional int64 timestamp = 16;
+  optional bool derived = 17 [default = false];
 }
 
 message PTableStats {

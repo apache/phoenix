@@ -151,14 +151,20 @@ public interface PTable extends PMetaDataEntity {
         /**
          * Link from a parent table to its child view
          */
-        CHILD_TABLE((byte)4);
+        CHILD_TABLE((byte)4),
+        /**
+         * Link for an dropped column
+         */
+        DROPPED_COLUMN((byte)5);
 
         private final byte[] byteValue;
         private final byte serializedValue;
+        private final byte[] serializedByteArrayValue;
 
         LinkType(byte serializedValue) {
             this.serializedValue = serializedValue;
             this.byteValue = Bytes.toBytes(this.name());
+            this.serializedByteArrayValue = new byte[] { serializedValue };
         }
 
         public byte[] getBytes() {
@@ -167,6 +173,10 @@ public interface PTable extends PMetaDataEntity {
 
         public byte getSerializedValue() {
             return this.serializedValue;
+        }
+
+        public byte[] getSerializedValueAsByteArray() {
+            return serializedByteArrayValue;
         }
 
         public static LinkType fromSerializedValue(byte serializedValue) {

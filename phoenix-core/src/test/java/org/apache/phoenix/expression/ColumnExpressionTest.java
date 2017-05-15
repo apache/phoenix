@@ -25,6 +25,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
@@ -43,7 +44,7 @@ public class ColumnExpressionTest {
         int scale = 5;
         PName colName = PNameFactory.newName("c1");
         PColumn column = new PColumnImpl(colName, PNameFactory.newName("f1"), PDecimal.INSTANCE, maxLen, scale,
-                true, 20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes());
+                true, 20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes(), HConstants.LATEST_TIMESTAMP);
         ColumnExpression colExp = new KeyValueColumnExpression(column);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dOut = new DataOutputStream(baos);
@@ -64,7 +65,7 @@ public class ColumnExpressionTest {
         int maxLen = 30;
         PName colName = PNameFactory.newName("c1");
         PColumn column = new PColumnImpl(colName, PNameFactory.newName("f1"), PBinary.INSTANCE, maxLen, null,
-                true, 20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes());
+                true, 20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes(), HConstants.LATEST_TIMESTAMP);
         ColumnExpression colExp = new KeyValueColumnExpression(column);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dOut = new DataOutputStream(baos);
@@ -85,7 +86,7 @@ public class ColumnExpressionTest {
         int scale = 5;
         PName colName = PNameFactory.newName("c1");
         PColumn column = new PColumnImpl(colName, PNameFactory.newName("f1"), PVarchar.INSTANCE, null, scale,
-                true, 20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes());
+                true, 20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes(), HConstants.LATEST_TIMESTAMP);
         ColumnExpression colExp = new KeyValueColumnExpression(column);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dOut = new DataOutputStream(baos);
@@ -105,7 +106,7 @@ public class ColumnExpressionTest {
     public void testSerializationWithNullScaleAndMaxLength() throws Exception {
         PName colName = PNameFactory.newName("c1");
         PColumn column = new PColumnImpl(colName, PNameFactory.newName("f1"), PDecimal.INSTANCE, null, null, true,
-                20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes());
+                20, SortOrder.getDefault(), 0, null, false, null, false, false, colName.getBytes(), HConstants.LATEST_TIMESTAMP);
         ColumnExpression colExp = new KeyValueColumnExpression(column);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dOut = new DataOutputStream(baos);

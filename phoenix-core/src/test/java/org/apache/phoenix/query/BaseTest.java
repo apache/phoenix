@@ -426,7 +426,7 @@ public abstract class BaseTest {
     protected static String url;
     protected static PhoenixTestDriver driver;
     protected static boolean clusterInitialized = false;
-    private static HBaseTestingUtility utility;
+    protected static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create(); 
     
     protected static String getUrl() {
