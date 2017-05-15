@@ -1939,12 +1939,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     // region so either this succeeds or fails.
                     for (int i = groupedMutations.size() - 1; i >= 1; i--) {
                         List<Mutation> mutationsToApply = groupedMutations.get(i).getAllMutations();
-                        hTable.batch(Lists.<Row>newArrayList(mutationsToApply));
                         logger.info("Issuing Deletes: " + mutationsToApply);
+                        Object[] appliedMutations = new Object[mutationsToApply.size()];
+                        hTable.batch(mutationsToApply, appliedMutations);
                     }
                     // now we can finally delete that linking row for the original table and we are done
-                    hTable.batch(groupedMutations.getFirst().getLinkMutations());
-                    logger.info("Issuing Deletes: " + groupedMutations.getFirst().getLinkMutations());
+                    List<Mutation> linkMutations = groupedMutations.getFirst().getLinkMutations();
+                    logger.info("Issuing Deletes: " + linkMutations);
+                    Object[] appliedMutations = new Object[linkMutations.size()];
+                    hTable.batch(linkMutations, appliedMutations);
+                } catch (Throwable t) {
+                    logger.error("dropTable failed", t);
+                    ProtobufUtil.setControllerException(controller,
+                        ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
                 } finally {
                     if (hTable != null) {
                         hTable.close();

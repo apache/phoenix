@@ -1,6 +1,7 @@
 package org.apache.phoenix.coprocessor;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -8,6 +9,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
@@ -235,8 +237,10 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         dropTableCache(conn, grandChild, baseTable);
         conn.createStatement().execute("DROP TABLE " + baseTable + " CASCADE");
 
+        dropTableCache(conn, grandChild, baseTable);
 
-
+        // the grand child should no longer exist
+        PhoenixRuntime.getTable(conn, grandChild);
     }
 
     private void assertColumnNamesEqual(PTable table, String... cols) {

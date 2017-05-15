@@ -15,12 +15,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -33,13 +30,12 @@ import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Set;
 
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
-public class OrphanCleaner {
+class OrphanCleaner {
 
-    public static void reapOrphans(HTableInterface hTable, byte[] tenantId, byte[] schema, byte[] name) throws IOException {
+    static void reapOrphans(HTableInterface hTable, byte[] tenantId, byte[] schema, byte[] name) throws IOException {
         List<byte[]> listOBytes = Lists.newArrayList();
         TableViewFinderResult viewFinderResult = new TableViewFinderResult();
         ViewFinder.findAllRelatives(hTable, tenantId, schema, name, PTable.LinkType.CHILD_TABLE, viewFinderResult);
@@ -47,33 +43,26 @@ public class OrphanCleaner {
             byte[][] rowViewKeyMetaData = new byte[5][];
             getVarChars(aResult.getRow(), 5, rowViewKeyMetaData);
             byte[] resultTenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-            byte[] resultSchema =
-                SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                    .getBytes();
-            byte[] resultTable =
-                SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                    .getBytes();
+            byte[] resultSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
+            byte[] resultTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
             byte[] rowKeyInQuestion = SchemaUtil.getTableKey(resultTenantId, resultSchema, resultTable);
             listOBytes.add(rowKeyInQuestion);
         }
-
         for (int i = listOBytes.size() - 1; i >= 0; i--) {
-            traverseUpAndDelete(hTable, listOBytes.get(i));
+            List<Delete> deletes = traverseUpAndDelete(hTable, listOBytes.get(i));
+            // add the linking row as well if needed
+            deletes.add(new Delete(listOBytes.get(i)));
+            hTable.delete(deletes);
+        }
+        for (Result result : viewFinderResult.getResults()) {
+            byte[] rowArray = result.getRow();
+            Delete linkedDelete = new Delete(rowArray);
+            hTable.delete(linkedDelete);
         }
     }
 
-    static List<Delete> traverseUpAndDelete(HTableInterface hTable, byte[] row) throws IOException {
-        byte[][] rowViewKeyMetaData = new byte[3][];
-        getVarChars(row, 3, rowViewKeyMetaData);
-        byte[] resultTenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-        byte[] resultSchema =
-            SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                .getBytes();
-        byte[] resultTable =
-            SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                .getBytes();
+    static List<Delete> traverseUpAndDelete(HTableInterface hTable, byte[] startKey) throws IOException {
         List<Delete> deletesToIssue = Lists.newArrayList();
-        byte[] startKey = SchemaUtil.getTableKey(resultTenantId, resultSchema, resultTable);
         Scan scan = new Scan(startKey, ByteUtil.nextKey(startKey));
         scan.setFilter(new KeyOnlyFilter());
         ResultScanner scanner = hTable.getScanner(scan);
