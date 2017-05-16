@@ -50,8 +50,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
+import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.AfterClass;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -69,6 +70,11 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
           QueryServerBasicsIT.class.getName() + "-localDir").getAbsoluteFile();
   private static File pqsSinkFile = new File(testRootDir,
           "myfile");
+  private static final String global = "global";
+  private static final String requestReadMetrics = "Statement-RequestReadMetrics";
+  private static final String overAllReadRequestMetrics =
+          "Statement-OverAllReadRequestMetrics";
+  private static final String writeMetricsMut = "Connection-WriteMetricsForMutations";
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -80,7 +86,11 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
     Files.createFile(pqsSinkFile.toPath());
     CONF.set(PHOENIX_PQS_FILE_SINK_FILENAME, pqsSinkFile.getCanonicalPath());
     CONF.setInt(PHOENIX_PQS_METRIC_REPORTING_INTERVAL_MS,2000);
-    assertTrue("no log message in the file ", checkIfTempFileIsEmpty());
+    boolean noMetrics = checkFileContainsMetricsData(global) &&
+            checkFileContainsMetricsData(overAllReadRequestMetrics) &&
+            checkFileContainsMetricsData(requestReadMetrics) && checkFileContainsMetricsData(writeMetricsMut);
+    assertFalse(" metrics file should have no metrics",
+            noMetrics);
     CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
@@ -118,6 +128,8 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
         assertFalse("unexpected populated resultSet", resultSet.next());
         assertEquals(1, metaData.getColumnCount());
         assertEquals(TABLE_CAT, metaData.getColumnName(1));
+        assertTrue(" metrics file should contain global ",
+                checkFileContainsMetricsData(global));
       }
     }
   }
@@ -184,16 +196,27 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
         }
       }
     }
-    assertFalse(" metrics file should not be empty", checkIfTempFileIsEmpty());
-
+    assertTrue(" metrics file should contain global ",
+            checkFileContainsMetricsData(global));
+    assertTrue(" metrics file should contain overall statement level metrics",
+            checkFileContainsMetricsData(overAllReadRequestMetrics));
+    assertTrue(" metrics file should contain statement level read metrics",
+            checkFileContainsMetricsData(requestReadMetrics));
+    assertTrue(" metrics file should contain connection level write metrics",
+            checkFileContainsMetricsData(writeMetricsMut));
   }
 
-  private static boolean checkIfTempFileIsEmpty() throws Exception {
+  private static boolean checkFileContainsMetricsData(String metricsType) throws Exception {
     FileReader fileReader = new FileReader(pqsSinkFile);
     try(BufferedReader br = new BufferedReader(fileReader)) {
       String st;
-      if (( st = br.readLine() ) == null) {
-        return true;
+      while (( st = br.readLine() ) != null) {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode actualObj = mapper.readTree(st);
+        boolean contains = actualObj.get(metricsType)!= null?true:false;
+        if (contains) {
+          return true; // the outputfile does contain metrics jsons
+        }
       }
     };
     return false;
