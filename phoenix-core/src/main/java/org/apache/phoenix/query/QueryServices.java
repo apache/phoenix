@@ -244,6 +244,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
 
+    public static final String PHOENIX_QUERY_SERVER_METRICS = "phoenix.query.server.metrics";
+    public static final String PHOENIX_PQS_METRIC_REPORTING_INTERVAL_MS = "phoenix.query.server.metrics.report.interval.ms";
+    public static final String PHOENIX_PQS_TYPE_OF_SINK = "phoenix.query.server.metrics.type.of.sink";
+    public static final String PHOENIX_PQS_FILE_SINK_FILENAME = "phoenix.query.server.filesink.filename";
     /**
      * Get executor service used for parallel scans
      */

@@ -18,10 +18,11 @@
 
 package org.apache.phoenix.queryserver.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.calcite.avatica.jdbc.JdbcMeta;
 import org.apache.calcite.avatica.jdbc.StatementInfo;
-import org.apache.calcite.avatica.metrics.MetricsSystem;
 import org.apache.phoenix.queryserver.metrics.PqsMetricsSystem;
+import org.apache.phoenix.queryserver.metrics.sink.PqsSink;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,22 +38,16 @@ import java.util.Properties;
 public class PQSMetricsMeta extends JdbcMeta {
 
     private static final Logger LOG = LoggerFactory.getLogger(PQSMetricsMeta.class);
-    public static final PqsMetricsSystem pqsMetricsSystem = new PqsMetricsSystem();
 
-    public PQSMetricsMeta(String url) throws SQLException {
-        super(url);
-    }
-
-    public PQSMetricsMeta(String url, String user, String password) throws SQLException {
-        super(url, user, password);
-    }
+    private PqsMetricsSystem pqsMetricsSystem;
+    private Integer reportingInterval;
+    private String fileName;
+    private String sinkType;
+    private PqsSink pqsSink;
 
     public PQSMetricsMeta(String url, Properties info) throws SQLException {
         super(url, info);
-    }
-
-    public PQSMetricsMeta(String url, Properties info, MetricsSystem metrics) throws SQLException {
-        super(url, info, metrics);
+        init(info);
     }
 
     @Override
@@ -62,22 +57,17 @@ public class PQSMetricsMeta extends JdbcMeta {
         Map<String, Map<String, Long>> mutationReadMetrics = null;
         try {
             conn = super.getConnection(ch.id);
-        } catch (SQLException e) {
-            LOG.error(" error while getting hold of connection object ",e);
-        }
-        if (conn != null) {
-            try {
-                //get Phoenix Metrics and create Gauges if it does not exists.
+            if (conn != null) {
                 mutationWriteMetrics = PhoenixRuntime.getWriteMetricsForMutationsSinceLastReset(conn);
                 mutationReadMetrics = PhoenixRuntime.getReadMetricsForMutationsSinceLastReset(conn);
-                pqsMetricsSystem.pqsSink.writeMapOfMap(mutationReadMetrics, PqsMetricsSystem.connectionMetrics);
-                pqsMetricsSystem.pqsSink.writeMapOfMap(mutationWriteMetrics, PqsMetricsSystem.connectionMetrics);
+                pqsSink.writeMapOfMap(mutationReadMetrics, PqsMetricsSystem.connectionReadMetricsForMutations);
+                pqsSink.writeMapOfMap(mutationWriteMetrics, PqsMetricsSystem.connectionWriteMetricsForMutations);
                 PhoenixRuntime.resetMetrics(conn);
-            } catch (SQLException e) {
-                LOG.warn("sql exception when trying to get connection level metrics ");
             }
-
+        } catch (Exception e) {
+            LOG.error(" error while getting hold of connection object ",e);
         }
+
         super.closeConnection(ch);
 
     }
@@ -87,7 +77,6 @@ public class PQSMetricsMeta extends JdbcMeta {
         StatementInfo statementInfo = super.getStatementCache().getIfPresent(h.id);
         Map<String, Long> overAllQueryMetrics = null;
         Map<String, Map<String, Long>> requestReadMetrics = null;
-
         // get phoenix metrics from this.
         if (statementInfo != null ) {
             ResultSet resultSet = statementInfo.getResultSet();
@@ -95,8 +84,8 @@ public class PQSMetricsMeta extends JdbcMeta {
                 try {
                     overAllQueryMetrics = PhoenixRuntime.getOverAllReadRequestMetrics(resultSet);
                     requestReadMetrics = PhoenixRuntime.getRequestReadMetrics(resultSet);
-                    pqsMetricsSystem.pqsSink.writeMap(overAllQueryMetrics, PqsMetricsSystem.statementLevelMetrics);
-                    pqsMetricsSystem.pqsSink.writeMapOfMap(requestReadMetrics, PqsMetricsSystem.statementLevelMetrics);
+                    pqsSink.writeMap(overAllQueryMetrics, PqsMetricsSystem.overAllReadRequestMetrics);
+                    pqsSink.writeMapOfMap(requestReadMetrics, PqsMetricsSystem.statementReadMetrics);
                     PhoenixRuntime.resetMetrics(resultSet);
                 } catch (SQLException e) {
                     LOG.warn("sql exception when trying to get connection level metrics ");
@@ -105,4 +94,19 @@ public class PQSMetricsMeta extends JdbcMeta {
         }
         super.closeStatement(h);
     }
+
+    private void init(Properties info){
+        reportingInterval = Integer.valueOf(info.get("pqs_reporting_interval").toString());
+        fileName = info.getProperty("pqs_filename");
+        sinkType = info.getProperty("pqs_sinktype");
+        pqsSink = PqsMetricsSystem.getSinkObject(sinkType,fileName);
+        pqsMetricsSystem = new PqsMetricsSystem(sinkType,fileName,reportingInterval);
+    }
+
+
+    @VisibleForTesting
+    public PqsMetricsSystem getPqsMetricsSystem() {
+        return pqsMetricsSystem;
+    }
+
 }

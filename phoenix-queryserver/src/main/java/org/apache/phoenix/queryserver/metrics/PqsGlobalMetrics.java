@@ -20,6 +20,7 @@ package org.apache.phoenix.queryserver.metrics;
 
 
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.JmxReporter;
 import com.codahale.metrics.MetricRegistry;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -36,10 +37,13 @@ public class PqsGlobalMetrics implements Runnable {
     private Collection<GlobalMetric> phoenixGlobalMetricsCollection;
     private PqsSink pqsSink;
     private static final MetricRegistry metrics = new MetricRegistry();
+    private int reportingInterval;
+    private final JmxReporter reporter;
 
-    public PqsGlobalMetrics(PqsSink pqsSink) {
+    public PqsGlobalMetrics(String sinkType,String fileSinkFilename, int reportingInterval) {
+        this.reportingInterval = reportingInterval;
+        this.pqsSink = PqsMetricsSystem.getSinkObject(sinkType,fileSinkFilename);
         phoenixGlobalMetricsCollection = PhoenixRuntime.getGlobalPhoenixClientMetrics();
-        this.pqsSink = pqsSink;
         for(final GlobalMetric globalMetric:phoenixGlobalMetricsCollection) {
             metrics.register(MetricRegistry.name(PqsGlobalMetrics.class,
                     global,globalMetric.getName()),
@@ -50,21 +54,25 @@ public class PqsGlobalMetrics implements Runnable {
                         }
                     });
         }
+        reporter = JmxReporter.forRegistry(metrics).build();
 
     }
 
     @Override
     public void run() {
-        while (true) {
-            int delay = PqsConfiguration.getReportingInterval();
+        boolean run = true;
+        reporter.start();
+        while (run) {
             //besides writing to JMX, the global metrics is also written to pqsSink
             //default pqsSink is slf4j ( logger)
             phoenixGlobalMetricsCollection = PhoenixRuntime.getGlobalPhoenixClientMetrics();
             this.pqsSink.writeGlobal(phoenixGlobalMetricsCollection);
             try {
-                Thread.sleep(delay);
+                Thread.sleep(reportingInterval);
             } catch (InterruptedException e) {
-                LOG.error(" Sleep thread interrupted for metrics collection ");
+                LOG.error(" Sleep thread interrupted for metrics collection. " +
+                        "So stopping global metrics collection. ",e);
+                run = false;
             }
         }
     }

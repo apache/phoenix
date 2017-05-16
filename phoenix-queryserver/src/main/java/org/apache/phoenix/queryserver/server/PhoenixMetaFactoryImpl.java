@@ -27,7 +27,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.queryserver.metrics.PqsConfiguration;
+import org.apache.phoenix.queryserver.metrics.PqsMetricsSystem;
 import org.apache.phoenix.util.QueryUtil;
 
 import java.sql.Connection;
@@ -38,6 +38,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_METRICS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_QUERY_SERVER_METRICS;
 
 /**
  * Bridge between Phoenix and Avatica.
@@ -70,10 +73,18 @@ public class PhoenixMetaFactoryImpl extends Configured implements PhoenixMetaFac
             "0 or 1 argument expected. Received " + Arrays.toString(args.toArray()));
       }
       // TODO: what about -D configs passed in from cli? How do they get pushed down?
-      if (PqsConfiguration.isMetricsTurnedOn()) {
+      boolean isMetricOn = conf.getBoolean(PHOENIX_QUERY_SERVER_METRICS,
+              DEFAULT_PHOENIX_QUERY_SERVER_METRICS);
+      if (isMetricOn) {
+        info.put("pqs_reporting_interval", PqsMetricsSystem.getReportingInterval(conf));
+        info.put("pqs_filename",PqsMetricsSystem.getSinkFileName(conf));
+        info.put("pqs_sinktype",PqsMetricsSystem.getTypeOfSink(conf));
         info.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+        return new PQSMetricsMeta(url, info);
+      } else {
+        return new JdbcMeta(url, info);
       }
-      return new PQSMetricsMeta(url, info);
+
     } catch (SQLException | ClassNotFoundException e) {
       throw new RuntimeException(e);
     }

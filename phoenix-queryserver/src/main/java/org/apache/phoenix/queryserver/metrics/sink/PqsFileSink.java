@@ -19,7 +19,8 @@
 package org.apache.phoenix.queryserver.metrics.sink;
 
 
-import org.apache.phoenix.queryserver.metrics.PqsConfiguration;
+import org.apache.phoenix.query.QueryServicesOptions;
+import static org.apache.phoenix.queryserver.metrics.PqsMetricsSystem.MetricType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,9 +35,8 @@ public class PqsFileSink extends PqsSink {
 
     private PrintStream writer;
     private static final Logger LOG = LoggerFactory.getLogger(PqsFileSink.class);
-    private String filename = PqsConfiguration.getFileSinkFilename();
 
-    public PqsFileSink() {
+    public PqsFileSink(String filename) {
         try {
             writer = filename == null ? System.out
                     : new PrintStream(new FileOutputStream(new File(filename)),
@@ -45,6 +45,10 @@ public class PqsFileSink extends PqsSink {
             LOG.error("Error creating "+ filename, e);
         } catch (UnsupportedEncodingException e) {
             LOG.error("Error creating "+ filename, e);
+        } finally {
+            if (writer == null) {
+                writer = System.out;
+            }
         }
     }
 
@@ -53,14 +57,12 @@ public class PqsFileSink extends PqsSink {
         writer.close();
     }
 
-
     @Override
-    public void writeJson(String json){
+    public void writeJson(String json, MetricType type){
         if (json != null)
         {
-            writer.print(json);
+            writer.println(json);
         }
-        writer.println();
     }
 
 }

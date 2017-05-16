@@ -82,6 +82,12 @@ import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_PQS_FILE_SINK_FILENAME;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_PQS_METRIC_REPORTING_INTERVAL_MS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_PQS_TYPE_OF_SINK;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_QUERY_SERVER_METRICS;
+
+
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -272,6 +278,11 @@ public class QueryServicesOptions {
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME = ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS.toString();
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME = ImmutableStorageScheme.ONE_CELL_PER_COLUMN.toString();
 
+    public static final Integer DEFAULT_PHOENIX_PQS_REPORTING_INTERVAL_MS = 10000; // 10 sec
+    public static final String DEFAULT_PHOENIX_PQS_TYPE_OF_SINK = "file";
+    public static final boolean DEFAULT_PHOENIX_QUERY_SERVER_METRICS = true;
+    public static final String DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME = "/tmp/pqsSinkFile";
+
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
       {
@@ -354,7 +365,11 @@ public class QueryServicesOptions {
             .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
             .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)
             .setIfUnset(AUTO_UPGRADE_ENABLED, DEFAULT_AUTO_UPGRADE_ENABLED)
-            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING);
+            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
+            .setIfUnset(PHOENIX_PQS_FILE_SINK_FILENAME,DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME)
+            .setIfUnset(PHOENIX_PQS_METRIC_REPORTING_INTERVAL_MS,DEFAULT_PHOENIX_PQS_REPORTING_INTERVAL_MS)
+            .setIfUnset(PHOENIX_PQS_TYPE_OF_SINK,DEFAULT_PHOENIX_PQS_TYPE_OF_SINK)
+            .setIfUnset(PHOENIX_QUERY_SERVER_METRICS,DEFAULT_PHOENIX_QUERY_SERVER_METRICS);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
@@ -702,5 +717,4 @@ public class QueryServicesOptions {
         config.setLong(INDEX_POPULATION_SLEEP_TIME, waitTime);
         return this;
     }
-    
 }

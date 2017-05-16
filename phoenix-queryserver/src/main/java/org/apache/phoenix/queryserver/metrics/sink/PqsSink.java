@@ -20,6 +20,7 @@ package org.apache.phoenix.queryserver.metrics.sink;
 
 
 import org.apache.phoenix.monitoring.GlobalMetric;
+import static org.apache.phoenix.queryserver.metrics.PqsMetricsSystem.MetricType;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,7 @@ public abstract class PqsSink implements Closeable {
         }catch(IOException ioe) {
             LOG.error(" error while creating json string ",json);
         } finally {
-            writeJson(json);
+            writeJson(json, MetricType.request);
         }
 
     }
@@ -62,24 +63,26 @@ public abstract class PqsSink implements Closeable {
         }catch(IOException ioe) {
             LOG.error(" error while creating json string ",json);
         } finally {
-            writeJson(json);
+            writeJson(json, MetricType.request);
         }
 
     }
 
     public void writeGlobal(Collection<GlobalMetric> globalMetrics) {
         String json = null;
+        Map<String,Collection<GlobalMetric>> data = new HashMap<>();
+        data.put("global",globalMetrics);
         try {
-            json = new ObjectMapper().writeValueAsString(globalMetrics);
+            json = new ObjectMapper().writeValueAsString(data);
         }catch(IOException ioe) {
             LOG.error(" error while creating json string ",json);
         } finally {
-            writeJson(json);
+            writeJson(json, MetricType.global);
         }
     }
 
 
-    public abstract void writeJson(String json);
+    public abstract void writeJson(String json, MetricType type);
 
     public abstract void close();
 }

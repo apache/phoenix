@@ -19,6 +19,7 @@
 package org.apache.phoenix.queryserver.metrics.sink;
 
 
+import static org.apache.phoenix.queryserver.metrics.PqsMetricsSystem.MetricType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,11 +35,16 @@ public class PqsSlf4jSink extends PqsSink {
     public void close()  {}
 
     @Override
-    public void writeJson(String json){
-        if (json != null)
-        {
-            if (logger.isInfoEnabled())
+    public void writeJson(String json, MetricType type){
+        // if debug is enabled log global and request level metrics
+        // if info is enabled log only request level metrics
+        if (logger.isDebugEnabled()) {
+            logger.debug(json);
+        } else if (logger.isInfoEnabled()){
+            if (type == MetricType.request) {
                 logger.info(json);
+            }
         }
     }
+
 }

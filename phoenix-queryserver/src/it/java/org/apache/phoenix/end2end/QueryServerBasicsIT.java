@@ -22,6 +22,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CAT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_PQS_FILE_SINK_FILENAME;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_PQS_METRIC_REPORTING_INTERVAL_MS;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -33,7 +35,7 @@ import static org.junit.Assert.fail;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.io.PrintWriter;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -48,9 +50,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
-import org.apache.phoenix.queryserver.metrics.PqsConfiguration;
-import org.apache.phoenix.queryserver.server.PQSMetricsMeta;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -63,17 +64,22 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
 
   private static QueryServerThread AVATICA_SERVER;
   private static Configuration CONF;
-  private static String CONN_STRING;
-  private static FileReader fileReader;
+  private static String CONN_STRING;;
+  private static File testRootDir = new File("target",
+          QueryServerBasicsIT.class.getName() + "-localDir").getAbsoluteFile();
+  private static File pqsSinkFile = new File(testRootDir,
+          "myfile");
 
   @BeforeClass
   public static void beforeClass() throws Exception {
-    //clear up old file in /tmp directory
-    PrintWriter writer = new PrintWriter(new File(PqsConfiguration.DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME));
-    writer.print("");
-    writer.close();
-    fileReader = new FileReader(PqsConfiguration.DEFAULT_PHOENIX_PQS_FILE_SINK_FILENAME);
     CONF = getTestClusterConfig();
+    if (!testRootDir.exists()) {
+      testRootDir.mkdir();
+    }
+    Files.deleteIfExists(pqsSinkFile.toPath());
+    Files.createFile(pqsSinkFile.toPath());
+    CONF.set(PHOENIX_PQS_FILE_SINK_FILENAME, pqsSinkFile.getCanonicalPath());
+    CONF.setInt(PHOENIX_PQS_METRIC_REPORTING_INTERVAL_MS,2000);
     assertTrue("no log message in the file ", checkIfTempFileIsEmpty());
     CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
@@ -98,14 +104,10 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       assertEquals("query server didn't exit cleanly", 0, AVATICA_SERVER.getQueryServer()
         .getRetCode());
     }
-    if (fileReader != null) {
-      fileReader.close();
-    }
-    Thread globalMetricThread = PQSMetricsMeta.pqsMetricsSystem.getGlobalMetricThread();
-    if (globalMetricThread!=null) {
-      globalMetricThread.interrupt();
-    }
+    //need to stop the global metrics thread
+    stopGlobalThread();
   }
+
 
   @Test
   public void testCatalogs() throws Exception {
@@ -144,10 +146,8 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
 
   @Test
   public void smokeTest() throws Exception {
-    Properties props=new Properties();
-    props.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
     final String tableName = getClass().getSimpleName().toUpperCase() + System.currentTimeMillis();
-    try (final Connection connection = DriverManager.getConnection(CONN_STRING,props)) {
+    try (final Connection connection = DriverManager.getConnection(CONN_STRING)) {
       assertThat(connection.isClosed(), is(false));
       connection.setAutoCommit(true);
       try (final Statement stmt = connection.createStatement()) {
@@ -189,14 +189,29 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   }
 
   private static boolean checkIfTempFileIsEmpty() throws Exception {
-    BufferedReader br = new BufferedReader(fileReader);
-    String st;
-    if (( st = br.readLine() ) == null) {
-      return true;
-    }
-    br.close();
+    FileReader fileReader = new FileReader(pqsSinkFile);
+    try(BufferedReader br = new BufferedReader(fileReader)) {
+      String st;
+      if (( st = br.readLine() ) == null) {
+        return true;
+      }
+    };
     return false;
   }
 
+  public static Thread getThreadByName(String threadName) {
+    for (Thread t : Thread.getAllStackTraces().keySet()) {
+      if (t.getName().equals(threadName)) return t;
+    }
+    return null;
   }
+
+  private static void stopGlobalThread(){
+    //need to stop the global metrics thread
+    Thread globalMetricsThread = getThreadByName("globalMetricsThread");
+    globalMetricsThread.interrupt();
+
+  }
+
+}
 
