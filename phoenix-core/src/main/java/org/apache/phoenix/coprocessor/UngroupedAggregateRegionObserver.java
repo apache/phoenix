@@ -112,6 +112,7 @@ import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -377,6 +378,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         
         RegionScanner theScanner = s;
         
+        boolean replayMutations = scan.getAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
         List<Expression> selectExpressions = null;
@@ -397,7 +399,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             values = new byte[projectedTable.getPKColumns().size()][];
             areMutationInSameRegion = Bytes.compareTo(targetHTable.getTableName(),
                     region.getTableDesc().getTableName().getName()) == 0
-                    && !isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
+                    && !ExpressionUtil.isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
             
         } else {
             byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
@@ -608,6 +610,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             Cell firstKV = results.get(0);
                             Delete delete = new Delete(firstKV.getRowArray(),
                                 firstKV.getRowOffset(), firstKV.getRowLength(),ts);
+                            if (replayMutations) {
+                                delete.setAttribute(IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                            }
                             mutations.add(delete);
                             // force tephra to ignore this deletes
                             delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
@@ -659,6 +664,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                             for (Mutation mutation : row.toRowMutations()) {
+                                if (replayMutations) {
+                                    mutation.setAttribute(IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                                }
                                 mutations.add(mutation);
                             }
                             for (i = 0; i < selectExpressions.size(); i++) {
@@ -789,17 +797,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         } else {
             commitBatch(region, mutations, indexUUID, blockingMemstoreSize, indexMaintainersPtr, txState, useIndexProto);
         }
-    }
-
-    private boolean isPkPositionChanging(TableRef tableRef, List<Expression> projectedExpressions) throws SQLException {
-        // If the row ends up living in a different region, we'll get an error otherwise.
-        for (int i = 0; i < tableRef.getTable().getPKColumns().size(); i++) {
-            PColumn column = tableRef.getTable().getPKColumns().get(i);
-            Expression source = projectedExpressions.get(i);
-            if (source == null || !source
-                    .equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) { return true; }
-        }
-        return false;
     }
 
     private boolean readyToCommit(MutationList mutations, int maxBatchSize, long maxBatchSizeBytes) {

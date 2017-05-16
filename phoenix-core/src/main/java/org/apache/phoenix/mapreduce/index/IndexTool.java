@@ -225,8 +225,16 @@ public class IndexTool extends Configured implements Tool {
                 if (index.getIndexState().equals(PIndexState.BUILDING)) {
                     disableIndexes.add(index.getTableName().getString());
                     disabledPIndexes.add(index);
-                    if (minDisableTimestamp > index.getIndexDisableTimestamp()) {
-                        minDisableTimestamp = index.getIndexDisableTimestamp();
+                    // We need a way of differentiating the block writes to data table case from
+                    // the leave index active case. In either case, we need to know the time stamp
+                    // at which writes started failing so we can rebuild from that point. If we
+                    // keep the index active *and* have a positive INDEX_DISABLE_TIMESTAMP_BYTES,
+                    // then writes to the data table will be blocked (this is client side logic
+                    // and we can't change this in a minor release). So we use the sign of the
+                    // time stamp to differentiate.
+                    long indexDisableTimestamp = Math.abs(index.getIndexDisableTimestamp());
+                    if (minDisableTimestamp > indexDisableTimestamp) {
+                        minDisableTimestamp = indexDisableTimestamp;
                         indexWithMinDisableTimestamp = index;
                     }
                 }

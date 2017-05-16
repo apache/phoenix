@@ -167,7 +167,8 @@ public class QueryServicesOptions {
     public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
     public static final boolean DEFAULT_INDEX_FAILURE_HANDLING_REBUILD = true; // auto rebuild on
     public static final boolean DEFAULT_INDEX_FAILURE_BLOCK_WRITE = false; 
-    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 10000; // 10 secs
+    public static final boolean DEFAULT_INDEX_FAILURE_DISABLE_INDEX = false; 
+    public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME = 1; // 1 ms
 
     /**
@@ -287,7 +288,9 @@ public class QueryServicesOptions {
                                                                                     // 4.10, psql and CSVBulkLoad
                                                                                     // expects binary data to be base 64
                                                                                     // encoded
-    
+    // RS -> RS calls for upsert select statements are enabled by default
+    public static final boolean DEFAULT_ENABLE_SERVER_UPSERT_SELECT = true;
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {

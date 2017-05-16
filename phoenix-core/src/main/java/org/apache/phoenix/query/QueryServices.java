@@ -137,8 +137,9 @@ public interface QueryServices extends SQLCloseable {
     
     public static final String INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE = "phoenix.index.rebuild.batch.perTable";
 
-    // A master switch if to block writes when index build failed
+    // Block writes to data table when index write fails
     public static final String INDEX_FAILURE_BLOCK_WRITE = "phoenix.index.failure.block.write";
+    public static final String INDEX_FAILURE_DISABLE_INDEX = "phoenix.index.failure.disable.index";
 
     // Index will be partially re-built from index disable time stamp - following overlap time
     public static final String INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_TIME_ATTRIB =
@@ -245,6 +246,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB  = "phoenix.default.column.encoded.bytes.attrib";
     public static final String DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.immutable.storage.scheme";
     public static final String DEFAULT_MULTITENANT_IMMUTABLE_STORAGE_SCHEME_ATTRIB  = "phoenix.default.multitenant.immutable.storage.scheme";
+
+    // whether to enable server side RS -> RS calls for upsert select statements
+    public static final String ENABLE_SERVER_UPSERT_SELECT ="phoenix.client.enable.server.upsert.select";
 
     /**
      * Get executor service used for parallel scans

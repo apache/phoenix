@@ -66,7 +66,7 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
     	// create a state manager, so we can manage each batch
         LocalTableState state = new LocalTableState(env, localTable, mutation);
         // build the index updates for each group
-        IndexUpdateManager manager = new IndexUpdateManager();
+        IndexUpdateManager manager = new IndexUpdateManager(indexMetaData);
 
         batchMutationAndAddUpdates(manager, state, mutation, indexMetaData);
 

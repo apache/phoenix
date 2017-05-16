@@ -29,10 +29,13 @@ public class RepairUtil {
         byte[] endKey = environment.getRegion().getRegionInfo().getEndKey();
         byte[] indexKeyEmbedded = startKey.length == 0 ? new byte[endKey.length] : startKey;
         for (StoreFile file : store.getStorefiles()) {
-            byte[] fileFirstRowKey = KeyValue.createKeyValueFromKey(file.getReader().getFirstKey()).getRow();;
-            if ((fileFirstRowKey != null && Bytes.compareTo(file.getReader().getFirstKey(), 0, indexKeyEmbedded.length,
-                    indexKeyEmbedded, 0, indexKeyEmbedded.length) != 0)
-                    /*|| (endKey.length > 0 && Bytes.compareTo(file.getLastKey(), endKey) < 0)*/) { return false; }
+            if (file.getReader() != null && file.getReader().getFirstKey() != null) {
+                byte[] fileFirstRowKey = KeyValue.createKeyValueFromKey(file.getReader().getFirstKey()).getRow();
+                ;
+                if ((fileFirstRowKey != null && Bytes.compareTo(file.getReader().getFirstKey(), 0,
+                        indexKeyEmbedded.length, indexKeyEmbedded, 0, indexKeyEmbedded.length) != 0)
+                /* || (endKey.length > 0 && Bytes.compareTo(file.getLastKey(), endKey) < 0) */) { return false; }
+            }
         }
         return true;
     }
