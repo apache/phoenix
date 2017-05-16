@@ -42,9 +42,6 @@ import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.snapshot.SnapshotTestingUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Threads;
@@ -60,7 +57,6 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -626,57 +622,6 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test
-    public void testSplitDuringIndexScan() throws Exception {
-        testSplitDuringIndexScan(false);
-    }
-    
-    @Test
-    public void testSplitDuringIndexReverseScan() throws Exception {
-        testSplitDuringIndexScan(true);
-    }
-
-    private void testSplitDuringIndexScan(boolean isReverse) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        props.setProperty(QueryServices.SCAN_CACHE_SIZE_ATTRIB, Integer.toString(2));
-        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
-        Connection conn1 = getConnection(props);
-		String tableName = "TBL_" + generateUniqueName();
-        String indexName = "IDX_" + generateUniqueName();
-		HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-        dropTable(admin, conn1);
-        try{
-            String[] strings = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
-            createTableAndLoadData(conn1, tableName, indexName, strings, isReverse);
-
-            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName);
-            assertTrue(rs.next());
-            splitDuringScan(conn1, tableName, indexName, strings, admin, isReverse);
-            dropTable(admin, conn1);
-
-       } finally {
-           dropTable(admin, conn1);
-           if(conn1 != null) conn1.close();
-           if(admin != null) admin.close();
-       }
-    }
-
-    private void dropTable(HBaseAdmin admin, Connection conn) throws SQLException, IOException {
-
-		String tableName = "TBL_" + generateUniqueName();
-		String indexName = "IDX_" + generateUniqueName();
-        conn.createStatement().execute("DROP TABLE IF EXISTS "+ tableName);
-        if(admin.tableExists(tableName)) {
-            admin.disableTable(TableName.valueOf(tableName));
-            admin.deleteTable(TableName.valueOf(tableName));
-        } 
-        if(!localIndex && admin.tableExists(indexName)) {
-            admin.disableTable(indexName);
-            admin.deleteTable(indexName);
-
-        }
-    }
-
     private void createTableAndLoadData(Connection conn1, String tableName, String indexName, String[] strings, boolean isReverse) throws SQLException {
         createBaseTable(conn1, tableName, null);
         for (int i = 0; i < 26; i++) {
@@ -696,65 +641,60 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
 		HBaseAdmin admin = connectionQueryServices.getAdmin();
 		String tableName = "TBL_" + generateUniqueName();
 		String indexName = "IDX_" + generateUniqueName();
-        try {
-            dropTable(admin, conn1);
-            createBaseTable(conn1, tableName, "('e')");
-            conn1.createStatement().execute("CREATE "+(localIndex?"LOCAL":"")+" INDEX " + indexName + " ON " + tableName + "(v1)" + (localIndex?"":" SPLIT ON ('e')"));
-            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
-            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('f',1,2,3,'z')");
-            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
-            conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
-            conn1.commit();
-            
+        createBaseTable(conn1, tableName, "('e')");
+        conn1.createStatement().execute("CREATE "+(localIndex?"LOCAL":"")+" INDEX " + indexName + " ON " + tableName + "(v1)" + (localIndex?"":" SPLIT ON ('e')"));
+        conn1.createStatement().execute("UPSERT INTO "+tableName+" values('b',1,2,4,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+tableName+" values('f',1,2,3,'z')");
+        conn1.createStatement().execute("UPSERT INTO "+tableName+" values('j',2,4,2,'a')");
+        conn1.createStatement().execute("UPSERT INTO "+tableName+" values('q',3,1,1,'c')");
+        conn1.commit();
+        
 
-            String query = "SELECT count(*) FROM " + tableName +" where v1<='z'";
-            ResultSet rs = conn1.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals(4, rs.getInt(1));
+        String query = "SELECT count(*) FROM " + tableName +" where v1<='z'";
+        ResultSet rs = conn1.createStatement().executeQuery(query);
+        assertTrue(rs.next());
+        assertEquals(4, rs.getInt(1));
 
-            TableName indexTable = TableName.valueOf(localIndex?tableName: indexName);
-            admin.flush(indexTable);
-            boolean merged = false;
-            HTableInterface table = connectionQueryServices.getTable(indexTable.getName());
-            // merge regions until 1 left
-            long numRegions = 0;
-            while (true) {
-              rs = conn1.createStatement().executeQuery(query);
-              assertTrue(rs.next());
-              assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
-              try {
-                List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);
-                numRegions = indexRegions.size();
-                if (numRegions==1) {
-                  break;
-                }
-                if(!merged) {
-                          List<HRegionInfo> regions =
-                                  admin.getTableRegions(indexTable);
-                    Log.info("Merging: " + regions.size());
-                    admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
-                        regions.get(1).getEncodedNameAsBytes(), false);
-                    merged = true;
-                    Threads.sleep(10000);
-                }
-              } catch (Exception ex) {
-                Log.info(ex);
-              }
-              long waitStartTime = System.currentTimeMillis();
-              // wait until merge happened
-              while (System.currentTimeMillis() - waitStartTime < 10000) {
-                List<HRegionInfo> regions = admin.getTableRegions(indexTable);
-                Log.info("Waiting:" + regions.size());
-                if (regions.size() < numRegions) {
-                  break;
-                }
-                Threads.sleep(1000);
-              }
-              SnapshotTestingUtils.waitForTableToBeOnline(BaseTest.getUtility(), indexTable);
-              assertTrue("Index table should be online ", admin.isTableAvailable(indexTable));
+        TableName indexTable = TableName.valueOf(localIndex?tableName: indexName);
+        admin.flush(indexTable);
+        boolean merged = false;
+        HTableInterface table = connectionQueryServices.getTable(indexTable.getName());
+        // merge regions until 1 left
+        long numRegions = 0;
+        while (true) {
+          rs = conn1.createStatement().executeQuery(query);
+          assertTrue(rs.next());
+          assertEquals(4, rs.getInt(1)); //TODO this returns 5 sometimes instead of 4, duplicate results?
+          try {
+            List<HRegionInfo> indexRegions = admin.getTableRegions(indexTable);
+            numRegions = indexRegions.size();
+            if (numRegions==1) {
+              break;
             }
-        } finally {
-            dropTable(admin, conn1);
+            if(!merged) {
+                      List<HRegionInfo> regions =
+                              admin.getTableRegions(indexTable);
+                Log.info("Merging: " + regions.size());
+                admin.mergeRegions(regions.get(0).getEncodedNameAsBytes(),
+                    regions.get(1).getEncodedNameAsBytes(), false);
+                merged = true;
+                Threads.sleep(10000);
+            }
+          } catch (Exception ex) {
+            Log.info(ex);
+          }
+          long waitStartTime = System.currentTimeMillis();
+          // wait until merge happened
+          while (System.currentTimeMillis() - waitStartTime < 10000) {
+            List<HRegionInfo> regions = admin.getTableRegions(indexTable);
+            Log.info("Waiting:" + regions.size());
+            if (regions.size() < numRegions) {
+              break;
+            }
+            Threads.sleep(1000);
+          }
+          SnapshotTestingUtils.waitForTableToBeOnline(BaseTest.getUtility(), indexTable);
+          assertTrue("Index table should be online ", admin.isTableAvailable(indexTable));
         }
     }
 
