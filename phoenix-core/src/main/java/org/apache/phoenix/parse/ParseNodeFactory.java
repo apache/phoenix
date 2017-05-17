@@ -731,6 +731,26 @@ public class ParseNodeFactory {
         return new UpsertStatement(table, hint, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
     }
 
+    public CursorName cursorName(String name){
+        return new CursorName(name);
+    }
+
+    public DeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select){
+        return new DeclareCursorStatement(cursor, select);
+    }
+
+    public FetchStatement fetch(CursorName cursor, boolean isNext, int fetchLimit){
+        return new FetchStatement(cursor, isNext, fetchLimit);
+    }
+
+    public OpenStatement open(CursorName cursor){
+        return new OpenStatement(cursor);
+    }
+
+    public CloseStatement close(CursorName cursor){
+        return new CloseStatement(cursor);
+    }
+
     public DeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode node, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
         return new DeleteStatement(table, hint, node, orderBy, limit, bindCount, udfParseNodes);
     }
