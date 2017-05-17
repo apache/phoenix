@@ -130,6 +130,10 @@ tokens
     USE='use';
     OFFSET ='offset';
     FETCH = 'fetch';
+    DECLARE = 'declare';
+    CURSOR = 'cursor';
+    OPEN = 'open';
+    CLOSE = 'close';
     ROW = 'row';
     ROWS = 'rows';
     ONLY = 'only';
@@ -409,6 +413,10 @@ oneStatement returns [BindableStatement ret]
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
+    |   s=cursor_open_node
+    |   s=cursor_close_node
+    |   s=cursor_fetch_node
+    |   s=declare_cursor_node
     |   s=drop_table_node
     |   s=drop_index_node
     |   s=alter_index_node
@@ -744,6 +752,25 @@ upsert_column_refs returns [Pair<List<ColumnDef>,List<ColumnName>> ret]
        (COMMA d=dyn_column_name_or_def { if (d.getDataType()!=null) { $ret.getFirst().add(d); } $ret.getSecond().add(d.getColumnDefName()); } )*
 ;
 	
+
+// Parse a full declare cursor expression structure.
+declare_cursor_node returns [DeclareCursorStatement ret]
+    :    DECLARE c=cursor_name CURSOR FOR s=select_node
+        {ret = factory.declareCursor(c, s); }
+    ;
+
+cursor_open_node returns [OpenStatement ret]
+    :    OPEN c=cursor_name {ret = factory.open(c);}
+    ;
+ 
+cursor_close_node returns [CloseStatement ret]
+    :    CLOSE c=cursor_name {ret = factory.close(c);}
+    ;
+
+cursor_fetch_node returns [FetchStatement ret]
+    :    FETCH NEXT (a=NUMBER)? (ROW|ROWS)? FROM c=cursor_name {ret = factory.fetch(c,true, a == null ? 1 :  Integer.parseInt( a.getText() )); }
+    ;
+
 // Parse a full delete expression structure.
 delete_node returns [DeleteStatement ret]
     :   DELETE (hint=hintClause)? FROM t=from_table_name
@@ -1031,6 +1058,10 @@ value_expression_list returns [List<ParseNode> ret]
 
 index_name returns [NamedNode ret]
     :   name=identifier {$ret = factory.indexName(name); }
+    ;
+
+cursor_name returns [CursorName ret]
+    :   name=identifier {$ret = factory.cursorName(name);}
     ;
 
 // TODO: figure out how not repeat this two times
