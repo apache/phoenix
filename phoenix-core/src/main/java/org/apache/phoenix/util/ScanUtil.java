@@ -613,6 +613,10 @@ public class ScanUtil {
         scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.TRUE_BYTES);
     }
 
+    public static void unsetReversed(Scan scan) {
+        scan.setAttribute(BaseScannerRegionObserver.REVERSE_SCAN, PDataType.FALSE_BYTES);
+    }
+
     private static byte[] getReversedRow(byte[] startRow) {
         /*
          * Must get previous key because this is going from an inclusive start key to an exclusive stop key, and we need
