@@ -682,4 +682,34 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     }
 
 
+    @Test
+    public void testLocalIndexForMultiTenantTable() throws Exception {
+        String tableName = schemaName + "." + generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+
+        Connection conn1 = getConnection();
+        try{
+            if (isNamespaceMapped) {
+                conn1.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
+            }
+            String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n" +
+                    "k1 INTEGER NOT NULL,\n" +
+                    "v1 VARCHAR,\n" +
+                    "v2 VARCHAR,\n" +
+                    "CONSTRAINT pk PRIMARY KEY (t_id, k1)) MULTI_TENANT=true";
+            conn1.createStatement().execute(ddl);
+            conn1.createStatement().execute("UPSERT INTO " + tableName + " values('b',1,'x','y')");
+            conn1.commit();
+            conn1.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
+            
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT * FROM " + tableName + " WHERE v1 = 'x'");
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString("T_ID"));
+            assertEquals("y", rs.getString("V2"));
+            assertFalse(rs.next());
+       } finally {
+            conn1.close();
+        }
+    }
+
 }

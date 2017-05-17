@@ -692,6 +692,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 dataPosOffset++;
                 output.write(0); // will be set at end to salt byte
             }
+            if (viewIndexId != null) {
+                indexRowKeySchema.next(ptr, indexPosOffset++, maxRowKeyOffset);
+            }
             if (isMultiTenant) {
                 indexRowKeySchema.next(ptr, indexPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
