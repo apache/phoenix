@@ -61,9 +61,10 @@ public interface TableState {
  * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
    *        when replaying mutation state for partial index rebuild where writes succeeded to the data
    *        table, but not to the index table.
+ * @param indexMetaData TODO
    */
   Pair<ValueGetter, IndexUpdate> getIndexUpdateState(
-      Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound) throws IOException;
+      Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData) throws IOException;
 
   /**
    * @return the row key for the current row for which we are building an index update.
