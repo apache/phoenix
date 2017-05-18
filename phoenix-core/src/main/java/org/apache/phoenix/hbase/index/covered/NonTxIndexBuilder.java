@@ -383,6 +383,9 @@ public class NonTxIndexBuilder extends BaseIndexBuilder {
      */
     protected void addDeleteUpdatesToMap(IndexUpdateManager updateMap, LocalTableState state, long ts, IndexMetaData indexMetaData)
             throws IOException {
+        if (indexMetaData.isImmutableRows()) {
+            return;
+        }
         Iterable<IndexUpdate> cleanup = codec.getIndexDeletes(state, indexMetaData);
         if (cleanup != null) {
             for (IndexUpdate d : cleanup) {

@@ -43,14 +43,14 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.util.EnvironmentEdge;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.hbase.index.TableName;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -146,9 +146,22 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
 
     @Override
     public void verify(TableState state) {
+        IndexMetaData indexMetaData = new IndexMetaData() {
+
+            @Override
+            public boolean isImmutableRows() {
+                return false;
+            }
+
+            @Override
+            public boolean ignoreNewerMutations() {
+                return false;
+            }
+              
+          };
       try {
         Scanner kvs =
-            ((LocalTableState) state).getIndexedColumnsTableState(Arrays.asList(columns), false, false).getFirst();
+            ((LocalTableState) state).getIndexedColumnsTableState(Arrays.asList(columns), false, false, indexMetaData).getFirst();
 
         int count = 0;
         Cell kv;
