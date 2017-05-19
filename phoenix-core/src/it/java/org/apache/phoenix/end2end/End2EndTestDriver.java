@@ -23,17 +23,25 @@ import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
+import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import org.apache.commons.cli.CommandLine;
+import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hbase.AuthUtil;
+import org.apache.hadoop.hbase.ChoreService;
 import org.apache.hadoop.hbase.ClassFinder;
 import org.apache.hadoop.hbase.ClassFinder.FileNameFilter;
 import org.apache.hadoop.hbase.ClassTestFinder;
 import org.apache.hadoop.hbase.IntegrationTestingUtility;
+import org.apache.hadoop.hbase.ScheduledChore;
+import org.apache.hadoop.hbase.chaos.monkies.ChaosMonkey;
 import org.apache.hadoop.hbase.util.AbstractHBaseTool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.end2end.chaos.factories.MonkeyFactory;
 import org.junit.internal.TextListener;
 import org.junit.runner.Description;
 import org.junit.runner.JUnitCore;
@@ -51,10 +59,17 @@ public class End2EndTestDriver extends AbstractHBaseTool {
     private static final Logger LOG = LoggerFactory.getLogger(End2EndTestDriver.class);
     private static final String SHORT_REGEX_ARG = "r";
     private static final String SKIP_TESTS = "n";
-    
+    private static final String MONKEY_ARG = "m";
+    private static final String MONKEY_LONG_ARG = "monkey";
+    private static final String MONKEY_PROPS_LONG_ARG = "monkeyProps";
+    private static final String DEFINE_ARG = "D";
+
     private End2EndTestFilter end2endTestFilter = new End2EndTestFilter();
     private boolean skipTests = false;
-    
+    private ChoreService choreService;
+    private String monkeyToUse;
+    private Properties monkeyProps;
+    private ChaosMonkey monkey;
 
     public static void main(String[] args) throws Exception {
       int ret = ToolRunner.run(new End2EndTestDriver(), args);
@@ -113,6 +128,10 @@ public class End2EndTestDriver extends AbstractHBaseTool {
         ".*end2end.*");
       addOptNoArg(SKIP_TESTS, 
           "Print list of End2End test suits without running them.");
+      addOptWithArg(MONKEY_ARG, MONKEY_LONG_ARG, "Which chaos monkey to run.  Default: none");
+      addOptWithArg(MONKEY_PROPS_LONG_ARG, "The properties file for specifying chaos "
+          + "monkey properties.");
+      addOptWithArg(DEFINE_ARG, "Define a property for the test, e.g. -Dkey=value");
     }
 
     @Override
@@ -122,6 +141,38 @@ public class End2EndTestDriver extends AbstractHBaseTool {
         end2endTestFilter.setPattern(testFilterString);
       }
       skipTests = cmd.hasOption(SKIP_TESTS);
+      if (cmd.hasOption(MONKEY_ARG)) {
+        monkeyToUse = cmd.getOptionValue(MONKEY_ARG);
+        monkeyProps = new Properties();
+        if (cmd.hasOption(MONKEY_PROPS_LONG_ARG)) {
+          String monkeyPropsFile = cmd.getOptionValue(MONKEY_PROPS_LONG_ARG);
+          if (StringUtils.isNotEmpty(monkeyPropsFile)) {
+            try {
+              monkeyProps.load(this.getClass().getClassLoader().getResourceAsStream(monkeyPropsFile));
+            } catch (IOException e) {
+              System.err.println(e);
+              System.exit(EXIT_FAILURE);
+            }
+          }
+        }
+      }
+      // XXX: Do we need this?
+      if (cmd.hasOption(DEFINE_ARG)) {
+        for (String opt: cmd.getOptionValues(DEFINE_ARG)) {
+          StringTokenizer tok = new StringTokenizer(opt, "=");
+          if (!tok.hasMoreTokens()) {
+            System.err.println("Invalid parameter: " + opt);
+            continue;
+          }
+          String key = tok.nextToken();
+          if (!tok.hasMoreTokens()) {
+            System.err.println("Invalid value for key '" + key + "'");
+            continue;
+          }
+          String value = tok.nextToken();
+          System.setProperty(key, value);
+        }
+      }
     }
 
     /**
@@ -202,12 +253,61 @@ public class End2EndTestDriver extends AbstractHBaseTool {
       for (Class<?> aClass : classes) {
           System.out.println("  " + aClass);
       }
-      if(skipTests) return 0;
-      
-      JUnitCore junit = new JUnitCore();
-      junit.addListener(new End2EndTestListenter(System.out));
-      Result result = junit.run(classes);
 
-      return result.wasSuccessful() ? 0 : 1;
+      if (skipTests) {
+          return 0;
+      }
+
+      startAuthChore();
+      try {
+          // Use no chaos monkey unless one was specified on the command line
+          if (monkeyToUse != null) {
+              startMonkey(monkeyToUse, monkeyProps);
+          }
+          try {
+              JUnitCore junit = new JUnitCore();
+              junit.addListener(new End2EndTestListenter(System.out));
+              Result result = junit.run(classes);
+              return result.wasSuccessful() ? 0 : 1;
+          } finally {
+              stopMonkey();
+          }
+      } finally {
+          stopAuthChore();
+      }
     }
+
+    protected void startAuthChore() throws IOException {
+        ScheduledChore authChore = AuthUtil.getAuthChore(conf);
+        if (authChore != null) {
+            choreService = new ChoreService("INTEGRATION_TEST");
+            choreService.scheduleChore(authChore);
+        }
+    }
+
+    protected void stopAuthChore() {
+        if (choreService != null) {
+            choreService.shutdown();
+        }
+    }
+
+    protected void startMonkey(String monkeyToUse, Properties monkeyProps) throws Exception {
+        MonkeyFactory factory = MonkeyFactory.getFactory(monkeyToUse);
+        if (factory == null) {
+            factory = MonkeyFactory.getFactory(MonkeyFactory.SLOW_DETERMINISTIC);
+        }
+        monkey = factory
+            .setProperties(monkeyProps)
+            .setUtil(new IntegrationTestingUtility(conf))
+            .build();
+        monkey.start();
+    }
+
+    protected void stopMonkey() throws InterruptedException {
+        if (monkey != null && !monkey.isStopped()) {
+            monkey.stop("Ending test");
+            monkey.waitForStop();
+        }
+    }
+
 }
