@@ -525,12 +525,14 @@ public class Indexer extends BaseRegionObserver {
         super.postOpen(c);
         return;
       }
-    LOG.info("Found some outstanding index updates that didn't succeed during"
-        + " WAL replay - attempting to replay now.");
+
     //if we have no pending edits to complete, then we are done
     if (updates == null || updates.size() == 0) {
       return;
     }
+
+    LOG.info("Found some outstanding index updates that didn't succeed during"
+            + " WAL replay - attempting to replay now.");
     
     // do the usual writer stuff, killing the server again, if we can't manage to make the index
     // writes succeed again
