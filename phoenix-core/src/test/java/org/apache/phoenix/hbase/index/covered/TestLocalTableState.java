@@ -24,8 +24,8 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -33,16 +33,14 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.junit.Test;
-import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-import org.apache.phoenix.hbase.index.covered.IndexUpdate;
-import org.apache.phoenix.hbase.index.covered.LocalTableState;
 import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.covered.data.LocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.Scanner;
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  *
@@ -54,6 +52,19 @@ public class TestLocalTableState {
   private static final byte[] qual = Bytes.toBytes("qual");
   private static final byte[] val = Bytes.toBytes("val");
   private static final long ts = 10;
+  private static final IndexMetaData indexMetaData = new IndexMetaData() {
+
+    @Override
+    public boolean isImmutableRows() {
+        return false;
+    }
+
+    @Override
+    public boolean ignoreNewerMutations() {
+        return false;
+    }
+      
+  };
 
   @SuppressWarnings("unchecked")
   @Test
@@ -91,7 +102,90 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     //check that our value still shows up first on scan, even though this is a lazy load
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false);
+    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+    Scanner s = p.getFirst();
+    assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0), s.next());
+  }
+
+  public static final class ScannerCreatedException extends RuntimeException {
+      ScannerCreatedException(String msg) {
+          super(msg);
+      }
+  }
+  
+  @Test(expected = ScannerCreatedException.class)
+  public void testScannerForMutableRows() throws Exception {
+      IndexMetaData indexMetaData = new IndexMetaData() {
+
+          @Override
+          public boolean isImmutableRows() {
+              return false;
+          }
+
+          @Override
+          public boolean ignoreNewerMutations() {
+              return false;
+          }
+            
+        };
+    Put m = new Put(row);
+    m.add(fam, qual, ts, val);
+    // setup mocks
+    Configuration conf = new Configuration(false);
+    RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
+    Mockito.when(env.getConfiguration()).thenReturn(conf);
+
+    Region region = Mockito.mock(Region.class);
+    Mockito.when(env.getRegion()).thenReturn(region);
+    Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
+
+    LocalHBaseState state = new LocalTable(env);
+    LocalTableState table = new LocalTableState(env, state, m);
+    //add the kvs from the mutation
+    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+
+    // setup the lookup
+    ColumnReference col = new ColumnReference(fam, qual);
+    table.setCurrentTimestamp(ts);
+    table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
+  }
+
+  @Test
+  public void testNoScannerForImmutableRows() throws Exception {
+      IndexMetaData indexMetaData = new IndexMetaData() {
+
+          @Override
+          public boolean isImmutableRows() {
+              return true;
+          }
+
+          @Override
+          public boolean ignoreNewerMutations() {
+              return false;
+          }
+            
+        };
+    Put m = new Put(row);
+    m.add(fam, qual, ts, val);
+    // setup mocks
+    Configuration conf = new Configuration(false);
+    RegionCoprocessorEnvironment env = Mockito.mock(RegionCoprocessorEnvironment.class);
+    Mockito.when(env.getConfiguration()).thenReturn(conf);
+
+    Region region = Mockito.mock(Region.class);
+    Mockito.when(env.getRegion()).thenReturn(region);
+    Mockito.when(region.getScanner(Mockito.any(Scan.class))).thenThrow(new ScannerCreatedException("Should not open scanner when data is immutable"));
+
+    LocalHBaseState state = new LocalTable(env);
+    LocalTableState table = new LocalTableState(env, state, m);
+    //add the kvs from the mutation
+    table.addPendingUpdates(KeyValueUtil.ensureKeyValues(m.get(fam, qual)));
+
+    // setup the lookup
+    ColumnReference col = new ColumnReference(fam, qual);
+    table.setCurrentTimestamp(ts);
+    //check that our value still shows up first on scan, even though this is a lazy load
+    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", m.get(fam, qual).get(0), s.next());
   }
@@ -135,13 +229,13 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false);
+    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     assertEquals("Didn't get the pending mutation's value first", kv, s.next());
 
     // rollback that value
     table.rollback(Arrays.asList(kv));
-    p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false);
+    p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     s = p.getFirst();
     assertEquals("Didn't correctly rollback the row - still found it!", null, s.next());
     Mockito.verify(env, Mockito.times(1)).getRegion();
@@ -179,14 +273,14 @@ public class TestLocalTableState {
     ColumnReference col = new ColumnReference(fam, qual);
     table.setCurrentTimestamp(ts);
     // check that the value is there
-    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false);
+    Pair<Scanner, IndexUpdate> p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     Scanner s = p.getFirst();
     // make sure it read the table the one time
     assertEquals("Didn't get the stored keyvalue!", storedKv, s.next());
 
     // on the second lookup it shouldn't access the underlying table again - the cached columns
     // should know they are done
-    p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false);
+    p = table.getIndexedColumnsTableState(Arrays.asList(col), false, false, indexMetaData);
     s = p.getFirst();
     assertEquals("Lost already loaded update!", storedKv, s.next());
     Mockito.verify(env, Mockito.times(1)).getRegion();
