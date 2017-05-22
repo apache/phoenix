@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
+import org.apache.phoenix.compile.CloseStatementCompiler;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.CreateFunctionCompiler;
@@ -55,6 +56,7 @@ import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSchemaCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
+import org.apache.phoenix.compile.DeclareCursorCompiler;
 import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -63,6 +65,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ListJarsQueryPlan;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.compile.OpenStatementCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -91,13 +94,16 @@ import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
+import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.CursorName;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -107,6 +113,7 @@ import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ExecuteUpgradeStatement;
+import org.apache.phoenix.parse.FetchStatement;
 import org.apache.phoenix.parse.ExplainStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -117,6 +124,7 @@ import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OffsetNode;
+import org.apache.phoenix.parse.OpenStatement;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
@@ -155,6 +163,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -294,7 +303,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         StatementContext context = plan.getContext();
                         context.getOverallQueryMetrics().startQuery();
-                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), context);
+                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
                         resultSets.add(rs);
                         setLastQueryPlan(plan);
                         setLastResultSet(rs);
@@ -403,6 +412,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects, udfParseNodes);
         }
         
+        private ExecutableSelectStatement(ExecutableSelectStatement select) {
+            this(select.getFrom(), select.getHint(), select.isDistinct(), select.getSelect(), select.getWhere(),
+                    select.getGroupBy(), select.getHaving(), select.getOrderBy(), select.getLimit(), select.getOffset(), select.getBindCount(),
+                    select.isAggregate(), select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
+        }
+		
+        
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
@@ -417,6 +433,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 resolver = FromCompiler.getResolverForQuery(transformedSelect, stmt.getConnection());
                 select = StatementNormalizer.normalize(transformedSelect, resolver);
             }
+
             QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.<PDatum>emptyList(), stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt), true).compile();
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
@@ -763,6 +780,56 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             };
             
         }
+    }
+
+    private static class ExecutableDeclareCursorStatement extends DeclareCursorStatement implements CompilableStatement {
+        public ExecutableDeclareCursorStatement(CursorName cursor, SelectStatement select){
+            super(cursor, select);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            ExecutableSelectStatement wrappedSelect = new ExecutableSelectStatement(
+            		(ExecutableSelectStatement) stmt.parseStatement(this.getQuerySQL()));
+            DeclareCursorCompiler compiler = new DeclareCursorCompiler(stmt, this.getOperation(),wrappedSelect.compilePlan(stmt, seqAction));
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableOpenStatement extends OpenStatement implements CompilableStatement {
+        public ExecutableOpenStatement(CursorName cursor){
+            super(cursor);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            OpenStatementCompiler compiler = new OpenStatementCompiler(stmt, this.getOperation());
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableCloseStatement extends CloseStatement implements CompilableStatement {
+        public ExecutableCloseStatement(CursorName cursor){
+            super(cursor);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            CloseStatementCompiler compiler = new CloseStatementCompiler(stmt, this.getOperation());
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableFetchStatement extends FetchStatement implements CompilableStatement {
+        public ExecutableFetchStatement(CursorName cursor, boolean isNext, int fetchLimit){
+            super(cursor, isNext, fetchLimit);
+        }
+
+        @Override
+        public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            return CursorUtil.getFetchPlan(this.getCursorName().getName(), this.isNext(), this.getFetchSize());
+        }
+
     }
 
     private static class ExecutableDeleteJarStatement extends DeleteJarStatement implements CompilableStatement {
@@ -1209,7 +1276,27 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
             return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
         }
-        
+
+        @Override
+        public ExecutableDeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select){
+            return new ExecutableDeclareCursorStatement(cursor, select);
+        }
+
+        @Override
+        public ExecutableFetchStatement fetch(CursorName cursor, boolean isNext, int fetchLimit){
+            return new ExecutableFetchStatement(cursor, isNext, fetchLimit);
+        }
+
+        @Override
+        public ExecutableOpenStatement open(CursorName cursor){
+            return new ExecutableOpenStatement(cursor);
+        }
+
+        @Override
+        public ExecutableCloseStatement close(CursorName cursor){
+            return new ExecutableCloseStatement(cursor);
+        }
+
         @Override
         public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
             return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);

@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -68,5 +69,10 @@ public class FirstValueFunction extends FirstLastValueBaseFunction {
         aggregator.init(0);
 
         return aggregator;
+    }
+
+    @Override
+    public String getName() {
+        return NAME;
     }
 }
