@@ -53,4 +53,14 @@ abstract public class FirstLastValueBaseFunction extends DelegateConstantToCount
     public PDataType getDataType() {
         return children.get(2).getDataType();
     }
+    
+    @Override
+    public Integer getMaxLength() {
+        return children.get(2).getMaxLength();
+    }
+    
+    @Override
+    public Integer getScale() {
+        return children.get(2).getScale();
+    }
 }
