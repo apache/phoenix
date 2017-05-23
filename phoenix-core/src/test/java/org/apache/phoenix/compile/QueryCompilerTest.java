@@ -4134,4 +4134,51 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         }
     }
+
+    @Test
+    public void testUnionDifferentColumnNumber() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement statement = conn.createStatement();
+        try {
+            String create = "CREATE TABLE s.t1 (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, " +
+                    "f2.v3 varchar, v4 varchar)";
+            statement.execute(create);
+            create = "CREATE TABLE s.t2 (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, f2.v3 varchar)";
+            statement.execute(create);
+            String query = "SELECT *  FROM s.t1 UNION ALL select * FROM s.t2";
+            statement.executeQuery(query);
+            fail("Should fail with different column numbers ");
+        } catch (SQLException e) {
+            assertEquals(e.getMessage(), "ERROR 525 (42902): SELECT column number differs in a Union All query " +
+                    "is not allowed. 1st query has 5 columns whereas 2nd query has 4");
+        } finally {
+            statement.execute("DROP TABLE IF EXISTS s.t1");
+            statement.execute("DROP TABLE IF EXISTS s.t2");
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testUnionDifferentColumnType() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        Statement statement = conn.createStatement();
+        try {
+            String create = "CREATE TABLE s.t1 (k integer not null primary key, f1.v1 varchar, f1.v2 varchar, " +
+                    "f2.v3 varchar, v4 varchar)";
+            statement.execute(create);
+            create = "CREATE TABLE s.t2 (k integer not null primary key, f1.v1 varchar, f1.v2 integer, " +
+                    "f2.v3 varchar, f2.v4 varchar)";
+            statement.execute(create);
+            String query = "SELECT *  FROM s.t1 UNION ALL select * FROM s.t2";
+            statement.executeQuery(query);
+            fail("Should fail with different column types ");
+        } catch (SQLException e) {
+            assertEquals(e.getMessage(), "ERROR 526 (42903): SELECT column types differ in a Union All query " +
+                    "is not allowed. Column # 2 is VARCHAR in 1st query where as it is INTEGER in 2nd query");
+        } finally {
+            statement.execute("DROP TABLE IF EXISTS s.t1");
+            statement.execute("DROP TABLE IF EXISTS s.t2");
+            conn.close();
+        }
+    }
 }
