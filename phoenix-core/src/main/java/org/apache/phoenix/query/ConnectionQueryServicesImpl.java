@@ -3860,11 +3860,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (returnSequenceValues) {
             ConcurrentMap<SequenceKey,Sequence> formerSequenceMap = null;
             synchronized (connectionCountLock) {
-                if (--connectionCount == 0) {
+                if (--connectionCount <= 0) {
                     if (!this.sequenceMap.isEmpty()) {
                         formerSequenceMap = this.sequenceMap;
                         this.sequenceMap = Maps.newConcurrentMap();
                     }
+                }
+                if (connectionCount < 0) {
+                    connectionCount = 0;
                 }
             }
             // Since we're using the former sequenceMap, we can do this outside
@@ -3872,6 +3875,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (formerSequenceMap != null) {
                 // When there are no more connections, attempt to return any sequences
                 returnAllSequences(formerSequenceMap);
+            }
+        } else if (shouldThrottleNumConnections){ //still need to decrement connection count
+            synchronized (connectionCountLock) {
+                if (connectionCount > 0) {
+                    --connectionCount;
+                }
             }
         }
     }
