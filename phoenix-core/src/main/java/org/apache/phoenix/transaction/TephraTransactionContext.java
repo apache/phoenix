@@ -98,7 +98,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
     }
 
     public TephraTransactionContext(PhoenixConnection connection) {
-        assert(txClient != null);
         this.txServiceClient = txClient;  
         this.txAwares = Collections.emptyList();
         this.txContext = new TransactionContext(txServiceClient);
@@ -106,7 +105,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
 
     public TephraTransactionContext(PhoenixTransactionContext ctx,
             PhoenixConnection connection, boolean subTask) {
-        assert(txClient != null);
         this.txServiceClient = txClient;  
         assert (ctx instanceof TephraTransactionContext);
         TephraTransactionContext tephraTransactionContext = (TephraTransactionContext) ctx;
