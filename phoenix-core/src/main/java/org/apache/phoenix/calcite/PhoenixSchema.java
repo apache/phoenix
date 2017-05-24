@@ -13,7 +13,6 @@ import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.schema.*;
-import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.TableFunctionImpl;
 import org.apache.calcite.schema.impl.ViewTable;
 import org.apache.calcite.sql.ListJarsTable;
@@ -438,12 +437,10 @@ public class PhoenixSchema implements Schema {
     public boolean contentsHaveChangedSince(long lastCheck, long now) {
         return lastCheck != now;
     }
-    
-    public void clear() {
-        tables.clear();
-        views.clear();
-        this.views.put("ListJars", listJarsFunction);
-        viewTables.clear();
+
+    @Override
+    public Schema snapshot(long now) {
+        return new PhoenixSchema(name, schemaName, parentSchema, pc, typeFactory);
     }
     
     public void defineIndexesAsMaterializations() {

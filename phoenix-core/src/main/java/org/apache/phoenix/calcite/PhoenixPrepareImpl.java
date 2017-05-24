@@ -23,19 +23,14 @@ import org.apache.calcite.plan.RelOptCostFactory;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
-import org.apache.calcite.prepare.Prepare.PreparedResult;
 import org.apache.calcite.rel.RelNode;
-import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.convert.ConverterRule;
-import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.runtime.Hook;
 import org.apache.calcite.runtime.Hook.Closeable;
 import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlColumnDefInPkConstraintNode;
 import org.apache.calcite.sql.SqlColumnDefNode;
-import org.apache.calcite.sql.SqlExplainFormat;
-import org.apache.calcite.sql.SqlExplainLevel;
 import org.apache.calcite.sql.SqlFunctionArguementNode;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlIndexExpressionNode;
@@ -247,21 +242,6 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
     private List<Closeable> addHooks(final CalciteSchema rootSchema,
             boolean materializationEnabled, final boolean forceDecorrelate) {
         final List<Closeable> hooks = Lists.newArrayList();
-
-        hooks.add(Hook.PARSE_TREE.add(new Function<Object[], Object>() {
-            @Override
-            public Object apply(Object[] input) {
-                for (CalciteSchema schema : rootSchema.getSubSchemaMap().values()) {
-                    if (schema.schema instanceof PhoenixSchema) {
-                        ((PhoenixSchema) schema.schema).clear();
-                        for (CalciteSchema subSchema : schema.getSubSchemaMap().values()) {
-                            ((PhoenixSchema) subSchema.schema).clear();
-                        }
-                    }
-                }
-                return null;
-            }
-        }));
 
         hooks.add(Hook.TRIMMED.add(new Function<RelNode, Object>() {
             @Override

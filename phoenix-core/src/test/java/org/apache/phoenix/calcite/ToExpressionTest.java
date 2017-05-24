@@ -223,6 +223,11 @@ public class ToExpressionTest extends BaseConnectionlessQueryTest {
         public boolean contentsHaveChangedSince(long lastCheck, long now) {
             return false;
         }
+
+        @Override
+        public Schema snapshot(long now) {
+            return this;
+        }
 	    
 	}
 }
