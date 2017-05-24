@@ -96,6 +96,11 @@ import com.google.common.collect.Multimap;
  * nothing does. Currently, we do not support mixed-durability updates within a single batch. If you
  * want to have different durability levels, you only need to split the updates into two different
  * batches.
+ * <p>
+ * We don't need to implement {@link #postPut(ObserverContext, Put, WALEdit, Durability)} and
+ * {@link #postDelete(ObserverContext, Delete, WALEdit, Durability)} hooks because
+ * Phoenix always does batch mutations.
+ * <p>
  */
 public class Indexer extends BaseRegionObserver {
 
@@ -363,26 +368,6 @@ public class Indexer extends BaseRegionObserver {
     }
 
     return true;
-  }
-
-  @Override
-  public void postPut(ObserverContext<RegionCoprocessorEnvironment> e, Put put, WALEdit edit,
-      final Durability durability) throws IOException {
-      if (this.disabled) {
-      super.postPut(e, put, edit, durability);
-          return;
-        }
-    doPost(edit, put, durability);
-  }
-
-  @Override
-  public void postDelete(ObserverContext<RegionCoprocessorEnvironment> e, Delete delete,
-      WALEdit edit, final Durability durability) throws IOException {
-      if (this.disabled) {
-      super.postDelete(e, delete, edit, durability);
-          return;
-        }
-    doPost(edit, delete, durability);
   }
 
   @Override
