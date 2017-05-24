@@ -234,7 +234,7 @@ public class MutableIndexFailureIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(indexName, rs.getString(3));
             // the index is only disabled for non-txn tables upon index table write failure
-            if (transactional || leaveIndexActiveOnFailure) {
+            if (transactional || leaveIndexActiveOnFailure || localIndex) {
                 assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
             } else {
                 String indexState = rs.getString("INDEX_STATE");
@@ -413,7 +413,7 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         try {
             conn.commit();
-            if (commitShouldFail) {
+            if (commitShouldFail && !localIndex) {
                 fail();
             }
         } catch (CommitException e) {
@@ -434,7 +434,7 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         try {
             conn.commit();
-            if (commitShouldFail) {
+            if (commitShouldFail && !localIndex) {
                 fail();
             }
         } catch (CommitException e) {
