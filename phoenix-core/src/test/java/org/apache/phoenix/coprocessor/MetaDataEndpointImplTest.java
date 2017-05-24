@@ -125,15 +125,14 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute("ALTER VIEW " + childView + " DROP COLUMN C");
 
         // now lets check and make sure the columns are correct
-        dropTableCache(conn, childView, baseTable);
-        assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childView.toUpperCase()), "A", "B", "D");
+        assertColumnNamesEqual(PhoenixRuntime.getTableNoCache(conn, childView.toUpperCase()), "A", "B", "D");
 
     }
 
     @Test
     public void testDroppingAColumn() throws Exception {
-        String baseTable = generateUniqueName();
-        String childView = generateUniqueName();
+        String baseTable = "PARENT";
+        String childView = "CHILD";
         Connection conn = DriverManager.getConnection(getUrl());
         String ddlFormat = "CREATE TABLE " + baseTable + " (A VARCHAR PRIMARY KEY, B VARCHAR, C VARCHAR)";
         conn.createStatement().execute(ddlFormat);
@@ -142,8 +141,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute("ALTER TABLE " + baseTable + " DROP COLUMN C");
 
         // now lets check and make sure the columns are correct
-        dropTableCache(conn, childView, baseTable);
-        assertColumnNamesEqual(PhoenixRuntime.getTable(conn, childView.toUpperCase()), "A", "B", "D");
+        assertColumnNamesEqual(PhoenixRuntime.getTableNoCache(conn, childView.toUpperCase()), "A", "B", "D");
     }
 
     @Test
@@ -165,13 +163,11 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD V3 integer");
 
         // make sure that column was added to the base table
-        PTable table = PhoenixRuntime.getTable(conn, baseTable.toUpperCase());
+        PTable table = PhoenixRuntime.getTableNoCache(conn, baseTable.toUpperCase());
         assertColumnNamesEqual(table, "PK2", "V1", "V2", "V3");
 
-        // now lets check and make sure the columns are correct
-        dropTableCache(conn, leftChild, baseTable);
 
-        childPTable = PhoenixRuntime.getTable(conn, leftChild.toUpperCase());
+        childPTable = PhoenixRuntime.getTableNoCache(conn, leftChild.toUpperCase());
         assertColumnNamesEqual(childPTable, "PK2", "V1", "V2", "V3", "CARRIER");
     }
 
@@ -234,13 +230,10 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         assertColumnNamesEqual(grandChildPTable, "PK2", "V1", "V2", "A");
 
         // now lets drop the parent table
-        dropTableCache(conn, grandChild, baseTable);
         conn.createStatement().execute("DROP TABLE " + baseTable + " CASCADE");
 
-        dropTableCache(conn, grandChild, baseTable);
-
         // the grand child should no longer exist
-        PhoenixRuntime.getTable(conn, grandChild);
+        PhoenixRuntime.getTableNoCache(conn, grandChild);
     }
 
     private void assertColumnNamesEqual(PTable table, String... cols) {
@@ -258,10 +251,6 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
             actual.put(column.getName().getString().trim(), column.getDataType().getSqlTypeName());
         }
         assertEquals(Joiner.on(", ").withKeyValueSeparator(" => ").join(expected), Joiner.on(", ").withKeyValueSeparator(" => ").join(actual));
-    }
-
-    private void dropTableCache(Connection conn, String child, String baseTable) throws SQLException {
-        conn.unwrap(PhoenixConnection.class).removeTable(null, child.toUpperCase(), baseTable.toUpperCase(), HConstants.LATEST_TIMESTAMP);
     }
 
     private HTable getTable(TableName catalogTable) throws IOException {

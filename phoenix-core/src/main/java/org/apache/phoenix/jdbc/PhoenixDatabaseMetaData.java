@@ -447,6 +447,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
 
+    // TODO: rg change this to go through the cache...
     @Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {

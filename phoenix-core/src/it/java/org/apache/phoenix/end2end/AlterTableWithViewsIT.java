@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
@@ -837,6 +838,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
             
             phoenixConn = conn.unwrap(PhoenixConnection.class);
+            phoenixConn.removeTable(tenantId, viewOfTable, baseTableName, HConstants.LATEST_TIMESTAMP);
             table = phoenixConn.getTable(new PTableKey(null, baseTableName));
             assertTrue(table.isAppendOnlySchema());
             viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));

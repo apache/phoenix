@@ -30,11 +30,15 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PNameImpl;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
@@ -252,13 +256,17 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
             // create a view
             viewConn1.createStatement().execute(
                 "CREATE VIEW " + metricView1 + " AS SELECT * FROM " + tableName + " WHERE val2=1.2");
+            PTable metricView1ConnectionTable = PhoenixRuntime.getTable(viewConn1, metricView1);
+            System.out.println("metricView1ConnectionTable = " + metricView1ConnectionTable);
             try {
                 // create the same view which should fail
                 viewConn1.createStatement()
                         .execute("CREATE VIEW " + metricView1 + " AS SELECT * FROM " + tableName);
                 fail("view should already exist");
-            } catch (TableAlreadyExistsException e) {
-            }
+            } catch (TableAlreadyExistsException ignored) { }
+
+            metricView1ConnectionTable = PhoenixRuntime.getTable(viewConn1, metricView1);
+            System.out.println("metricView1ConnectionTable = " + metricView1ConnectionTable);
 
             // create a second view (without a where clause)
             viewConn2.createStatement().execute(

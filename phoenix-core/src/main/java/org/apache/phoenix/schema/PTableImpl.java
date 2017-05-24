@@ -294,15 +294,26 @@ public class PTableImpl implements PTable {
     }
 
     public static PTableImpl makePTable(PTable table, Collection<PColumn> columns) throws SQLException {
-        return new PTableImpl(
-                table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
-                table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
-                table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
-                table.isWALDisabled(), table.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
-                table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), table.isTransactional(), table.getUpdateCacheFrequency(),
-                table.getIndexDisableTimestamp(), table.isNamespaceMapped(), table.getAutoPartitionSeqName(), table.isAppendOnlySchema(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter());
+        return makePTable(table, table, columns, table.getTimeStamp());
     }
-    
+
+    // for views, the basePTable is for attributes we inherit from the physical table
+    public static PTableImpl makePTable(PTable table, PTable basePTable, Collection<PColumn> columns, long timestamp) throws SQLException {
+        // diverge fields:
+        // getUpdateCacheFrequency
+        //
+
+
+        return new PTableImpl(
+            table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timestamp,
+            table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
+            table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
+            table.isWALDisabled(), basePTable.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
+            table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), basePTable.isTransactional(), table.getUpdateCacheFrequency(),
+            table.getIndexDisableTimestamp(), basePTable.isNamespaceMapped(), basePTable.getAutoPartitionSeqName(), basePTable.isAppendOnlySchema(),
+            basePTable.getImmutableStorageScheme(), basePTable.getEncodingScheme(), table.getEncodedCQCounter());
+    }
+
     public static PTableImpl makePTable(PTable table, Collection<PColumn> columns, PName defaultFamily) throws SQLException {
         return new PTableImpl(
                 table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), table.getTimeStamp(),
@@ -499,12 +510,14 @@ public class PTableImpl implements PTable {
         this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
         this.kvColumnsByQualifiers = Maps.newHashMapWithExpectedSize(columns.size());
         int numPKColumns = 0;
+        int newOrdinal = 0;
         if (bucketNum != null) {
             // Add salt column to allColumns and pkColumns, but don't add to
             // columnsByName, since it should not be addressable via name.
             allColumns = new PColumn[columns.size()+1];
             allColumns[SALTING_COLUMN.getPosition()] = SALTING_COLUMN;
             pkColumns = Lists.newArrayListWithExpectedSize(columns.size()+1);
+            newOrdinal = 1;
             ++numPKColumns;
         } else {
             allColumns = new PColumn[columns.size()];
@@ -520,7 +533,7 @@ public class PTableImpl implements PTable {
             }
         });
 
-        int newOrdinal = 0;
+
         for (PColumn column : sortedColumns) {
             allColumns[newOrdinal] = column;
             newOrdinal++;

@@ -887,7 +887,7 @@ public abstract class BaseTest {
     	        ResultSet rs = dbmd.getTables(null, null, null, new String[]{PTableType.VIEW.toString(), PTableType.TABLE.toString()});
     	        boolean hasTables = rs.next();
     	        if (hasTables) {
-    	        	fail("The following tables are not deleted that should be:" + getTableNames(rs));
+//    	        	fail("The following tables are not deleted that should be:" + getTableNames(rs));
     	        }
             }
         }

@@ -61,7 +61,7 @@ class OrphanCleaner {
         }
     }
 
-    static List<Delete> traverseUpAndDelete(HTableInterface hTable, byte[] startKey) throws IOException {
+    private static List<Delete> traverseUpAndDelete(HTableInterface hTable, byte[] startKey) throws IOException {
         List<Delete> deletesToIssue = Lists.newArrayList();
         Scan scan = new Scan(startKey, ByteUtil.nextKey(startKey));
         scan.setFilter(new KeyOnlyFilter());
