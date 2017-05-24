@@ -64,9 +64,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -74,16 +71,12 @@ import com.google.common.collect.Maps;
 /**
  * Tests for the {@link IndexToolForPartialBuildIT}
  */
-@RunWith(Parameterized.class)
 public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     
-    private final boolean localIndex;
     protected boolean isNamespaceEnabled = false;
     protected final String tableDDLOptions;
     
-    public IndexToolForPartialBuildIT(boolean localIndex) {
-
-        this.localIndex = localIndex;
+    public IndexToolForPartialBuildIT() {
         StringBuilder optionBuilder = new StringBuilder();
         optionBuilder.append(" SPLIT ON(1,2)");
         this.tableDDLOptions = optionBuilder.toString();
@@ -106,13 +99,6 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     public static void doSetup() throws Exception {
         Map<String, String> serverProps = getServerProperties();
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), ReadOnlyProps.EMPTY_PROPS);
-    }
-    
-    @Parameters(name="localIndex = {0}")
-    public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 { false},{ true }
-           });
     }
     
     @Test
@@ -142,8 +128,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             upsertRow(stmt1, 2000);
 
             conn.commit();
-            stmt.execute(String.format("CREATE %s INDEX %s ON %s  (LPAD(UPPER(NAME),11,'x')||'_xyz') ",
-                    (localIndex ? "LOCAL" : ""), indxTable, fullTableName));
+            stmt.execute(String.format("CREATE INDEX %s ON %s  (LPAD(UPPER(NAME),11,'x')||'_xyz') ", indxTable, fullTableName));
             FailingRegionObserver.FAIL_WRITE = true;
             upsertRow(stmt1, 3000);
             upsertRow(stmt1, 4000);
@@ -186,7 +171,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
 
             // assert we are pulling from data table.
-			assertExplainPlan(actualExplainPlan, schemaName, dataTableName, null, false, isNamespaceEnabled);
+			assertExplainPlan(actualExplainPlan, schemaName, dataTableName, null, isNamespaceEnabled);
 
             rs = stmt1.executeQuery(selectSql);
             for (int i = 1; i <= 7; i++) {
@@ -219,7 +204,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             // assert we are pulling from index table.
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             actualExplainPlan = QueryUtil.getExplainPlan(rs);
-            assertExplainPlan(actualExplainPlan, schemaName, dataTableName, indxTable, localIndex, isNamespaceEnabled);
+            assertExplainPlan(actualExplainPlan, schemaName, dataTableName, indxTable, isNamespaceEnabled);
 
             rs = stmt.executeQuery(selectSql);
 
@@ -237,21 +222,13 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
     }
     
 	public static void assertExplainPlan(final String actualExplainPlan, String schemaName, String dataTable,
-			String indxTable, boolean isLocal, boolean isNamespaceMapped) {
+			String indxTable, boolean isNamespaceMapped) {
 
 		String expectedExplainPlan = "";
 		if (indxTable != null) {
-			if (isLocal) {
-				final String localIndexName = SchemaUtil
-						.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, dataTable), isNamespaceMapped,
-								PTableType.INDEX)
-						.getString();
-				expectedExplainPlan = String.format("CLIENT PARALLEL 3-WAY RANGE SCAN OVER %s [1]", localIndexName);
-			} else {
-				expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
-						SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, indxTable),
-								isNamespaceMapped, PTableType.INDEX));
-			}
+		    expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
+		        SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, indxTable),
+		            isNamespaceMapped, PTableType.INDEX));
 		} else {
 			expectedExplainPlan = String.format("CLIENT PARALLEL 1-WAY FULL SCAN OVER %s",
 					SchemaUtil.getPhysicalHBaseTableName(SchemaUtil.getTableName(schemaName, dataTable),
@@ -270,7 +247,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         args.add(dataTable);
         args.add("-pr");
         args.add("-op");
-        args.add("/tmp/output/partialTable_"+localIndex);
+        args.add("/tmp/output/partialTable_");
         return args.toArray(new String[0]);
     }
 

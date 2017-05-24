@@ -160,7 +160,6 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -1897,11 +1896,6 @@ public class MetaDataClient {
             if (tableType == PTableType.TABLE) {
                 Boolean isAppendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
                 isAppendOnlySchema = isAppendOnlySchemaProp!=null ? isAppendOnlySchemaProp : false;
-                
-                // By default, do not rebuild indexes on write failure
-                if (tableProps.get(PhoenixIndexFailurePolicy.REBUILD_INDEX_ON_WRITE_FAILURE) == null) {
-                    tableProps.put(PhoenixIndexFailurePolicy.REBUILD_INDEX_ON_WRITE_FAILURE, Boolean.FALSE);
-                }
             }
 
             // Can't set any of these on views or shared indexes on views

@@ -119,7 +119,7 @@ public class MutableIndexFailureIT extends BaseTest {
         this.fullIndexName = SchemaUtil.getTableName(schema, indexName);
         this.isNamespaceMapped = isNamespaceMapped;
         this.leaveIndexActiveOnFailure = ! (disableIndexOnWriteFailure == null ? QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX : disableIndexOnWriteFailure);
-        this.rebuildIndexOnWriteFailure = Boolean.TRUE.equals(rebuildIndexOnWriteFailure);
+        this.rebuildIndexOnWriteFailure = ! Boolean.FALSE.equals(rebuildIndexOnWriteFailure);
     }
 
     @BeforeClass
@@ -146,13 +146,13 @@ public class MutableIndexFailureIT extends BaseTest {
                 { true, false, false, true, true }, 
                 { true, false, true, true, true },
                 { false, true, true, true, true }, 
-                { false, true, false, true, true }, 
-                { true, true, false, true, true }, 
-                { true, true, true, true, true },
+                { false, true, false, null, null }, 
+                { true, true, false, true, null }, 
+                { true, true, true, null, true },
 
-                { false, false, false, null, true }, 
-                { false, true, false, false, true }, 
-                { false, false, false, false, null }, 
+                { false, false, false, false, true }, 
+                { false, true, false, false, null }, 
+                { false, false, false, false, false }, 
         } 
         );
     }
@@ -234,7 +234,7 @@ public class MutableIndexFailureIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(indexName, rs.getString(3));
             // the index is only disabled for non-txn tables upon index table write failure
-            if (transactional || leaveIndexActiveOnFailure) {
+            if (transactional || leaveIndexActiveOnFailure || localIndex) {
                 assertEquals(PIndexState.ACTIVE.toString(), rs.getString("INDEX_STATE"));
             } else {
                 String indexState = rs.getString("INDEX_STATE");
@@ -413,7 +413,7 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         try {
             conn.commit();
-            if (commitShouldFail) {
+            if (commitShouldFail && !localIndex) {
                 fail();
             }
         } catch (CommitException e) {
@@ -434,7 +434,7 @@ public class MutableIndexFailureIT extends BaseTest {
         stmt.execute();
         try {
             conn.commit();
-            if (commitShouldFail) {
+            if (commitShouldFail && !localIndex) {
                 fail();
             }
         } catch (CommitException e) {

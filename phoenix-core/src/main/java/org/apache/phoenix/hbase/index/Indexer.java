@@ -23,8 +23,8 @@ import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -96,6 +96,11 @@ import com.google.common.collect.Multimap;
  * nothing does. Currently, we do not support mixed-durability updates within a single batch. If you
  * want to have different durability levels, you only need to split the updates into two different
  * batches.
+ * <p>
+ * We don't need to implement {@link #postPut(ObserverContext, Put, WALEdit, Durability)} and
+ * {@link #postDelete(ObserverContext, Delete, WALEdit, Durability)} hooks because 
+ * Phoenix always does batch mutations.
+ * <p>
  */
 public class Indexer extends BaseRegionObserver {
 
@@ -225,10 +230,8 @@ public class Indexer extends BaseRegionObserver {
           if (!mutations.isEmpty()) {
               Region region = e.getEnvironment().getRegion();
               // Otherwise, submit the mutations directly here
-              region.mutateRowsWithLocks(
-                      mutations,
-                      Collections.<byte[]>emptyList(), // Rows are already locked
-                      HConstants.NO_NONCE, HConstants.NO_NONCE);
+                region.batchMutate(mutations.toArray(new Mutation[0]), HConstants.NO_NONCE,
+                    HConstants.NO_NONCE);
           }
           return Result.EMPTY_RESULT;
       } catch (Throwable t) {
@@ -320,14 +323,26 @@ public class Indexer extends BaseRegionObserver {
           if (current == null) {
               current = NullSpan.INSTANCE;
           }
-
           // get the index updates for all elements in this batch
           Collection<Pair<Mutation, byte[]>> indexUpdates =
                   this.builder.getIndexUpdate(miniBatchOp, mutations.values());
-
           current.addTimelineAnnotation("Built index updates, doing preStep");
           TracingUtils.addAnnotation(current, "index update count", indexUpdates.size());
-
+          byte[] tableName = c.getEnvironment().getRegion().getTableDesc().getTableName().getName();
+          Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
+          List<Mutation> localUpdates = new ArrayList<Mutation>(indexUpdates.size());
+          while(indexUpdatesItr.hasNext()) {
+              Pair<Mutation, byte[]> next = indexUpdatesItr.next();
+              if (Bytes.compareTo(next.getSecond(), tableName) == 0) {
+                  localUpdates.add(next.getFirst());
+                  indexUpdatesItr.remove();
+              }
+          }
+          if (!localUpdates.isEmpty()) {
+              miniBatchOp.addOperationsFromCP(0,
+                  localUpdates.toArray(new Mutation[localUpdates.size()]));
+          }
+          
           // write them, either to WAL or the index tables
           doPre(indexUpdates, edit, durability);
       }
@@ -363,26 +378,6 @@ public class Indexer extends BaseRegionObserver {
     }
 
     return true;
-  }
-
-  @Override
-  public void postPut(ObserverContext<RegionCoprocessorEnvironment> e, Put put, WALEdit edit,
-      final Durability durability) throws IOException {
-      if (this.disabled) {
-      super.postPut(e, put, edit, durability);
-          return;
-        }
-    doPost(edit, put, durability);
-  }
-
-  @Override
-  public void postDelete(ObserverContext<RegionCoprocessorEnvironment> e, Delete delete,
-      WALEdit edit, final Durability durability) throws IOException {
-      if (this.disabled) {
-      super.postDelete(e, delete, edit, durability);
-          return;
-        }
-    doPost(edit, delete, durability);
   }
 
   @Override
@@ -454,25 +449,8 @@ public class Indexer extends BaseRegionObserver {
               // references originally - therefore, we just pass in a null factory here and use the ones
               // already specified on each reference
               try {
-        		  current.addTimelineAnnotation("Actually doing index update for first time");
-                  Collection<Pair<Mutation, byte[]>> localUpdates =
-                          new ArrayList<Pair<Mutation, byte[]>>();
-                  Collection<Pair<Mutation, byte[]>> remoteUpdates =
-                          new ArrayList<Pair<Mutation, byte[]>>();
-        		  for (Pair<Mutation, byte[]> mutation : indexUpdates) {
-        			  if (Bytes.toString(mutation.getSecond()).equals(
-        					  environment.getRegion().getTableDesc().getNameAsString())) {
-        				  localUpdates.add(mutation);
-        			  } else {
-                          remoteUpdates.add(mutation);
-        			  }
-        		  }
-                  if(!remoteUpdates.isEmpty()) {
-                      writer.writeAndKillYourselfOnFailure(remoteUpdates, false);
-                  }
-                  if(!localUpdates.isEmpty()) {
-                      writer.writeAndKillYourselfOnFailure(localUpdates, true);
-                  }
+                  current.addTimelineAnnotation("Actually doing index update for first time");
+                  writer.writeAndKillYourselfOnFailure(indexUpdates, false);
               } finally {                  // With a custom kill policy, we may throw instead of kill the server.
                   // Without doing this in a finally block (at least with the mini cluster),
                   // the region server never goes down.
