@@ -226,6 +226,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.JDBCUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -435,7 +436,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
             this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
             GLOBAL_HCONNECTIONS_COUNTER.increment();
-            logger.info("HConnnection established. Details: " + connection + " " +  Throwables.getStackTraceAsString(new Exception()));
+            logger.info("HConnection established. Stacktrace for informational purposes: " + connection + " " +  LogUtil.getCallerStackTrace());
             // only initialize the tx service client if needed and if we succeeded in getting a connection
             // to HBase
             if (transactionsEnabled) {
@@ -2403,7 +2404,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         boolean success = false;
                         try {
                             GLOBAL_QUERY_SERVICES_COUNTER.increment();
-                            logger.info("An instance of ConnectionQueryServices was created: " + Throwables.getStackTraceAsString(new Exception()));
+                            logger.info("An instance of ConnectionQueryServices was created.");
                             openConnection();
                             hConnectionEstablished = true;
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
