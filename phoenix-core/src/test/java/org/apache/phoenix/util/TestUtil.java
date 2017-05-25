@@ -361,11 +361,11 @@ public class TestUtil {
     }
 
     public static MultiKeyValueComparisonFilter multiKVFilter(Expression e) {
-        return  new MultiCQKeyValueComparisonFilter(e);
+        return  new MultiCQKeyValueComparisonFilter(e, false, ByteUtil.EMPTY_BYTE_ARRAY);
     }
     
     public static MultiEncodedCQKeyValueComparisonFilter multiEncodedKVFilter(Expression e, QualifierEncodingScheme encodingScheme) {
-        return  new MultiEncodedCQKeyValueComparisonFilter(e, encodingScheme);
+        return  new MultiEncodedCQKeyValueComparisonFilter(e, encodingScheme, false, null);
     }
 
     public static Expression and(Expression... expressions) {

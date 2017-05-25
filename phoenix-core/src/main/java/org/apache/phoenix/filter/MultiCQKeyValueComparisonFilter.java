@@ -36,8 +36,8 @@ public class MultiCQKeyValueComparisonFilter extends MultiKeyValueComparisonFilt
     public MultiCQKeyValueComparisonFilter() {
     }
 
-    public MultiCQKeyValueComparisonFilter(Expression expression) {
-        super(expression);
+    public MultiCQKeyValueComparisonFilter(Expression expression, boolean allCFs, byte[] essentialCF) {
+        super(expression, allCFs, essentialCF);
     }
 
     @Override
