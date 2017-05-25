@@ -18,6 +18,8 @@
 package org.apache.phoenix.filter;
 
 import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -31,6 +33,9 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.schema.tuple.BaseTuple;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ServerUtil;
+
 
 
 /**
@@ -46,12 +51,16 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
     private Boolean matchedColumn;
     protected final IncrementalResultTuple inputTuple = new IncrementalResultTuple();
     protected TreeSet<byte[]> cfSet;
+    private byte[] essentialCF = ByteUtil.EMPTY_BYTE_ARRAY;
+    private boolean allCFs;
 
     public MultiKeyValueComparisonFilter() {
     }
 
-    public MultiKeyValueComparisonFilter(Expression expression) {
+    public MultiKeyValueComparisonFilter(Expression expression, boolean allCFs, byte[] essentialCF) {
         super(expression);
+        this.allCFs = allCFs;
+        this.essentialCF = essentialCF == null ? ByteUtil.EMPTY_BYTE_ARRAY : essentialCF;
         init();
     }
 
@@ -240,14 +249,38 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
 
     @Override
     public boolean isFamilyEssential(byte[] name) {
-        // Only the column families involved in the expression are essential.
-        // The others are for columns projected in the select expression.
-        return cfSet.contains(name);
+        // Typically only the column families involved in the expression are essential.
+        // The others are for columns projected in the select expression. However, depending
+        // on the expression (i.e. IS NULL), we may need to include the column family
+        // containing the empty key value or all column families in the case of a mapped
+        // view (where we don't have an empty key value).
+        return allCFs || Bytes.compareTo(name, essentialCF) == 0 || cfSet.contains(name);
     }
 
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);
+        try {
+            allCFs = input.readBoolean();
+            if (!allCFs) {
+                essentialCF = Bytes.readByteArray(input);
+            }
+        } catch (EOFException e) { // Ignore as this will occur when a 4.10 client is used
+        }
         init();
     }
+    
+    @Override
+    public void write(DataOutput output) throws IOException {
+        super.write(output);
+        try {
+            output.writeBoolean(allCFs);
+            if (!allCFs) {
+                Bytes.writeByteArray(output, essentialCF);
+            }
+        } catch (Throwable t) { // Catches incompatibilities during reading/writing and doesn't retry
+            ServerUtil.throwIOException("MultiKeyValueComparisonFilter failed during writing", t);
+        }
+    }
+
 }
