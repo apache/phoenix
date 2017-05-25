@@ -1415,13 +1415,13 @@ public class CalciteUtils {
                 column.getMaxLength(), column.getScale(),
                 column.getSortOrder());
           Object object =
-                  defaultExpression.getDataType().toObject(key,
-                      defaultExpression.getSortOrder(), defaultExpression.getMaxLength(),
-                      defaultExpression.getScale());
+                  column.getDataType().toObject(key,
+                      column.getSortOrder(), defaultExpression.getMaxLength(),
+                      column.getScale());
           RelDataType pDataTypeToRelDataType =
                   CalciteUtils.pDataTypeToRelDataType(rexBuilder.getTypeFactory(),
-                      defaultExpression.getDataType(), defaultExpression.getMaxLength(),
-                      defaultExpression.getScale(), column.getArraySize());
+                      column.getDataType(), column.getMaxLength(),
+                      column.getScale(), column.getArraySize());
         return rexBuilder.makeLiteral((Comparable)object, pDataTypeToRelDataType,true);
     }
 

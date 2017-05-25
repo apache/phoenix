@@ -386,7 +386,7 @@ public class PhoenixPrepareImpl extends CalcitePrepareImpl {
                 final ParseNode incrementBy = sequence.incrementBy == null ? null : nodeFactory.literal(sequence.incrementBy.intValue(true));
                 final ParseNode minValue = sequence.minValue == null ? null : nodeFactory.literal(sequence.minValue.intValue(true));
                 final ParseNode maxValue = sequence.maxValue == null ? null : nodeFactory.literal(sequence.maxValue.intValue(true));
-                final ParseNode cache = sequence.cache == null ? null : nodeFactory.literal(sequence.cache.intValue(true));
+                final ParseNode cache = sequence.cache == null ? null : nodeFactory.literal(sequence.cache.longValue(true));
                 final CreateSequenceStatement create = nodeFactory.createSequence(name, startWith, incrementBy, cache, minValue, maxValue, sequence.cycle.booleanValue(), sequence.ifNotExists.booleanValue(), 0);
                 try (final PhoenixStatement stmt = new PhoenixStatement(connection)) {
                     final CreateSequenceCompiler compiler = new CreateSequenceCompiler(stmt, Operation.UPSERT);

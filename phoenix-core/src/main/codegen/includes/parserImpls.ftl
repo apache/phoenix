@@ -387,7 +387,7 @@ SqlNode SqlCreateSequence() :
     ]
     [
         <INCREMENT> [ <BY> ]
-        v = UnsignedIntLiteral() { incrementBy = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
+        v = IntLiteral() { incrementBy = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
     ]
     [
         <MINVALUE>
@@ -402,7 +402,7 @@ SqlNode SqlCreateSequence() :
     ]
     [
         <CACHE>
-        v = UnsignedIntLiteral() { cache = SqlLiteral.createExactNumeric(v.toString(), getPos()); }
+        cache = UnsignedNumericLiteral()
     ]
     {
         return new SqlCreateSequence(pos.plus(getPos()), sequenceName,

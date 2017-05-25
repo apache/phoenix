@@ -75,7 +75,11 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
                 stmt.execute();
             }
             fail("Upsert should have failed since the number of upserts (200) is greater than the MAX_MUTATION_SIZE_ATTRIB (100)");
-        } catch (IllegalArgumentException expected) {}
+        } catch (SQLException expected) {
+            if(!(expected.getCause() instanceof IllegalArgumentException)) {
+                fail("Should throw IllegalArgumentException");
+            }
+        }
     }
 
     @Test
