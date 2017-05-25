@@ -3,6 +3,7 @@ package org.apache.phoenix.expression;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.execute.RuntimeContext;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
@@ -27,6 +28,7 @@ public class BindParameterExpression extends VariableExpression {
         }
         
         ptr.set(type.toBytes(value));
+        type.pad(ptr, maxLength, SortOrder.ASC);
         return true;
     }
 
