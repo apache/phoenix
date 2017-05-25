@@ -88,7 +88,6 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -472,7 +471,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
         }
-        long rowCount = 0;
+        int rowCount = 0;
         final RegionScanner innerScanner = theScanner;
         boolean useIndexProto = true;
         byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
@@ -709,14 +708,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         }
-                        if (readyToCommit(mutations, maxBatchSize, maxBatchSizeBytes)) {
+                        if (readyToCommit(rowCount, mutations.heapSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                     areMutationInSameRegion, targetHTable, useIndexProto);
                             mutations.clear();
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
-                        if (readyToCommit(indexMutations, maxBatchSize, maxBatchSizeBytes)) {
+                        if (readyToCommit(rowCount, indexMutations.heapSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState,
                                     useIndexProto);
                             indexMutations.clear();
@@ -800,9 +799,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private boolean readyToCommit(MutationList mutations, int maxBatchSize, long maxBatchSizeBytes) {
-        return !mutations.isEmpty() && (maxBatchSize > 0 && mutations.size() > maxBatchSize)
-                || (maxBatchSizeBytes > 0 && mutations.heapSize() > maxBatchSizeBytes);
+    private boolean readyToCommit(int rowCount, long mutationSize, int maxBatchSize, long maxBatchSizeBytes) {
+        return maxBatchSize > 0 && rowCount > maxBatchSize
+                || (maxBatchSizeBytes > 0 && mutationSize > maxBatchSizeBytes);
     }
 
     @Override
@@ -856,10 +855,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
         boolean hasMore;
-        long rowCount = 0;
+        int rowCount = 0;
         try {
-            int batchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            List<Mutation> mutations = Lists.newArrayListWithExpectedSize(batchSize);
+            int maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+            long maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
+            MutationList mutations = new MutationList(maxBatchSize);
             region.startRegionOperation();
             byte[] uuidValue = ServerCacheClient.generateId();
             synchronized (innerScanner) {
@@ -893,7 +894,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 del.addDeleteMarker(cell);
                             }
                         }
-                        if (mutations.size() >= batchSize) {
+                        if (readyToCommit(rowCount, mutations.heapSize(), maxBatchSize, maxBatchSizeBytes)) {
                             region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
                                     HConstants.NO_NONCE);
                             uuidValue = ServerCacheClient.generateId();
