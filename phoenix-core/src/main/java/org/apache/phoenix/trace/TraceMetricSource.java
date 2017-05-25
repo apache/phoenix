@@ -97,8 +97,8 @@ public class TraceMetricSource implements SpanReceiver, MetricsSource {
     // add all the metrics for the span
     builder.addCounter(Interns.info(SPAN.traceName, EMPTY_STRING), span.getSpanId());
     builder.addCounter(Interns.info(PARENT.traceName, EMPTY_STRING), span.getParentId());
-    builder.addCounter(Interns.info(START.traceName, EMPTY_STRING), span.getStartTimeMillis());
-    builder.addCounter(Interns.info(END.traceName, EMPTY_STRING), span.getStopTimeMillis());
+    builder.addCounter(Interns.info(START.traceName, EMPTY_STRING), span.getStartTimeNanos());
+    builder.addCounter(Interns.info(END.traceName, EMPTY_STRING), span.getStopTimeNanos());
     // add the tags to the span. They were written in order received so we mark them as such
     for (TimelineAnnotation ta : span.getTimelineAnnotations()) {
       builder.add(new MetricsTag(Interns.info(TAG.traceName, Long.toString(ta.getTime())), ta
