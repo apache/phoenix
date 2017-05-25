@@ -115,6 +115,20 @@ public class RoundFloorCeilExpressionsTest {
     }
 
     @Test
+    public void testFloorNegativePrecisionDecimalExpression() throws Exception {
+        LiteralExpression decimalLiteral = LiteralExpression.newConstant(444.44, PDecimal.INSTANCE);
+        Expression floorDecimalExpression = FloorDecimalExpression.create(decimalLiteral, -2);
+
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        floorDecimalExpression.evaluate(null, ptr);
+        Object result = floorDecimalExpression.getDataType().toObject(ptr);
+
+        assertTrue(result instanceof BigDecimal);
+        BigDecimal resultDecimal = (BigDecimal)result;
+        assertEquals(0, BigDecimal.valueOf(400).compareTo(resultDecimal));
+    }
+
+    @Test
     public void testFloorDecimalExpressionNoop() throws Exception {
         LiteralExpression decimalLiteral = LiteralExpression.newConstant(5, PInteger.INSTANCE);
         Expression floorDecimalExpression = FloorDecimalExpression.create(decimalLiteral, 3);
@@ -134,6 +148,20 @@ public class RoundFloorCeilExpressionsTest {
         assertTrue(result instanceof BigDecimal);
         BigDecimal resultDecimal = (BigDecimal)result;
         assertEquals(BigDecimal.valueOf(1.239), resultDecimal);
+    }
+
+    @Test
+    public void testCeilNegativePrecisionDecimalExpression() throws Exception {
+        LiteralExpression decimalLiteral = LiteralExpression.newConstant(444.44, PDecimal.INSTANCE);
+        Expression ceilDecimalExpression = CeilDecimalExpression.create(decimalLiteral, -2);
+
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        ceilDecimalExpression.evaluate(null, ptr);
+        Object result = ceilDecimalExpression.getDataType().toObject(ptr);
+
+        assertTrue(result instanceof BigDecimal);
+        BigDecimal resultDecimal = (BigDecimal)result;
+        assertEquals(0, BigDecimal.valueOf(500).compareTo(resultDecimal));
     }
 
     @Test
