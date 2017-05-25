@@ -127,7 +127,8 @@ public class MutationState implements SQLCloseable {
     
     private final PhoenixConnection connection;
     private final long maxSize;
-    private final long maxSizeBytes;
+    private final long batchSize;
+    private final long batchSizeBytes;
     private long batchCount = 0L;
     private final Map<TableRef, Map<ImmutableBytesPtr,RowMutationState>> mutations;
     private final List<TransactionAware> txAwares;
@@ -174,7 +175,8 @@ public class MutationState implements SQLCloseable {
             Transaction tx, TransactionContext txContext) {
         this.maxSize = maxSize;
         this.connection = connection;
-        this.maxSizeBytes = connection.getMutateBatchSizeBytes();
+        this.batchSize = connection.getMutateBatchSize();
+        this.batchSizeBytes = connection.getMutateBatchSizeBytes();
         this.mutations = mutations;
         boolean isMetricsEnabled = connection.isRequestLevelMetricsEnabled();
         this.mutationMetricQueue = isMetricsEnabled ? new MutationMetricQueue()
@@ -860,8 +862,8 @@ public class MutationState implements SQLCloseable {
         }
     }
 
-    public long getMaxSizeBytes() {
-        return maxSizeBytes;
+    public long getBatchSizeBytes() {
+        return batchSizeBytes;
     }
 
     public long getBatchCount() {
@@ -1095,7 +1097,7 @@ public class MutationState implements SQLCloseable {
                         
                         long startTime = System.currentTimeMillis();
                         child.addTimelineAnnotation("Attempt " + retryCount);
-                        List<List<Mutation>> mutationBatchList = getMutationBatchList(maxSize, maxSizeBytes, mutationList);
+                        List<List<Mutation>> mutationBatchList = getMutationBatchList(batchSize, batchSizeBytes, mutationList);
                         for (List<Mutation> mutationBatch : mutationBatchList) {
                             hTable.batch(mutationBatch);
                             batchCount++;
@@ -1169,13 +1171,13 @@ public class MutationState implements SQLCloseable {
      * @param allMutationList List of HBase mutations
      * @return List of lists of mutations
      */
-    public static List<List<Mutation>> getMutationBatchList(long maxSize, long maxSizeBytes, List<Mutation> allMutationList) {
+    public static List<List<Mutation>> getMutationBatchList(long batchSize, long batchSizeBytes, List<Mutation> allMutationList) {
         List<List<Mutation>> mutationBatchList = Lists.newArrayList();
         List<Mutation> currentList = Lists.newArrayList();
         long currentBatchSizeBytes = 0L;
         for (Mutation mutation : allMutationList) {
             long mutationSizeBytes = mutation.heapSize();
-            if (currentList.size() == maxSize || currentBatchSizeBytes + mutationSizeBytes > maxSizeBytes) {
+            if (currentList.size() == batchSize || currentBatchSizeBytes + mutationSizeBytes > batchSizeBytes) {
                 if (currentList.size() > 0) {
                     mutationBatchList.add(currentList);
                     currentList = Lists.newArrayList();
