@@ -33,7 +33,9 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -47,7 +49,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
-public class GroupByCaseIT extends ParallelStatsDisabledIT {
+public class AggregateIT extends ParallelStatsDisabledIT {
     private static void initData(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("create table " + tableName +
                 "   (id varchar not null primary key,\n" +
@@ -971,6 +973,8 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (4,1)");
             conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (5,1)");
             conn.commit();
+
+            TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(intTableName)));
 
             sql="select count(*) from "+intTableName;
             ResultSet rs=conn.createStatement().executeQuery(sql);
