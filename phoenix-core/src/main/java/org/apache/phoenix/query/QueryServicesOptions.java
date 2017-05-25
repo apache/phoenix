@@ -139,10 +139,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_TRACING_BATCH_SIZE = 100;
     public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
 
-    @Deprecated //use DEFAULT_MUTATE_BATCH_SIZE_BYTES
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
-    //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 10MB
-    public final static long DEFAULT_MUTATE_BATCH_SIZE_BYTES = 134217728;
+    //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB
+    public final static long DEFAULT_MUTATE_BATCH_SIZE_BYTES = 2097152;
 	// The only downside of it being out-of-sync is that the parallelization of the scan won't be as balanced as it could be.
     public static final int DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS = 30000; // 30 sec (with no activity)
     public static final int DEFAULT_SCAN_CACHE_SIZE = 1000;
