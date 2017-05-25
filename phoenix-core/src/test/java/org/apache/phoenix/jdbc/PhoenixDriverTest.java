@@ -84,7 +84,7 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB,"100");
         PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         assertEquals(100L, connection.getMutateBatchSizeBytes());
-        assertEquals(100L, connection.getMutationState().getMaxSizeBytes());
+        assertEquals(100L, connection.getMutationState().getBatchSizeBytes());
     }
     
     @Test

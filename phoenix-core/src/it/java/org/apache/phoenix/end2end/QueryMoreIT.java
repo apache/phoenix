@@ -28,6 +28,7 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -477,6 +478,7 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
     @Test
     public void testMutationBatch() throws Exception {
         Properties connectionProperties = new Properties();
+        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, "10");
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "1024");
         PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
         String fullTableName = generateUniqueName();
@@ -492,18 +494,28 @@ public class QueryMoreIT extends ParallelStatsDisabledIT {
                 "    )\n" +
                 ") MULTI_TENANT=TRUE");
         }
-        PreparedStatement stmt = connection.prepareStatement("upsert into " + fullTableName +
-            " (organization_id, entity_id, score) values (?,?,?)");
-        try {
-            for (int i = 0; i < 4; i++) {
-                stmt.setString(1, "AAAA" + i);
-                stmt.setString(2, "BBBB" + i);
-                stmt.setInt(3, 1);
-                stmt.execute();
-            }
-            connection.commit();
-        } catch (IllegalArgumentException expected) {}
-
+        upsertRows(connection, fullTableName);
+        connection.commit();
         assertEquals(2L, connection.getMutationState().getBatchCount());
+        
+        // set the batch size (rows) to 1 
+        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_ATTRIB, "1");
+        connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB, "1024");
+        connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        upsertRows(connection, fullTableName);
+        connection.commit();
+        // each row should be in its own batch
+        assertEquals(4L, connection.getMutationState().getBatchCount());
+    }
+
+    private void upsertRows(PhoenixConnection conn, String fullTableName) throws SQLException {
+        PreparedStatement stmt = conn.prepareStatement("upsert into " + fullTableName +
+                " (organization_id, entity_id, score) values (?,?,?)");
+        for (int i = 0; i < 4; i++) {
+            stmt.setString(1, "AAAA" + i);
+            stmt.setString(2, "BBBB" + i);
+            stmt.setInt(3, 1);
+            stmt.execute();
+        }
     }
 }
