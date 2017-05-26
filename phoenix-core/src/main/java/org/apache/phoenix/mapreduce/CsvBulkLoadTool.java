@@ -55,7 +55,7 @@ public class CsvBulkLoadTool extends AbstractBulkLoadTool {
         // we don't parse ZK_QUORUM_OPT here because we need it in order to
         // create the connection we need to build importColumns.
 
-        char delimiterChar = ',';
+        char delimiterChar = '\t';
         if (cmdLine.hasOption(DELIMITER_OPT.getOpt())) {
             String delimString = StringEscapeUtils.unescapeJava(cmdLine.getOptionValue(DELIMITER_OPT.getOpt()));
             if (delimString.length() != 1) {
