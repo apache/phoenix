@@ -146,7 +146,6 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
      * @throws Exception
      */
     @Test
-    @Ignore
     public void testClientServerIndexingTracing() throws Exception {
 
         // one call for client side, one call for server side
