@@ -41,15 +41,19 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.text.Format;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -247,6 +251,130 @@ public class QueryIT extends BaseQueryIT {
             conn.close();
         }
     }
+    
+    @Test
+    public void testDateBetweenLiterals() throws Exception {
+        Format formatter = DateUtil.getDateFormatter("yyyy-MM-dd");
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(date);
+        java.util.Date dateToday = cal.getTime();
+        cal.add(Calendar.DAY_OF_YEAR, 1);
+        java.util.Date dateTomorrow = cal.getTime();
+        String today = formatter.format(dateToday);
+        String tomorrow = formatter.format(dateTomorrow);
+        String query = "SELECT entity_id FROM ATABLE WHERE a_integer < 4 AND a_date BETWEEN date '" + today + "' AND date '" + tomorrow + "' ";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(ROW1, rs.getString(1));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+    
+    @Test
+    public void testSelectLiteralDate() throws Exception {
+        final String date = "2012-09-08";
+        String query = "SELECT DATE '" + date + "' FROM ATABLE";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(DateUtil.parseDate(date), rs.getDate(1));
+        } finally {
+            conn.close();
+        } 
+    }
+
+    @Test
+    public void testSelectLiteralDateCompare() throws Exception {
+        final String date = "2012-09-08";
+        String query = "SELECT (DATE '" + date + "' = DATE '" + date + "') FROM ATABLE";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertTrue(rs.next());
+            assertTrue(rs.getBoolean(1));
+        } finally {
+            conn.close();
+        } 
+    }
+
+    @Test
+    public void testSelectWhereDatesEqual() throws Exception {
+        final String date = "2012-09-08";
+        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' = DATE '" + date + "'";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertTrue(rs.next());
+        } finally {
+            conn.close();
+        } 
+    }
+
+    @Test
+    public void testSelectWhereDateAndToDateEqual() throws Exception {
+        final String date = "2012-09-08";
+        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' = TO_DATE ('" + date + "')";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertTrue(rs.next());
+        } finally {
+            conn.close();
+        } 
+    }
+    
+    @Test
+    public void testSelectWhereDateAndTimestampEqual() throws Exception {
+        final String timestamp = "2012-09-08 07:08:23";
+        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + timestamp + "' = TIMESTAMP '" + timestamp + "'";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertTrue(rs.next());
+        } finally {
+            conn.close();
+        } 
+    }
+
+    @Test
+    public void testSelectWhereSameDatesUnequal() throws Exception {
+        final String date = "2012-09-08";
+        String query = "SELECT entity_id FROM ATABLE WHERE  a_integer < 4 AND DATE '" + date + "' > DATE '" + date + "'";
+        String url = getUrl() + ";" + PhoenixRuntime.CURRENT_SCN_ATTRIB + "=" + (ts + 5); // Run query at timestamp 5
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(url, props);
+        try {
+            Statement statement = conn.createStatement();
+            ResultSet rs = statement.executeQuery(query);
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        } 
+    }
+    
     
     @Test
     public void testSimpleInListStatement() throws Exception {
