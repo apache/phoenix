@@ -71,6 +71,7 @@ public class TraceMetricsSourceTest {
   }
 
   private Span getSpan(){
-    return new MilliSpan("test span", 0, 1 , 2, "pid");
+    // Spans with Trace Id as 0 will be rejected (See PHOENIX-3767 for details)
+    return new MilliSpan("test span", 1, 1 , 2, "pid");
   }
 }
