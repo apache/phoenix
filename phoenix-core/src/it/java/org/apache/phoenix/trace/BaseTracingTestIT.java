@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsInfo;
@@ -36,6 +37,8 @@ import org.apache.hadoop.metrics2.MetricsTag;
 import org.apache.hadoop.metrics2.impl.ExposedMetricCounterLong;
 import org.apache.hadoop.metrics2.impl.ExposedMetricsRecordImpl;
 import org.apache.hadoop.metrics2.lib.ExposedMetricsInfoImpl;
+import org.apache.htrace.Span;
+import org.apache.htrace.impl.MilliSpan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.trace.util.Tracing;
@@ -49,6 +52,10 @@ import org.apache.phoenix.util.PropertiesUtil;
  */
 
 public class BaseTracingTestIT extends ParallelStatsDisabledIT {
+
+    protected CountDownLatch latch;
+    protected int defaultTracingThreadPoolForTest = 1;
+    protected int defaultTracingBatchSizeForTest = 1;
 
     public static Connection getConnectionWithoutTracing() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -127,4 +134,63 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
     private static MetricsInfo asInfo(String name) {
         return new ExposedMetricsInfoImpl(name, "");
     }
+
+    protected Span createNewSpan(long traceid, long parentid, long spanid, String description,
+            long startTime, long endTime, String processid, String... tags) {
+
+        Span span = new MilliSpan.Builder()
+                .description(description)
+                .traceId(traceid)
+                .parents(new long[] {parentid})
+                .spanId(spanid)
+                .processId(processid)
+                .begin(startTime)
+                .end(endTime)
+                .build();
+
+        int tagCount = 0;
+        for(String annotation : tags) {
+            span.addKVAnnotation((Integer.toString(tagCount++)).getBytes(), annotation.getBytes());
+        }
+        return span;
+    }
+
+
+    private static class CountDownConnection extends DelegateConnection {
+        private CountDownLatch commit;
+
+        public CountDownConnection(Connection conn, CountDownLatch commit) {
+            super(conn);
+            this.commit = commit;
+        }
+
+        @Override
+        public void commit() throws SQLException {
+            super.commit();
+            commit.countDown();
+        }
+
+    }
+
+    protected class TestTraceWriter extends TraceWriter {
+
+        public TestTraceWriter(String tableName, int numThreads, int batchSize) {
+            super(tableName, numThreads, batchSize);
+        }
+
+        @Override
+        protected Connection getConnection(String tableName) {
+            try {
+                Connection connection = new CountDownConnection(getConnectionWithoutTracing(), latch);
+                if(!traceTableExists(connection, tableName)) {
+                    createTable(connection, tableName);
+                }
+                return connection;
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
+
 }

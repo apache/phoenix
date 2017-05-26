@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -82,6 +82,11 @@ import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.TRACING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.TRACING_BATCH_SIZE;
+import static org.apache.phoenix.query.QueryServices.TRACING_THREAD_POOL_SIZE;
+import static org.apache.phoenix.query.QueryServices.TRACING_TRACE_BUFFER_SIZE;
 
 import java.util.HashSet;
 import java.util.Map.Entry;
@@ -129,6 +134,10 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_IMMUTABLE_ROWS = false; // Tables rows may be updated
     public static final boolean DEFAULT_DROP_METADATA = true; // Drop meta data also.
     public static final long DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS = 5  * 1000; // Time to wait in ShutdownHook to exit gracefully.
+    public static final boolean DEFAULT_TRACING_ENABLED = false;
+    public static final int DEFAULT_TRACING_THREAD_POOL_SIZE = 5;
+    public static final int DEFAULT_TRACING_BATCH_SIZE = 100;
+    public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
 
     @Deprecated //use DEFAULT_MUTATE_BATCH_SIZE_BYTES
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
@@ -227,12 +236,12 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_TABLE_ISTRANSACTIONAL = false;
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = false;
     public static final boolean DEFAULT_IS_GLOBAL_METRICS_ENABLED = true;
-    
+
     public static final boolean DEFAULT_TRANSACTIONAL = false;
     public static final boolean DEFAULT_AUTO_FLUSH = false;
 
     private static final String DEFAULT_CLIENT_RPC_CONTROLLER_FACTORY = ClientRpcControllerFactory.class.getName();
-    
+
     public static final String DEFAULT_CONSISTENCY_LEVEL = Consistency.STRONG.toString();
 
     public static final boolean DEFAULT_USE_BYTE_BASED_REGEX = false;
@@ -241,10 +250,10 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_REQUEST_LEVEL_METRICS_ENABLED = false;
     public static final boolean DEFAULT_ALLOW_VIEWS_ADD_NEW_CF_BASE_TABLE = true;
     public static final int DEFAULT_MAX_VERSIONS_TRANSACTIONAL = Integer.MAX_VALUE;
-    
+
     public static final boolean DEFAULT_RETURN_SEQUENCE_VALUES = false;
     public static final String DEFAULT_EXTRA_JDBC_ARGUMENTS = "";
-    
+
     public static final long DEFAULT_INDEX_POPULATION_SLEEP_TIME = 5000;
 
     // QueryServer defaults -- ensure ThinClientUtil is also updated since phoenix-queryserver-client
@@ -264,9 +273,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE = 10;
     public static final boolean DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE = true;
     public static final float DEFAULT_LIMITED_QUERY_SERIAL_THRESHOLD = 0.2f;
-    
+
     public static final boolean DEFAULT_INDEX_ASYNC_BUILD_ENABLED = true;
-    
+
     public static final String DEFAULT_CLIENT_CACHE_ENCODING = PTableRefFactory.Encoding.OBJECT.toString();
     public static final boolean DEFAULT_AUTO_UPGRADE_ENABLED = true;
     public static final int DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION = 86400000;
@@ -361,7 +370,10 @@ public class QueryServicesOptions {
             .setIfUnset(IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE)
             .setIfUnset(LOCAL_INDEX_CLIENT_UPGRADE_ATTRIB, DEFAULT_LOCAL_INDEX_CLIENT_UPGRADE)
             .setIfUnset(AUTO_UPGRADE_ENABLED, DEFAULT_AUTO_UPGRADE_ENABLED)
-            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING);
+            .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
+            .setIfUnset(TRACING_ENABLED, DEFAULT_TRACING_ENABLED)
+            .setIfUnset(TRACING_BATCH_SIZE, DEFAULT_TRACING_BATCH_SIZE)
+            .setIfUnset(TRACING_THREAD_POOL_SIZE, DEFAULT_TRACING_THREAD_POOL_SIZE);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
@@ -556,7 +568,33 @@ public class QueryServicesOptions {
     public int getSpillableGroupByNumSpillFiles() {
         return config.getInt(GROUPBY_SPILL_FILES_ATTRIB, DEFAULT_GROUPBY_SPILL_FILES);
     }
-    
+
+    public boolean isTracingEnabled() {
+        return config.getBoolean(TRACING_ENABLED, DEFAULT_TRACING_ENABLED);
+    }
+
+    public QueryServicesOptions setTracingEnabled(boolean enable) {
+        config.setBoolean(TRACING_ENABLED, enable);
+        return this;
+    }
+
+    public int getTracingThreadPoolSize() {
+        return config.getInt(TRACING_THREAD_POOL_SIZE, DEFAULT_TRACING_THREAD_POOL_SIZE);
+    }
+
+    public int getTracingBatchSize() {
+        return config.getInt(TRACING_BATCH_SIZE, DEFAULT_TRACING_BATCH_SIZE);
+    }
+
+    public int getTracingTraceBufferSize() {
+        return config.getInt(TRACING_TRACE_BUFFER_SIZE, DEFAULT_TRACING_TRACE_BUFFER_SIZE);
+    }
+
+    public String getTableName() {
+        return config.get(TRACING_STATS_TABLE_NAME_ATTRIB, DEFAULT_TRACING_STATS_TABLE_NAME);
+    }
+
+
     public boolean isGlobalMetricsEnabled() {
         return config.getBoolean(GLOBAL_METRICS_ENABLED, DEFAULT_IS_GLOBAL_METRICS_ENABLED);
     }
@@ -647,9 +685,9 @@ public class QueryServicesOptions {
     public QueryServicesOptions setDelayInMillisForSchemaChangeCheck(long delayInMillis) {
         config.setLong(DELAY_FOR_SCHEMA_UPDATE_CHECK, delayInMillis);
         return this;
-    
+
     }
-    
+
     public QueryServicesOptions setUseByteBasedRegex(boolean flag) {
         config.setBoolean(USE_BYTE_BASED_REGEX_ATTRIB, flag);
         return this;
@@ -659,7 +697,7 @@ public class QueryServicesOptions {
         config.setBoolean(FORCE_ROW_KEY_ORDER_ATTRIB, forceRowKeyOrder);
         return this;
     }
-    
+
     public QueryServicesOptions setExtraJDBCArguments(String extraArgs) {
         config.set(EXTRA_JDBC_ARGUMENTS_ATTRIB, extraArgs);
         return this;
@@ -674,40 +712,40 @@ public class QueryServicesOptions {
         config.setBoolean(COMMIT_STATS_ASYNC, flag);
         return this;
     }
-    
+
     public QueryServicesOptions setEnableRenewLease(boolean enable) {
         config.setBoolean(RENEW_LEASE_ENABLED, enable);
         return this;
     }
-    
+
     public QueryServicesOptions setIndexHandlerCount(int count) {
         config.setInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, count);
         return this;
     }
-    
+
     public QueryServicesOptions setMetadataHandlerCount(int count) {
         config.setInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, count);
         return this;
     }
-    
+
     public QueryServicesOptions setHConnectionPoolCoreSize(int count) {
         config.setInt(QueryServices.HCONNECTION_POOL_CORE_SIZE, count);
         return this;
     }
-    
+
     public QueryServicesOptions setHConnectionPoolMaxSize(int count) {
         config.setInt(QueryServices.HCONNECTION_POOL_MAX_SIZE, count);
         return this;
     }
-    
+
     public QueryServicesOptions setMaxThreadsPerHTable(int count) {
         config.setInt(QueryServices.HTABLE_MAX_THREADS, count);
         return this;
     }
-    
+
     public QueryServicesOptions setDefaultIndexPopulationWaitTime(long waitTime) {
         config.setLong(INDEX_POPULATION_SLEEP_TIME, waitTime);
         return this;
     }
-    
+
 }
