@@ -18,9 +18,8 @@
 package org.apache.phoenix.trace;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.*;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -28,13 +27,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Collection;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.metrics2.MetricsSource;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Sampler;
 import org.apache.htrace.Span;
 import org.apache.htrace.SpanReceiver;
@@ -43,11 +42,12 @@ import org.apache.htrace.TraceScope;
 import org.apache.htrace.impl.ProbabilitySampler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
+import org.apache.phoenix.trace.util.Tracing;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.ImmutableMap;
@@ -56,52 +56,26 @@ import com.google.common.collect.ImmutableMap;
  * Test that the logging sink stores the expected metrics/stats
  */
 
-// Marking this class as abstract till PHOENIX-3062 is fixed.
-// FIXME: PHOENIX-3062
-public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
+public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     private static final Log LOG = LogFactory.getLog(PhoenixTracingEndToEndIT.class);
     private static final int MAX_RETRIES = 10;
     private String enabledForLoggingTable;
     private String enableForLoggingIndex;
-
-    private DisableableMetricsWriter sink;
     private String tracingTableName;
+    private TestTraceWriter testTraceWriter = null;
 
     @Before
     public void setupMetrics() throws Exception {
-        PhoenixMetricsSink pWriter = new PhoenixMetricsSink();
-        Connection conn = getConnectionWithoutTracing();
         tracingTableName = "TRACING_" + generateUniqueName();
-        pWriter.initForTesting(conn, tracingTableName);
-        sink = new DisableableMetricsWriter(pWriter);
         enabledForLoggingTable = "ENABLED_FOR_LOGGING_" + generateUniqueName();
         enableForLoggingIndex = "ENABALED_FOR_LOGGING_INDEX_" + generateUniqueName();
-
-        TracingTestUtil.registerSink(sink, tracingTableName);
     }
 
     @After
-    public void cleanup() {
-        sink.disable();
-        sink.clear();
-        TracingTestUtil.unregisterSink(tracingTableName);
-    }
-
-    private void waitForCommit(CountDownLatch latch) throws SQLException {
-        Connection conn = new CountDownConnection(getConnectionWithoutTracing(), latch);
-        replaceWriterConnection(conn);
-    }
-
-    private void replaceWriterConnection(Connection conn) throws SQLException {
-        // disable the writer
-        sink.disable();
-
-        // swap the connection for one that listens
-        sink.getDelegate().initForTesting(conn, tracingTableName);
-
-        // enable the writer
-        sink.enable();
+    public void cleanUp() {
+        if(testTraceWriter != null)
+            testTraceWriter.stop();
     }
 
     /**
@@ -110,15 +84,11 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
      */
     @Test
     public void testWriteSpans() throws Exception {
-        // get a receiver for the spans
-        SpanReceiver receiver = new TraceMetricSource();
-        // which also needs to a source for the metrics system
-        Metrics.initialize().register("testWriteSpans-source", "source for testWriteSpans",
-                (MetricsSource) receiver);
 
         // watch our sink so we know when commits happen
-        CountDownLatch latch = new CountDownLatch(1);
-        waitForCommit(latch);
+        latch = new CountDownLatch(1);
+
+        testTraceWriter = new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
 
         // write some spans
         TraceScope trace = Trace.startSpan("Start write test", Sampler.ALWAYS);
@@ -136,7 +106,7 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         trace.close();
 
         // pass the trace on
-        receiver.receiveSpan(span);
+        Tracing.getTraceSpanReceiver().receiveSpan(span);
 
         // wait for the tracer to actually do the write
         assertTrue("Sink not flushed. commit() not called on the connection", latch.await(60, TimeUnit.SECONDS));
@@ -176,10 +146,12 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
      * @throws Exception
      */
     @Test
+    @Ignore
     public void testClientServerIndexingTracing() throws Exception {
+
         // one call for client side, one call for server side
-        final CountDownLatch updated = new CountDownLatch(2);
-        waitForCommit(updated);
+        latch = new CountDownLatch(2);
+        testTraceWriter = new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
 
         // separate connection so we don't create extra traces
         Connection conn = getConnectionWithoutTracing();
@@ -203,7 +175,7 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
         // wait for the latch to countdown, as the metrics system is time-based
         LOG.debug("Waiting for latch to complete!");
-        updated.await(200, TimeUnit.SECONDS);// should be way more than GC pauses
+        latch.await(200, TimeUnit.SECONDS);// should be way more than GC pauses
 
         // read the traces back out
 
@@ -259,8 +231,8 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         Connection conn = getConnectionWithoutTracing();
 
         // one call for client side, one call for server side
-        CountDownLatch updated = new CountDownLatch(2);
-        waitForCommit(updated);
+        latch = new CountDownLatch(2);
+        testTraceWriter = new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
 
         // create a dummy table
         createTestTable(conn, false);
@@ -289,7 +261,7 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         assertTrue("Didn't get second result", results.next());
         results.close();
 
-        assertTrue("Get expected updates to trace table", updated.await(200, TimeUnit.SECONDS));
+        assertTrue("Get expected updates to trace table", latch.await(200, TimeUnit.SECONDS));
         // don't trace reads either
         boolean tracingComplete = checkStoredTraces(conn, new TraceChecker(){
 
@@ -309,8 +281,8 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         Connection conn = getConnectionWithoutTracing();
 
         // one call for client side, one call for server side
-        CountDownLatch updated = new CountDownLatch(2);
-        waitForCommit(updated);
+        latch = new CountDownLatch(5);
+        testTraceWriter = new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
 
         // create a dummy table
         createTestTable(conn, false);
@@ -338,7 +310,8 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         assertEquals("Didn't get the expected number of row", 2, results.getInt(1));
         results.close();
 
-        assertTrue("Didn't get expected updates to trace table", updated.await(60, TimeUnit.SECONDS));
+        assertTrue("Didn't get expected updates to trace table", latch.await(60, TimeUnit.SECONDS));
+
         // don't trace reads either
         boolean found = checkStoredTraces(conn, new TraceChecker() {
             @Override
@@ -360,8 +333,8 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         Connection conn = getConnectionWithoutTracing();
 
         // one call for client side, one call for server side
-        CountDownLatch updated = new CountDownLatch(2);
-        waitForCommit(updated);
+        latch = new CountDownLatch(2);
+        testTraceWriter = new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
 
         // create a dummy table
         createTestTable(conn, false);
@@ -390,7 +363,7 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         assertTrue("Didn't get second result", results.next());
         results.close();
 
-        assertTrue("Get expected updates to trace table", updated.await(200, TimeUnit.SECONDS));
+        assertTrue("Get expected updates to trace table", latch.await(200, TimeUnit.SECONDS));
 
         assertAnnotationPresent(customAnnotationKey, customAnnotationValue, conn);
         assertAnnotationPresent(TENANT_ID_ATTRIB, tenantId, conn);
@@ -399,12 +372,12 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
     @Test
     public void testTraceOnOrOff() throws Exception {
-        Connection conn1 = DriverManager.getConnection(getUrl());
+        Connection conn1 = getConnectionWithoutTracing(); //DriverManager.getConnection(getUrl());
         try{
             Statement statement = conn1.createStatement();
             ResultSet  rs = statement.executeQuery("TRACE ON");
             assertTrue(rs.next());
-            PhoenixConnection pconn= (PhoenixConnection) conn1;
+            PhoenixConnection pconn = (PhoenixConnection) conn1;
             long traceId = pconn.getTraceScope().getSpan().getTraceId();
             assertEquals(traceId, rs.getLong(1));
             assertEquals(traceId, rs.getLong("trace_id"));
@@ -444,8 +417,123 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
 
             rs = statement.executeQuery("TRACE OFF");
             assertFalse(rs.next());
+
        } finally {
             conn1.close();
+        }
+    }
+
+    @Test
+    public void testSingleSpan() throws Exception {
+
+        Properties props = new Properties(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        latch = new CountDownLatch(1);
+        testTraceWriter = new TestTraceWriter(tableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
+
+        // create a simple metrics record
+        long traceid = 987654;
+        Span span = createNewSpan(traceid, Span.ROOT_SPAN_ID, 10, "root", 12, 13, "Some process", "test annotation for a span");
+
+        Tracing.getTraceSpanReceiver().receiveSpan(span);
+        assertTrue("Updates not written in table", latch.await(60, TimeUnit.SECONDS));
+
+        // start a reader
+        validateTraces(Collections.singletonList(span), conn, traceid, tableName);
+    }
+
+    /**
+     * Test multiple spans, within the same trace. Some spans are independent of the parent span,
+     * some are child spans
+     * @throws Exception on failure
+     */
+    @Test
+    public void testMultipleSpans() throws Exception {
+
+        Connection conn = getConnectionWithoutTracing();
+        String tableName = generateUniqueName();
+        latch = new CountDownLatch(4);
+        testTraceWriter = new TestTraceWriter(tableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
+
+        // create a simple metrics record
+        long traceid = 12345;
+        List<Span> spans = new ArrayList<Span>();
+
+        Span span =
+                createNewSpan(traceid, Span.ROOT_SPAN_ID, 7777, "root", 10, 30,
+                        "root process", "root-span tag");
+        spans.add(span);
+
+        // then create a child record
+        span =
+                createNewSpan(traceid, 7777, 6666, "c1", 11, 15, "c1 process",
+                        "first child");
+        spans.add(span);
+
+        // create a different child
+        span =
+                createNewSpan(traceid, 7777, 5555, "c2", 11, 18, "c2 process",
+                        "second child");
+        spans.add(span);
+
+        // create a child of the second child
+        span =
+                createNewSpan(traceid, 5555, 4444, "c3", 12, 16, "c3 process",
+                        "third child");
+        spans.add(span);
+
+        for(Span span1 : spans)
+            Tracing.getTraceSpanReceiver().receiveSpan(span1);
+
+        assertTrue("Updates not written in table", latch.await(100, TimeUnit.SECONDS));
+
+        // start a reader
+        validateTraces(spans, conn, traceid, tableName);
+    }
+
+    private void validateTraces(List<Span> spans, Connection conn, long traceid, String tableName)
+            throws Exception {
+        TraceReader reader = new TraceReader(conn, tableName);
+        Collection<TraceHolder> traces = reader.readAll(1);
+        assertEquals("Got an unexpected number of traces!", 1, traces.size());
+        // make sure the trace matches what we wrote
+        TraceHolder trace = traces.iterator().next();
+        assertEquals("Got an unexpected traceid", traceid, trace.traceid);
+        assertEquals("Got an unexpected number of spans", spans.size(), trace.spans.size());
+
+        validateTrace(spans, trace);
+    }
+
+    /**
+     * @param spans
+     * @param trace
+     */
+    private void validateTrace(List<Span> spans, TraceHolder trace) {
+        // drop each span into a sorted list so we get the expected ordering
+        Iterator<SpanInfo> spanIter = trace.spans.iterator();
+        for (Span span : spans) {
+            SpanInfo spanInfo = spanIter.next();
+            LOG.info("Checking span:\n" + spanInfo);
+
+            long parentId = span.getParentId();
+            if(parentId == Span.ROOT_SPAN_ID) {
+                assertNull("Got a parent, but it was a root span!", spanInfo.parent);
+            } else {
+                assertEquals("Got an unexpected parent span id", parentId, spanInfo.parent.id);
+            }
+
+            assertEquals("Got an unexpected start time", span.getStartTimeMillis(), spanInfo.start);
+            assertEquals("Got an unexpected end time", span.getStopTimeMillis(), spanInfo.end);
+
+            int annotationCount = 0;
+            for(Map.Entry<byte[], byte[]> entry : span.getKVAnnotations().entrySet()) {
+                int count = annotationCount++;
+                assertEquals("Didn't get expected annotation", count + " - " + Bytes.toString(entry.getValue()),
+                        spanInfo.annotations.get(count));
+            }
+            assertEquals("Didn't get expected number of annotations", annotationCount,
+                    spanInfo.annotationCount);
         }
     }
 
@@ -453,7 +541,7 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         boolean tracingComplete = checkStoredTraces(conn, new TraceChecker(){
             @Override
             public boolean foundTrace(TraceHolder currentTrace) {
-            	return currentTrace.toString().contains(annotationKey + " - " + annotationValue);
+                return currentTrace.toString().contains(annotationKey + " - " + annotationValue);
             }
         });
 
@@ -496,19 +584,4 @@ public abstract class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
         }
     }
 
-    private static class CountDownConnection extends DelegateConnection {
-        private CountDownLatch commit;
-
-        public CountDownConnection(Connection conn, CountDownLatch commit) {
-            super(conn);
-            this.commit = commit;
-        }
-
-        @Override
-        public void commit() throws SQLException {
-            commit.countDown();
-            super.commit();
-        }
-
-    }
 }
