@@ -75,11 +75,11 @@ public class TraceSpanReceiver implements SpanReceiver {
 
     @Override
     public void receiveSpan(Span span) {
-        if (spanQueue.offer(span)) {
+        if (span.getTraceId() != 0 && spanQueue.offer(span)) {
             if (LOG.isTraceEnabled()) {
                 LOG.trace("Span buffered to queue " + span.toJson());
             }
-        } else if (LOG.isDebugEnabled()) {
+        } else if (span.getTraceId() != 0 && LOG.isDebugEnabled()) {
                 LOG.debug("Span NOT buffered due to overflow in queue " + span.toJson());
         }
     }
