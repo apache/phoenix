@@ -230,7 +230,7 @@ public class CorrelatePlanTest {
         }
     }
 
-    private QueryPlan newLiteralResultIterationPlan(Object[][] rows, Integer offset) {
+    private QueryPlan newLiteralResultIterationPlan(Object[][] rows, Integer offset) throws SQLException {
         List<Tuple> tuples = Lists.newArrayList();
         Tuple baseTuple = new SingleKeyValueTuple(KeyValue.LOWESTKEY);
         for (Object[] row : rows) {

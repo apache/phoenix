@@ -802,6 +802,16 @@ public class UpsertCompiler {
                             planSteps.addAll(queryPlanSteps);
                             return new ExplainPlan(planSteps);
                         }
+
+                        @Override
+                        public Long getEstimatedRowsToScan() throws SQLException {
+                            return aggPlan.getEstimatedRowsToScan();
+                        }
+
+                        @Override
+                        public Long getEstimatedBytesToScan() throws SQLException {
+                            return aggPlan.getEstimatedBytesToScan();
+                        }
                     };
                 }
             }
@@ -873,6 +883,16 @@ public class UpsertCompiler {
                     planSteps.add("UPSERT SELECT");
                     planSteps.addAll(queryPlanSteps);
                     return new ExplainPlan(planSteps);
+                }
+
+                @Override
+                public Long getEstimatedRowsToScan() throws SQLException {
+                    return queryPlan.getEstimatedRowsToScan();
+                }
+
+                @Override
+                public Long getEstimatedBytesToScan() throws SQLException {
+                    return queryPlan.getEstimatedBytesToScan();
                 }
                 
             };
@@ -1095,6 +1115,16 @@ public class UpsertCompiler {
                 }
                 planSteps.add("PUT SINGLE ROW");
                 return new ExplainPlan(planSteps);
+            }
+
+            @Override
+            public Long getEstimatedRowsToScan() throws SQLException {
+                return 0l;
+            }
+
+            @Override
+            public Long getEstimatedBytesToScan() throws SQLException {
+                return 0l;
             }
 
         };
