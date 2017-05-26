@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.monitoring.CombinableMetric;
+import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -64,7 +65,7 @@ import com.google.common.annotations.VisibleForTesting;
 public class TableResultIterator implements ResultIterator {
     private final Scan scan;
     private final HTableInterface htable;
-    private final CombinableMetric scanMetrics;
+    private final ScanMetricsHolder scanMetricsHolder;
     private static final ResultIterator UNINITIALIZED_SCANNER = ResultIterator.EMPTY_ITERATOR;
     private final long renewLeaseThreshold;
     private final QueryPlan plan;
@@ -85,7 +86,7 @@ public class TableResultIterator implements ResultIterator {
 
     @VisibleForTesting // Exposed for testing. DON'T USE ANYWHERE ELSE!
     TableResultIterator() {
-        this.scanMetrics = null;
+        this.scanMetricsHolder = null;
         this.renewLeaseThreshold = 0;
         this.htable = null;
         this.scan = null;
@@ -97,10 +98,10 @@ public class TableResultIterator implements ResultIterator {
         RENEWED, NOT_RENEWED, CLOSED, UNINITIALIZED, THRESHOLD_NOT_REACHED, LOCK_NOT_ACQUIRED, NOT_SUPPORTED
     };
 
-    public TableResultIterator(MutationState mutationState, Scan scan, CombinableMetric scanMetrics,
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
             long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
         this.scan = scan;
-        this.scanMetrics = scanMetrics;
+        this.scanMetricsHolder = scanMetricsHolder;
         this.plan = plan;
         PTable table = plan.getTableRef().getTable();
         htable = mutationState.getHTable(table);
@@ -186,7 +187,7 @@ public class TableResultIterator implements ResultIterator {
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
                     this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scanMetrics);
+                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ServerUtil.parseServerException(e);
