@@ -152,7 +152,7 @@ public class LiteralResultIteratorPlanTest {
         assertNull(iter.next());
     }
 
-    private QueryPlan newLiteralResultIterationPlan(Integer offset, Integer limit) {
+    private QueryPlan newLiteralResultIterationPlan(Integer offset, Integer limit) throws SQLException {
         List<Tuple> tuples = Lists.newArrayList();
 
         Tuple baseTuple = new SingleKeyValueTuple(KeyValue.LOWESTKEY);

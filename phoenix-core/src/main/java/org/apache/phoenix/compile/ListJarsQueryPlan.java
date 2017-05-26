@@ -253,4 +253,14 @@ public class ListJarsQueryPlan implements QueryPlan {
 	public Operation getOperation() {
 		return stmt.getUpdateOperation();
 	}
+
+    @Override
+    public Long getEstimatedRowsToScan() {
+        return 0l;
+    }
+
+    @Override
+    public Long getEstimatedBytesToScan() {
+        return 0l;
+    }
 }

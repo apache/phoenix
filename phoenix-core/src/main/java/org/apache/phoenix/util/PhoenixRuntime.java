@@ -66,6 +66,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.query.QueryConstants;
@@ -184,6 +185,20 @@ public class PhoenixRuntime {
      * Use this connection property to explicitly enable or disable request level metric collection.
      */
     public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
+
+    /**
+     * Use this column name on the row returned by explain plan result set to get estimate of number
+     * of bytes read.
+     */
+    public static final String EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN =
+            PhoenixStatement.EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS;
+
+    /**
+     * Use this column name on the row returned by explain plan result set to get estimate of number
+     * of rows read.
+     */
+    public static final String EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN =
+            PhoenixStatement.EXPLAIN_PLAN_ROWS_COLUMN_ALIAS;
 
     /**
      * All Phoenix specific connection properties

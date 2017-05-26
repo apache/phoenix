@@ -19,6 +19,7 @@ package org.apache.phoenix.execute;
 
 import static org.apache.phoenix.monitoring.TaskExecutionMetricsHolder.NO_OP_INSTANCE;
 import static org.apache.phoenix.util.LogUtil.addCustomAnnotations;
+import static org.apache.phoenix.util.NumberUtil.add;
 
 import java.sql.SQLException;
 import java.util.Collections;
@@ -91,9 +92,12 @@ public class HashJoinPlan extends DelegateQueryPlan {
     private HashCacheClient hashClient;
     private AtomicLong firstJobEndTime;
     private List<Expression> keyRangeExpressions;
+    private Long estimatedRows;
+    private Long estimatedBytes;
+    private boolean explainPlanCalled;
     
     public static HashJoinPlan create(SelectStatement statement, 
-            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) {
+            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans) throws SQLException {
         if (!(plan instanceof HashJoinPlan))
             return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null, Collections.<SQLCloseable>emptyList());
         
@@ -111,7 +115,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
     
     private HashJoinPlan(SelectStatement statement, 
-            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause, List<SQLCloseable> dependencies) {
+            QueryPlan plan, HashJoinInfo joinInfo, SubPlan[] subPlans, boolean recompileWhereClause, List<SQLCloseable> dependencies) throws SQLException {
         super(plan);
         this.dependencies.addAll(dependencies);
         this.statement = statement;
@@ -238,6 +242,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
+        explainPlanCalled = true;
         List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
         int count = subPlans.length;
         for (int i = 0; i < count; i++) {
@@ -253,7 +258,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
         if (joinInfo != null && joinInfo.getLimit() != null) {
             planSteps.add("    JOIN-SCANNER " + joinInfo.getLimit() + " ROW LIMIT");
         }
-
+        for (SubPlan subPlan : subPlans) {
+            estimatedBytes = add(estimatedBytes, subPlan.getInnerPlan().getEstimatedBytesToScan());
+            estimatedRows = add(estimatedRows, subPlan.getInnerPlan().getEstimatedRowsToScan());
+        }
         return new ExplainPlan(planSteps);
     }
 
@@ -439,6 +447,22 @@ public class HashJoinPlan extends DelegateQueryPlan {
         public QueryPlan getInnerPlan() {
             return plan;
         }
+    }
+
+    @Override
+    public Long getEstimatedRowsToScan() throws SQLException {
+        if (!explainPlanCalled) {
+            getExplainPlan();
+        }
+        return estimatedRows;
+    }
+
+    @Override
+    public Long getEstimatedBytesToScan() throws SQLException {
+        if (!explainPlanCalled) {
+            getExplainPlan();
+        }
+        return estimatedBytes;
     }
 }
 
