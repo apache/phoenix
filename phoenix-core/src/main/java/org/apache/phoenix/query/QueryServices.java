@@ -155,6 +155,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String TRACING_PROBABILITY_THRESHOLD_ATTRIB = "phoenix.trace.probability.threshold";
     public static final String TRACING_STATS_TABLE_NAME_ATTRIB = "phoenix.trace.statsTableName";
     public static final String TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX = "phoenix.trace.custom.annotation.";
+    public static final String TRACING_ENABLED = "phoenix.trace.enabled";
+    public static final String TRACING_BATCH_SIZE = "phoenix.trace.batchSize";
+    public static final String TRACING_THREAD_POOL_SIZE = "phoenix.trace.threadPoolSize";
+    public static final String TRACING_TRACE_BUFFER_SIZE = "phoenix.trace.traceBufferSize";
 
     public static final String USE_REVERSE_SCAN_ATTRIB = "phoenix.query.useReverseScan";
 

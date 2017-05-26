@@ -18,12 +18,15 @@
 package org.apache.phoenix.trace;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.util.Collection;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.metrics2.MetricsRecord;
+import org.apache.htrace.Span;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
@@ -34,6 +37,7 @@ import org.junit.Test;
  */
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
+    private TestTraceWriter testTraceWriter;
     /**
      * IT should create the target table if it hasn't been created yet, but not fail if the table
      * has already been created
@@ -41,10 +45,9 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
      */
     @Test
     public void testCreatesTable() throws Exception {
-        PhoenixMetricsSink sink = new PhoenixMetricsSink();
+
+        testTraceWriter = new TestTraceWriter(generateUniqueName(), defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
         Connection conn = getConnectionWithoutTracing();
-        String tableName = generateUniqueName();
-        sink.initForTesting(conn, tableName);
 
         // check for existence of the tracing table
         try {
@@ -56,26 +59,21 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
             // expected
         }
 
-        // initialize sink again, which should attempt to create the table, but not fail
-        try {
-            sink.initForTesting(conn, tableName);
-        } catch (Exception e) {
-            fail("Initialization shouldn't fail if table already exists!");
-        }
     }
 
     /**
      * Simple metrics writing and reading check, that uses the standard wrapping in the
-     * {@link PhoenixMetricsSink}
+     * {@link TraceWriter}
      * @throws Exception on failure
      */
     @Test
     public void writeMetrics() throws Exception {
-        // hook up a phoenix sink
-        PhoenixMetricsSink sink = new PhoenixMetricsSink();
+
         Connection conn = getConnectionWithoutTracing();
         String tableName = generateUniqueName();
-        sink.initForTesting(conn, tableName);
+        TraceSpanReceiver traceSpanReceiver = new TraceSpanReceiver();
+        latch = new CountDownLatch(1);
+        testTraceWriter = new TestTraceWriter(tableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
 
         // create a simple metrics record
         long traceid = 987654;
@@ -84,15 +82,14 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         long parentid = 11;
         long startTime = 12;
         long endTime = 13;
+        String processid = "Some process";
         String annotation = "test annotation for a span";
-        String hostnameValue = "host-name.value";
-       MetricsRecord record =
-                createRecord(traceid, parentid, spanid, description, startTime, endTime,
-                    hostnameValue, annotation);
 
-        // actually write the record to the table
-        sink.putMetrics(record);
-        sink.flush();
+        Span span = createNewSpan(traceid, parentid, spanid, description, startTime, endTime,
+            processid, annotation);
+
+        traceSpanReceiver.getSpanQueue().add(span);
+        assertTrue("Span never committed to table", latch.await(30, TimeUnit.SECONDS));
 
         // make sure we only get expected stat entry (matcing the trace id), otherwise we could the
         // stats for the update as well
@@ -111,8 +108,8 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         assertEquals(parentid, spanInfo.getParentIdForTesting());
         assertEquals(startTime, spanInfo.start);
         assertEquals(endTime, spanInfo.end);
-        assertEquals(hostnameValue, spanInfo.hostname);
         assertEquals("Wrong number of tags", 0, spanInfo.tagCount);
         assertEquals("Wrong number of annotations", 1, spanInfo.annotationCount);
     }
+
 }
