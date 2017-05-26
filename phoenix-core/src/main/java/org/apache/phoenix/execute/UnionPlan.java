@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.util.NumberUtil.add;
+
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -62,6 +64,9 @@ public class UnionPlan implements QueryPlan {
     private final boolean isDegenerate;
     private final List<QueryPlan> plans;
     private UnionResultIterators iterators;
+    private Long estimatedRows;
+    private Long estimatedBytes;
+    private boolean explainPlanCalled;
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) throws SQLException {
@@ -80,7 +85,7 @@ public class UnionPlan implements QueryPlan {
             if (plan.getContext().getScanRanges() != ScanRanges.NOTHING) {
                 isDegen = false;
                 break;
-            } 
+            }
         }
         this.isDegenerate = isDegen;     
     }
@@ -166,6 +171,7 @@ public class UnionPlan implements QueryPlan {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
+        explainPlanCalled = true;
         List<String> steps = new ArrayList<String>();
         steps.add("UNION ALL OVER " + this.plans.size() + " QUERIES");
         ResultIterator iterator = iterator();
@@ -174,6 +180,10 @@ public class UnionPlan implements QueryPlan {
         int offset = !orderBy.getOrderByExpressions().isEmpty() && limit != null ? 2 : limit != null ? 1 : 0;
         for (int i = 1 ; i < steps.size()-offset; i++) {
             steps.set(i, "    " + steps.get(i));
+        }
+        for (QueryPlan plan : plans) {
+            estimatedRows = add(estimatedRows, plan.getEstimatedRowsToScan());
+            estimatedBytes = add(estimatedBytes, plan.getEstimatedBytesToScan());
         }
         return new ExplainPlan(steps);
     }
@@ -227,4 +237,20 @@ public class UnionPlan implements QueryPlan {
 		}
 		return sources;
 	}
+
+    @Override
+    public Long getEstimatedRowsToScan() throws SQLException {
+        if (!explainPlanCalled) {
+            getExplainPlan();
+        }
+        return estimatedRows;
+    }
+
+    @Override
+    public Long getEstimatedBytesToScan() throws SQLException {
+        if (!explainPlanCalled) {
+            getExplainPlan();
+        }
+        return estimatedBytes;
+    }
 }

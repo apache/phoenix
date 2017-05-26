@@ -67,4 +67,14 @@ public class DelegateMutationPlan implements MutationPlan {
         this.plan = plan;
     }
 
+    @Override
+    public Long getEstimatedRowsToScan() throws SQLException {
+        return plan.getEstimatedRowsToScan();
+    }
+
+    @Override
+    public Long getEstimatedBytesToScan() throws SQLException {
+        return plan.getEstimatedBytesToScan();
+    }
+
 }

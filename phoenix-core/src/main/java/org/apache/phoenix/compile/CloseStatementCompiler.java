@@ -17,16 +17,15 @@
  */
 package org.apache.phoenix.compile;
 
+import java.sql.SQLException;
+import java.util.Collections;
+
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.CloseStatement;
-import org.apache.phoenix.parse.OpenStatement;
 import org.apache.phoenix.schema.MetaDataClient;
-
-import java.sql.SQLException;
-import java.util.Collections;
 
 public class CloseStatementCompiler {
     private final PhoenixStatement statement;
