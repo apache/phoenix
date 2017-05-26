@@ -76,12 +76,14 @@ import com.google.common.collect.Sets;
 
 public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
-    private static final List<String> mutationMetricsToSkip = Lists
-            .newArrayList(MetricType.MUTATION_COMMIT_TIME.name());
-    private static final List<String> readMetricsToSkip = Lists.newArrayList(MetricType.TASK_QUEUE_WAIT_TIME.name(),
-            MetricType.TASK_EXECUTION_TIME.name(), MetricType.TASK_END_TO_END_TIME.name());
+    private static final List<String> mutationMetricsToSkip =
+            Lists.newArrayList(MetricType.MUTATION_COMMIT_TIME.name());
+    private static final List<String> readMetricsToSkip =
+            Lists.newArrayList(MetricType.TASK_QUEUE_WAIT_TIME.name(),
+                MetricType.TASK_EXECUTION_TIME.name(), MetricType.TASK_END_TO_END_TIME.name(),
+                MetricType.COUNT_MILLS_BETWEEN_NEXTS.name());
     private static final String CUSTOM_URL_STRING = "SESSION";
-    private static final AtomicInteger numConnections = new AtomicInteger(0); 
+    private static final AtomicInteger numConnections = new AtomicInteger(0);
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -230,7 +232,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         resultSetBeingTested.close();
         Set<String> expectedTableNames = Sets.newHashSet(tableName);
         assertReadMetricValuesForSelectSql(Lists.newArrayList(numRows), Lists.newArrayList(numExpectedTasks),
-                resultSetBeingTested, expectedTableNames);
+            resultSetBeingTested, expectedTableNames);
     }
 
     @Test
@@ -617,7 +619,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             assertMetricsHaveSameValues(metrics.get(index1), metrics.get(index3), mutationMetricsToSkip);
         }
     }
-    
+
     @Test
     public void testOpenConnectionsCounter() throws Exception {
         long numOpenConnections = GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue();
@@ -626,7 +628,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
         assertEquals(numOpenConnections, GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue());
     }
-    
+
     private void createTableAndInsertValues(boolean commit, int numRows, Connection conn, String tableName)
             throws SQLException {
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
@@ -684,20 +686,14 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = entry.getKey();
             expectedTableNames.remove(tableName);
             Map<String, Long> metricValues = entry.getValue();
-            boolean scanMetricsPresent = false;
             boolean taskCounterMetricsPresent = false;
             boolean taskExecutionTimeMetricsPresent = false;
             boolean memoryMetricsPresent = false;
             for (Entry<String, Long> pair : metricValues.entrySet()) {
                 String metricName = pair.getKey();
                 long metricValue = pair.getValue();
-                long n = numRows.get(counter);
                 long numTask = numExpectedTasks.get(counter);
-                if (metricName.equals(SCAN_BYTES.name())) {
-                    // we are using a SCAN_BYTES_DELTA of 1. So number of scan bytes read should be number of rows read
-                    assertEquals(n, metricValue);
-                    scanMetricsPresent = true;
-                } else if (metricName.equals(TASK_EXECUTED_COUNTER.name())) {
+                if (metricName.equals(TASK_EXECUTED_COUNTER.name())) {
                     assertEquals(numTask, metricValue);
                     taskCounterMetricsPresent = true;
                 } else if (metricName.equals(TASK_EXECUTION_TIME.name())) {
@@ -709,7 +705,6 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
                 }
             }
             counter++;
-            assertTrue(scanMetricsPresent);
             assertTrue(taskCounterMetricsPresent);
             assertTrue(taskExecutionTimeMetricsPresent);
             assertTrue(memoryMetricsPresent);
@@ -822,7 +817,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
         }
     }
-    
+
     @Test
     public void testGetConnectionsForSameUrlConcurrently()  throws Exception {
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
@@ -940,7 +935,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             exec.shutdownNow();
         }
     }
-    
+
     @Test
     public void testGetConnectionsWithDifferentJDBCParamsConcurrently()  throws Exception {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
@@ -977,9 +972,9 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     c.close();
                 } catch (Exception ignore) {}
             }
-        } 
+        }
     }
-    
+
     private static class GetConnectionCallable implements Callable<Connection> {
         private final String url;
         GetConnectionCallable(String url) {
