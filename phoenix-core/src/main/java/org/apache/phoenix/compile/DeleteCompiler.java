@@ -17,6 +17,7 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.execute.MutationState.RowTimestampColInfo.NULL_ROWTIMESTAMP_INFO;
+import static org.apache.phoenix.util.NumberUtil.add;
 
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
@@ -301,6 +302,24 @@ public class DeleteCompiler {
 		public Operation getOperation() {
 			return operation;
 		}
+
+        @Override
+        public Long getEstimatedRowsToScan() throws SQLException {
+            Long estRows = null;
+            for (MutationPlan plan : plans) {
+                estRows = add(estRows, plan.getEstimatedRowsToScan());
+            }
+            return estRows;
+        }
+
+        @Override
+        public Long getEstimatedBytesToScan() throws SQLException {
+            Long estBytes = null;
+            for (MutationPlan plan : plans) {
+                estBytes = add(estBytes, plan.getEstimatedBytesToScan());
+            }
+            return estBytes;
+        }
     }
     
     private static boolean hasNonPKIndexedColumns(Collection<PTable> immutableIndexes) {
@@ -530,6 +549,16 @@ public class DeleteCompiler {
             		public Operation getOperation() {
             			return operation;
             		}
+
+                    @Override
+                    public Long getEstimatedRowsToScan() throws SQLException {
+                        return 0l;
+                    }
+
+                    @Override
+                    public Long getEstimatedBytesToScan() throws SQLException {
+                        return 0l;
+                    }
                 });
             } else if (runOnServer) {
                 // TODO: better abstraction
@@ -621,6 +650,16 @@ public class DeleteCompiler {
                         planSteps.addAll(queryPlanSteps);
                         return new ExplainPlan(planSteps);
                     }
+
+                    @Override
+                    public Long getEstimatedRowsToScan() throws SQLException {
+                        return aggPlan.getEstimatedRowsToScan();
+                    }
+
+                    @Override
+                    public Long getEstimatedBytesToScan() throws SQLException {
+                        return aggPlan.getEstimatedBytesToScan();
+                    }
                 });
             } else {
                 List<TableRef> immutableIndexRefsToBe = Lists.newArrayListWithExpectedSize(dataPlan.getTableRef().getTable().getIndexes().size());
@@ -697,6 +736,16 @@ public class DeleteCompiler {
                         planSteps.add("DELETE ROWS");
                         planSteps.addAll(queryPlanSteps);
                         return new ExplainPlan(planSteps);
+                    }
+
+                    @Override
+                    public Long getEstimatedRowsToScan() throws SQLException {
+                        return plan.getEstimatedRowsToScan();
+                    }
+
+                    @Override
+                    public Long getEstimatedBytesToScan() throws SQLException {
+                        return plan.getEstimatedBytesToScan();
                     }
                 });
             }
