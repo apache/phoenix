@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
-
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
@@ -33,6 +31,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
+import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.QueryConstants;
@@ -168,12 +168,19 @@ public class SerialIterators extends BaseResultIterators {
             if (index >= scans.size()) {
                 return EMPTY_ITERATOR;
             }
+            ReadMetricQueue readMetrics = context.getReadMetricsQueue();
+            boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
             while (index < scans.size()) {
                 Scan currentScan = scans.get(index++);
                 if (remainingOffset != null) {
                     currentScan.setAttribute(BaseScannerRegionObserver.SCAN_OFFSET, PInteger.INSTANCE.toBytes(remainingOffset));
                 }
-                TableResultIterator itr = new TableResultIterator(mutationState, currentScan, context.getReadMetricsQueue().allotMetric(SCAN_BYTES, tableName), renewLeaseThreshold, plan, scanGrouper);
+                ScanMetricsHolder scanMetricsHolder =
+                        ScanMetricsHolder.getInstance(readMetrics, tableName, currentScan,
+                            isRequestMetricsEnabled);
+                TableResultIterator itr =
+                        new TableResultIterator(mutationState, currentScan, scanMetricsHolder,
+                                renewLeaseThreshold, plan, scanGrouper);
                 PeekingResultIterator peekingItr = iteratorFactory.newIterator(context, itr, currentScan, tableName, plan);
                 Tuple tuple;
                 if ((tuple = peekingItr.peek()) == null) {

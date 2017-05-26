@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.hive.mapreduce;
 
-import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
-
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
@@ -49,6 +47,7 @@ import org.apache.phoenix.iterate.SequenceResultIterator;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.ScanMetricsHolder;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
@@ -113,12 +112,14 @@ public class PhoenixRecordReader<T extends DBWritable> implements
             String tableName = queryPlan.getTableRef().getTable().getPhysicalName().getString();
             long renewScannerLeaseThreshold = queryPlan.getContext().getConnection()
                     .getQueryServices().getRenewLeaseThresholdMilliSeconds();
+            boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
             for (Scan scan : scans) {
                 scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes
                         .toBytes(true));
-                final TableResultIterator tableResultIterator = new TableResultIterator(queryPlan
-                        .getContext().getConnection().getMutationState(), scan,
-                        readMetrics.allotMetric(SCAN_BYTES, tableName), renewScannerLeaseThreshold, queryPlan, MapReduceParallelScanGrouper.getInstance()	);
+                ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, tableName, scan, isRequestMetricsEnabled);
+                final TableResultIterator tableResultIterator = new TableResultIterator(
+                        queryPlan.getContext().getConnection().getMutationState(), scan, scanMetricsHolder,
+                        renewScannerLeaseThreshold, queryPlan, MapReduceParallelScanGrouper.getInstance());
 
                 PeekingResultIterator peekingResultIterator = LookAheadResultIterator.wrap
                         (tableResultIterator);

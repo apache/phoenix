@@ -30,9 +30,9 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.job.JobManager.JobCallable;
-import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.LogUtil;
@@ -97,11 +97,16 @@ public class ParallelIterators extends BaseResultIterators {
         context.getOverallQueryMetrics().updateNumParallelScans(numScans);
         GLOBAL_NUM_PARALLEL_SCANS.update(numScans);
         final long renewLeaseThreshold = context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
+        boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
         for (final ScanLocator scanLocation : scanLocations) {
             final Scan scan = scanLocation.getScan();
-            final CombinableMetric scanMetrics = readMetrics.allotMetric(MetricType.SCAN_BYTES, physicalTableName);
+            final ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, physicalTableName,
+                scan, isRequestMetricsEnabled);
             final TaskExecutionMetricsHolder taskMetrics = new TaskExecutionMetricsHolder(readMetrics, physicalTableName);
-            final TableResultIterator tableResultItr = context.getConnection().getTableResultIteratorFactory().newIterator(mutationState, tableRef, scan, scanMetrics, renewLeaseThreshold, plan, scanGrouper);
+            final TableResultIterator tableResultItr =
+                    context.getConnection().getTableResultIteratorFactory().newIterator(
+                        mutationState, tableRef, scan, scanMetricsHolder, renewLeaseThreshold, plan,
+                        scanGrouper);
             context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
             Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
                 
