@@ -87,6 +87,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SQLCloseable;
@@ -837,7 +838,7 @@ public class MutationState implements SQLCloseable {
         long byteSize = 0;
         if (GlobalClientMetrics.isMetricsEnabled()) {
             for (Mutation mutation : mutations) {
-                byteSize += mutation.heapSize();
+                byteSize += KeyValueUtil.calculateMutationDiskSize(mutation);
             }
         }
         GLOBAL_MUTATION_BYTES.update(byteSize);

@@ -21,11 +21,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 
@@ -160,4 +162,19 @@ public class KeyValueUtil {
 			return kvBuilder.compareQualifier(l, qualifier, 0, qualifier.length);
 		}
 	}
+
+	/**
+	 * Calculate the size a mutation will likely take when stored in HBase
+	 * @param m The Mutation
+	 * @return the disk size of the passed mutation
+	 */
+    public static long calculateMutationDiskSize(Mutation m) {
+        long size = 0;
+        for (Entry<byte [], List<Cell>> entry : m.getFamilyCellMap().entrySet()) {
+            for (Cell c : entry.getValue()) {
+                size += org.apache.hadoop.hbase.KeyValueUtil.length(c);
+            }
+        }
+        return size;
+    }
 }
