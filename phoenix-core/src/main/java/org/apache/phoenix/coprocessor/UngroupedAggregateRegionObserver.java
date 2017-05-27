@@ -58,7 +58,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.io.HeapSize;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -288,8 +287,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return s;
     }
 
-    class MutationList extends ArrayList<Mutation> implements HeapSize {
-        private long heapSize = 0l;
+    class MutationList extends ArrayList<Mutation> {
+        private long byteSize = 0l;
         public MutationList() {
             super();
         }
@@ -302,23 +301,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         public boolean add(Mutation e) {
             boolean r = super.add(e);
             if (r) {
-                incrementHeapSize(e.heapSize());
+                this.byteSize += KeyValueUtil.calculateMutationDiskSize(e);
             }
             return r;
         }
 
-        @Override
-        public long heapSize() {
-            return heapSize;
-        }
-
-        private void incrementHeapSize(long heapSize) {
-            this.heapSize += heapSize;
+        public long byteSize() {
+            return byteSize;
         }
 
         @Override
         public void clear() {
-            heapSize = 0l;
+            byteSize = 0l;
             super.clear();
         }
     }
@@ -708,14 +702,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         }
-                        if (readyToCommit(rowCount, mutations.heapSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                     areMutationInSameRegion, targetHTable, useIndexProto);
                             mutations.clear();
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
-                        if (readyToCommit(rowCount, indexMutations.heapSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (readyToCommit(rowCount, indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState,
                                     useIndexProto);
                             indexMutations.clear();
@@ -894,7 +888,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 del.addDeleteMarker(cell);
                             }
                         }
-                        if (readyToCommit(rowCount, mutations.heapSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
                                     HConstants.NO_NONCE);
                             uuidValue = ServerCacheClient.generateId();
