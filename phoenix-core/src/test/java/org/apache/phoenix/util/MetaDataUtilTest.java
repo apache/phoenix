@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -62,7 +63,26 @@ public class MetaDataUtilTest {
         assertFalse(MetaDataUtil.areClientAndServerCompatible(VersionUtil.encodeVersion(3,1,10), 3, 5));
     }
 
-  /**
+    @Test
+    public void testMutatingAPut() throws Exception {
+        String version = VersionInfo.getVersion();
+        KeyValueBuilder builder = KeyValueBuilder.get(version);
+        byte[] row = Bytes.toBytes("row");
+        byte[] family = PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+        byte[] qualifier = Bytes.toBytes("qual");
+        byte[] value = Bytes.toBytes("generic-value");
+        KeyValue kv = builder.buildPut(wrap(row), wrap(family), wrap(qualifier), wrap(value));
+        Put put = new Put(row);
+        KeyValueBuilder.addQuietly(put, builder, kv);
+        byte[] newValue = Bytes.toBytes("new-value");
+        Cell cell = put.get(family, qualifier).get(0);
+        assertEquals(Bytes.toString(value), Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
+        MetaDataUtil.mutatePutValue(put, family, qualifier, newValue);
+        cell = put.get(family, qualifier).get(0);
+        assertEquals(Bytes.toString(newValue), Bytes.toString(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()));
+    }
+
+    /**
    * Ensure it supports {@link GenericKeyValueBuilder}
    * @throws Exception on failure
    */

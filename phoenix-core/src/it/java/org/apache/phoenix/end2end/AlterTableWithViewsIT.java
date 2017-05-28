@@ -34,6 +34,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 import org.apache.commons.lang.ArrayUtils;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
@@ -107,12 +108,14 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
             
             // adding a new pk column and a new regular column
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4");
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 7, 5, "ID", "COL1", "COL2", "COL3", "COL4", "VIEW_COL1", "VIEW_COL2");
+            // nothing changes for this view. The sequence ID is not update because we are no longer updating that row.
+            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
+
         } 
     }
     
@@ -188,14 +191,14 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                     .execute(
                         "CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
             assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
-                "ID", "COL1", "COL2", "COL3", "COL4", "COL5", "VIEW_COL1", "VIEW_COL2");
+                "VIEW_COL1", "VIEW_COL2");
 
-            // drop two columns from the base table
+            // drop two columns from the base table - shouldn't affect the view at all since we resolve at read time.
             conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN COL3, COL5");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 4,
                 QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL4");
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 6, 4,
-                "ID", "COL1", "COL2", "COL4", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
+                "VIEW_COL1", "VIEW_COL2");
         }
     }
     
@@ -218,7 +221,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256), VIEW_COL3 VARCHAR, VIEW_COL4 DECIMAL, VIEW_COL5 DECIMAL(10,2), VIEW_COL6 VARCHAR, CONSTRAINT pk PRIMARY KEY (VIEW_COL5, VIEW_COL6) ) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn,viewOfTable, PTableType.VIEW, tableName, 0, 9, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
+            assertTableDefinition(conn,viewOfTable, PTableType.VIEW, tableName, 0, 9, 3, "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
             
             // upsert single row into view
             String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?, ?, ?, ?, ?)";
@@ -336,7 +339,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
             
             // upsert single row into view
             String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?)";
@@ -406,7 +409,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             // add the pk column of the view to the base table
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 5, 5, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 5, 5, "VIEW_COL1", "VIEW_COL2");
             
             // query table
             ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
@@ -511,7 +514,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(conn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
             
             viewConn2.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
             assertTableDefinition(conn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
@@ -835,6 +838,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
             
             phoenixConn = conn.unwrap(PhoenixConnection.class);
+            phoenixConn.removeTable(tenantId, viewOfTable, baseTableName, HConstants.LATEST_TIMESTAMP);
             table = phoenixConn.getTable(new PTableKey(null, baseTableName));
             assertTrue(table.isAppendOnlySchema());
             viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));

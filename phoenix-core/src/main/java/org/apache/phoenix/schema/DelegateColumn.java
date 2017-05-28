@@ -76,6 +76,21 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
     }
 
     @Override
+    public long getTimestamp() {
+        return getDelegate().getTimestamp();
+    }
+
+    @Override
+    public boolean isDerived() {
+        return getDelegate().isDerived();
+    }
+
+    @Override
+    public boolean isExcluded() {
+        return getDelegate().isExcluded();
+    }
+
+    @Override
     public boolean isRowTimestamp() {
         return getDelegate().isRowTimestamp();
     }    

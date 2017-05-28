@@ -1102,7 +1102,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         conn1.createStatement().execute("CREATE INDEX " + indexTableName + " ON " + dataTableFullName + "(COL1) INCLUDE (COL2,COL3,COL4)");
         
         ddl = "ALTER TABLE " + dataTableFullName + " DROP COLUMN COL2, COL3";
-        conn1.createStatement().execute(ddl);
+         conn1.createStatement().execute(ddl);
         ResultSet rs = conn1.getMetaData().getColumns("", "", dataTableFullName, null);
         assertTrue(rs.next());
         assertEquals("ID",rs.getString(4));
@@ -2467,10 +2467,10 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             
             // assert that the server side metadata for the base table and the view is also updated correctly.
             assertEncodedCQCounter(DEFAULT_COLUMN_FAMILY, schemaName, baseTableName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 10));
-            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL10", schemaName, viewName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 8));
-            assertEncodedCQValue("A", "COL11", schemaName, viewName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 9);
+            assertEncodedCQValue(DEFAULT_COLUMN_FAMILY, "COL10", schemaName, baseTableName, (ENCODED_CQ_COUNTER_INITIAL_VALUE + 8));
+            assertEncodedCQValue("A", "COL11", schemaName, baseTableName, ENCODED_CQ_COUNTER_INITIAL_VALUE + 9);
             assertSequenceNumber(schemaName, baseTableName, columnEncoded ? initBaseTableSeqNumber + 4 : initBaseTableSeqNumber + 2 );
-            assertSequenceNumber(schemaName, viewName, PTable.INITIAL_SEQ_NUM + 2);
+            assertSequenceNumber(schemaName, baseTableName, PTable.INITIAL_SEQ_NUM + 2);
         }
     }
 	

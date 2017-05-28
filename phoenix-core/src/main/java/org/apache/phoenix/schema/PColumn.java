@@ -53,6 +53,18 @@ public interface PColumn extends PDatum {
     int getEstimatedSize();
     
     String getExpressionStr();
+
+    /**
+     * @return the cell timestamp associated with this PColumn
+     */
+    long getTimestamp();
+
+    /**
+     * @return is the column derived from some other table / view or not
+     */
+    boolean isDerived();
+
+    boolean isExcluded();
     
     /**
      * @return whether this column represents/stores the hbase cell timestamp.

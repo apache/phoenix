@@ -25,7 +25,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.NavigableMap;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -34,10 +37,12 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HConnection;
 import org.apache.hadoop.hbase.client.HConnectionManager;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -67,6 +72,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
@@ -175,10 +181,76 @@ public class MetaDataUtil {
         return version;
     }
     
+    public static byte[] getTenantIdAndSchemaAndTableName(Mutation someRow) {
+        byte[][] rowKeyMetaData = new byte[3][];
+        getVarChars(someRow.getRow(), 3, rowKeyMetaData);
+        return ByteUtil.concat(rowKeyMetaData[0], rowKeyMetaData[1], rowKeyMetaData[2]);
+    }
+
+    public static byte[] getTenantIdAndSchemaAndTableName(Result result) {
+        byte[][] rowKeyMetaData = new byte[3][];
+        getVarChars(result.getRow(), 3, rowKeyMetaData);
+        return ByteUtil.concat(rowKeyMetaData[0], rowKeyMetaData[1], rowKeyMetaData[2]);
+    }
+
     public static void getTenantIdAndSchemaAndTableName(List<Mutation> tableMetadata, byte[][] rowKeyMetaData) {
         Mutation m = getTableHeaderRow(tableMetadata);
         getVarChars(m.getRow(), 3, rowKeyMetaData);
     }
+
+    public static int getBaseColumnCount(List<Mutation> tableMetadata) {
+        int result = -1;
+        for (Mutation mutation : tableMetadata) {
+            for (List<Cell> cells : mutation.getFamilyCellMap().values()) {
+                for (Cell cell : cells) {
+                    // compare using offsets
+                    if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(), PhoenixDatabaseMetaData.BASE_COLUMN_COUNT_BYTES, 0,
+                        PhoenixDatabaseMetaData.BASE_COLUMN_COUNT_BYTES.length) == 0)
+                    if (Bytes.contains(cell.getQualifierArray(), PhoenixDatabaseMetaData.BASE_COLUMN_COUNT_BYTES)) {
+                        result = PInteger.INSTANCE.getCodec()
+                            .decodeInt(cell.getValueArray(), cell.getValueOffset(), SortOrder.ASC);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    public static void mutatePutValue(Put somePut, byte[] family, byte[] qualifier, byte[] newValue) {
+        NavigableMap<byte[], List<Cell>> familyCellMap = somePut.getFamilyCellMap();
+        List<Cell> cells = familyCellMap.get(family);
+        List<Cell> newCells = Lists.newArrayList();
+        if (cells != null) {
+            for (Cell cell : cells) {
+                if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                    qualifier, 0, qualifier.length) == 0) {
+                    Cell replacementCell = new KeyValue(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength(),
+                        cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength(), cell.getQualifierArray(),
+                        cell.getQualifierOffset(), cell.getQualifierLength(), cell.getTimestamp(),
+                        KeyValue.Type.codeToType(cell.getTypeByte()), newValue, 0, newValue.length);
+                    newCells.add(replacementCell);
+                } else {
+                    newCells.add(cell);
+                }
+            }
+            familyCellMap.put(family, newCells);
+        }
+    }
+
+    public static Put cloneDeleteToPutAndAddColumn(Delete delete, byte[] family, byte[] qualifier, byte[] value) {
+        NavigableMap<byte[], List<Cell>> familyCellMap = delete.getFamilyCellMap();
+        List<Cell> cells = familyCellMap.get(family);
+        Cell cell = Iterables.getFirst(cells, null);
+        if (cell == null) {
+            throw new RuntimeException("Empty cells for delete for family: " + Bytes.toStringBinary(family));
+        }
+        byte[] rowArray = new byte[cell.getRowLength()];
+        System.arraycopy(cell.getRowArray(), cell.getRowOffset(), rowArray, 0, cell.getRowLength());
+        Put put = new Put(rowArray, delete.getTimeStamp());
+        put.addColumn(family, qualifier, delete.getTimeStamp(), value);
+        return put;
+    }
+
 
     public static void getTenantIdAndFunctionName(List<Mutation> functionMetadata, byte[][] rowKeyMetaData) {
         Mutation m = getTableHeaderRow(functionMetadata);
@@ -255,6 +327,35 @@ public class MetaDataUtil {
                 KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
                 if (builder.compareQualifier(kv, key, 0, key.length) ==0) {
                     builder.getValueAsPtr(kv, ptr);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static KeyValue getMutationValue(Mutation headerRow, byte[] key,
+        KeyValueBuilder builder) {
+        List<Cell> kvs = headerRow.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
+        if (kvs != null) {
+            for (Cell cell : kvs) {
+                KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
+                if (builder.compareQualifier(kv, key, 0, key.length) ==0) {
+                    return kv;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static boolean setMutationValue(Mutation headerRow, byte[] key,
+        KeyValueBuilder builder, KeyValue keyValue) {
+        List<Cell> kvs = headerRow.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
+        if (kvs != null) {
+            for (Cell cell : kvs) {
+                KeyValue kv = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValue(cell);
+                if (builder.compareQualifier(kv, key, 0, key.length) ==0) {
+                    KeyValueBuilder.addQuietly(headerRow, builder, keyValue);
                     return true;
                 }
             }
@@ -598,17 +699,27 @@ public class MetaDataUtil {
 	}
 
     public static LinkType getLinkType(Mutation tableMutation) {
-        List<Cell> kvs = tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES);
+        return getLinkType(tableMutation.getFamilyCellMap().get(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES));
+    }
+
+    public static LinkType getLinkType(Collection<Cell> kvs) {
         if (kvs != null) {
             for (Cell kv : kvs) {
                 if (Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(),
-                        PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0,
-                        PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) { return LinkType
-                                .fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(),
-                                        kv.getValueOffset(), SortOrder.getDefault())); }
+                    PhoenixDatabaseMetaData.LINK_TYPE_BYTES, 0,
+                    PhoenixDatabaseMetaData.LINK_TYPE_BYTES.length) == 0) { return LinkType
+                    .fromSerializedValue(PUnsignedTinyint.INSTANCE.getCodec().decodeByte(kv.getValueArray(),
+                        kv.getValueOffset(), SortOrder.getDefault())); }
             }
         }
         return null;
+    }
+
+    public static boolean isLinkingRow(Mutation tableMutation) {
+        byte[][] array = new byte[5][];
+        getVarChars(tableMutation.getRow(), array);
+        return array[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX] != null && Bytes
+            .equals(array[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX], HConstants.EMPTY_BYTE_ARRAY);
     }
 
     public static boolean isLocalIndex(String physicalName) {
