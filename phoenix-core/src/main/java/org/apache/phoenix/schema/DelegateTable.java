@@ -312,7 +312,7 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public boolean useStatsForQueryPlan() {
-        return delegate.useStatsForQueryPlan();
+    public boolean useStatsForParallelization() {
+        return delegate.useStatsForParallelization();
     }
 }

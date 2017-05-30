@@ -188,7 +188,7 @@ public enum TableProperty {
         
     },
 
-    USE_STATS_FOR_QUERY_PLAN(PhoenixDatabaseMetaData.USE_STATS_FOR_QUERY_PLAN, true, true, true) {
+    USE_STATS_FOR_PARALLELIZATION(PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION, true, true, true) {
         @Override
         public Object getValue(Object value) {
             if (value == null) {
@@ -196,13 +196,13 @@ public enum TableProperty {
             } else if (value instanceof Boolean) {
                 return value;
             } else {
-                throw new IllegalArgumentException("Use stats for query plan table property can only be either true or false");
+                throw new IllegalArgumentException("Use stats for parallelization property can only be either true or false");
             }
         }
 
         @Override
         public Object getPTableValue(PTable table) {
-            return table.useStatsForQueryPlan();
+            return table.useStatsForParallelization();
         }
     }
     ;
