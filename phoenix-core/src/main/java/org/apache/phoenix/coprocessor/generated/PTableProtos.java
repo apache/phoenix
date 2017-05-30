@@ -3511,15 +3511,15 @@ public final class PTableProtos {
     org.apache.phoenix.coprocessor.generated.PTableProtos.EncodedCQCounterOrBuilder getEncodedCQCountersOrBuilder(
         int index);
 
-    // optional bool useStatsForQueryPlan = 37;
+    // optional bool useStatsForParallelization = 37;
     /**
-     * <code>optional bool useStatsForQueryPlan = 37;</code>
+     * <code>optional bool useStatsForParallelization = 37;</code>
      */
-    boolean hasUseStatsForQueryPlan();
+    boolean hasUseStatsForParallelization();
     /**
-     * <code>optional bool useStatsForQueryPlan = 37;</code>
+     * <code>optional bool useStatsForParallelization = 37;</code>
      */
-    boolean getUseStatsForQueryPlan();
+    boolean getUseStatsForParallelization();
   }
   /**
    * Protobuf type {@code PTable}
@@ -3768,7 +3768,7 @@ public final class PTableProtos {
             }
             case 296: {
               bitField0_ |= 0x80000000;
-              useStatsForQueryPlan_ = input.readBool();
+              useStatsForParallelization_ = input.readBool();
               break;
             }
           }
@@ -4518,20 +4518,20 @@ public final class PTableProtos {
       return encodedCQCounters_.get(index);
     }
 
-    // optional bool useStatsForQueryPlan = 37;
-    public static final int USESTATSFORQUERYPLAN_FIELD_NUMBER = 37;
-    private boolean useStatsForQueryPlan_;
+    // optional bool useStatsForParallelization = 37;
+    public static final int USESTATSFORPARALLELIZATION_FIELD_NUMBER = 37;
+    private boolean useStatsForParallelization_;
     /**
-     * <code>optional bool useStatsForQueryPlan = 37;</code>
+     * <code>optional bool useStatsForParallelization = 37;</code>
      */
-    public boolean hasUseStatsForQueryPlan() {
+    public boolean hasUseStatsForParallelization() {
       return ((bitField0_ & 0x80000000) == 0x80000000);
     }
     /**
-     * <code>optional bool useStatsForQueryPlan = 37;</code>
+     * <code>optional bool useStatsForParallelization = 37;</code>
      */
-    public boolean getUseStatsForQueryPlan() {
-      return useStatsForQueryPlan_;
+    public boolean getUseStatsForParallelization() {
+      return useStatsForParallelization_;
     }
 
     private void initFields() {
@@ -4570,7 +4570,7 @@ public final class PTableProtos {
       storageScheme_ = com.google.protobuf.ByteString.EMPTY;
       encodingScheme_ = com.google.protobuf.ByteString.EMPTY;
       encodedCQCounters_ = java.util.Collections.emptyList();
-      useStatsForQueryPlan_ = false;
+      useStatsForParallelization_ = false;
     }
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
@@ -4744,7 +4744,7 @@ public final class PTableProtos {
         output.writeMessage(36, encodedCQCounters_.get(i));
       }
       if (((bitField0_ & 0x80000000) == 0x80000000)) {
-        output.writeBool(37, useStatsForQueryPlan_);
+        output.writeBool(37, useStatsForParallelization_);
       }
       getUnknownFields().writeTo(output);
     }
@@ -4902,7 +4902,7 @@ public final class PTableProtos {
       }
       if (((bitField0_ & 0x80000000) == 0x80000000)) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBoolSize(37, useStatsForQueryPlan_);
+          .computeBoolSize(37, useStatsForParallelization_);
       }
       size += getUnknownFields().getSerializedSize();
       memoizedSerializedSize = size;
@@ -5090,10 +5090,10 @@ public final class PTableProtos {
       }
       result = result && getEncodedCQCountersList()
           .equals(other.getEncodedCQCountersList());
-      result = result && (hasUseStatsForQueryPlan() == other.hasUseStatsForQueryPlan());
-      if (hasUseStatsForQueryPlan()) {
-        result = result && (getUseStatsForQueryPlan()
-            == other.getUseStatsForQueryPlan());
+      result = result && (hasUseStatsForParallelization() == other.hasUseStatsForParallelization());
+      if (hasUseStatsForParallelization()) {
+        result = result && (getUseStatsForParallelization()
+            == other.getUseStatsForParallelization());
       }
       result = result &&
           getUnknownFields().equals(other.getUnknownFields());
@@ -5248,9 +5248,9 @@ public final class PTableProtos {
         hash = (37 * hash) + ENCODEDCQCOUNTERS_FIELD_NUMBER;
         hash = (53 * hash) + getEncodedCQCountersList().hashCode();
       }
-      if (hasUseStatsForQueryPlan()) {
-        hash = (37 * hash) + USESTATSFORQUERYPLAN_FIELD_NUMBER;
-        hash = (53 * hash) + hashBoolean(getUseStatsForQueryPlan());
+      if (hasUseStatsForParallelization()) {
+        hash = (37 * hash) + USESTATSFORPARALLELIZATION_FIELD_NUMBER;
+        hash = (53 * hash) + hashBoolean(getUseStatsForParallelization());
       }
       hash = (29 * hash) + getUnknownFields().hashCode();
       memoizedHashCode = hash;
@@ -5446,7 +5446,7 @@ public final class PTableProtos {
         } else {
           encodedCQCountersBuilder_.clear();
         }
-        useStatsForQueryPlan_ = false;
+        useStatsForParallelization_ = false;
         bitField1_ = (bitField1_ & ~0x00000008);
         return this;
       }
@@ -5636,7 +5636,7 @@ public final class PTableProtos {
         if (((from_bitField1_ & 0x00000008) == 0x00000008)) {
           to_bitField0_ |= 0x80000000;
         }
-        result.useStatsForQueryPlan_ = useStatsForQueryPlan_;
+        result.useStatsForParallelization_ = useStatsForParallelization_;
         result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
@@ -5838,8 +5838,8 @@ public final class PTableProtos {
             }
           }
         }
-        if (other.hasUseStatsForQueryPlan()) {
-          setUseStatsForQueryPlan(other.getUseStatsForQueryPlan());
+        if (other.hasUseStatsForParallelization()) {
+          setUseStatsForParallelization(other.getUseStatsForParallelization());
         }
         this.mergeUnknownFields(other.getUnknownFields());
         return this;
@@ -7887,35 +7887,35 @@ public final class PTableProtos {
         return encodedCQCountersBuilder_;
       }
 
-      // optional bool useStatsForQueryPlan = 37;
-      private boolean useStatsForQueryPlan_ ;
+      // optional bool useStatsForParallelization = 37;
+      private boolean useStatsForParallelization_ ;
       /**
-       * <code>optional bool useStatsForQueryPlan = 37;</code>
+       * <code>optional bool useStatsForParallelization = 37;</code>
        */
-      public boolean hasUseStatsForQueryPlan() {
+      public boolean hasUseStatsForParallelization() {
         return ((bitField1_ & 0x00000008) == 0x00000008);
       }
       /**
-       * <code>optional bool useStatsForQueryPlan = 37;</code>
+       * <code>optional bool useStatsForParallelization = 37;</code>
        */
-      public boolean getUseStatsForQueryPlan() {
-        return useStatsForQueryPlan_;
+      public boolean getUseStatsForParallelization() {
+        return useStatsForParallelization_;
       }
       /**
-       * <code>optional bool useStatsForQueryPlan = 37;</code>
+       * <code>optional bool useStatsForParallelization = 37;</code>
        */
-      public Builder setUseStatsForQueryPlan(boolean value) {
+      public Builder setUseStatsForParallelization(boolean value) {
         bitField1_ |= 0x00000008;
-        useStatsForQueryPlan_ = value;
+        useStatsForParallelization_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>optional bool useStatsForQueryPlan = 37;</code>
+       * <code>optional bool useStatsForParallelization = 37;</code>
        */
-      public Builder clearUseStatsForQueryPlan() {
+      public Builder clearUseStatsForParallelization() {
         bitField1_ = (bitField1_ & ~0x00000008);
-        useStatsForQueryPlan_ = false;
+        useStatsForParallelization_ = false;
         onChanged();
         return this;
       }
@@ -8587,7 +8587,7 @@ public final class PTableProtos {
       "\"\232\001\n\013PTableStats\022\013\n\003key\030\001 \002(\014\022\016\n\006values\030",
       "\002 \003(\014\022\033\n\023guidePostsByteCount\030\003 \001(\003\022\025\n\rke" +
       "yBytesCount\030\004 \001(\003\022\027\n\017guidePostsCount\030\005 \001" +
-      "(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\"\212\007" +
+      "(\005\022!\n\013pGuidePosts\030\006 \001(\0132\014.PGuidePosts\"\220\007" +
       "\n\006PTable\022\027\n\017schemaNameBytes\030\001 \002(\014\022\026\n\016tab" +
       "leNameBytes\030\002 \002(\014\022\036\n\ttableType\030\003 \002(\0162\013.P" +
       "TableType\022\022\n\nindexState\030\004 \001(\t\022\026\n\016sequenc" +
@@ -8609,13 +8609,13 @@ public final class PTableProtos {
       "Name\030\037 \001(\t\022\032\n\022isAppendOnlySchema\030  \001(\010\022\027" +
       "\n\017parentNameBytes\030! \001(\014\022\025\n\rstorageScheme" +
       "\030\" \001(\014\022\026\n\016encodingScheme\030# \001(\014\022,\n\021encode" +
-      "dCQCounters\030$ \003(\0132\021.EncodedCQCounter\022\034\n\024" +
-      "useStatsForQueryPlan\030% \001(\010\"6\n\020EncodedCQC" +
-      "ounter\022\021\n\tcolFamily\030\001 \002(\t\022\017\n\007counter\030\002 \002" +
-      "(\005*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004USER\020\001\022\010" +
-      "\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(org.apa" +
-      "che.phoenix.coprocessor.generatedB\014PTabl",
-      "eProtosH\001\210\001\001\240\001\001"
+      "dCQCounters\030$ \003(\0132\021.EncodedCQCounter\022\"\n\032" +
+      "useStatsForParallelization\030% \001(\010\"6\n\020Enco" +
+      "dedCQCounter\022\021\n\tcolFamily\030\001 \002(\t\022\017\n\007count" +
+      "er\030\002 \002(\005*A\n\nPTableType\022\n\n\006SYSTEM\020\000\022\010\n\004US" +
+      "ER\020\001\022\010\n\004VIEW\020\002\022\t\n\005INDEX\020\003\022\010\n\004JOIN\020\004B@\n(o" +
+      "rg.apache.phoenix.coprocessor.generatedB",
+      "\014PTableProtosH\001\210\001\001\240\001\001"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
       new com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner() {
@@ -8639,7 +8639,7 @@ public final class PTableProtos {
           internal_static_PTable_fieldAccessorTable = new
             com.google.protobuf.GeneratedMessage.FieldAccessorTable(
               internal_static_PTable_descriptor,
-              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForQueryPlan", });
+              new java.lang.String[] { "SchemaNameBytes", "TableNameBytes", "TableType", "IndexState", "SequenceNumber", "TimeStamp", "PkNameBytes", "BucketNum", "Columns", "Indexes", "IsImmutableRows", "DataTableNameBytes", "DefaultFamilyName", "DisableWAL", "MultiTenant", "ViewType", "ViewStatement", "PhysicalNames", "TenantId", "ViewIndexId", "IndexType", "StatsTimeStamp", "StoreNulls", "BaseColumnCount", "RowKeyOrderOptimizable", "Transactional", "UpdateCacheFrequency", "IndexDisableTimestamp", "IsNamespaceMapped", "AutoParititonSeqName", "IsAppendOnlySchema", "ParentNameBytes", "StorageScheme", "EncodingScheme", "EncodedCQCounters", "UseStatsForParallelization", });
           internal_static_EncodedCQCounter_descriptor =
             getDescriptor().getMessageTypes().get(3);
           internal_static_EncodedCQCounter_fieldAccessorTable = new
