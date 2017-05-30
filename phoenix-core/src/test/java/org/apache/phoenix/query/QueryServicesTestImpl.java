@@ -64,7 +64,6 @@ public final class QueryServicesTestImpl extends BaseQueryServicesImpl {
     public static final int DEFAULT_HTABLE_MAX_THREADS = 10;
     public static final long DEFAULT_INDEX_POPULATION_WAIT_TIME = 0;
     public static final boolean DEFAULT_TRANSACTIONS_ENABLED = true;
-
     
     /**
      * Set number of salt buckets lower for sequence table during testing, as a high

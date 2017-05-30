@@ -16,17 +16,22 @@
  * limitations under the License.
  */
 package org.apache.phoenix.end2end;
+
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
@@ -208,7 +213,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             assertEquals((Long) 0l, info.getFirst());
         }
     }
-    
+
     @Test
     public void testBytesRowsForSelectExecutedSerially() throws Exception {
         String sql = "SELECT * FROM " + tableA + " LIMIT 2";
@@ -233,10 +238,43 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             }
             ResultSet rs = statement.executeQuery(explainSql);
             rs.next();
-            estimatedBytes = (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN);
-            estimatedRows = (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
+            estimatedBytes =
+                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN);
+            estimatedRows =
+                    (Long) rs.getObject(PhoenixRuntime.EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN);
         }
         return new Pair<>(estimatedRows, estimatedBytes);
     }
 
+    @Test
+    public void testSettingUseStatsForQueryPlanProperty() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String table = generateUniqueName();
+            String ddl =
+                    "CREATE TABLE " + table
+                            + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR) USE_STATS_FOR_QUERY_PLAN = false";
+            conn.createStatement().execute(ddl);
+            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), false);
+            ddl = "ALTER TABLE " + table + " SET USE_STATS_FOR_QUERY_PLAN = true";
+            conn.createStatement().execute(ddl);
+            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), true);
+            table = generateUniqueName();
+            ddl = "CREATE TABLE " + table + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR)";
+            conn.createStatement().execute(ddl);
+            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), true);
+        }
+    }
+
+    private static void assertUseStatsForQueryFlag(String tableName, PhoenixConnection conn,
+            boolean flag) throws TableNotFoundException, SQLException {
+        assertEquals(flag, conn.unwrap(PhoenixConnection.class).getMetaDataCache()
+                .getTableRef(new PTableKey(null, tableName)).getTable().useStatsForQueryPlan());
+        String query =
+                "SELECT USE_STATS_FOR_QUERY_PLAN FROM SYSTEM.CATALOG WHERE TABLE_NAME = ? AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL AND TENANT_ID IS NULL";
+        PreparedStatement stmt = conn.prepareStatement(query);
+        stmt.setString(1, tableName);
+        ResultSet rs = stmt.executeQuery();
+        rs.next();
+        assertEquals(flag, rs.getBoolean(1));
+    }
 }
