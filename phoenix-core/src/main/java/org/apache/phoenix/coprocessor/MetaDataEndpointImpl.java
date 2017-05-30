@@ -117,6 +117,7 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorService;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -1652,8 +1653,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private static final byte[] CHILD_TABLE_BYTES = new byte[] {PTable.LinkType.CHILD_TABLE.getSerializedValue()};
 
-    private void findAllChildViews(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName, TableViewFinderResult result) throws IOException {
-        TableViewFinderResult currResult = findChildViews(region, tenantId, schemaName, tableName);
+    private void findAllChildViews(Region region, byte[] tenantId, PTable table, TableViewFinderResult result, long clientTimeStamp) throws IOException, SQLException {
+        TableViewFinderResult currResult = findChildViews(region, tenantId, table);
         result.addResult(currResult);
         for (Result viewResult : currResult.getResults()) {
             byte[][] rowViewKeyMetaData = new byte[5][];
@@ -1661,16 +1662,88 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] viewtenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
             byte[] viewSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
             byte[] viewTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
-            findAllChildViews(region, viewtenantId, viewSchema, viewTable, result);
+            byte[] tableKey =
+                    SchemaUtil.getTableKey(viewtenantId,
+                        viewSchema,
+                        viewTable);
+            ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
+            PTable view =
+                    loadTable(env, tableKey, cacheKey, clientTimeStamp,
+                        clientTimeStamp);
+            findAllChildViews(region, viewtenantId, view, result, clientTimeStamp);
         }
     }
-
-    /**
-     * @param tableName parent table's name
-     * Looks for whether child views exist for the table specified by table.
-     * TODO: should we pass a timestamp here?
-     */
-    private TableViewFinderResult findChildViews(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName) throws IOException {
+        
+    // TODO remove this in 4.13 release 
+    @Deprecated
+    private TableViewFinderResult findChildViews_deprecated(Region region, byte[] tenantId, PTable table, byte[] linkTypeBytes) throws IOException {
+        byte[] schemaName = table.getSchemaName().getBytes();
+        byte[] tableName = table.getTableName().getBytes();
+        boolean isMultiTenant = table.isMultiTenant();
+        Scan scan = new Scan();
+        // If the table is multi-tenant, we need to check across all tenant_ids,
+        // so we can't constrain the row key. Otherwise, any views would have
+        // the same tenantId.
+        if (!isMultiTenant) {
+            byte[] startRow = ByteUtil.concat(tenantId, QueryConstants.SEPARATOR_BYTE_ARRAY);
+            byte[] stopRow = ByteUtil.nextKey(startRow);
+            scan.setStartRow(startRow);
+            scan.setStopRow(stopRow);
+        }
+        SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES, CompareOp.EQUAL, linkTypeBytes);
+        SingleColumnValueFilter tableTypeFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES,
+                CompareOp.EQUAL, PTableType.VIEW.getSerializedValue().getBytes());
+        tableTypeFilter.setFilterIfMissing(false);
+        linkFilter.setFilterIfMissing(true);
+        byte[] suffix = ByteUtil.concat(QueryConstants.SEPARATOR_BYTE_ARRAY, SchemaUtil
+                .getPhysicalTableName(SchemaUtil.getTableNameAsBytes(schemaName, tableName), table.isNamespaceMapped())
+                .getName());
+        SuffixFilter rowFilter = new SuffixFilter(suffix);
+        FilterList filter = new FilterList(linkFilter,tableTypeFilter,rowFilter);
+        scan.setFilter(filter);
+        scan.addColumn(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+        scan.addColumn(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
+        scan.addColumn(TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
+        
+        // Original region-only scanner modified due to PHOENIX-1208
+        // RegionScanner scanner = region.getScanner(scan);
+        // The following *should* work, but doesn't due to HBASE-11837
+        // TableName systemCatalogTableName = region.getTableDesc().getTableName();
+        // HTableInterface hTable = env.getTable(systemCatalogTableName);
+        // These deprecated calls work around the issue
+        HTableInterface hTable = ServerUtil.getHTableForCoprocessorScan(env,
+                region.getTableDesc().getTableName().getName());
+        try {
+            boolean allViewsInCurrentRegion = true;
+            int numOfChildViews = 0;
+            List<Result> results = Lists.newArrayList();
+            ResultScanner scanner = hTable.getScanner(scan);
+            try {
+                for (Result result = scanner.next(); (result != null); result = scanner.next()) {
+                    numOfChildViews++;
+                    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                    ResultTuple resultTuple = new ResultTuple(result);
+                    resultTuple.getKey(ptr);
+                    byte[] key = ptr.copyBytes();
+                    if (checkTableKeyInRegion(key, region) != null) {
+                        allViewsInCurrentRegion = false;
+                    }
+                    results.add(result);
+                }
+                TableViewFinderResult tableViewFinderResult = new TableViewFinderResult(results);
+                if (numOfChildViews > 0 && !allViewsInCurrentRegion) {
+                    tableViewFinderResult.setAllViewsNotInSingleRegion();
+                }
+                return tableViewFinderResult;
+            } finally {
+                    scanner.close();
+            }
+        } finally {
+            hTable.close();
+        }
+    }
+    
+    private TableViewFinderResult findChildViews_4_11(Region region, byte[] tenantId, byte[] schemaName, byte[] tableName) throws IOException {
         Scan scan = new Scan();
         byte[] startRow = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
         byte[] stopRow = ByteUtil.nextKey(startRow);
@@ -1719,7 +1792,28 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             hTable.close();
         }
     }
+    
+    private static final byte[] PHYSICAL_TABLE_BYTES =
+            new byte[] { PTable.LinkType.PHYSICAL_TABLE.getSerializedValue() };
 
+    private TableViewFinderResult findChildViews(Region region, byte[] tenantId, PTable table)
+            throws IOException, SQLException {
+        byte[] tableKey =
+                SchemaUtil.getTableKey(ByteUtil.EMPTY_BYTE_ARRAY,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA_BYTES,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES);
+        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
+        PTable systemCatalog =
+                loadTable(env, tableKey, cacheKey, MIN_SYSTEM_TABLE_TIMESTAMP,
+                    HConstants.LATEST_TIMESTAMP);
+        if (systemCatalog.getTimeStamp() < MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0) {
+            return findChildViews_deprecated(region, tenantId, table, PHYSICAL_TABLE_BYTES);
+        } else {
+            return findChildViews_4_11(region, tenantId, table.getSchemaName().getBytes(),
+                table.getTableName().getBytes());
+        }
+    }
+    
     @Override
     public void dropTable(RpcController controller, DropTableRequest request,
             RpcCallback<MetaDataResponse> done) {
@@ -1851,7 +1945,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
             if (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) {
                 // Handle any child views that exist
-                TableViewFinderResult tableViewFinderResult = findChildViews(region, tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes());
+                TableViewFinderResult tableViewFinderResult = findChildViews(region, tenantId, table);
                 if (tableViewFinderResult.hasViews()) {
                     if (isCascade) {
                         if (tableViewFinderResult.allViewsInMultipleRegions()) {
@@ -2885,10 +2979,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             schemaName, tableName);
                     // Size for worst case - all new columns are PK column
                     List<Mutation> mutationsForAddingColumnsToViews = Lists.newArrayListWithExpectedSize(tableMetaData.size() * ( 1 + table.getIndexes().size()));
-                    // TODO propagate to grandchild views as well
                     if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
                         TableViewFinderResult childViewsResult = new TableViewFinderResult();
-                        findAllChildViews(region, tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
+                        findAllChildViews(region, tenantId, table, childViewsResult, clientTimeStamp);
                         if (childViewsResult.hasViews()) {
                             /* 
                              * Dis-allow if:
@@ -3162,10 +3255,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     List<Mutation> additionalTableMetaData = Lists.newArrayList();
                     
                     PTableType type = table.getType();
-                    // TODO propagate to grandchild views as well
                     if (type == PTableType.TABLE || type == PTableType.SYSTEM) {
                         TableViewFinderResult childViewsResult = new TableViewFinderResult();
-                        findAllChildViews(region, tenantId, table.getSchemaName().getBytes(), table.getTableName().getBytes(), childViewsResult);
+                        findAllChildViews(region, tenantId, table, childViewsResult, clientTimeStamp);
                         if (childViewsResult.hasViews()) {
                             MetaDataMutationResult mutationResult =
                                     dropColumnsFromChildViews(region, table,
