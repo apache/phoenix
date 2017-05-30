@@ -333,6 +333,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] COLUMN_QUALIFIER_BYTES = Bytes.toBytes(COLUMN_QUALIFIER);
     public static final String COLUMN_QUALIFIER_COUNTER = "QUALIFIER_COUNTER";
     public static final byte[] COLUMN_QUALIFIER_COUNTER_BYTES = Bytes.toBytes(COLUMN_QUALIFIER_COUNTER);
+    public static final String USE_STATS_FOR_QUERY_PLAN = "USE_STATS_FOR_QUERY_PLAN";
+    public static final byte[] USE_STATS_FOR_QUERY_PLAN_BYTES = Bytes.toBytes(USE_STATS_FOR_QUERY_PLAN);
 
     PhoenixDatabaseMetaData(PhoenixConnection connection) throws SQLException {
         this.emptyResultSet = new PhoenixResultSet(ResultIterator.EMPTY_ITERATOR, RowProjector.EMPTY_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));

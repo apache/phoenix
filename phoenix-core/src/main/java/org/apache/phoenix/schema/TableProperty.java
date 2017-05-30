@@ -186,6 +186,24 @@ public enum TableProperty {
             return table.getImmutableStorageScheme();
         }   
         
+    },
+
+    USE_STATS_FOR_QUERY_PLAN(PhoenixDatabaseMetaData.USE_STATS_FOR_QUERY_PLAN, true, true, true) {
+        @Override
+        public Object getValue(Object value) {
+            if (value == null) {
+                return null;
+            } else if (value instanceof Boolean) {
+                return value;
+            } else {
+                throw new IllegalArgumentException("Use stats for query plan table property can only be either true or false");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.useStatsForQueryPlan();
+        }
     }
     ;
 	
