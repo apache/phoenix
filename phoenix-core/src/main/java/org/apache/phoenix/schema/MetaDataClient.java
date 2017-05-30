@@ -85,7 +85,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_QUERY_PLAN;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
@@ -283,7 +283,7 @@ public class MetaDataClient {
                     GUIDE_POSTS_WIDTH + "," +
                     IMMUTABLE_STORAGE_SCHEME + "," +
                     ENCODING_SCHEME + "," +
-                    USE_STATS_FOR_QUERY_PLAN +
+                    USE_STATS_FOR_PARALLELIZATION +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
@@ -1991,14 +1991,14 @@ public class MetaDataClient {
                 }
             }
 
-            boolean useStatsForQueryPlan = true;
-            Boolean useStatsForQueryPlanProp = (Boolean) TableProperty.USE_STATS_FOR_QUERY_PLAN.getValue(tableProps);
-            if (useStatsForQueryPlanProp != null) {
-                useStatsForQueryPlan = useStatsForQueryPlanProp;
+            boolean useStatsForParallelization = true;
+            Boolean useStatsForParallelizationProp = (Boolean) TableProperty.USE_STATS_FOR_PARALLELIZATION.getValue(tableProps);
+            if (useStatsForParallelizationProp != null) {
+                useStatsForParallelization = useStatsForParallelizationProp;
             } else {
-                useStatsForQueryPlan = connection.getQueryServices().getProps().getBoolean(
+                useStatsForParallelization = connection.getQueryServices().getProps().getBoolean(
                     QueryServices.USE_STATS_FOR_PARALLELIZATION,
-                    QueryServicesOptions.DEFAULT_USE_STATS_FOR_QUERY_PLANNING);
+                    QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION);
             }
 
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || allocateIndexId;
@@ -2593,7 +2593,7 @@ public class MetaDataClient {
             }
             tableUpsert.setByte(26, immutableStorageScheme.getSerializedMetadataValue());
             tableUpsert.setByte(27, encodingScheme.getSerializedMetadataValue());
-            tableUpsert.setBoolean(28, useStatsForQueryPlan);
+            tableUpsert.setBoolean(28, useStatsForParallelization);
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -2698,7 +2698,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns.values(),
                         parent == null ? null : parent.getSchemaName(), parent == null ? null : parent.getTableName(), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe, useStatsForQueryPlan);
+                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe, useStatsForParallelization);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;
@@ -2882,7 +2882,7 @@ public class MetaDataClient {
                                 PTable viewIndexTable = new PTableImpl(null,
                                         SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName),
                                         SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName), ts,
-                                        table.getColumnFamilies(),table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.useStatsForQueryPlan());
+                                        table.getColumnFamilies(),table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.useStatsForParallelization());
                                 tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
                             }
                         }
@@ -3009,7 +3009,7 @@ public class MetaDataClient {
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
             Boolean isTransactional, Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
             Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema, ImmutableStorageScheme immutableStorageScheme
-            , Boolean useStatsForQueryPlan)
+            , Boolean useStatsForParallelization)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3056,8 +3056,8 @@ public class MetaDataClient {
         if (immutableStorageScheme !=null) {
             mutateStringProperty(tenantId, schemaName, tableName, IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.name());
         }
-        if (useStatsForQueryPlan != null) {
-            mutateBooleanProperty(tenantId, schemaName, tableName, USE_STATS_FOR_QUERY_PLAN, useStatsForQueryPlan);
+        if (useStatsForParallelization != null) {
+            mutateBooleanProperty(tenantId, schemaName, tableName, USE_STATS_FOR_PARALLELIZATION, useStatsForParallelization);
         }
         return seqNum;
     }
@@ -3142,7 +3142,7 @@ public class MetaDataClient {
             Boolean appendOnlySchemaProp = null;
             Long guidePostWidth = -1L;
             ImmutableStorageScheme immutableStorageSchemeProp = null;
-            Boolean useStatsForQueryPlanProp = null;
+            Boolean useStatsForParallelizationProp = null;
 
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
             List<ColumnDef> columnDefs = null;
@@ -3207,8 +3207,8 @@ public class MetaDataClient {
                             appendOnlySchemaProp = (Boolean) value;
                         } else if (propName.equalsIgnoreCase(IMMUTABLE_STORAGE_SCHEME)) {
                             immutableStorageSchemeProp = (ImmutableStorageScheme)value;
-                        } else if (propName.equalsIgnoreCase(USE_STATS_FOR_QUERY_PLAN)) {
-                            useStatsForQueryPlanProp = (Boolean)value;
+                        } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
+                            useStatsForParallelizationProp = (Boolean)value;
                         }
                     }
                     // if removeTableProps is true only add the property if it is not a HTable or Phoenix Table property
@@ -3310,10 +3310,10 @@ public class MetaDataClient {
                         changingPhoenixTableProperty = true;
                     }
                 }
-                Boolean useStatsForQueryPlan = null;
-                if (useStatsForQueryPlanProp != null) {
-                    if (useStatsForQueryPlanProp.booleanValue() != table.useStatsForQueryPlan()) {
-                        useStatsForQueryPlan = useStatsForQueryPlanProp;
+                Boolean useStatsForParallelization = null;
+                if (useStatsForParallelizationProp != null) {
+                    if (useStatsForParallelizationProp.booleanValue() != table.useStatsForParallelization()) {
+                        useStatsForParallelization = useStatsForParallelizationProp;
                         changingPhoenixTableProperty = true;
                     }
                 }
@@ -3491,7 +3491,7 @@ public class MetaDataClient {
                 
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
                     incrementTableSeqNum(table, tableType, columnDefs.size(), isTransactional, updateCacheFrequency, isImmutableRows,
-                            disableWAL, multiTenant, storeNulls, guidePostWidth, appendOnlySchema, immutableStorageScheme, useStatsForQueryPlan);
+                            disableWAL, multiTenant, storeNulls, guidePostWidth, appendOnlySchema, immutableStorageScheme, useStatsForParallelization);
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
@@ -3588,7 +3588,7 @@ public class MetaDataClient {
                             PTable viewIndexTable = new PTableImpl(null,
                                     SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName),
                                     SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName), ts,
-                                    table.getColumnFamilies(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.useStatsForQueryPlan());
+                                    table.getColumnFamilies(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.useStatsForParallelization());
                             List<TableRef> tableRefs = Collections.singletonList(new TableRef(null, viewIndexTable, ts, false));
                             MutationPlan plan = new PostDDLCompiler(connection).compile(tableRefs, null, null,
                                     Collections.<PColumn> emptyList(), ts);
@@ -3853,7 +3853,7 @@ public class MetaDataClient {
                                         sharedTableState.getSchemaName(), sharedTableState.getTableName(), ts,
                                         table.getColumnFamilies(), sharedTableState.getColumns(),
                                         sharedTableState.getPhysicalNames(), sharedTableState.getViewIndexId(),
-                                        table.isMultiTenant(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForQueryPlan());
+                                        table.isMultiTenant(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
                                 TableRef indexTableRef = new TableRef(viewIndexTable);
                                 PName indexTableTenantId = sharedTableState.getTenantId();
                                 if (indexTableTenantId==null) {
