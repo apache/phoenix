@@ -1079,7 +1079,7 @@ public class UpgradeUtil {
      * @param oldMetaConnection caller should take care of closing the passed connection appropriately
      * @throws SQLException
      */
-    public static void upgradeTo4_11_0(PhoenixConnection oldMetaConnection) throws SQLException {
+    public static void addParentToChildLinks(PhoenixConnection oldMetaConnection) throws SQLException {
         PhoenixConnection metaConnection = null;
         try {
             // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 

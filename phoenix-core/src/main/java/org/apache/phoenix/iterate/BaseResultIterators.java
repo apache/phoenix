@@ -23,6 +23,8 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STAR
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_QUERY_PLANNING;
 import static org.apache.phoenix.schema.PTable.IndexType.LOCAL;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -142,6 +144,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private Long estimatedSize;
     private boolean hasGuidePosts;
     private Scan scan;
+    private boolean useStatsForQueryPlanning;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -467,7 +470,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
-        
+        this.useStatsForQueryPlanning =
+                context.getConnection().getQueryServices().getConfiguration().getBoolean(
+                    USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_QUERY_PLANNING);
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
@@ -727,7 +732,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             estimatedRows += gps.getRowCounts()[guideIndex];
                             estimatedSize += gps.getByteCounts()[guideIndex];
                         }
-                        scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                        if (useStatsForQueryPlanning) {
+                            scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                        }
                         currentKeyBytes = currentGuidePostBytes;
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();

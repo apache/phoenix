@@ -58,7 +58,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
 import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
-import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_11_0;
+import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
@@ -2794,7 +2794,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     clearCache();
                 }
                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0) {
-                    upgradeTo4_11_0(metaConnection);
+                    metaConnection = addColumnsIfNotExists(
+                        metaConnection,
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0,
+                        PhoenixDatabaseMetaData.USE_STATS_FOR_QUERY_PLAN + " "
+                                + PBoolean.INSTANCE.getSqlTypeName());
+                    addParentToChildLinks(metaConnection);
                 }
             }
 
