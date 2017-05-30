@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -30,6 +31,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -252,25 +254,25 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             String table = generateUniqueName();
             String ddl =
                     "CREATE TABLE " + table
-                            + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR) USE_STATS_FOR_QUERY_PLAN = false";
+                            + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR) USE_STATS_FOR_PARALLELIZATION = false";
             conn.createStatement().execute(ddl);
             assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), false);
-            ddl = "ALTER TABLE " + table + " SET USE_STATS_FOR_QUERY_PLAN = true";
+            ddl = "ALTER TABLE " + table + " SET USE_STATS_FOR_PARALLELIZATION = true";
             conn.createStatement().execute(ddl);
             assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), true);
             table = generateUniqueName();
             ddl = "CREATE TABLE " + table + " (PK1 INTEGER NOT NULL PRIMARY KEY, KV1 VARCHAR)";
             conn.createStatement().execute(ddl);
-            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), true);
+            assertUseStatsForQueryFlag(table, conn.unwrap(PhoenixConnection.class), DEFAULT_USE_STATS_FOR_PARALLELIZATION);
         }
     }
 
     private static void assertUseStatsForQueryFlag(String tableName, PhoenixConnection conn,
             boolean flag) throws TableNotFoundException, SQLException {
         assertEquals(flag, conn.unwrap(PhoenixConnection.class).getMetaDataCache()
-                .getTableRef(new PTableKey(null, tableName)).getTable().useStatsForQueryPlan());
+                .getTableRef(new PTableKey(null, tableName)).getTable().useStatsForParallelization());
         String query =
-                "SELECT USE_STATS_FOR_QUERY_PLAN FROM SYSTEM.CATALOG WHERE TABLE_NAME = ? AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL AND TENANT_ID IS NULL";
+                "SELECT USE_STATS_FOR_PARALLELIZATION FROM SYSTEM.CATALOG WHERE TABLE_NAME = ? AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL AND TENANT_ID IS NULL";
         PreparedStatement stmt = conn.prepareStatement(query);
         stmt.setString(1, tableName);
         ResultSet rs = stmt.executeQuery();

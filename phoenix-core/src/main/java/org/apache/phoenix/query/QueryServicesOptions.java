@@ -287,7 +287,7 @@ public class QueryServicesOptions {
     //by default, max connections from one client to one cluster is unlimited
     public static final int DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
     public static final boolean DEFAULT_STATS_COLLECTION_ENABLED = true;
-    public static final boolean DEFAULT_USE_STATS_FOR_QUERY_PLANNING = true;
+    public static final boolean DEFAULT_USE_STATS_FOR_PARALLELIZATION = true;
 
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
@@ -378,7 +378,7 @@ public class QueryServicesOptions {
             .setIfUnset(TRACING_BATCH_SIZE, DEFAULT_TRACING_BATCH_SIZE)
             .setIfUnset(TRACING_THREAD_POOL_SIZE, DEFAULT_TRACING_THREAD_POOL_SIZE)
             .setIfUnset(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)
-            .setIfUnset(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_QUERY_PLANNING);
+            .setIfUnset(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
         // it to 1, so we'll change it.
@@ -752,7 +752,7 @@ public class QueryServicesOptions {
         return this;
     }
 
-    public QueryServicesOptions setUseStatsForQueryPlanning(boolean flag) {
+    public QueryServicesOptions setUseStatsForParallelization(boolean flag) {
         config.setBoolean(USE_STATS_FOR_PARALLELIZATION, flag);
         return this;
     }

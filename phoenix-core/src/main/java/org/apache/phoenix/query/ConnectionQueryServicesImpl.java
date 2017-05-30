@@ -2798,7 +2798,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         metaConnection,
                         PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                         MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0,
-                        PhoenixDatabaseMetaData.USE_STATS_FOR_QUERY_PLAN + " "
+                        PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION + " "
                                 + PBoolean.INSTANCE.getSqlTypeName());
                     addParentToChildLinks(metaConnection);
                 }

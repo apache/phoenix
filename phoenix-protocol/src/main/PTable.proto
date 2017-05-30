@@ -99,7 +99,7 @@ message PTable {
   optional bytes storageScheme = 34;
   optional bytes encodingScheme = 35;
   repeated EncodedCQCounter encodedCQCounters = 36;
-  optional bool useStatsForQueryPlan = 37;
+  optional bool useStatsForParallelization = 37;
 }
 
 message EncodedCQCounter {
