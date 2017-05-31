@@ -299,11 +299,6 @@ public class PTableImpl implements PTable {
 
     // for views, the basePTable is for attributes we inherit from the physical table
     public static PTableImpl makePTable(PTable table, PTable basePTable, Collection<PColumn> columns, long timestamp) throws SQLException {
-        // diverge fields:
-        // getUpdateCacheFrequency
-        //
-
-
         return new PTableImpl(
             table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timestamp,
             table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),

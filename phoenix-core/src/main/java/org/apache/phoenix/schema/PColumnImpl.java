@@ -52,9 +52,18 @@ public class PColumnImpl implements PColumn {
     public PColumnImpl(PColumn column, int position) {
         this(column, column.isDerived(), position);
     }
+
+    public PColumnImpl(PColumn column, byte[] viewConstant) {
+        this(column, column.isDerived(), column.getPosition(), viewConstant);
+    }
+
     public PColumnImpl(PColumn column, boolean derivedColumn, int position) {
+        this(column, derivedColumn, position, column.getViewConstant());
+    }
+
+    public PColumnImpl(PColumn column, boolean derivedColumn, int position, byte[] viewConstant) {
         this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
-            column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), column.getViewConstant(), column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
+            column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), viewConstant, column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
             column.getTimestamp(), derivedColumn);
     }
 

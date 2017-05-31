@@ -580,8 +580,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] tableInQuestion = listOBytes.get(i);
             PTable pTable = this.doGetTable(tableInQuestion, timestamp);
             if (pTable == null) {
-                throw new TableNotFoundException("ERROR COMBINING COLUMNS");
-                // now delete everything else
+                String tableNameLink = Bytes.toStringBinary(tableInQuestion);
+                throw new TableNotFoundException("ERROR COMBINING COLUMNS FOR: " + tableNameLink);
             } else {
                 if (TABLE.equals(pTable.getType())) {
                     baseTable = pTable;
@@ -637,11 +637,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             position++;
         }
-        return PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTimestamp);
+        List<PColumn> result = WhereConstantParser.addConstantsToPColumnsIfNeeded(table, columnsToAdd);
+        return PTableImpl.makePTable(table, baseTable, result, maxTimestamp);
     }
 
-
-    // TODO: rg put the combine logic here
     private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, Region region,
             long clientTimeStamp) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);

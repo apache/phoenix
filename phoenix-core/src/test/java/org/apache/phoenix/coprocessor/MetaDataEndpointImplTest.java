@@ -236,6 +236,37 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         PhoenixRuntime.getTableNoCache(conn, grandChild);
     }
 
+    @Test
+    public void testWhereClause() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String baseTableName = generateUniqueName();
+        String childViewName = generateUniqueName();
+        String grandChildViewName = generateUniqueName();
+        String baseTableDdl = "CREATE TABLE " + baseTableName + " (" +
+            "A0 CHAR(1) NOT NULL PRIMARY KEY," +
+            "A1 CHAR(1),  A2 CHAR (1))";
+        conn.createStatement().execute(baseTableDdl);
+        conn.createStatement().execute(
+            "CREATE VIEW " + childViewName + " AS SELECT * FROM " + baseTableName + " WHERE A1 = 'X'");
+        conn.createStatement().execute(
+            "CREATE VIEW " + grandChildViewName + " AS SELECT * FROM " + childViewName + " WHERE A2 = 'Y'");
+
+        PTable childViewTable = PhoenixRuntime.getTableNoCache(conn, childViewName);
+        PTable grandChildViewTable = PhoenixRuntime.getTableNoCache(conn, grandChildViewName);
+        String expectedViewStatement = "SELECT * FROM " + baseTableName + " WHERE A1 = 'X' AND A2 = 'Y'";
+
+        List<PColumn> newColumns =
+            WhereConstantParser.addConstantsToPColumnsIfNeeded(grandChildViewTable, grandChildViewTable.getColumns());
+        for (PColumn newColumn : newColumns) {
+            System.out.println("newColumn = " + newColumn.getName().getString() + " : " + Bytes.toString(newColumn.getViewConstant()));
+        }
+
+        System.out.println("childViewTable = " + childViewTable.getViewStatement());
+        System.out.println("grandChildViewTable = " + grandChildViewTable.getViewStatement());
+
+
+    }
+
     private void assertColumnNamesEqual(PTable table, String... cols) {
         List<String> actual = Lists.newArrayList();
         for (PColumn column : table.getColumns()) {
