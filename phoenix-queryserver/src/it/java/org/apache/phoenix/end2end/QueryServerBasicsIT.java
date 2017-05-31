@@ -29,6 +29,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -45,7 +46,9 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 
 /**
  * Smoke test for query server.
@@ -57,6 +60,9 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private static QueryServerThread AVATICA_SERVER;
   private static Configuration CONF;
   private static String CONN_STRING;
+
+  @Rule
+  public TestName name = new TestName();
 
   @BeforeClass
   public static void beforeClass() throws Exception {
@@ -123,7 +129,7 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
 
   @Test
   public void smokeTest() throws Exception {
-    final String tableName = getClass().getSimpleName().toUpperCase() + System.currentTimeMillis();
+    final String tableName = name.getMethodName();
     try (final Connection connection = DriverManager.getConnection(CONN_STRING)) {
       assertThat(connection.isClosed(), is(false));
       connection.setAutoCommit(true);
@@ -161,5 +167,152 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
         }
       }
     }
+  }
+
+  @Test
+  public void arrayTest() throws Exception {
+      final String tableName = name.getMethodName();
+      try (Connection conn = DriverManager.getConnection(CONN_STRING);
+              Statement stmt = conn.createStatement()) {
+          conn.setAutoCommit(false);
+          assertFalse(stmt.execute("DROP TABLE IF EXISTS " + tableName));
+          assertFalse(stmt.execute("CREATE TABLE " + tableName + " ("
+              + "pk VARCHAR NOT NULL PRIMARY KEY, "
+              + "histogram INTEGER[])")
+              );
+          conn.commit();
+          int numRows = 10;
+          int numEvenElements = 4;
+          int numOddElements = 6;
+          for (int i = 0; i < numRows; i++) {
+              int arrayLength = i % 2 == 0 ? numEvenElements : numOddElements;
+              StringBuilder sb = new StringBuilder();
+              for (int arrayOffset = 0; arrayOffset < arrayLength; arrayOffset++) {
+                  if (sb.length() > 0) {
+                      sb.append(", ");
+                  }
+                  sb.append(getArrayValueForOffset(arrayOffset));
+              }
+              String updateSql = "UPSERT INTO " + tableName + " values('" + i + "', " + "ARRAY[" + sb.toString() + "])";
+              assertEquals(1, stmt.executeUpdate(updateSql));
+          }
+          conn.commit();
+          try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName)) {
+              for (int i = 0; i < numRows; i++) {
+                  assertTrue(rs.next());
+                  assertEquals(i, Integer.parseInt(rs.getString(1)));
+                  Array array = rs.getArray(2);
+                  Object untypedArrayData = array.getArray();
+                  assertTrue("Expected array data to be an int array, but was " + untypedArrayData.getClass(), untypedArrayData instanceof Object[]);
+                  Object[] arrayData = (Object[]) untypedArrayData;
+                  int expectedArrayLength = i % 2 == 0 ? numEvenElements : numOddElements;
+                  assertEquals(expectedArrayLength, arrayData.length);
+                  for (int arrayOffset = 0; arrayOffset < expectedArrayLength; arrayOffset++) {
+                      assertEquals(getArrayValueForOffset(arrayOffset), arrayData[arrayOffset]);
+                  }
+              }
+              assertFalse(rs.next());
+          }
+      }
+  }
+
+  @Test
+  public void preparedStatementArrayTest() throws Exception {
+      final String tableName = name.getMethodName();
+      try (Connection conn = DriverManager.getConnection(CONN_STRING);
+              Statement stmt = conn.createStatement()) {
+          conn.setAutoCommit(false);
+          assertFalse(stmt.execute("DROP TABLE IF EXISTS " + tableName));
+          assertFalse(stmt.execute("CREATE TABLE " + tableName + " ("
+              + "pk VARCHAR NOT NULL PRIMARY KEY, "
+              + "histogram INTEGER[])")
+              );
+          conn.commit();
+          int numRows = 10;
+          int numEvenElements = 4;
+          int numOddElements = 6;
+          try (PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?, ?)")) {
+              for (int i = 0; i < numRows; i++) {
+                pstmt.setString(1, Integer.toString(i));
+                int arrayLength = i % 2 == 0 ? numEvenElements : numOddElements;
+                Object[] arrayData = new Object[arrayLength];
+                for (int arrayOffset = 0; arrayOffset < arrayLength; arrayOffset++) {
+                  arrayData[arrayOffset] = getArrayValueForOffset(arrayOffset);
+                }
+                pstmt.setArray(2, conn.createArrayOf("INTEGER", arrayData));
+                assertEquals(1, pstmt.executeUpdate());
+              }
+              conn.commit();
+          }
+          conn.commit();
+          try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName)) {
+              for (int i = 0; i < numRows; i++) {
+                  assertTrue(rs.next());
+                  assertEquals(i, Integer.parseInt(rs.getString(1)));
+                  Array array = rs.getArray(2);
+                  Object untypedArrayData = array.getArray();
+                  assertTrue("Expected array data to be an int array, but was " + untypedArrayData.getClass(), untypedArrayData instanceof Object[]);
+                  Object[] arrayData = (Object[]) untypedArrayData;
+                  int expectedArrayLength = i % 2 == 0 ? numEvenElements : numOddElements;
+                  assertEquals(expectedArrayLength, arrayData.length);
+                  for (int arrayOffset = 0; arrayOffset < expectedArrayLength; arrayOffset++) {
+                      assertEquals(getArrayValueForOffset(arrayOffset), arrayData[arrayOffset]);
+                  }
+              }
+              assertFalse(rs.next());
+          }
+      }
+  }
+
+  @Test
+  public void preparedStatementVarcharArrayTest() throws Exception {
+      final String tableName = name.getMethodName();
+      try (Connection conn = DriverManager.getConnection(CONN_STRING);
+              Statement stmt = conn.createStatement()) {
+          conn.setAutoCommit(false);
+          assertFalse(stmt.execute("DROP TABLE IF EXISTS " + tableName));
+          assertFalse(stmt.execute("CREATE TABLE " + tableName + " ("
+              + "pk VARCHAR NOT NULL PRIMARY KEY, "
+              + "histogram VARCHAR[])")
+              );
+          conn.commit();
+          int numRows = 10;
+          int numEvenElements = 4;
+          int numOddElements = 6;
+          try (PreparedStatement pstmt = conn.prepareStatement("UPSERT INTO " + tableName + " values(?, ?)")) {
+              for (int i = 0; i < numRows; i++) {
+                pstmt.setString(1, Integer.toString(i));
+                int arrayLength = i % 2 == 0 ? numEvenElements : numOddElements;
+                Object[] arrayData = new Object[arrayLength];
+                for (int arrayOffset = 0; arrayOffset < arrayLength; arrayOffset++) {
+                  arrayData[arrayOffset] = Integer.toString(getArrayValueForOffset(arrayOffset));
+                }
+                pstmt.setArray(2, conn.createArrayOf("VARCHAR", arrayData));
+                assertEquals(1, pstmt.executeUpdate());
+              }
+              conn.commit();
+          }
+          conn.commit();
+          try (ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName)) {
+              for (int i = 0; i < numRows; i++) {
+                  assertTrue(rs.next());
+                  assertEquals(i, Integer.parseInt(rs.getString(1)));
+                  Array array = rs.getArray(2);
+                  Object untypedArrayData = array.getArray();
+                  assertTrue("Expected array data to be an int array, but was " + untypedArrayData.getClass(), untypedArrayData instanceof Object[]);
+                  Object[] arrayData = (Object[]) untypedArrayData;
+                  int expectedArrayLength = i % 2 == 0 ? numEvenElements : numOddElements;
+                  assertEquals(expectedArrayLength, arrayData.length);
+                  for (int arrayOffset = 0; arrayOffset < expectedArrayLength; arrayOffset++) {
+                      assertEquals(Integer.toString(getArrayValueForOffset(arrayOffset)), arrayData[arrayOffset]);
+                  }
+              }
+              assertFalse(rs.next());
+          }
+      }
+  }
+
+  private int getArrayValueForOffset(int arrayOffset) {
+      return arrayOffset * 2 + 1;
   }
 }
