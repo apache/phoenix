@@ -20,6 +20,7 @@ package org.apache.phoenix.schema;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
+import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN_NAME;
 
 import java.io.IOException;
 import java.sql.DriverManager;
@@ -35,7 +36,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
@@ -260,10 +264,6 @@ public class PTableImpl implements PTable {
         return makePTable(table, timeStamp, indexes, table.getParentSchemaName(), table.getViewStatement());
     }
 
-    public static PTableImpl makePTable(PTable table, long timeStamp, List<PTable> indexes, List<PColumn> columns) throws SQLException {
-        return makePTable(table, timeStamp, indexes, columns);
-    }
-
     public static PTable makePTable(PTable index, PName indexName, String viewStatement, long updateCacheFrequency, PName tenantId) throws SQLException {
         return Objects.equal(viewStatement, index.getViewStatement()) ? index : makePTable(index, indexName, index.getTimeStamp(), Lists.newArrayList(index.getPhysicalName()), index.getIndexes(), viewStatement, updateCacheFrequency, tenantId);
     }
@@ -299,14 +299,9 @@ public class PTableImpl implements PTable {
 
     // for views, the basePTable is for attributes we inherit from the physical table
     public static PTableImpl makePTable(PTable table, PTable basePTable, Collection<PColumn> columns, long timestamp) throws SQLException {
-        // diverge fields:
-        // getUpdateCacheFrequency
-        //
-
-
         return new PTableImpl(
             table.getTenantId(), table.getSchemaName(), table.getTableName(), table.getType(), table.getIndexState(), timestamp,
-            table.getSequenceNumber(), table.getPKName(), table.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
+            table.getSequenceNumber(), table.getPKName(), basePTable.getBucketNum(), columns, table.getParentSchemaName(), table.getParentTableName(),
             table.getIndexes(), table.isImmutableRows(), table.getPhysicalNames(), table.getDefaultFamilyName(), table.getViewStatement(),
             table.isWALDisabled(), basePTable.isMultiTenant(), table.getStoreNulls(), table.getViewType(), table.getViewIndexId(), table.getIndexType(),
             table.getBaseColumnCount(), table.rowKeyOrderOptimizable(), basePTable.isTransactional(), table.getUpdateCacheFrequency(),
@@ -510,14 +505,12 @@ public class PTableImpl implements PTable {
         this.columnsByName = ArrayListMultimap.create(columns.size(), 1);
         this.kvColumnsByQualifiers = Maps.newHashMapWithExpectedSize(columns.size());
         int numPKColumns = 0;
-        int newOrdinal = 0;
         if (bucketNum != null) {
             // Add salt column to allColumns and pkColumns, but don't add to
             // columnsByName, since it should not be addressable via name.
             allColumns = new PColumn[columns.size()+1];
             allColumns[SALTING_COLUMN.getPosition()] = SALTING_COLUMN;
             pkColumns = Lists.newArrayListWithExpectedSize(columns.size()+1);
-            newOrdinal = 1;
             ++numPKColumns;
         } else {
             allColumns = new PColumn[columns.size()];
@@ -533,10 +526,13 @@ public class PTableImpl implements PTable {
             }
         });
 
-
+        int position = 0;
+        if (bucketNum != null) {
+            position = 1;
+        }
         for (PColumn column : sortedColumns) {
-            allColumns[newOrdinal] = column;
-            newOrdinal++;
+            allColumns[position] = column;
+            position++;
             PName familyName = column.getFamilyName();
             if (familyName == null) {
                 ++numPKColumns;

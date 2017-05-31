@@ -31,6 +31,8 @@ import java.util.Set;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -234,6 +236,29 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
 
         // the grand child should no longer exist
         PhoenixRuntime.getTableNoCache(conn, grandChild);
+    }
+
+    @Test
+    public void testWhereClause() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String baseTableName = generateUniqueName();
+        String childViewName = generateUniqueName();
+        String grandChildViewName = generateUniqueName();
+        String baseTableDdl = "CREATE TABLE " + baseTableName + " (" +
+            "A0 CHAR(1) NOT NULL PRIMARY KEY," +
+            "A1 CHAR(1), A2 CHAR (1))";
+        conn.createStatement().execute(baseTableDdl);
+        conn.createStatement().execute(
+            "CREATE VIEW " + childViewName + " AS SELECT * FROM " + baseTableName + " WHERE A1 = 'X'");
+        conn.createStatement().execute(
+            "CREATE VIEW " + grandChildViewName + " AS SELECT * FROM " + childViewName + " WHERE A2 = 'Y'");
+
+        PTable childViewTable = PhoenixRuntime.getTableNoCache(conn, childViewName);
+        PTable grandChildViewTable = PhoenixRuntime.getTableNoCache(conn, grandChildViewName);
+
+        assertNotNull(childViewTable.getColumnForColumnName("A1").getViewConstant());
+        assertNotNull(grandChildViewTable.getColumnForColumnName("A1").getViewConstant());
+        assertNotNull(grandChildViewTable.getColumnForColumnName("A2").getViewConstant());
     }
 
     private void assertColumnNamesEqual(PTable table, String... cols) {

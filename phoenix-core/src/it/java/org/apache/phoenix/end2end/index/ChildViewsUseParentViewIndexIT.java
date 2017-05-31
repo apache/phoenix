@@ -29,7 +29,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
@@ -111,7 +115,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
             // create child of parent view that should be able to use the parent's index
             String childViewDdl = "CREATE VIEW " + childViewName1 + " AS SELECT * FROM " + parentViewName + " WHERE A2 = 'Y'";
             conn.createStatement().execute(childViewDdl);
-            
+
+            PTable childViewPTable = PhoenixRuntime.getTableNoCache(conn, childViewName1);
             // create child of parent view that should *not* be able to use the parent's index
             String grandChildViewDdl1 = "CREATE VIEW " + childViewName2 + " AS SELECT * FROM " + childViewName1 + " WHERE A3 = 'Z'";
             conn.createStatement().execute(grandChildViewDdl1);

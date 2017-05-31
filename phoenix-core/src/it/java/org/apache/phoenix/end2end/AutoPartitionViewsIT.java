@@ -381,7 +381,15 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
             // add a column to the view
             viewConn1.createStatement().execute(
                     "ALTER VIEW " + metricView + " DROP COLUMN val3");
-            
+
+            PName tenantId = null;
+            if (isMultiTenant) {
+                tenantId = PNameFactory.newName("tenantId1");
+            }
+
+            // Don't really understand why we need to drop this cache, but it doesn't work otherwise.
+            viewConn1.unwrap(PhoenixConnection.class).removeTable(tenantId, metricView, tableName, HConstants.LATEST_TIMESTAMP);
+
             // verify columns don't exist
             try {
                 viewConn1.createStatement().executeQuery("SELECT val2 FROM " + metricView);

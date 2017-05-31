@@ -529,9 +529,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                 // Subtract one because we add one due to timestamp granularity in Windows
                 builder.setMutationTime(minNonZerodisableIndexTimestamp - 1);
             }
-            if (PTableType.VIEW.equals(table.getType())) {
-                table = combineColumns(table, tenantId, schemaName, tableName, request.getClientTimestamp());
-            }
+            table = combineColumns(table, tenantId, schemaName, tableName, request.getClientTimestamp());
             if (table.getTimeStamp() != tableTimeStamp) {
                 builder.setTable(PTableImpl.toProto(table));
             }
@@ -545,6 +543,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
 
     private PTable combineColumns(PTable table, byte[] tenantId, byte[] schemaName, byte[] tableName, long timestamp)
         throws SQLException, IOException {
+        if (PTableType.VIEW != table.getType()) {
+            return table;
+        }
         // here you combine columns from the parent tables
         // the logic is as follows, if the PColumn is in the EXCLUDED_COLUMNS remove it,
         // otherwise priority of keeping duplicate columns is child -> parent
@@ -580,8 +581,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             byte[] tableInQuestion = listOBytes.get(i);
             PTable pTable = this.doGetTable(tableInQuestion, timestamp);
             if (pTable == null) {
-                throw new TableNotFoundException("ERROR COMBINING COLUMNS");
-                // now delete everything else
+                String tableNameLink = Bytes.toString(tableInQuestion);
+                throw new TableNotFoundException("ERROR COMBINING COLUMNS FOR: " + tableNameLink);
             } else {
                 if (TABLE.equals(pTable.getType())) {
                     baseTable = pTable;
@@ -637,11 +638,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             }
             position++;
         }
-        return PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTimestamp);
+        // need to have the columns in the PTable to use the WhereCompiler unfortunately so this needs to be done
+        // twice....
+        PTableImpl pTable = PTableImpl.makePTable(table, baseTable, columnsToAdd, maxTimestamp);
+        return WhereConstantParser.addConstantsToPColumnsIfNeeded(pTable);
+
     }
 
-
-    // TODO: rg put the combine logic here
     private PTable buildTable(byte[] key, ImmutableBytesPtr cacheKey, Region region,
             long clientTimeStamp) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
@@ -1621,9 +1624,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                             return;
                         }
                     } else {
-                        if (table.getType() == VIEW) {
-                            table = combineColumns(table, tenantIdBytes, schemaName, tableName, clientTimeStamp);
-                        }
+                        table = combineColumns(table, tenantIdBytes, schemaName, tableName, clientTimeStamp);
                         builder.setReturnCode(MetaDataProtos.MutationCode.NEWER_TABLE_FOUND);
                         builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
                         builder.setTable(PTableImpl.toProto(table));
@@ -2911,6 +2912,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
                     byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
                     PTableType type = table.getType();
+                    table = combineColumns(table, tenantId, schemaName, tableName, HConstants.LATEST_TIMESTAMP);
                     byte[] tableHeaderRowKey = SchemaUtil.getTableKey(tenantId,
                             schemaName, tableName);
                     // Size for worst case - all new columns are PK column
@@ -3159,9 +3161,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     byte[] tenantId = rowKeyMetaData[TENANT_ID_INDEX];
                     byte[] schemaName = rowKeyMetaData[SCHEMA_NAME_INDEX];
                     byte[] tableName = rowKeyMetaData[TABLE_NAME_INDEX];
-                    if (PTableType.VIEW == table.getType()) {
-                        table = combineColumns(table, tenantId, schemaName, tableName, clientTimeStamp);
-                    }
+                    table = combineColumns(table, tenantId, schemaName, tableName, clientTimeStamp);
                     boolean deletePKColumn = false;
                     List<Mutation> additionalTableMetaData = Lists.newArrayList();
                     ListIterator<Mutation> iterator = tableMetaData.listIterator();
