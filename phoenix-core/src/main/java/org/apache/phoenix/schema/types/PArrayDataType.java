@@ -20,6 +20,8 @@ package org.apache.phoenix.schema.types;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.sql.Array;
+import java.sql.SQLException;
 import java.sql.Types;
 import java.text.Format;
 import java.util.regex.Pattern;
@@ -86,10 +88,34 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     public byte[] toBytes(Object object, PDataType baseType, SortOrder sortOrder) {
         return toBytes(object, baseType, sortOrder, true);
     }
+
+    /**
+     * Ensures that the provided {@code object} is a PhoenixArray, attempting a conversion in the
+     * case when it is not.
+     */
+    PhoenixArray toPhoenixArray(Object object, PDataType baseType) {
+        if (object instanceof PhoenixArray) {
+            return (PhoenixArray) object;
+        }
+        if (!(object instanceof Array)) {
+            throw new IllegalArgumentException("Expected an Array but got " + object.getClass());
+        }
+        Array arr = (Array) object;
+        try {
+            Object untypedArrayData = arr.getArray();
+            if (!(untypedArrayData instanceof Object[])) {
+                throw new IllegalArgumentException("Array data is required to be Object[] but data for "
+                    + arr.getClass() + " is " + untypedArrayData.getClass());
+            }
+            return this.getArrayFactory().newArray(baseType, (Object[]) untypedArrayData);
+        } catch (SQLException e) {
+            throw new IllegalArgumentException("Could not convert Array data", e);
+        }
+    }
     
     public byte[] toBytes(Object object, PDataType baseType, SortOrder sortOrder, boolean rowKeyOrderOptimizable) {
         if (object == null) { throw new ConstraintViolationException(this + " may not be null"); }
-        PhoenixArray arr = ((PhoenixArray)object);
+        PhoenixArray arr = toPhoenixArray(object, baseType);
         int noOfElements = arr.numElements;
         if (noOfElements == 0) { return ByteUtil.EMPTY_BYTE_ARRAY; }
         TrustedByteArrayOutputStream byteStream = null;
@@ -115,7 +141,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
         }
         DataOutputStream oStream = new DataOutputStream(byteStream);
         // Handles bit inversion also
-        return createArrayBytes(byteStream, oStream, (PhoenixArray)object, noOfElements, baseType, sortOrder, rowKeyOrderOptimizable);
+        return createArrayBytes(byteStream, oStream, arr, noOfElements, baseType, sortOrder, rowKeyOrderOptimizable);
     }
 
     public static int serializeNulls(DataOutputStream oStream, int nulls) throws IOException {
@@ -376,7 +402,7 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
 
     @Override
     public Object toObject(Object object, PDataType actualType) {
-        return object;
+        return toPhoenixArray(object, arrayBaseType(actualType));
     }
 
     public Object toObject(Object object, PDataType actualType, SortOrder sortOrder) {
