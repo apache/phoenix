@@ -18,11 +18,15 @@
 package org.apache.phoenix.mapreduce.util;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
+
+import java.io.IOException;
+import java.util.UUID;
 
 /**
  * Utility class for setting Configuration parameters for the Map Reduce job
@@ -62,6 +66,66 @@ public final class PhoenixMapReduceUtil {
         PhoenixConfigurationUtil.setInputQuery(configuration, inputQuery);
         PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
      }
+
+    /**
+     *
+     * @param job
+     * @param inputClass DBWritable class
+     * @param snapshotName The name of a snapshot (of a table) to read from
+     * @param tableName Input table name
+     * @param restoreDir a temporary dir to copy the snapshot files into
+     * @param conditions Condition clause to be added to the WHERE clause. Can be <tt>null</tt> if there are no conditions.
+     * @param fieldNames fields being projected for the SELECT query.
+     */
+    public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String snapshotName, String tableName,
+        Path restoreDir, final String conditions, final String... fieldNames) throws
+        IOException {
+        final Configuration configuration = setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir);
+        if(conditions != null) {
+            PhoenixConfigurationUtil.setInputTableConditions(configuration, conditions);
+        }
+        PhoenixConfigurationUtil.setSelectColumnNames(configuration, fieldNames);
+    }
+
+    /**
+     *
+     * @param job
+     * @param inputClass DBWritable class
+     * @param snapshotName The name of a snapshot (of a table) to read from
+     * @param tableName Input table name
+     * @param restoreDir a temporary dir to copy the snapshot files into
+     * @param inputQuery The select query
+     */
+    public static void setInput(final Job job, final Class<? extends DBWritable> inputClass, final String snapshotName, String tableName,
+        Path restoreDir, String inputQuery) throws
+        IOException {
+        final Configuration configuration = setSnapshotInput(job, inputClass, snapshotName, tableName, restoreDir);
+        if(inputQuery != null) {
+            PhoenixConfigurationUtil.setInputQuery(configuration, inputQuery);
+        }
+
+    }
+
+    /**
+     *
+     * @param job
+     * @param inputClass DBWritable class
+     * @param snapshotName The name of a snapshot (of a table) to read from
+     * @param tableName Input table name
+     * @param restoreDir a temporary dir to copy the snapshot files into
+     */
+    private static Configuration setSnapshotInput(Job job, Class<? extends DBWritable> inputClass, String snapshotName,
+        String tableName, Path restoreDir) {
+        job.setInputFormatClass(PhoenixInputFormat.class);
+        final Configuration configuration = job.getConfiguration();
+        PhoenixConfigurationUtil.setInputClass(configuration, inputClass);
+        PhoenixConfigurationUtil.setSnapshotNameKey(configuration, snapshotName);
+        PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
+
+        PhoenixConfigurationUtil.setRestoreDirKey(configuration, new Path(restoreDir, UUID.randomUUID().toString()).toString());
+        PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
+        return configuration;
+    }
 
     private static Configuration setInput(final Job job, final Class<? extends DBWritable> inputClass, final String tableName){
         job.setInputFormatClass(PhoenixInputFormat.class);
