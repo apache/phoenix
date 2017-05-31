@@ -24,8 +24,6 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLEC
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 
 /**
  * Provides new {@link DefaultStatisticsCollector} instances based on configuration settings for a
@@ -64,12 +62,12 @@ public class StatisticsCollectorFactory {
      * use case for that.
      */
     private static boolean statisticsEnabled(RegionCoprocessorEnvironment env) {
-        return (env.getConfiguration()
-                .getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)
-                // old config left here for backward compatibility. TODO: remove in the next major
-                // release
-                || env.getConfiguration().getBoolean(STATS_ENABLED_ATTRIB, true))
-                && StatisticsUtil.isStatsEnabled(env.getRegionInfo().getTable());
+        return (env.getConfiguration().getBoolean(STATS_COLLECTION_ENABLED,
+            DEFAULT_STATS_COLLECTION_ENABLED)
+            // old config left here for backward compatibility. TODO: remove in the next major release
+            && env.getConfiguration().getBoolean(STATS_ENABLED_ATTRIB, true)
+            )
+            && StatisticsUtil.isStatsEnabled(env.getRegionInfo().getTable());
     }
 
 }
