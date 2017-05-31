@@ -1370,9 +1370,9 @@ public class CalciteUtils {
         }
     }
 
-    public static SQLException unwrapSqlException(SQLException root){
+    public static SQLException unwrapSqlException(Exception root){
         Exception e = root;
-        while(e.getCause() instanceof Exception){
+        while (e.getCause() instanceof Exception) {
             e = (Exception) e.getCause();
             if(e instanceof RuntimeException && e.getCause() instanceof SQLException) {
                 return (SQLException) e.getCause();
@@ -1381,7 +1381,7 @@ public class CalciteUtils {
                 return (SQLException) e;
             }
         }
-        return root;
+        return new SQLException(root);
     }
 
     public static Expression parseExpressionFromStr(String expressionStr, PhoenixConnection pc) {

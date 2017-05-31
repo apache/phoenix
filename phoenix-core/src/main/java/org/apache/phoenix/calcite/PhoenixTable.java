@@ -231,7 +231,11 @@ public class PhoenixTable extends AbstractTable
             PColumn column = tableMapping.getMappedColumns().get(iColumn);
             String expressionStr = column.getExpressionStr();
             if(expressionStr == null) {
-                return super.newColumnDefaultValue(table, iColumn, context);
+                RelDataType pDataTypeToRelDataType =
+                        CalciteUtils.pDataTypeToRelDataType(rexBuilder.getTypeFactory(),
+                            column.getDataType(), column.getMaxLength(),
+                            column.getScale(), column.getArraySize());
+                return new ImplicitNullLiteral(this.rexBuilder.makeNullLiteral(pDataTypeToRelDataType));
             }
             Expression defaultExpression = CalciteUtils.parseExpressionFromStr(expressionStr, pc);
             return CalciteUtils.convertColumnExpressionToLiteral(column, defaultExpression,

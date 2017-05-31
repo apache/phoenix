@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -89,7 +90,7 @@ public class PhoenixServerRpcIT extends BaseUniqueNamesOwnClusterIT {
     @Test
     public void testIndexQos() throws Exception { 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = driver.connect(getUrl(), props);
+        Connection conn = DriverManager.getConnection(url, props);;
         try {
             // create the table 
             conn.createStatement().execute(

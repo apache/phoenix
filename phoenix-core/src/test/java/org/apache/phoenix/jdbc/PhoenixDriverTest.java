@@ -46,7 +46,7 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
         final String tenantId = "00Dxx0000001234";
         props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
 
-        Connection connection = new PhoenixTestDriver().connect(getUrl(), props);
+        Connection connection = DriverManager.getConnection(getUrl(), props);
         assertEquals(tenantId, connection.getClientInfo(PhoenixRuntime.TENANT_ID_ATTRIB));
     }
 
@@ -86,7 +86,8 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
     public void testMaxMutationSizeInBytesSetCorrectly() throws Exception {
         Properties connectionProperties = new Properties();
         connectionProperties.setProperty(QueryServices.MUTATE_BATCH_SIZE_BYTES_ATTRIB,"100");
-        PhoenixConnection connection = (PhoenixConnection) DriverManager.getConnection(getUrl(), connectionProperties);
+        PhoenixConnection connection = DriverManager.getConnection(getUrl(), connectionProperties)
+                        .unwrap(PhoenixConnection.class);
         assertEquals(100L, connection.getMutateBatchSizeBytes());
         assertEquals(100L, connection.getMutationState().getMaxSizeBytes());
     }

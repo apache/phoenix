@@ -32,6 +32,8 @@ public interface PhoenixRelImplementor {
     ImplementorContext popContext();
     ImplementorContext getCurrentContext();
     TupleProjector project(List<Expression> exprs);
+    void setUnspecifiedColumnPositions(List<Integer> positions);
+    List<Integer> getUnspecifiedColumnPoistions();
     
     class ImplementorContext {
         public final boolean retainPKColumns;

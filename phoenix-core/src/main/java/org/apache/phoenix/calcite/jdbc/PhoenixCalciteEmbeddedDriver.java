@@ -30,8 +30,11 @@ import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.jdbc.Driver;
 import org.apache.calcite.linq4j.function.Function0;
+import org.apache.calcite.prepare.Prepare;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql2rel.SqlToRelConverter;
+import org.apache.phoenix.calcite.CalciteUtils;
 import org.apache.phoenix.calcite.PhoenixPrepareImpl;
 import org.apache.phoenix.calcite.PhoenixSchema;
 import org.apache.phoenix.calcite.rules.PhoenixConverterRules;
@@ -115,9 +118,13 @@ public abstract class PhoenixCalciteEmbeddedDriver extends Driver implements SQL
         final String phoenixUrl = url.replaceFirst(PhoenixRuntime.JDBC_PROTOCOL_CALCITE, PhoenixRuntime.JDBC_PROTOCOL);
         operand.put("url", phoenixUrl);
         SchemaPlus rootSchema = connection.getRootSchema();
-        Schema schema = PhoenixSchema.FACTORY.create(rootSchema, "phoenix", operand);
-        ((PhoenixSchema)schema).setTypeFactory(connection.getTypeFactory());
-        rootSchema.add("phoenix",schema);
+        try {
+            Schema schema = PhoenixSchema.FACTORY.create(rootSchema, "phoenix", operand);
+            ((PhoenixSchema)schema).setTypeFactory(connection.getTypeFactory());
+            rootSchema.add("phoenix",schema);
+        } catch(Exception e) {
+            CalciteUtils.unwrapSqlException(e);
+        }
         connection.setSchema("phoenix");
         
         return connection;

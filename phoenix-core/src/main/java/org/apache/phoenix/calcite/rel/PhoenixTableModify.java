@@ -4,6 +4,7 @@ import static org.apache.phoenix.execute.MutationState.RowTimestampColInfo.NULL_
 
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -83,17 +84,31 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
         
         final QueryPlan queryPlan = implementor.visitInput(0, (PhoenixQueryRel) input);
         RowProjector projector;
+        final List<PColumn> targetColumns;
         try {
-            final List<PColumn> targetColumns =
+            final List<PColumn> mappedColumns =
                     getOperation() == Operation.DELETE
                     ? null : targetTable.tableMapping.getMappedColumns();
+            List<Integer> unspecifiedColumnPoistions = implementor.getUnspecifiedColumnPoistions();
+            if (unspecifiedColumnPoistions != null && !unspecifiedColumnPoistions.isEmpty()
+                    && getOperation() != Operation.DELETE) {
+                targetColumns =  new ArrayList<PColumn>(
+                        mappedColumns.size());
+                for(int i = 0; i < mappedColumns.size(); i++) {
+                    if(unspecifiedColumnPoistions.indexOf(i)==-1) {
+                        targetColumns.add(mappedColumns.get(i));
+                    }
+                }
+            } else {
+                targetColumns = mappedColumns;
+            }
             projector = implementor.getTableMapping().createRowProjector(targetColumns);
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
 
         if (getOperation() == Operation.INSERT) {
-            return upsert(connection, targetTable, targetTableRef, queryPlan, projector);
+            return upsert(connection, targetColumns, targetTableRef, queryPlan, projector);
         }
         
         // delete
@@ -101,19 +116,18 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
     }
     
     private static MutationPlan upsert(final PhoenixConnection connection,
-            final PhoenixTable targetTable, final TableRef targetTableRef,
+            final List<PColumn> targetColumns, final TableRef targetTableRef,
             final QueryPlan queryPlan, final RowProjector projector) {
         try (PhoenixStatement stmt = new PhoenixStatement(connection)) {
             final ColumnResolver resolver = FromCompiler.getResolver(targetTableRef);
             final StatementContext context = new StatementContext(stmt, resolver, new Scan(), new SequenceManager(stmt));
 
             // TODO TenantId, ViewIndexId, UpdatableViewColumns
-            final List<PColumn> mappedColumns = targetTable.tableMapping.getMappedColumns();
-            final int[] columnIndexes = new int[mappedColumns.size()];
-            final int[] pkSlotIndexes = new int[mappedColumns.size()];
+            final int[] columnIndexes = new int[targetColumns.size()];
+            final int[] pkSlotIndexes = new int[targetColumns.size()];
             int pkColPosition = -1;
-            for (int i = 0; i < columnIndexes.length; i++) {
-                PColumn column = mappedColumns.get(i);
+            for (int i = 0; i < targetColumns.size(); i++) {
+                PColumn column = targetColumns.get(i);
                 if (SchemaUtil.isPKColumn(column)) {
                     if (pkColPosition == -1) {
                         pkColPosition = column.getPosition();

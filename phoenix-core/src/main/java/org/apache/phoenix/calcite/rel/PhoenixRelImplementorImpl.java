@@ -32,6 +32,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDataType;
+
 import com.google.common.collect.Lists;
 
 public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
@@ -39,6 +40,7 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
     private final RuntimeContext runtimeContext;
 	private Stack<ImplementorContext> contextStack;
 	private TableMapping tableMapping;
+	private List<Integer> unspecifiedColumnPoistions;
 	
 	public PhoenixRelImplementorImpl(
 	        StatementContext statementContext, RuntimeContext runtimeContext) {
@@ -142,4 +144,13 @@ public class PhoenixRelImplementorImpl implements PhoenixRelImplementor {
         return new TupleProjector(builder.build(), exprs.toArray(new Expression[exprs.size()]));        
     }
 
+    @Override
+    public void setUnspecifiedColumnPositions(List<Integer> positions) {
+        this.unspecifiedColumnPoistions = positions;
+    }
+
+    @Override
+    public List<Integer> getUnspecifiedColumnPoistions() {
+        return unspecifiedColumnPoistions;
+    }
 }

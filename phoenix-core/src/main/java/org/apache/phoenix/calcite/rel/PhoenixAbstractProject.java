@@ -11,10 +11,13 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexDynamicParam;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.phoenix.calcite.CalciteUtils;
+import org.apache.phoenix.calcite.ImplicitNullLiteral;
 import org.apache.phoenix.calcite.TableMapping;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
@@ -51,12 +54,27 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixQ
     
     protected TupleProjector project(PhoenixRelImplementor implementor) {        
         List<Expression> exprs = Lists.newArrayList();
-        for (RexNode project : getProjects()) {
+        List<Integer> unspecifiedColumnPositions = Lists.newArrayList();
+        List<RexNode> projects = getProjects();
+        boolean bindVariablesPresent = false;
+        for(RexNode project: projects) {
+            if(project instanceof RexDynamicParam) {
+                bindVariablesPresent = true;
+                break;
+            }
+        }
+        for (int i = 0; i < projects.size(); i++) {
+            RexNode project = projects.get(i);
+            if((bindVariablesPresent && RexLiteral.isNullLiteral(project)) || project instanceof ImplicitNullLiteral) {
+                unspecifiedColumnPositions.add(new Integer(i));
+                continue;
+            }
             exprs.add(CalciteUtils.toExpression(project, implementor));
         }
         TupleProjector tupleProjector = implementor.project(exprs);
         PTable projectedTable = implementor.getTableMapping().createProjectedTable(implementor.getCurrentContext().retainPKColumns);
         implementor.setTableMapping(new TableMapping(projectedTable));
+        implementor.setUnspecifiedColumnPositions(unspecifiedColumnPositions);
 
         return tupleProjector;
     }
