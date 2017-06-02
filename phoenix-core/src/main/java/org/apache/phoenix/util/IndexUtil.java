@@ -48,7 +48,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
@@ -504,7 +503,7 @@ public class IndexUtil {
         return QueryUtil.getViewStatement(index.getSchemaName().getString(), index.getTableName().getString(), buf.toString());
     }
     
-    public static void wrapResultUsingOffset(final ObserverContext<RegionCoprocessorEnvironment> c,
+    public static void wrapResultUsingOffset(final RegionCoprocessorEnvironment environment,
             List<Cell> result, final int offset, ColumnReference[] dataColumns,
             TupleProjector tupleProjector, Region dataRegion, IndexMaintainer indexMaintainer,
             byte[][] viewConstants, ImmutableBytesWritable ptr) throws IOException {
@@ -529,11 +528,11 @@ public class IndexUtil {
                 joinResult = dataRegion.get(get);
             } else {
                 TableName dataTable =
-                        TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(c.getEnvironment()
-                                .getRegion().getTableDesc().getNameAsString()));
+                        TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(
+                            environment.getRegion().getTableDesc().getNameAsString()));
                 HTableInterface table = null;
                 try {
-                    table = c.getEnvironment().getTable(dataTable);
+                    table = environment.getTable(dataTable);
                     joinResult = table.get(get);
                 } finally {
                     if (table != null) table.close();
