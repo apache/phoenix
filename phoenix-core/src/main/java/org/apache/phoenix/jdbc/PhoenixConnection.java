@@ -270,6 +270,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
         timestampPattern = this.services.getProps().get(QueryServices.TIMESTAMP_FORMAT_ATTRIB, DateUtil.DEFAULT_TIMESTAMP_FORMAT);
         String numberPattern = this.services.getProps().get(QueryServices.NUMBER_FORMAT_ATTRIB, NumberUtil.DEFAULT_NUMBER_FORMAT);
         int maxSize = this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        int maxSizeBytes = this.services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         Format dateFormat = DateUtil.getDateFormatter(datePattern);
         Format timeFormat = DateUtil.getDateFormatter(timePattern);
         Format timestampFormat = DateUtil.getDateFormatter(timestampPattern);
@@ -300,7 +301,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             }
         };
         this.isRequestLevelMetricsEnabled = JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info, this.services.getProps());
-        this.mutationState = mutationState == null ? newMutationState(maxSize) : new MutationState(mutationState);
+        this.mutationState = mutationState == null ? newMutationState(maxSize, maxSizeBytes) : new MutationState(mutationState);
         this.metaData = metaData;
         this.metaData.pruneTables(pruner);
         this.metaData.pruneFunctions(pruner);
@@ -486,8 +487,8 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
     	return metaData.getTableRef(key);
     }
 
-    protected MutationState newMutationState(int maxSize) {
-        return new MutationState(maxSize, this);
+    protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
+        return new MutationState(maxSize, maxSizeBytes, this);
     }
     
     public MutationState getMutationState() {
@@ -663,7 +664,7 @@ public class PhoenixConnection implements Connection, MetaDataMutated, SQLClosea
             .build().buildException();
         }
         this.mutationState.rollback();
-        this.mutationState = new MutationState(this.mutationState.getMaxSize(), this, txContext);
+        this.mutationState = new MutationState(this.mutationState.getMaxSize(), this.mutationState.getMaxSizeBytes(), this, txContext);
         
         // Write data to HBase after each statement execution as the commit may not
         // come through Phoenix APIs.

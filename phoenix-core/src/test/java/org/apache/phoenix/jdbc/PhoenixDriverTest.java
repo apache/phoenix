@@ -60,7 +60,7 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
-    public void testMaxMutationSizeSetCorrectly() throws Exception {
+    public void testMaxMutationSizeSetCorrectly() throws SQLException {
         Properties connectionProperties = new Properties();
         connectionProperties.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB,"100");
         connectionProperties.setProperty(QueryServices.IMMUTABLE_ROWS_ATTRIB,"100");
@@ -75,7 +75,9 @@ public class PhoenixDriverTest extends BaseConnectionlessQueryTest {
                 stmt.execute();
             }
             fail("Upsert should have failed since the number of upserts (200) is greater than the MAX_MUTATION_SIZE_ATTRIB (100)");
-        } catch (IllegalArgumentException expected) {}
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getErrorCode(), e.getErrorCode());
+        }
     }
 
     @Test
