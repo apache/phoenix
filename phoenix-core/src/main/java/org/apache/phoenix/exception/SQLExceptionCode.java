@@ -432,7 +432,10 @@ public enum SQLExceptionCode {
                                     727, "43M11", " ASYNC option is not allowed.. "),
     NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
         "because this client already has the maximum number" +
-        " of connections to the target cluster.");
+        " of connections to the target cluster."),
+    
+    MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
+    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes");
 
     private final int errorCode;
     private final String sqlState;

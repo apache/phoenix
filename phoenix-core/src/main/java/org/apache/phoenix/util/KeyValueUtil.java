@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
@@ -29,7 +30,14 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.execute.MutationState.RowMutationState;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
 
 /**
  * 
@@ -173,6 +181,56 @@ public class KeyValueUtil {
         for (Entry<byte [], List<Cell>> entry : m.getFamilyCellMap().entrySet()) {
             for (Cell c : entry.getValue()) {
                 size += org.apache.hadoop.hbase.KeyValueUtil.length(c);
+            }
+        }
+        return size;
+    }
+
+    /**
+     * Estimates the storage size of a row
+     * @param mutations map from table to row to RowMutationState
+     * @return estimated row size
+     */
+    public static long
+            getEstimatedRowSize(Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> mutations) {
+        long size = 0;
+        // iterate over tables
+        for (Entry<TableRef, Map<ImmutableBytesPtr, RowMutationState>> tableEntry : mutations
+                .entrySet()) {
+            PTable table = tableEntry.getKey().getTable();
+            // iterate over rows
+            for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : tableEntry.getValue()
+                    .entrySet()) {
+                int rowLength = rowEntry.getKey().getLength();
+                Map<PColumn, byte[]> colValueMap = rowEntry.getValue().getColumnValues();
+                switch (table.getImmutableStorageScheme()) {
+                case ONE_CELL_PER_COLUMN:
+                    // iterate over columns
+                    for (Entry<PColumn, byte[]> colValueEntry : colValueMap.entrySet()) {
+                        PColumn pColumn = colValueEntry.getKey();
+                        size +=
+                                KeyValue.getKeyValueDataStructureSize(rowLength,
+                                    pColumn.getFamilyName().getBytes().length,
+                                    pColumn.getColumnQualifierBytes().length,
+                                    colValueEntry.getValue().length);
+                    }
+                    break;
+                case SINGLE_CELL_ARRAY_WITH_OFFSETS:
+                    // we store all the column values in a single key value that contains all the
+                    // column values followed by an offset array
+                    size +=
+                            PArrayDataTypeEncoder.getEstimatedByteSize(table, rowLength,
+                                colValueMap);
+                    break;
+                }
+                // count the empty key value
+                Pair<byte[], byte[]> emptyKeyValueInfo =
+                        EncodedColumnsUtil.getEmptyKeyValueInfo(table);
+                size +=
+                        KeyValue.getKeyValueDataStructureSize(rowLength,
+                            SchemaUtil.getEmptyColumnFamilyPtr(table).getLength(),
+                            emptyKeyValueInfo.getFirst().length,
+                            emptyKeyValueInfo.getSecond().length);
             }
         }
         return size;

@@ -1040,7 +1040,7 @@ public class MetaDataClient {
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
 
         if (table == null || table.getType() == PTableType.VIEW /*|| table.isTransactional()*/) {
-            return new MutationState(0,connection);
+            return new MutationState(0, 0, connection);
         }
         // Hack to get around the case when an SCN is specified on the connection.
         // In this case, we won't see the table we just created yet, so we hack
@@ -1114,7 +1114,7 @@ public class MetaDataClient {
             }
         }
         final long count = rowCount;
-        return new MutationState(1, connection) {
+        return new MutationState(1, 1000, connection) {
             @Override
             public long getUpdateCount() {
                 return count;
@@ -1373,17 +1373,17 @@ public class MetaDataClient {
 
     public MutationState declareCursor(DeclareCursorStatement statement, QueryPlan queryPlan) throws SQLException {
         CursorUtil.declareCursor(statement, queryPlan);
-        return new MutationState(0,connection);
+        return new MutationState(0, 0, connection);
     }
 
     public MutationState open(OpenStatement statement) throws SQLException {
         CursorUtil.openCursor(statement, connection);
-        return new MutationState(0,connection);
+        return new MutationState(0, 0, connection);
     }
 
     public MutationState close(CloseStatement statement) throws SQLException {
         CursorUtil.closeCursor(statement);
-        return new MutationState(0,connection);
+        return new MutationState(0, 0, connection);
     }
 
     /**
@@ -1595,7 +1595,7 @@ public class MetaDataClient {
             }
         }
         if (table == null) {
-            return new MutationState(0,connection);
+            return new MutationState(0, 0, connection);
         }
 
         if (logger.isInfoEnabled()) logger.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
@@ -1604,7 +1604,7 @@ public class MetaDataClient {
                 QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
         // In async process, we return immediately as the MR job needs to be triggered .
         if(statement.isAsync() && asyncIndexBuildEnabled) {
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         }
 
         // If our connection is at a fixed point-in-time, we need to open a new
@@ -1626,11 +1626,11 @@ public class MetaDataClient {
             connection.getQueryServices().dropSequence(tenantId, schemaName, sequenceName, timestamp);
         } catch (SequenceNotFoundException e) {
             if (statement.ifExists()) {
-                return new MutationState(0, connection);
+                return new MutationState(0, 0, connection);
             }
             throw e;
         }
-        return new MutationState(1, connection);
+        return new MutationState(1, 1000, connection);
     }
 
     public MutationState createSequence(CreateSequenceStatement statement, long startWith,
@@ -1661,11 +1661,11 @@ public class MetaDataClient {
                     startWith, incrementBy, cacheSize, minValue, maxValue, cycle, timestamp);
         } catch (SequenceAlreadyExistsException e) {
             if (ifNotExists) {
-                return new MutationState(0, connection);
+                return new MutationState(0, 0, connection);
             }
             throw e;
         }
-        return new MutationState(1, connection);
+        return new MutationState(1, 1000, connection);
     }
 
     public MutationState createFunction(CreateFunctionStatement stmt) throws SQLException {
@@ -1727,7 +1727,7 @@ public class MetaDataClient {
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
-        return new MutationState(1, connection);
+        return new MutationState(1, 1000, connection);
     }
 
     private static ColumnDef findColumnDefOrNull(List<ColumnDef> colDefs, ColumnName colName) {
@@ -2786,7 +2786,7 @@ public class MetaDataClient {
                 PFunction function = connection.getMetaDataCache().getFunction(new PTableKey(tenantId, functionName));
                 if (function.isTemporaryFunction()) {
                     connection.removeFunction(tenantId, functionName, clientTimeStamp);
-                    return new MutationState(0, connection);
+                    return new MutationState(0, 0, connection);
                 }
             } catch(FunctionNotFoundException e) {
 
@@ -2806,7 +2806,7 @@ public class MetaDataClient {
                 connection.removeFunction(tenantId, functionName, result.getMutationTime());
                 break;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -2904,7 +2904,7 @@ public class MetaDataClient {
                 }
                 break;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -3556,7 +3556,7 @@ public class MetaDataClient {
                         if (!ifNotExists) {
                             throw new ColumnAlreadyExistsException(schemaName, tableName, SchemaUtil.findExistingColumn(result.getTable(), columns));
                         }
-                        return new MutationState(0,connection);
+                        return new MutationState(0, 0, connection);
                     }
                     // Only update client side cache if we aren't adding a PK column to a table with indexes or
                     // transitioning a table from non transactional to transactional.
@@ -3605,7 +3605,7 @@ public class MetaDataClient {
                         MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(new TableRef(null, table, ts, false)), emptyCF, projectCF == null ? null : Collections.singletonList(projectCF), null, ts);
                         return connection.getQueryServices().updateData(plan);
                     }
-                    return new MutationState(0,connection);
+                    return new MutationState(0, 0, connection);
                 } catch (ConcurrentTableMutationException e) {
                     if (retried) {
                         throw e;
@@ -3720,7 +3720,7 @@ public class MetaDataClient {
                         columnRef = resolver.resolveColumn(null, column.getFamilyName(), column.getColumnName());
                     } catch (ColumnNotFoundException e) {
                         if (statement.ifExists()) {
-                            return new MutationState(0,connection);
+                            return new MutationState(0, 0, connection);
                         }
                         throw e;
                     }
@@ -3824,7 +3824,7 @@ public class MetaDataClient {
                         if (!statement.ifExists()) {
                             throw new ColumnNotFoundException(schemaName, tableName, Bytes.toString(result.getFamilyName()), Bytes.toString(result.getColumnName()));
                         }
-                        return new MutationState(0, connection);
+                        return new MutationState(0, 0, connection);
                     }
                     // If we've done any index metadata updates, don't bother trying to update
                     // client-side cache as it would be too painful. Just let it pull it over from
@@ -3917,7 +3917,7 @@ public class MetaDataClient {
                         // Return the last MutationState
                         return state;
                     }
-                    return new MutationState(0, connection);
+                    return new MutationState(0, 0, connection);
                 } catch (ConcurrentTableMutationException e) {
                     if (retried) {
                         throw e;
@@ -4025,12 +4025,12 @@ public class MetaDataClient {
                 TableRef dataTableRef = FromCompiler.getResolver(dataTableNode, connection).getTables().get(0);
                 return buildIndex(index, dataTableRef);
             }
-            return new MutationState(1, connection);
+            return new MutationState(1, 1000, connection);
         } catch (TableNotFoundException e) {
             if (!statement.ifExists()) {
                 throw e;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -4116,7 +4116,7 @@ public class MetaDataClient {
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
-        return new MutationState(0, connection);
+        return new MutationState(0, 0, connection);
     }
 
     private void validateSchema(String schemaName) throws SQLException {
@@ -4155,7 +4155,7 @@ public class MetaDataClient {
                 connection.removeSchema(schema, result.getMutationTime());
                 break;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -4170,6 +4170,6 @@ public class MetaDataClient {
             .resolveSchema(useSchemaStatement.getSchemaName());
             connection.setSchema(useSchemaStatement.getSchemaName());
         }
-        return new MutationState(0, connection);
+        return new MutationState(0, 0, connection);
     }
 }
