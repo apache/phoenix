@@ -953,7 +953,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                 fail();
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-                assertTrue(e.getMessage(), e.getMessage().contains("ERROR 504 (42703): Undefined column. columnName=COL5"));
+                assertTrue(e.getMessage(), e.getMessage().contains("ERROR 504 (42703): Undefined column. columnName="+dataTableFullName+".COL5"));
             }
 
             ddl = "ALTER TABLE " + dataTableFullName + " DROP COLUMN IF EXISTS col1";

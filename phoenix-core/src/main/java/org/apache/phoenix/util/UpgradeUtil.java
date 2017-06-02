@@ -1832,7 +1832,7 @@ public class UpgradeUtil {
             MetaDataMutationResult result = new MetaDataClient(conn).updateCache(conn.getTenantId(),schemaName,
                     SchemaUtil.getTableNameFromFullName(tableName),true);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { throw new TableNotFoundException(
-                    tableName); }
+              schemaName, tableName); }
             table = result.getTable();
             
             // check whether table is properly upgraded before upgrading indexes

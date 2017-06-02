@@ -813,7 +813,10 @@ public class PTableImpl implements PTable {
         List<PColumn> columns = columnsByName.get(name);
         int size = columns.size();
         if (size == 0) {
-            throw new ColumnNotFoundException(name);
+            String schemaNameStr = schemaName==null?null:schemaName.getString();
+            String tableNameStr = tableName==null?null:tableName.getString();
+            throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, name);
+
         }
         if (size > 1) {
             for (PColumn column : columns) {
@@ -839,7 +842,10 @@ public class PTableImpl implements PTable {
             String family = (String)PVarchar.INSTANCE.toObject(cf);
             PColumn col = kvColumnsByQualifiers.get(new KVColumnFamilyQualifier(family, cq));
             if (col == null) {
-                throw new ColumnNotFoundException("No column found for column qualifier " + qualifierEncodingScheme.decode(cq));
+                String schemaNameStr = schemaName==null?null:schemaName.getString();
+                String tableNameStr = tableName==null?null:tableName.getString();
+                throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null,
+                    "No column found for column qualifier " + qualifierEncodingScheme.decode(cq));
             }
             return col;
         }
@@ -1054,7 +1060,9 @@ public class PTableImpl implements PTable {
     public PColumnFamily getColumnFamily(String familyName) throws ColumnFamilyNotFoundException {
         PColumnFamily family = familyByString.get(familyName);
         if (family == null) {
-            throw new ColumnFamilyNotFoundException(familyName);
+            String schemaNameStr = schemaName==null?null:schemaName.getString();
+            String tableNameStr = tableName==null?null:tableName.getString();
+            throw new ColumnFamilyNotFoundException(schemaNameStr, tableNameStr, familyName);
         }
         return family;
     }
@@ -1064,7 +1072,9 @@ public class PTableImpl implements PTable {
         PColumnFamily family = familyByBytes.get(familyBytes);
         if (family == null) {
             String familyName = Bytes.toString(familyBytes);
-            throw new ColumnFamilyNotFoundException(familyName);
+            String schemaNameStr = schemaName==null?null:schemaName.getString();
+            String tableNameStr = tableName==null?null:tableName.getString();
+            throw new ColumnFamilyNotFoundException(schemaNameStr, tableNameStr, familyName);
         }
         return family;
     }
@@ -1094,7 +1104,9 @@ public class PTableImpl implements PTable {
         List<PColumn> columns = columnsByName.get(name);
         int size = columns.size();
         if (size == 0) {
-            throw new ColumnNotFoundException(name);
+            String schemaNameStr = schemaName==null?null:schemaName.getString();
+            String tableNameStr = tableName==null?null:tableName.getString();
+            throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, name);
         }
         if (size > 1) {
             do {
@@ -1103,7 +1115,9 @@ public class PTableImpl implements PTable {
                     return column;
                 }
             } while (size > 0);
-            throw new ColumnNotFoundException(name);
+            String schemaNameStr = schemaName==null?null:schemaName.getString();
+            String tableNameStr = tableName==null?null:tableName.getString();
+            throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, name);
         }
         return columns.get(0);
     }

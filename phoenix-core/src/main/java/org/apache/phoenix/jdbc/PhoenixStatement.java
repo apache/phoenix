@@ -80,6 +80,7 @@ import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -150,6 +151,7 @@ import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
@@ -177,6 +179,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
+import org.mortbay.log.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -278,6 +281,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt) throws SQLException {
+      return executeQuery(stmt,true);
+    }
+    private PhoenixResultSet executeQuery(final CompilableStatement stmt,
+        final boolean doRetryOnMetaNotFoundError) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
         try {
             return CallRunner.run(
@@ -320,7 +327,19 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         connection.incrementStatementExecutionCounter();
                         return rs;
-                    } catch (RuntimeException e) {
+                    }
+                    //Force update cache and retry if meta not found error occurs
+                    catch (MetaDataEntityNotFoundException e) {
+                        if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
+                            if(logger.isDebugEnabled())
+                                logger.debug("Reloading table "+ e.getTableName()+" data from server");
+                            if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
+                                e.getSchemaName(), e.getTableName(), true).wasUpdated()){
+                                return executeQuery(stmt, false);
+                            }
+                        }
+                        throw e;
+                    }catch (RuntimeException e) {
                         // FIXME: Expression.evaluate does not throw SQLException
                         // so this will unwrap throws from that.
                         if (e.getCause() instanceof SQLException) {
@@ -335,7 +354,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     }
                 }
                 }, PhoenixContextExecutor.inContext());
-        } catch (Exception e) {
+        }catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
@@ -343,6 +362,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
     
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
+      return executeMutation(stmt, true);
+    }
+
+    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError) throws SQLException {
 	 if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
@@ -383,7 +406,19 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 setLastUpdateOperation(stmt.getOperation());
                                 connection.incrementStatementExecutionCounter();
                                 return lastUpdateCount;
-                            } catch (RuntimeException e) {
+                            }
+                            //Force update cache and retry if meta not found error occurs
+                            catch (MetaDataEntityNotFoundException e) {
+                                if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
+                                    if(logger.isDebugEnabled())
+                                        logger.debug("Reloading table "+ e.getTableName()+" data from server");
+                                    if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
+                                        e.getSchemaName(), e.getTableName(), true).wasUpdated()){
+                                        return executeMutation(stmt, false);
+                                    }
+                                }
+                                throw e;
+                            }catch (RuntimeException e) {
                                 // FIXME: Expression.evaluate does not throw SQLException
                                 // so this will unwrap throws from that.
                                 if (e.getCause() instanceof SQLException) {
