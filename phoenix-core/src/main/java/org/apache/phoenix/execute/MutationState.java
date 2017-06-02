@@ -128,6 +128,7 @@ public class MutationState implements SQLCloseable {
     
     private final PhoenixConnection connection;
     private final long maxSize;
+    private final long maxSizeBytes;
     private final long batchSize;
     private final long batchSizeBytes;
     private long batchCount = 0L;
@@ -146,35 +147,36 @@ public class MutationState implements SQLCloseable {
     private final MutationMetricQueue mutationMetricQueue;
     private ReadMetricQueue readMetricQueue;
 
-    public MutationState(long maxSize, PhoenixConnection connection) {
-        this(maxSize,connection, null, null);
+    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection) {
+        this(maxSize, maxSizeBytes, connection, null, null);
     }
     
-    public MutationState(long maxSize, PhoenixConnection connection, TransactionContext txContext) {
-        this(maxSize,connection, null, txContext);
+    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, TransactionContext txContext) {
+        this(maxSize, maxSizeBytes, connection, null, txContext);
     }
     
     public MutationState(MutationState mutationState) {
-        this(mutationState.maxSize, mutationState.connection, mutationState.getTransaction(), null);
+        this(mutationState.maxSize, mutationState.maxSizeBytes, mutationState.connection, mutationState.getTransaction(), null);
     }
     
-    public MutationState(long maxSize, PhoenixConnection connection, long sizeOffset) {
-        this(maxSize, connection, null, null, sizeOffset);
+    public MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, long sizeOffset) {
+        this(maxSize, maxSizeBytes, connection, null, null, sizeOffset);
     }
     
-    private MutationState(long maxSize, PhoenixConnection connection, Transaction tx, TransactionContext txContext) {
-        this(maxSize,connection, tx, txContext, 0);
+    private MutationState(long maxSize, long maxSizeBytes,PhoenixConnection connection, Transaction tx, TransactionContext txContext) {
+        this(maxSize, maxSizeBytes, connection, tx, txContext, 0);
     }
     
-    private MutationState(long maxSize, PhoenixConnection connection, Transaction tx, TransactionContext txContext, long sizeOffset) {
-        this(maxSize, connection, Maps.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>newHashMapWithExpectedSize(5), tx, txContext);
+    private MutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection, Transaction tx, TransactionContext txContext, long sizeOffset) {
+        this(maxSize, maxSizeBytes, connection, Maps.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>newHashMapWithExpectedSize(5), tx, txContext);
         this.sizeOffset = sizeOffset;
     }
     
-    MutationState(long maxSize, PhoenixConnection connection,
-            Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> mutations,
-            Transaction tx, TransactionContext txContext) {
+    MutationState(long maxSize, long maxSizeBytes,
+            PhoenixConnection connection,
+            Map<TableRef, Map<ImmutableBytesPtr, RowMutationState>> mutations, Transaction tx, TransactionContext txContext) {
         this.maxSize = maxSize;
+        this.maxSizeBytes = maxSizeBytes;
         this.connection = connection;
         this.batchSize = connection.getMutateBatchSize();
         this.batchSizeBytes = connection.getMutateBatchSizeBytes();
@@ -201,8 +203,8 @@ public class MutationState implements SQLCloseable {
         }
     }
 
-    public MutationState(TableRef table, Map<ImmutableBytesPtr,RowMutationState> mutations, long sizeOffset, long maxSize, PhoenixConnection connection) {
-        this(maxSize, connection, null, null, sizeOffset);
+    public MutationState(TableRef table, Map<ImmutableBytesPtr,RowMutationState> mutations, long sizeOffset, long maxSize, long maxSizeBytes, PhoenixConnection connection) throws SQLException {
+        this(maxSize, maxSizeBytes, connection, null, null, sizeOffset);
         this.mutations.put(table, mutations);
         this.numRows = mutations.size();
         this.tx = connection.getMutationState().getTransaction();
@@ -211,6 +213,10 @@ public class MutationState implements SQLCloseable {
     
     public long getMaxSize() {
         return maxSize;
+    }
+    
+    public long getMaxSizeBytes() {
+        return maxSizeBytes;
     }
     
     /**
@@ -436,16 +442,23 @@ public class MutationState implements SQLCloseable {
         return false;
     }
 
-    public static MutationState emptyMutationState(long maxSize, PhoenixConnection connection) {
-        MutationState state = new MutationState(maxSize, connection, Collections.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>emptyMap(), null, null);
+    public static MutationState emptyMutationState(long maxSize, long maxSizeBytes, PhoenixConnection connection) {
+        MutationState state = new MutationState(maxSize, maxSizeBytes, connection, Collections.<TableRef, Map<ImmutableBytesPtr,RowMutationState>>emptyMap(), null, null);
         state.sizeOffset = 0;
         return state;
     }
     
-    private void throwIfTooBig() {
+    private void throwIfTooBig() throws SQLException {
         if (numRows > maxSize) {
-            // TODO: throw SQLException ?
-            throw new IllegalArgumentException("MutationState size of " + numRows + " is bigger than max allowed size of " + maxSize);
+            resetState();
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED).build()
+                    .buildException();
+        }
+        long estimatedSize = KeyValueUtil.getEstimatedRowSize(mutations);
+        if (estimatedSize > maxSizeBytes) {
+            resetState();
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED)
+                    .build().buildException();
         }
     }
     
@@ -512,7 +525,7 @@ public class MutationState implements SQLCloseable {
      * 
      * @param newMutationState the newer mutation state
      */
-    public void join(MutationState newMutationState) {
+    public void join(MutationState newMutationState) throws SQLException {
         if (this == newMutationState) { // Doesn't make sense
             return;
         }
@@ -1177,7 +1190,7 @@ public class MutationState implements SQLCloseable {
         List<Mutation> currentList = Lists.newArrayList();
         long currentBatchSizeBytes = 0L;
         for (Mutation mutation : allMutationList) {
-            long mutationSizeBytes = mutation.heapSize();
+            long mutationSizeBytes = KeyValueUtil.calculateMutationDiskSize(mutation);
             if (currentList.size() == batchSize || currentBatchSizeBytes + mutationSizeBytes > batchSizeBytes) {
                 if (currentList.size() > 0) {
                     mutationBatchList.add(currentList);

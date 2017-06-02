@@ -352,7 +352,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public MutationState updateData(MutationPlan plan) throws SQLException {
-        return new MutationState(0, plan.getContext().getConnection());
+        return new MutationState(0, 0, plan.getContext().getConnection());
     }
 
     @Override

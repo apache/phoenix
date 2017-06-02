@@ -80,7 +80,6 @@ import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.BatchUpdateExecution;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -179,7 +178,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
-import org.mortbay.log.Log;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -876,7 +874,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     } catch(IOException e) {
                         throw new SQLException(e);
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
             
@@ -980,7 +978,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     } catch(IOException e) {
                         throw new SQLException(e);
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
             
@@ -1231,7 +1229,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         	getContext().getConnection().setConsistency(Consistency.STRONG);
                         }
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
         }
@@ -1305,7 +1303,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     PhoenixConnection phxConn = stmt.getConnection();
                     Properties props = new Properties();
                     phxConn.getQueryServices().upgradeSystemTables(phxConn.getURL(), props);
-                    return MutationState.emptyMutationState(-1, phxConn);
+                    return MutationState.emptyMutationState(-1, -1, phxConn);
                 }
 
                 @Override
