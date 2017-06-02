@@ -40,10 +40,19 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.curator.test.InstanceSpec;
+import org.apache.curator.test.TestingServer;
+import org.apache.curator.utils.CloseableUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.loadbalancer.service.LoadBalancerConfiguration;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.queryserver.client.ThinClientUtil;
+import org.apache.zookeeper.data.Stat;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -57,10 +66,23 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
   private static QueryServerThread AVATICA_SERVER;
   private static Configuration CONF;
   private static String CONN_STRING;
+  private static TestingServer zookeeperTestingServer;
+  private static CuratorFramework curatorFramework;
+  private static String zookeeperQuorum;
+  private static String zookeeperPort;
+  private static LoadBalancerConfiguration loadBalancerConfig = new LoadBalancerConfiguration();
 
   @BeforeClass
   public static void beforeClass() throws Exception {
     CONF = getTestClusterConfig();
+    zookeeperQuorum = CONF.get(QueryServices.ZOOKEEPER_QUORUM_ATTRIB);
+    zookeeperPort = CONF.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+    String connectString = String.format("%s:%s",zookeeperQuorum,
+            zookeeperPort);
+    curatorFramework = CuratorFrameworkFactory.newClient(connectString
+            , new ExponentialBackoffRetry(1000, 3));
+    curatorFramework.start();
+
     CONF.setInt(QueryServices.QUERY_SERVER_HTTP_PORT_ATTRIB, 0);
     String url = getUrl();
     AVATICA_SERVER = new QueryServerThread(new String[] { url }, CONF,
@@ -84,6 +106,8 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       assertEquals("query server didn't exit cleanly", 0, AVATICA_SERVER.getQueryServer()
         .getRetCode());
     }
+    CloseableUtils.closeQuietly(curatorFramework);
+    CloseableUtils.closeQuietly(zookeeperTestingServer);
   }
 
   @Test
@@ -162,4 +186,11 @@ public class QueryServerBasicsIT extends BaseHBaseManagedTimeIT {
       }
     }
   }
+
+  @Test
+  public void testIfRegisteredWithZookeeper() throws Exception {
+    Stat stat = curatorFramework.checkExists().forPath(loadBalancerConfig.getQueryServerBasePath());
+    Assert.assertNotNull(" The query server is not registered with zookeeper ",stat);
+  }
+
 }
