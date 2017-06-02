@@ -243,6 +243,52 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseUniqueNamesOwnClust
     }
 
     @Test
+    public void testUpdateCacheFrequencyWithCreateTableAndViewOnDiffConns() throws Exception {
+        // Create connections 1 and 2
+        Properties longRunningProps = new Properties();
+        longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
+            QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        Connection conn1 = DriverManager.getConnection(getUrl(), longRunningProps);
+        String url2 = getUrl() + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
+        conn1.setAutoCommit(true);
+        conn2.setAutoCommit(true);
+        String tableName = generateUniqueName();
+        String viewName = "V1_"+tableName;
+        String valueSelQuery = "SELECT * FROM "+tableName+" WHERE v1 = 'value1'";
+        try {
+            //Create table on conn1
+            String createQry = "create table "+tableName+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+              + " UPDATE_CACHE_FREQUENCY=1000000000";
+            conn1.createStatement().execute(createQry);
+            //Load few rows
+            conn1.createStatement()
+                    .execute("upsert into "+tableName+" values ('row1', 'value1', 'key1')");
+            conn1.createStatement()
+                    .execute("upsert into "+tableName+" values ('row2', 'value2', 'key2')");
+            conn1.commit();
+            ResultSet rs = conn1.createStatement().executeQuery("select k,v1,v2 from "+tableName);
+            assertTrue(rs.next());
+            assertTrue(rs.next());
+
+            //Create View on conn2
+            String viewCreateQuery =
+                "CREATE VIEW "+viewName+" (v43 VARCHAR) AS SELECT * FROM "+tableName+" WHERE v1 = 'value1'";
+            conn2.createStatement().execute(viewCreateQuery);
+
+            //Read from view on conn2
+            rs = conn2.createStatement().executeQuery(valueSelQuery);
+            assertTrue(rs.next());
+            //Read from view on conn1
+            rs = conn1.createStatement().executeQuery(valueSelQuery);
+            assertTrue(rs.next());
+        } finally {
+            conn1.close();
+            conn2.close();
+        }
+    }
+
+    @Test
     public void testUpsertSelectOnSameTableWithFutureData() throws Exception {
         String tableName = generateUniqueName();
         Properties longRunningProps = new Properties();
