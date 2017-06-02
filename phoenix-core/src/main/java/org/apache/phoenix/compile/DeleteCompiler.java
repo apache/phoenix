@@ -116,6 +116,7 @@ public class DeleteCompiler {
         final boolean isAutoCommit = connection.getAutoCommit();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         final int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         Map<ImmutableBytesPtr,RowMutationState> mutations = Maps.newHashMapWithExpectedSize(batchSize);
         List<Map<ImmutableBytesPtr,RowMutationState>> indexMutations = null;
@@ -174,10 +175,10 @@ public class DeleteCompiler {
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (isAutoCommit && rowCount % batchSize == 0) {
-                    MutationState state = new MutationState(targetTableRef, mutations, 0, maxSize, connection);
+                    MutationState state = new MutationState(targetTableRef, mutations, 0, maxSize, maxSizeBytes, connection);
                     connection.getMutationState().join(state);
                     for (int i = 0; i < indexTableRefs.size(); i++) {
-                        MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, connection);
+                        MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, maxSizeBytes, connection);
                         connection.getMutationState().join(indexState);
                     }
                     connection.getMutationState().send();
@@ -190,10 +191,10 @@ public class DeleteCompiler {
 
             // If auto commit is true, this last batch will be committed upon return
             int nCommittedRows = isAutoCommit ? (rowCount / batchSize * batchSize) : 0;
-            MutationState state = new MutationState(targetTableRef, mutations, nCommittedRows, maxSize, connection);
+            MutationState state = new MutationState(targetTableRef, mutations, nCommittedRows, maxSize, maxSizeBytes, connection);
             for (int i = 0; i < indexTableRefs.size(); i++) {
                 // To prevent the counting of these index rows, we have a negative for remainingRows.
-                MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, connection);
+                MutationState indexState = new MutationState(indexTableRefs.get(i), indexMutations.get(i), 0, maxSize, maxSizeBytes, connection);
                 state.join(indexState);
             }
             return state;
@@ -496,6 +497,7 @@ public class DeleteCompiler {
             }
             
             final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+            final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
      
             final StatementContext context = plan.getContext();
             // If we're doing a query for a set of rows with no where clause, then we don't need to contact the server at all.
@@ -522,7 +524,7 @@ public class DeleteCompiler {
                         while (iterator.hasNext()) {
                             mutation.put(new ImmutableBytesPtr(iterator.next().getLowerRange()), new RowMutationState(PRow.DELETE_MARKER, statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO, null));
                         }
-                        return new MutationState(tableRef, mutation, 0, maxSize, connection);
+                        return new MutationState(tableRef, mutation, 0, maxSize, maxSizeBytes, connection);
                     }
     
                     @Override
@@ -627,7 +629,7 @@ public class DeleteCompiler {
                             try {
                                 Tuple row = iterator.next();
                                 final long mutationCount = (Long)projector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
-                                return new MutationState(maxSize, connection) {
+                                return new MutationState(maxSize, maxSizeBytes, connection) {
                                     @Override
                                     public long getUpdateCount() {
                                         return mutationCount;
@@ -716,7 +718,7 @@ public class DeleteCompiler {
                                 }
                                 // Return total number of rows that have been delete. In the case of auto commit being off
                                 // the mutations will all be in the mutation state of the current connection.
-                                MutationState state = new MutationState(maxSize, connection, totalRowCount);
+                                MutationState state = new MutationState(maxSize, maxSizeBytes, connection, totalRowCount);
 
                                 // set the read metrics accumulated in the parent context so that it can be published when the mutations are committed.
                                 state.setReadMetricQueue(plan.getContext().getReadMetricsQueue());

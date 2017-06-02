@@ -180,6 +180,9 @@ public class UpsertCompiler {
         ConnectionQueryServices services = connection.getQueryServices();
         int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,
                 QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        int maxSizeBytes =
+                services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,
+                    QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         int batchSize = Math.min(connection.getMutateBatchSize(), maxSize);
         boolean isAutoCommit = connection.getAutoCommit();
         int numSplColumns =
@@ -240,14 +243,14 @@ public class UpsertCompiler {
                 rowCount++;
                 // Commit a batch if auto commit is true and we're at our batch size
                 if (isAutoCommit && rowCount % batchSize == 0) {
-                    MutationState state = new MutationState(tableRef, mutation, 0, maxSize, connection);
+                    MutationState state = new MutationState(tableRef, mutation, 0, maxSize, maxSizeBytes, connection);
                     connection.getMutationState().join(state);
                     connection.getMutationState().send();
                     mutation.clear();
                 }
             }
             // If auto commit is true, this last batch will be committed upon return
-            return new MutationState(tableRef, mutation, rowCount / batchSize * batchSize, maxSize, connection);
+            return new MutationState(tableRef, mutation, rowCount / batchSize * batchSize, maxSize, maxSizeBytes, connection);
         }
     }
 
@@ -316,6 +319,7 @@ public class UpsertCompiler {
         final PhoenixConnection connection = statement.getConnection();
         ConnectionQueryServices services = connection.getQueryServices();
         final int maxSize = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE);
+        final int maxSizeBytes = services.getProps().getInt(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB,QueryServicesOptions.DEFAULT_MAX_MUTATION_SIZE_BYTES);
         List<ColumnName> columnNodes = upsert.getColumns();
         TableRef tableRefToBe = null;
         PTable table = null;
@@ -751,7 +755,7 @@ public class UpsertCompiler {
                                     new MetaDataClient(connection).buildIndex(index, tableRef,
                                             scan.getTimeRange().getMax(), scan.getTimeRange().getMax() + 1);
                                 }
-                                return new MutationState(maxSize, connection) {
+                                return new MutationState(maxSize, maxSizeBytes, connection) {
                                     @Override
                                     public long getUpdateCount() {
                                         return mutationCount;
@@ -844,7 +848,7 @@ public class UpsertCompiler {
                         }
                         // Return total number of rows that have been updated. In the case of auto commit being off
                         // the mutations will all be in the mutation state of the current connection.
-                        MutationState mutationState = new MutationState(maxSize, statement.getConnection(), totalRowCount);
+                        MutationState mutationState = new MutationState(maxSize, maxSizeBytes, statement.getConnection(), totalRowCount);
                         /*
                          *  All the metrics collected for measuring the reads done by the parallel mutating iterators
                          *  is included in the ReadMetricHolder of the statement context. Include these metrics in the
@@ -1085,7 +1089,7 @@ public class UpsertCompiler {
                     viewConstants = IndexUtil.getViewConstants(parentTable);
                 }
                 setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement, useServerTimestamp, indexMaintainer, viewConstants, onDupKeyBytes, 0);
-                return new MutationState(tableRef, mutation, 0, maxSize, connection);
+                return new MutationState(tableRef, mutation, 0, maxSize, maxSizeBytes, connection);
             }
 
             @Override

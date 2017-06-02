@@ -873,7 +873,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     } catch(IOException e) {
                         throw new SQLException(e);
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
             
@@ -977,7 +977,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     } catch(IOException e) {
                         throw new SQLException(e);
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
             
@@ -1258,7 +1258,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     PhoenixConnection phxConn = stmt.getConnection();
                     Properties props = new Properties();
                     phxConn.getQueryServices().upgradeSystemTables(phxConn.getURL(), props);
-                    return MutationState.emptyMutationState(-1, phxConn);
+                    return MutationState.emptyMutationState(-1, -1, phxConn);
                 }
 
                 @Override
