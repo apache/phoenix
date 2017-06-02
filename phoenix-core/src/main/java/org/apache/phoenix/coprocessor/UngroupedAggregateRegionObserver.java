@@ -108,6 +108,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ExpressionUtil;
@@ -118,7 +119,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TimeKeeper;
-import org.apache.tephra.TxConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -609,7 +609,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                             mutations.add(delete);
                             // force tephra to ignore this deletes
-                            delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
+                            delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                         } else if (isUpsert) {
                             Arrays.fill(values, null);
                             int bucketNumOffset = 0;
@@ -676,7 +676,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     results.get(0).getRowLength());
                                 delete.deleteColumns(deleteCF,  deleteCQ, ts);
                                 // force tephra to ignore this deletes
-                                delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
+                                delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
                                 mutations.add(delete);
                             }
                         }

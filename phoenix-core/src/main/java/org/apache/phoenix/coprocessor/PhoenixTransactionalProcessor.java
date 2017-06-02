@@ -17,12 +17,12 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import org.apache.tephra.hbase.coprocessor.TransactionProcessor;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 public class PhoenixTransactionalProcessor extends DelegateRegionObserver {
 
     public PhoenixTransactionalProcessor() {
-        super(new TransactionProcessor());
+        super(TransactionFactory.getTransactionFactory().getTransactionContext().getCoProcessor());
     }
 
 }
