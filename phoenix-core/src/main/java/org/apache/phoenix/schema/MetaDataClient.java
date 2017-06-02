@@ -983,7 +983,8 @@ public class MetaDataClient {
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
 
         boolean isAppendOnlySchema = false;
-        long updateCacheFrequency = 0;
+        long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
+            QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
         if (parent==null) {
 	        Boolean appendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
 	        if (appendOnlySchemaProp != null) {
@@ -1931,7 +1932,8 @@ public class MetaDataClient {
             if (disableWALProp != null) {
                 disableWAL = disableWALProp;
             }
-            long updateCacheFrequency = 0;
+            long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
+                QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
             Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
             if (updateCacheFrequencyProp != null) {
                 updateCacheFrequency = updateCacheFrequencyProp;

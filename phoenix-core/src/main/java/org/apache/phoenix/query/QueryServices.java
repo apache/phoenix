@@ -260,6 +260,9 @@ public interface QueryServices extends SQLCloseable {
     // whether to enable server side RS -> RS calls for upsert select statements
     public static final String ENABLE_SERVER_UPSERT_SELECT ="phoenix.client.enable.server.upsert.select";
 
+    //Update Cache Frequency default config attribute
+    public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB  = "phoenix.default.update.cache.frequency";
+
     /**
      * Get executor service used for parallel scans
      */
