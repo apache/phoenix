@@ -289,6 +289,9 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_STATS_COLLECTION_ENABLED = true;
     public static final boolean DEFAULT_USE_STATS_FOR_PARALLELIZATION = true;
 
+    //default update cache frequency
+    public static final int DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
+
     @SuppressWarnings("serial")
     public static final Set<String> DEFAULT_QUERY_SERVER_SKIP_WORDS = new HashSet<String>() {
       {
