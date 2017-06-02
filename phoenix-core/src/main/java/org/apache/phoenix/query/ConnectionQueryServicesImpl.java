@@ -2071,7 +2071,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // and merge them with the common family properties.
         for (String f : stmtFamiliesPropsMap.keySet()) {
             if (!addingColumns && !existingColumnFamilies.contains(f)) {
-                throw new ColumnFamilyNotFoundException(f);
+                String schemaNameStr = table.getSchemaName()==null?null:table.getSchemaName().getString();
+                String tableNameStr = table.getTableName()==null?null:table.getTableName().getString();
+                throw new ColumnFamilyNotFoundException(schemaNameStr, tableNameStr, f);
             }
             if (addingColumns && !colFamiliesForPColumnsToBeAdded.contains(f)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_PROPERTY_FOR_COLUMN_NOT_ADDED).build().buildException();

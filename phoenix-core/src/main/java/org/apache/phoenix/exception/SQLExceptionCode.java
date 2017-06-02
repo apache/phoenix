@@ -194,7 +194,7 @@ public enum SQLExceptionCode {
     COLUMN_FAMILY_NOT_FOUND(1001, "42I01", "Undefined column family.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            return new ColumnFamilyNotFoundException(info.getFamilyName());
+            return new ColumnFamilyNotFoundException(info.getSchemaName(), info.getTableName(), info.getFamilyName());
         }
     }),
     PROPERTIES_FOR_FAMILY(1002, "42I02","Properties may not be defined for an unused family name."),

@@ -17,35 +17,25 @@
  */
 package org.apache.phoenix.schema;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
-
-/**
- * 
- * Exception thrown when a column name referenced in a select
- * statement cannot be found in any table.
- *
- * 
- * @since 0.1
- */
-public class ColumnNotFoundException extends MetaDataEntityNotFoundException {
+public class UpsertColumnsValuesMismatchException extends MetaDataEntityNotFoundException {
     private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.COLUMN_NOT_FOUND;
-    private final String columnName;
-
-    public ColumnNotFoundException(String columnName) {
-        this(null, null, null, columnName);
+    private static SQLExceptionCode code = SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH;
+    private final long timestamp;
+    public UpsertColumnsValuesMismatchException(String schemaName, String tableName, String message) {
+        this(schemaName, tableName, message, HConstants.LATEST_TIMESTAMP);
+    }
+    public UpsertColumnsValuesMismatchException(String schemaName, String tableName, String message, long timestamp) {
+        super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).
+          setTableName(tableName).setMessage(message).build().toString(), code.getSQLState(),
+                code.getErrorCode(), schemaName, tableName, null);
+        this.timestamp = timestamp;
     }
 
-    public ColumnNotFoundException(String schemaName, String tableName, String familyName, String columnName) {
-        super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName)
-                .setFamilyName(familyName).setColumnName(columnName).build().toString(),
-                code.getSQLState(), code.getErrorCode(), schemaName, tableName, null);
-        this.columnName = columnName;
-    }
-
-    public String getColumnName() {
-        return columnName;
+    public long getTimeStamp() {
+        return timestamp;
     }
 }
