@@ -1499,7 +1499,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             }
         }
     }
-    
+
     @Test
     public void testInvalidNullCompositePrimaryKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
