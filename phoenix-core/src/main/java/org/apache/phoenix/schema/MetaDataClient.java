@@ -671,7 +671,7 @@ public class MetaDataClient {
         return result;
     }
 
-    private MetaDataMutationResult updateCache(PName tenantId, List<String> functionNames,
+    public MetaDataMutationResult updateCache(PName tenantId, List<String> functionNames,
             boolean alwaysHitServer) throws SQLException { // TODO: pass byte[] herez
         long clientTimeStamp = getClientTimeStamp();
         List<PFunction> functions = new ArrayList<PFunction>(functionNames.size());

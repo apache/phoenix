@@ -198,7 +198,9 @@ public class WhereCompiler {
             // inefficient. Then we can skip this plan.
             if (context.getCurrentTable().getTable().getIndexType() == IndexType.LOCAL
                     && (table.getIndexType() == null || table.getIndexType() == IndexType.GLOBAL)) {
-                throw new ColumnNotFoundException(ref.getColumn().getName().getString());
+                String schemaNameStr = table.getSchemaName()==null?null:table.getSchemaName().getString();
+                String tableNameStr = table.getTableName()==null?null:table.getTableName().getString();
+                throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, ref.getColumn().getName().getString());
             }
             // Track if we need to compare KeyValue during filter evaluation
             // using column family. If the column qualifier is enough, we

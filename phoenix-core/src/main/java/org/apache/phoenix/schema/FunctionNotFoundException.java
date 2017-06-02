@@ -37,7 +37,7 @@ public class FunctionNotFoundException extends MetaDataEntityNotFoundException {
     
     public FunctionNotFoundException(String functionName, long timestamp) {
         super(new SQLExceptionInfo.Builder(code).setFunctionName(functionName).build().toString(),
-                code.getSQLState(), code.getErrorCode(), null);
+                code.getSQLState(), code.getErrorCode(), null, null, null);
         this.functionName = functionName;
         this.timestamp = timestamp;
     }

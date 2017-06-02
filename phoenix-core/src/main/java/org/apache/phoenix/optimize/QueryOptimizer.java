@@ -249,7 +249,9 @@ public class QueryOptimizer {
                     if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
                     } else if (index.getIndexType() == IndexType.GLOBAL) {
-                        throw new ColumnNotFoundException("*");
+                        String schemaNameStr = index.getSchemaName()==null?null:index.getSchemaName().getString();
+                        String tableNameStr = index.getTableName()==null?null:index.getTableName().getString();
+                        throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
                     }
                 }
             } catch (ColumnNotFoundException e) {

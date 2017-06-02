@@ -24,11 +24,10 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 public class SchemaNotFoundException extends MetaDataEntityNotFoundException {
     private static final long serialVersionUID = 1L;
     private static SQLExceptionCode code = SQLExceptionCode.SCHEMA_NOT_FOUND;
-    private final String schemaName;
     private final long timestamp;
 
     public SchemaNotFoundException(SchemaNotFoundException e, long timestamp) {
-        this(e.schemaName, timestamp);
+        this(e.getSchemaName(), timestamp);
     }
 
     public SchemaNotFoundException(String schemaName) {
@@ -37,13 +36,8 @@ public class SchemaNotFoundException extends MetaDataEntityNotFoundException {
 
     public SchemaNotFoundException(String schemaName, long timestamp) {
         super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).build().toString(), code.getSQLState(),
-                code.getErrorCode(), null);
-        this.schemaName = schemaName;
+                code.getErrorCode(), schemaName, null, null);
         this.timestamp = timestamp;
-    }
-
-    public String getSchemaName() {
-        return schemaName;
     }
 
     public long getTimeStamp() {

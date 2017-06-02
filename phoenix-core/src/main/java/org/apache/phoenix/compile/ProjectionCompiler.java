@@ -196,7 +196,9 @@ public class ProjectionCompiler {
         if (index.getIndexType() != IndexType.LOCAL) {
             if (index.getColumns().size()-minIndexPKOffset != dataTable.getColumns().size()-minTablePKOffset) {
                 // We'll end up not using this by the optimizer, so just throw
-                throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
+                String schemaNameStr = dataTable.getSchemaName()==null?null:dataTable.getSchemaName().getString();
+                String tableNameStr = dataTable.getTableName()==null?null:dataTable.getTableName().getString();
+                throw new ColumnNotFoundException(schemaNameStr, tableNameStr,null, WildcardParseNode.INSTANCE.toString());
             }
         }
         for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
