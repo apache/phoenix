@@ -62,6 +62,7 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -394,7 +395,7 @@ public class DeleteCompiler {
                 select = StatementNormalizer.normalize(select, resolverToBe);
                 SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolverToBe, connection);
                 if (transformedSelect != select) {
-                    resolverToBe = FromCompiler.getResolverForQuery(transformedSelect, connection);
+                    resolverToBe = FromCompiler.getResolverForQuery(transformedSelect, connection, false, delete.getTable().getName());
                     select = StatementNormalizer.normalize(transformedSelect, resolverToBe);
                 }
                 parallelIteratorFactory = hasLimit ? null : new DeletingParallelIteratorFactory(connection);

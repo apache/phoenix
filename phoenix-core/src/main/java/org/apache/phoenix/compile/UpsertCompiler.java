@@ -73,6 +73,7 @@ import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
@@ -94,6 +95,7 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.UpsertColumnsValuesMismatchException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
@@ -345,258 +347,237 @@ public class UpsertCompiler {
         // update the cache up front when we create the resolver in that case.
         boolean retryOnce = !connection.getAutoCommit();
         boolean useServerTimestampToBe = false;
-        while (true) {
-            try {
-                resolver = FromCompiler.getResolverForMutation(upsert, connection);
-                tableRefToBe = resolver.getTables().get(0);
-                table = tableRefToBe.getTable();
-                // Cannot update:
-                // - read-only VIEW 
-                // - transactional table with a connection having an SCN 
-                if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
-                    throw new ReadOnlyTableException(schemaName,tableName);
-                }
-                else if (table.isTransactional() && connection.getSCN() != null) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE).setSchemaName(schemaName)
-                    .setTableName(tableName).build().buildException();
-                }
-                boolean isSalted = table.getBucketNum() != null;
-                isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
-                isSharedViewIndex = table.getViewIndexId() != null;
-                tenantIdStr = isTenantSpecific ? connection.getTenantId().getString() : null;
-                int posOffset = isSalted ? 1 : 0;
-                // Setup array of column indexes parallel to values that are going to be set
-                allColumnsToBe = table.getColumns();
         
-                nColumnsToSet = 0;
-                if (table.getViewType() == ViewType.UPDATABLE) {
-                    addViewColumnsToBe = Sets.newLinkedHashSetWithExpectedSize(allColumnsToBe.size());
-                    for (PColumn column : allColumnsToBe) {
-                        if (column.getViewConstant() != null) {
-                            addViewColumnsToBe.add(column);
-                        }
-                    }
+
+        resolver = FromCompiler.getResolverForMutation(upsert, connection);
+        tableRefToBe = resolver.getTables().get(0);
+        table = tableRefToBe.getTable();
+        // Cannot update:
+        // - read-only VIEW
+        // - transactional table with a connection having an SCN
+        if (table.getType() == PTableType.VIEW && table.getViewType().isReadOnly()) {
+            throw new ReadOnlyTableException(schemaName,tableName);
+        }
+        else if (table.isTransactional() && connection.getSCN() != null) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPECIFY_SCN_FOR_TXN_TABLE).setSchemaName(schemaName)
+            .setTableName(tableName).build().buildException();
+        }
+        boolean isSalted = table.getBucketNum() != null;
+        isTenantSpecific = table.isMultiTenant() && connection.getTenantId() != null;
+        isSharedViewIndex = table.getViewIndexId() != null;
+        tenantIdStr = isTenantSpecific ? connection.getTenantId().getString() : null;
+        int posOffset = isSalted ? 1 : 0;
+        // Setup array of column indexes parallel to values that are going to be set
+        allColumnsToBe = table.getColumns();
+
+        nColumnsToSet = 0;
+        if (table.getViewType() == ViewType.UPDATABLE) {
+            addViewColumnsToBe = Sets.newLinkedHashSetWithExpectedSize(allColumnsToBe.size());
+            for (PColumn column : allColumnsToBe) {
+                if (column.getViewConstant() != null) {
+                    addViewColumnsToBe.add(column);
                 }
-                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-                // Allow full row upsert if no columns or only dynamic ones are specified and values count match
-                if (columnNodes.isEmpty() || columnNodes.size() == upsert.getTable().getDynamicColumns().size()) {
-                    nColumnsToSet = allColumnsToBe.size() - posOffset;
-                    columnIndexesToBe = new int[nColumnsToSet];
-                    pkSlotIndexesToBe = new int[columnIndexesToBe.length];
-                    targetColumns = Lists.newArrayListWithExpectedSize(columnIndexesToBe.length);
-                    targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
-                    int minPKPos = 0;
-                    if (isSharedViewIndex) {
-                        PColumn indexIdColumn = table.getPKColumns().get(minPKPos);
-                        columnIndexesToBe[minPKPos] = indexIdColumn.getPosition();
-                        targetColumns.set(minPKPos, indexIdColumn);
-                        minPKPos++;
-                    }
-                    if (isTenantSpecific) {
-                        PColumn tenantColumn = table.getPKColumns().get(minPKPos);
-                        columnIndexesToBe[minPKPos] = tenantColumn.getPosition();
-                        targetColumns.set(minPKPos, tenantColumn);
-                        minPKPos++;
-                    }
-                    for (int i = posOffset, j = 0; i < allColumnsToBe.size(); i++) {
-                        PColumn column = allColumnsToBe.get(i);
-                        if (SchemaUtil.isPKColumn(column)) {
-                            pkSlotIndexesToBe[i-posOffset] = j + posOffset;
-                            if (j++ < minPKPos) { // Skip, as it's already been set above
-                                continue;
-                            }
-                            minPKPos = 0;
-                        }
-                        columnIndexesToBe[i-posOffset+minPKPos] = i;
-                        targetColumns.set(i-posOffset+minPKPos, column);
-                    }
-                    if (!addViewColumnsToBe.isEmpty()) {
-                        // All view columns overlap in this case
-                        overlapViewColumnsToBe = addViewColumnsToBe;
-                        addViewColumnsToBe = Collections.emptySet();
-                    }
-                } else {
-                    // Size for worse case
-                    int numColsInUpsert = columnNodes.size();
-                    nColumnsToSet = numColsInUpsert + addViewColumnsToBe.size() + (isTenantSpecific ? 1 : 0) +  + (isSharedViewIndex ? 1 : 0);
-                    columnIndexesToBe = new int[nColumnsToSet];
-                    pkSlotIndexesToBe = new int[columnIndexesToBe.length];
-                    targetColumns = Lists.newArrayListWithExpectedSize(columnIndexesToBe.length);
-                    targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
-                    Arrays.fill(columnIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
-                    Arrays.fill(pkSlotIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
-                    BitSet pkColumnsSet = new BitSet(table.getPKColumns().size());
-                    int i = 0;
-                    if (isSharedViewIndex) {
-                        PColumn indexIdColumn = table.getPKColumns().get(i + posOffset);
-                        columnIndexesToBe[i] = indexIdColumn.getPosition();
-                        pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
-                        targetColumns.set(i, indexIdColumn);
-                        i++;
-                    }
-                    // Add tenant column directly, as we don't want to resolve it as this will fail
-                    if (isTenantSpecific) {
-                        PColumn tenantColumn = table.getPKColumns().get(i + posOffset);
-                        columnIndexesToBe[i] = tenantColumn.getPosition();
-                        pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
-                        targetColumns.set(i, tenantColumn);
-                        i++;
-                    }
-                    for (ColumnName colName : columnNodes) {
-                        ColumnRef ref = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName());
-                        PColumn column = ref.getColumn();
-                        if (IndexUtil.getViewConstantValue(column, ptr)) {
-                            if (overlapViewColumnsToBe.isEmpty()) {
-                                overlapViewColumnsToBe = Sets.newHashSetWithExpectedSize(addViewColumnsToBe.size());
-                            }
-                            nColumnsToSet--;
-                            overlapViewColumnsToBe.add(column);
-                            addViewColumnsToBe.remove(column);
-                        }
-                        columnIndexesToBe[i] = ref.getColumnPosition();
-                        targetColumns.set(i, column);
-                        if (SchemaUtil.isPKColumn(column)) {
-                            pkColumnsSet.set(pkSlotIndexesToBe[i] = ref.getPKSlotPosition());
-                        }
-                        i++;
-                    }
-                    for (PColumn column : addViewColumnsToBe) {
-                        columnIndexesToBe[i] = column.getPosition();
-                        targetColumns.set(i, column);
-                        if (SchemaUtil.isPKColumn(column)) {
-                            pkColumnsSet.set(pkSlotIndexesToBe[i] = SchemaUtil.getPKPosition(table, column));
-                        }
-                        i++;
-                    }
-                    // If a table has rowtimestamp col, then we always set it.
-                    useServerTimestampToBe = table.getRowTimestampColPos() != -1 && !isRowTimestampSet(pkSlotIndexesToBe, table);
-                    if (useServerTimestampToBe) {
-                        PColumn rowTimestampCol = table.getPKColumns().get(table.getRowTimestampColPos());
-                        // Need to resize columnIndexesToBe and pkSlotIndexesToBe to include this extra column.
-                        columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, columnIndexesToBe.length + 1);
-                        pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, pkSlotIndexesToBe.length + 1);
-                        columnIndexesToBe[i] = rowTimestampCol.getPosition();
-                        pkColumnsSet.set(pkSlotIndexesToBe[i] = table.getRowTimestampColPos());
-                        targetColumns.add(rowTimestampCol);
-                        if (valueNodes != null && !valueNodes.isEmpty()) {
-                            valueNodes.add(getNodeForRowTimestampColumn(rowTimestampCol));
-                        }
-                        nColumnsToSet++;
-                    }
-                    for (i = posOffset; i < table.getPKColumns().size(); i++) {
-                        PColumn pkCol = table.getPKColumns().get(i);
-                        if (!pkColumnsSet.get(i)) {
-                            if (!pkCol.isNullable() && pkCol.getExpressionStr() == null) {
-                                throw new ConstraintViolationException(table.getName().getString() + "." + pkCol.getName().getString() + " may not be null");
-                            }
-                        }
-                    }
-                }
-                boolean isAutoCommit = connection.getAutoCommit();
-                if (valueNodes == null) {
-                    SelectStatement select = upsert.getSelect();
-                    assert(select != null);
-                    select = SubselectRewriter.flatten(select, connection);
-                    ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection);
-                    select = StatementNormalizer.normalize(select, selectResolver);
-                    select = prependTenantAndViewConstants(table, select, tenantIdStr, addViewColumnsToBe, useServerTimestampToBe);
-                    SelectStatement transformedSelect = SubqueryRewriter.transform(select, selectResolver, connection);
-                    if (transformedSelect != select) {
-                        selectResolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
-                        select = StatementNormalizer.normalize(transformedSelect, selectResolver);
-                    }
-                    sameTable = !select.isJoin()
-                        && tableRefToBe.equals(selectResolver.getTables().get(0));
-                    tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
-                    /* We can run the upsert in a coprocessor if:
-                     * 1) from has only 1 table or server UPSERT SELECT is enabled
-                     * 2) the select query isn't doing aggregation (which requires a client-side final merge)
-                     * 3) autoCommit is on
-                     * 4) the table is not immutable with indexes, as the client is the one that figures out the additional
-                     *    puts for index tables.
-                     * 5) no limit clause, as the limit clause requires client-side post processing
-                     * 6) no sequences, as sequences imply that the order of upsert must match the order of
-                     *    selection. TODO: change this and only force client side if there's a ORDER BY on the sequence value
-                     * Otherwise, run the query to pull the data from the server
-                     * and populate the MutationState (upto a limit).
-                    */            
-                    if (! (select.isAggregate() || select.isDistinct() || select.getLimit() != null || select.hasSequence()) ) {
-                        // We can pipeline the upsert select instead of spooling everything to disk first,
-                        // if we don't have any post processing that's required.
-                        parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe, useServerTimestampToBe);
-                        // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
-                        // so we might be able to run it entirely on the server side.
-                        // region space managed by region servers. So we bail out on executing on server side.
-                        runOnServer = (sameTable || serverUpsertSelectEnabled) && isAutoCommit && !table.isTransactional()
-                                && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
-                                && !select.isJoin() && table.getRowTimestampColPos() == -1;
-                    }
-                    // If we may be able to run on the server, add a hint that favors using the data table
-                    // if all else is equal.
-                    // TODO: it'd be nice if we could figure out in advance if the PK is potentially changing,
-                    // as this would disallow running on the server. We currently use the row projector we
-                    // get back to figure this out.
-                    HintNode hint = upsert.getHint();
-                    if (!upsert.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
-                        hint = HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE);
-                    }
-                    select = SelectStatement.create(select, hint);
-                    // Pass scan through if same table in upsert and select so that projection is computed correctly
-                    // Use optimizer to choose the best plan
-                    try {
-                        QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false);
-                        queryPlanToBe = compiler.compile();
-                        // This is post-fix: if the tableRef is a projected table, this means there are post-processing 
-                        // steps and parallelIteratorFactory did not take effect.
-                        if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
-                            parallelIteratorFactoryToBe = null;
-                        }
-                    } catch (MetaDataEntityNotFoundException e) {
-                        retryOnce = false; // don't retry if select clause has meta data entities that aren't found, as we already updated the cache
-                        throw e;
-                    }
-                    nValuesToSet = queryPlanToBe.getProjector().getColumnCount();
-                    // Cannot auto commit if doing aggregation or topN or salted
-                    // Salted causes problems because the row may end up living on a different region
-                } else {
-                    nValuesToSet = valueNodes.size() + addViewColumnsToBe.size() + (isTenantSpecific ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
-                }
-                // Resize down to allow a subset of columns to be specifiable
-                if (columnNodes.isEmpty() && columnIndexesToBe.length >= nValuesToSet) {
-                    nColumnsToSet = nValuesToSet;
-                    columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, nValuesToSet);
-                    pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, nValuesToSet);
-                }
-                
-                if (nValuesToSet != nColumnsToSet) {
-                    // We might have added columns, so refresh cache and try again if stale.
-                    // Note that this check is not really sufficient, as a column could have
-                    // been removed and the added back and we wouldn't detect that here.
-                    if (retryOnce) {
-                        retryOnce = false;
-                        if (new MetaDataClient(connection).updateCache(schemaName, tableName).wasUpdated()) {
-                            continue;
-                        }
-                    }
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.UPSERT_COLUMN_NUMBERS_MISMATCH)
-                        .setMessage("Numbers of columns: " + nColumnsToSet + ". Number of values: " + nValuesToSet)
-                        .build().buildException();
-                }
-            } catch (MetaDataEntityNotFoundException e) {
-                // Catch column/column family not found exception, as our meta data may
-                // be out of sync. Update the cache once and retry if we were out of sync.
-                // Otherwise throw, as we'll just get the same error next time.
-                if (retryOnce) {
-                    retryOnce = false;
-                    if (new MetaDataClient(connection).updateCache(schemaName, tableName).wasUpdated()) {
+            }
+        }
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        // Allow full row upsert if no columns or only dynamic ones are specified and values count match
+        if (columnNodes.isEmpty() || columnNodes.size() == upsert.getTable().getDynamicColumns().size()) {
+            nColumnsToSet = allColumnsToBe.size() - posOffset;
+            columnIndexesToBe = new int[nColumnsToSet];
+            pkSlotIndexesToBe = new int[columnIndexesToBe.length];
+            targetColumns = Lists.newArrayListWithExpectedSize(columnIndexesToBe.length);
+            targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
+            int minPKPos = 0;
+            if (isSharedViewIndex) {
+                PColumn indexIdColumn = table.getPKColumns().get(minPKPos);
+                columnIndexesToBe[minPKPos] = indexIdColumn.getPosition();
+                targetColumns.set(minPKPos, indexIdColumn);
+                minPKPos++;
+            }
+            if (isTenantSpecific) {
+                PColumn tenantColumn = table.getPKColumns().get(minPKPos);
+                columnIndexesToBe[minPKPos] = tenantColumn.getPosition();
+                targetColumns.set(minPKPos, tenantColumn);
+                minPKPos++;
+            }
+            for (int i = posOffset, j = 0; i < allColumnsToBe.size(); i++) {
+                PColumn column = allColumnsToBe.get(i);
+                if (SchemaUtil.isPKColumn(column)) {
+                    pkSlotIndexesToBe[i-posOffset] = j + posOffset;
+                    if (j++ < minPKPos) { // Skip, as it's already been set above
                         continue;
                     }
+                    minPKPos = 0;
                 }
+                columnIndexesToBe[i-posOffset+minPKPos] = i;
+                targetColumns.set(i-posOffset+minPKPos, column);
+            }
+            if (!addViewColumnsToBe.isEmpty()) {
+                // All view columns overlap in this case
+                overlapViewColumnsToBe = addViewColumnsToBe;
+                addViewColumnsToBe = Collections.emptySet();
+            }
+        } else {
+            // Size for worse case
+            int numColsInUpsert = columnNodes.size();
+            nColumnsToSet = numColsInUpsert + addViewColumnsToBe.size() + (isTenantSpecific ? 1 : 0) +  + (isSharedViewIndex ? 1 : 0);
+            columnIndexesToBe = new int[nColumnsToSet];
+            pkSlotIndexesToBe = new int[columnIndexesToBe.length];
+            targetColumns = Lists.newArrayListWithExpectedSize(columnIndexesToBe.length);
+            targetColumns.addAll(Collections.<PColumn>nCopies(columnIndexesToBe.length, null));
+            Arrays.fill(columnIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
+            Arrays.fill(pkSlotIndexesToBe, -1); // TODO: necessary? So we'll get an AIOB exception if it's not replaced
+            BitSet pkColumnsSet = new BitSet(table.getPKColumns().size());
+            int i = 0;
+            if (isSharedViewIndex) {
+                PColumn indexIdColumn = table.getPKColumns().get(i + posOffset);
+                columnIndexesToBe[i] = indexIdColumn.getPosition();
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                targetColumns.set(i, indexIdColumn);
+                i++;
+            }
+            // Add tenant column directly, as we don't want to resolve it as this will fail
+            if (isTenantSpecific) {
+                PColumn tenantColumn = table.getPKColumns().get(i + posOffset);
+                columnIndexesToBe[i] = tenantColumn.getPosition();
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = i + posOffset);
+                targetColumns.set(i, tenantColumn);
+                i++;
+            }
+            for (ColumnName colName : columnNodes) {
+                ColumnRef ref = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName());
+                PColumn column = ref.getColumn();
+                if (IndexUtil.getViewConstantValue(column, ptr)) {
+                    if (overlapViewColumnsToBe.isEmpty()) {
+                        overlapViewColumnsToBe = Sets.newHashSetWithExpectedSize(addViewColumnsToBe.size());
+                    }
+                    nColumnsToSet--;
+                    overlapViewColumnsToBe.add(column);
+                    addViewColumnsToBe.remove(column);
+                }
+                columnIndexesToBe[i] = ref.getColumnPosition();
+                targetColumns.set(i, column);
+                if (SchemaUtil.isPKColumn(column)) {
+                    pkColumnsSet.set(pkSlotIndexesToBe[i] = ref.getPKSlotPosition());
+                }
+                i++;
+            }
+            for (PColumn column : addViewColumnsToBe) {
+                columnIndexesToBe[i] = column.getPosition();
+                targetColumns.set(i, column);
+                if (SchemaUtil.isPKColumn(column)) {
+                    pkColumnsSet.set(pkSlotIndexesToBe[i] = SchemaUtil.getPKPosition(table, column));
+                }
+                i++;
+            }
+            // If a table has rowtimestamp col, then we always set it.
+            useServerTimestampToBe = table.getRowTimestampColPos() != -1 && !isRowTimestampSet(pkSlotIndexesToBe, table);
+            if (useServerTimestampToBe) {
+                PColumn rowTimestampCol = table.getPKColumns().get(table.getRowTimestampColPos());
+                // Need to resize columnIndexesToBe and pkSlotIndexesToBe to include this extra column.
+                columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, columnIndexesToBe.length + 1);
+                pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, pkSlotIndexesToBe.length + 1);
+                columnIndexesToBe[i] = rowTimestampCol.getPosition();
+                pkColumnsSet.set(pkSlotIndexesToBe[i] = table.getRowTimestampColPos());
+                targetColumns.add(rowTimestampCol);
+                if (valueNodes != null && !valueNodes.isEmpty()) {
+                    valueNodes.add(getNodeForRowTimestampColumn(rowTimestampCol));
+                }
+                nColumnsToSet++;
+            }
+            for (i = posOffset; i < table.getPKColumns().size(); i++) {
+                PColumn pkCol = table.getPKColumns().get(i);
+                if (!pkColumnsSet.get(i)) {
+                    if (!pkCol.isNullable() && pkCol.getExpressionStr() == null) {
+                        throw new ConstraintViolationException(table.getName().getString() + "." + pkCol.getName().getString() + " may not be null");
+                    }
+                }
+            }
+        }
+        boolean isAutoCommit = connection.getAutoCommit();
+        if (valueNodes == null) {
+            SelectStatement select = upsert.getSelect();
+            assert(select != null);
+            select = SubselectRewriter.flatten(select, connection);
+            ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection, false, upsert.getTable().getName());
+            select = StatementNormalizer.normalize(select, selectResolver);
+            select = prependTenantAndViewConstants(table, select, tenantIdStr, addViewColumnsToBe, useServerTimestampToBe);
+            SelectStatement transformedSelect = SubqueryRewriter.transform(select, selectResolver, connection);
+            if (transformedSelect != select) {
+                selectResolver = FromCompiler.getResolverForQuery(transformedSelect, connection, false, upsert.getTable().getName());
+                select = StatementNormalizer.normalize(transformedSelect, selectResolver);
+            }
+            sameTable = !select.isJoin()
+                && tableRefToBe.equals(selectResolver.getTables().get(0));
+            tableRefToBe = adjustTimestampToMinOfSameTable(tableRefToBe, selectResolver.getTables());
+            /* We can run the upsert in a coprocessor if:
+             * 1) from has only 1 table or server UPSERT SELECT is enabled
+             * 2) the select query isn't doing aggregation (which requires a client-side final merge)
+             * 3) autoCommit is on
+             * 4) the table is not immutable with indexes, as the client is the one that figures out the additional
+             *    puts for index tables.
+             * 5) no limit clause, as the limit clause requires client-side post processing
+             * 6) no sequences, as sequences imply that the order of upsert must match the order of
+             *    selection. TODO: change this and only force client side if there's a ORDER BY on the sequence value
+             * Otherwise, run the query to pull the data from the server
+             * and populate the MutationState (upto a limit).
+            */
+            if (! (select.isAggregate() || select.isDistinct() || select.getLimit() != null || select.hasSequence()) ) {
+                // We can pipeline the upsert select instead of spooling everything to disk first,
+                // if we don't have any post processing that's required.
+                parallelIteratorFactoryToBe = new UpsertingParallelIteratorFactory(connection, tableRefToBe, useServerTimestampToBe);
+                // If we're in the else, then it's not an aggregate, distinct, limited, or sequence using query,
+                // so we might be able to run it entirely on the server side.
+                // region space managed by region servers. So we bail out on executing on server side.
+                runOnServer = (sameTable || serverUpsertSelectEnabled) && isAutoCommit && !table.isTransactional()
+                        && !(table.isImmutableRows() && !table.getIndexes().isEmpty())
+                        && !select.isJoin() && table.getRowTimestampColPos() == -1;
+            }
+            // If we may be able to run on the server, add a hint that favors using the data table
+            // if all else is equal.
+            // TODO: it'd be nice if we could figure out in advance if the PK is potentially changing,
+            // as this would disallow running on the server. We currently use the row projector we
+            // get back to figure this out.
+            HintNode hint = upsert.getHint();
+            if (!upsert.getHint().hasHint(Hint.USE_INDEX_OVER_DATA_TABLE)) {
+                hint = HintNode.create(hint, Hint.USE_DATA_OVER_INDEX_TABLE);
+            }
+            select = SelectStatement.create(select, hint);
+            // Pass scan through if same table in upsert and select so that projection is computed correctly
+            // Use optimizer to choose the best plan
+            try {
+                QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns, parallelIteratorFactoryToBe, new SequenceManager(statement), false);
+                queryPlanToBe = compiler.compile();
+                // This is post-fix: if the tableRef is a projected table, this means there are post-processing
+                // steps and parallelIteratorFactory did not take effect.
+                if (queryPlanToBe.getTableRef().getTable().getType() == PTableType.PROJECTED || queryPlanToBe.getTableRef().getTable().getType() == PTableType.SUBQUERY) {
+                    parallelIteratorFactoryToBe = null;
+                }
+            } catch (MetaDataEntityNotFoundException e) {
+                retryOnce = false; // don't retry if select clause has meta data entities that aren't found, as we already updated the cache
                 throw e;
             }
-            break;
+            nValuesToSet = queryPlanToBe.getProjector().getColumnCount();
+            // Cannot auto commit if doing aggregation or topN or salted
+            // Salted causes problems because the row may end up living on a different region
+        } else {
+            nValuesToSet = valueNodes.size() + addViewColumnsToBe.size() + (isTenantSpecific ? 1 : 0) + (isSharedViewIndex ? 1 : 0);
+        }
+        // Resize down to allow a subset of columns to be specifiable
+        if (columnNodes.isEmpty() && columnIndexesToBe.length >= nValuesToSet) {
+            nColumnsToSet = nValuesToSet;
+            columnIndexesToBe = Arrays.copyOf(columnIndexesToBe, nValuesToSet);
+            pkSlotIndexesToBe = Arrays.copyOf(pkSlotIndexesToBe, nValuesToSet);
         }
         
+        if (nValuesToSet != nColumnsToSet) {
+            // We might have added columns, so refresh cache and try again if stale.
+            // We have logic to catch MetaNotFoundException and refresh cache  in PhoenixStatement
+            // Note that this check is not really sufficient, as a column could have
+            // been removed and the added back and we wouldn't detect that here.
+            throw new UpsertColumnsValuesMismatchException(schemaName, tableName,
+              "Numbers of columns: " + nColumnsToSet + ". Number of values: " + nValuesToSet);
+        }
         final QueryPlan originalQueryPlan = queryPlanToBe;
         RowProjector projectorToBe = null;
         // Optimize only after all checks have been performed
