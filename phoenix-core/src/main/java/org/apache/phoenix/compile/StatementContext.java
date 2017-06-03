@@ -279,7 +279,7 @@ public class StatementContext {
         return sequences;
     }
 
-    public void addWhereCoditionColumn(byte[] cf, byte[] q) {
+    public void addWhereConditionColumn(byte[] cf, byte[] q) {
         whereConditionColumns.add(new Pair<byte[], byte[]>(cf, q));
     }
 
