@@ -17,13 +17,12 @@
  */
 package org.apache.phoenix.util;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Collection;
+import java.util.NavigableSet;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -34,14 +33,12 @@ import org.apache.phoenix.expression.DelegateExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.tuple.Tuple;
-
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Maps;
 
 public class EncodedColumnsUtil {
 
@@ -128,7 +125,7 @@ public class EncodedColumnsUtil {
         return new Pair<>(minQ, maxQ);
     }
 
-    public static boolean setQualifierRanges(PTable table) {
+    public static boolean useEncodedQualifierListOptimization(PTable table) {
         return table.getImmutableStorageScheme() != null
                 && table.getImmutableStorageScheme() == ImmutableStorageScheme.ONE_CELL_PER_COLUMN
                 && usesEncodedColumnNames(table) && !table.isTransactional()
@@ -139,24 +136,22 @@ public class EncodedColumnsUtil {
         return minMaxQualifiers != null;
     }
 
-    public static Map<String, Pair<Integer, Integer>> getFamilyQualifierRanges(PTable table) {
-        checkNotNull(table);
+    public static Pair<Integer, Integer> setQualifiersForColumnsInFamily(PTable table, String cf, NavigableSet<byte[]> qualifierSet)
+            throws ColumnFamilyNotFoundException {
         QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
-        Preconditions.checkArgument(encodingScheme != NON_ENCODED_QUALIFIERS);
-        if (table.getEncodedCQCounter() != null) {
-            Map<String, Integer> values = table.getEncodedCQCounter().values();
-            Map<String, Pair<Integer, Integer>> toReturn = Maps.newHashMapWithExpectedSize(values.size());
-            for (Entry<String, Integer> e : values.entrySet()) {
-                Integer lowerBound = QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
-                Integer upperBound = e.getValue() - 1;
-                if (lowerBound > upperBound) {
-                    lowerBound = upperBound;
-                }
-                toReturn.put(e.getKey(), new Pair<>(lowerBound, upperBound));
+        checkArgument(encodingScheme != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS);
+        Collection<PColumn> columns = table.getColumnFamily(cf).getColumns();
+        if (columns.size() > 0) {
+            int[] qualifiers = new int[columns.size()];
+            int i = 0;
+            for (PColumn col : columns) {
+                qualifierSet.add(col.getColumnQualifierBytes());
+                qualifiers[i++] = encodingScheme.decode(col.getColumnQualifierBytes());
             }
-            return toReturn;
+            Arrays.sort(qualifiers);
+            return new Pair<>(qualifiers[0], qualifiers[qualifiers.length - 1]);
         }
-        return Collections.emptyMap();
+        return null;
     }
     
     public static byte[] getColumnQualifierBytes(String columnName, Integer numberBasedQualifier, PTable table, boolean isPk) {

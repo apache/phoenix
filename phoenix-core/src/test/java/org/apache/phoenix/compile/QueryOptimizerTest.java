@@ -24,6 +24,7 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Array;
@@ -781,7 +782,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute("CREATE TABLE " + tableName + " (k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 VARCHAR) COLUMN_ENCODED_BYTES=4");
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         ResultSet rs = stmt.executeQuery("SELECT K from " + tableName);
-        assertQualifierRanges(rs, ENCODED_CQ_COUNTER_INITIAL_VALUE, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
+        assertQualifierRangesNotPresent(rs);
         rs = stmt.executeQuery("SELECT V2 from " + tableName);
         assertQualifierRanges(rs, ENCODED_EMPTY_COLUMN_NAME, ENCODED_CQ_COUNTER_INITIAL_VALUE + 1);
         rs = stmt.executeQuery("SELECT V1 from " + tableName);
@@ -796,9 +797,9 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(maxQualifier, Bytes.toInt(scan.getAttribute(MAX_QUALIFIER)));
     }
     
-//    private static void assertQualifierRangesNotPresent(ResultSet rs) throws SQLException {
-//        Scan scan = rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getContext().getScan();
-//        assertNull(scan.getAttribute(MIN_QUALIFIER));
-//        assertNull(scan.getAttribute(MAX_QUALIFIER));
-//    }
+    private static void assertQualifierRangesNotPresent(ResultSet rs) throws SQLException {
+        Scan scan = rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getContext().getScan();
+        assertNull(scan.getAttribute(MIN_QUALIFIER));
+        assertNull(scan.getAttribute(MAX_QUALIFIER));
+    }
 }
