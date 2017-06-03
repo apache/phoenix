@@ -17,13 +17,10 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.util.EncodedColumnsUtil.usesEncodedColumnNames;
-
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 
