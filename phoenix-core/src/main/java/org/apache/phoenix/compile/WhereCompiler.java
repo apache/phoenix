@@ -182,7 +182,7 @@ public class WhereCompiler {
                 byte[] cq = tableRef.getTable().getImmutableStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS 
                 		? QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES : ref.getColumn().getColumnQualifierBytes();
                 // track the where condition columns. Later we need to ensure the Scan in HRS scans these column CFs
-                context.addWhereCoditionColumn(ref.getColumn().getFamilyName().getBytes(), cq);
+                context.addWhereConditionColumn(ref.getColumn().getFamilyName().getBytes(), cq);
             }
 			return newColumnExpression;
         }
