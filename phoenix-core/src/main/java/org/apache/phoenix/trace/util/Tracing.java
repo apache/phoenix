@@ -267,13 +267,12 @@ public class Tracing {
      */
     public synchronized static void addTraceMetricsSource() {
         try {
-            if (!initialized) {
+            QueryServicesOptions options = QueryServicesOptions.withDefaults();
+            if (!initialized && options.isTracingEnabled()) {
                 traceSpanReceiver = new TraceSpanReceiver();
                 Trace.addReceiver(traceSpanReceiver);
-                if(QueryServicesOptions.withDefaults().isTracingEnabled()) {
-                    QueryServicesOptions options = QueryServicesOptions.withDefaults();
-                    new TraceWriter(options.getTableName(), options.getTracingThreadPoolSize(), options.getTracingBatchSize());
-                }
+                TraceWriter traceWriter = new TraceWriter(options.getTableName(), options.getTracingThreadPoolSize(), options.getTracingBatchSize());
+                traceWriter.start();
             }
         } catch (RuntimeException e) {
             LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
