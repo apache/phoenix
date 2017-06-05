@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.htrace.Span;
+import org.apache.htrace.Tracer;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.trace.TraceReader.SpanInfo;
 import org.apache.phoenix.trace.TraceReader.TraceHolder;
@@ -37,7 +38,6 @@ import org.junit.Test;
  */
 public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
 
-    private TestTraceWriter testTraceWriter;
     /**
      * IT should create the target table if it hasn't been created yet, but not fail if the table
      * has already been created
@@ -46,7 +46,6 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
     @Test
     public void testCreatesTable() throws Exception {
 
-        testTraceWriter = new TestTraceWriter(generateUniqueName(), defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
         Connection conn = getConnectionWithoutTracing();
 
         // check for existence of the tracing table
@@ -58,7 +57,6 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         } catch (Exception e) {
             // expected
         }
-
     }
 
     /**
@@ -70,10 +68,8 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
     public void writeMetrics() throws Exception {
 
         Connection conn = getConnectionWithoutTracing();
-        String tableName = generateUniqueName();
-        TraceSpanReceiver traceSpanReceiver = new TraceSpanReceiver();
         latch = new CountDownLatch(1);
-        testTraceWriter = new TestTraceWriter(tableName, defaultTracingThreadPoolForTest, defaultTracingBatchSizeForTest);
+        testTraceWriter.start();
 
         // create a simple metrics record
         long traceid = 987654;
@@ -88,12 +84,12 @@ public class PhoenixTableMetricsWriterIT extends BaseTracingTestIT {
         Span span = createNewSpan(traceid, parentid, spanid, description, startTime, endTime,
             processid, annotation);
 
-        traceSpanReceiver.getSpanQueue().add(span);
+        Tracer.getInstance().deliver(span);
         assertTrue("Span never committed to table", latch.await(30, TimeUnit.SECONDS));
 
         // make sure we only get expected stat entry (matcing the trace id), otherwise we could the
         // stats for the update as well
-        TraceReader reader = new TraceReader(conn, tableName);
+        TraceReader reader = new TraceReader(conn, tracingTableName);
         Collection<TraceHolder> traces = reader.readAll(10);
         assertEquals("Wrong number of traces in the tracing table", 1, traces.size());
 
