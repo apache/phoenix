@@ -21,6 +21,8 @@ import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
+import org.apache.htrace.Tracer;
 import org.apache.htrace.impl.MilliSpan;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -28,7 +30,7 @@ import org.junit.Test;
 /**
  * Test that the @{link TraceSpanReceiver} correctly handles different kinds of traces
  */
-public class TraceMetricsSourceTest {
+public class TraceSpanReceiverTest {
 
   @BeforeClass
   public static void setup() throws Exception{
@@ -52,9 +54,11 @@ public class TraceMetricsSourceTest {
 
     // Create the sink and write the span
     TraceSpanReceiver source = new TraceSpanReceiver();
-    source.receiveSpan(span);
+    Trace.addReceiver(source);
 
-    assertTrue(source.getSpanQueue().size() == 1);
+    Tracer.getInstance().deliver(span);
+
+    assertTrue(source.getNumSpans() == 1);
   }
 
   @Test
@@ -65,9 +69,10 @@ public class TraceMetricsSourceTest {
     TracingUtils.addAnnotation(span, "message", 10);
 
     TraceSpanReceiver source = new TraceSpanReceiver();
-    source.receiveSpan(span);
+    Trace.addReceiver(source);
 
-    assertTrue(source.getSpanQueue().size() == 1);
+    Tracer.getInstance().deliver(span);
+    assertTrue(source.getNumSpans() == 1);
   }
 
   private Span getSpan(){

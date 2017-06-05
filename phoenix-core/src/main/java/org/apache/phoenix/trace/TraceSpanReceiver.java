@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.htrace.Span;
@@ -67,7 +68,7 @@ public class TraceSpanReceiver implements SpanReceiver {
 
     private static final int CAPACITY = QueryServicesOptions.withDefaults().getTracingTraceBufferSize();
 
-    private static BlockingQueue<Span> spanQueue = null;
+    private BlockingQueue<Span> spanQueue = null;
 
     public TraceSpanReceiver() {
         this.spanQueue = new ArrayBlockingQueue<Span>(CAPACITY);
@@ -89,7 +90,15 @@ public class TraceSpanReceiver implements SpanReceiver {
         // noop
     }
 
-    protected BlockingQueue<Span> getSpanQueue() {
-        return spanQueue;
+    boolean isSpanAvailable() {
+        return spanQueue.isEmpty();
+    }
+
+    Span getSpan() {
+        return spanQueue.poll();
+    }
+
+    int getNumSpans() {
+        return spanQueue.size();
     }
 }

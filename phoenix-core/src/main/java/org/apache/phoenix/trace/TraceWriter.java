@@ -34,8 +34,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -64,9 +62,10 @@ import com.google.common.base.Joiner;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
- * Sink for the trace spans pushed into the queue by {@link TraceSpanReceiver}. The class instantiates a thread pool
- * of configurable size, which will pull the data from queue and write to the Phoenix Trace Table in batches. Various
- * configuration options include thread pool size and batch commit size.
+ * Sink for the trace spans pushed into the queue by {@link TraceSpanReceiver}. The class
+ * instantiates a thread pool of configurable size, which will pull the data from queue and write to
+ * the Phoenix Trace Table in batches. Various configuration options include thread pool size and
+ * batch commit size.
  */
 public class TraceWriter {
     private static final Log LOG = LogFactory.getLog(TraceWriter.class);
@@ -89,42 +88,43 @@ public class TraceWriter {
     private static final Joiner COMMAS = Joiner.on(',');
 
     private String tableName;
-    private int BATCH_SIZE;
-    private int NUM_THREADS;
+    private int batchSize;
+    private int numThreads;
+    private TraceSpanReceiver traceSpanReceiver;
 
-    protected BlockingQueue<Span> spanQueue;
-
-    private ScheduledExecutorService executor;
+    protected ScheduledExecutorService executor;
 
     public TraceWriter(String tableName, int numThreads, int batchSize) {
 
-        this.BATCH_SIZE = batchSize;
-        this.NUM_THREADS = numThreads;
+        this.batchSize = batchSize;
+        this.numThreads = numThreads;
         this.tableName = tableName;
+    }
 
-        TraceSpanReceiver traceSpanReceiver = Tracing.getTraceSpanReceiver();
-        spanQueue = traceSpanReceiver != null ? traceSpanReceiver.getSpanQueue() : null;
-        // TraceWriter should be instantiated only once, however when multiple JUnit Test runs continuously, each of them initialize their own class.
-        // To prevent them from interfering with each other, its safe to clear the queue.
-        if(spanQueue != null)
-            spanQueue.clear();
+    public void start() {
+
+        traceSpanReceiver = getTraceSpanReceiver();
+        if (traceSpanReceiver == null) {
+            LOG.warn(
+                "No receiver has been initialized for TraceWriter. Traces will not be written.");
+            LOG.warn("Restart Phoenix to try again.");
+            return;
+        }
+
         ThreadFactoryBuilder builder = new ThreadFactoryBuilder();
         builder.setDaemon(true).setNameFormat("PHOENIX-METRICS-WRITER");
-        executor = Executors.newScheduledThreadPool(NUM_THREADS, builder.build());
-        for (int i = 0; i < NUM_THREADS; i++) {
+        executor = Executors.newScheduledThreadPool(this.numThreads, builder.build());
+
+        for (int i = 0; i < this.numThreads; i++) {
             executor.scheduleAtFixedRate(new FlushMetrics(), 0, 10, TimeUnit.SECONDS);
         }
+
         LOG.info("Writing tracing metrics to phoenix table");
     }
 
     @VisibleForTesting
-    public void stop() {
-        try {
-            executor.awaitTermination(5, TimeUnit.SECONDS);
-            executor.shutdownNow();
-        } catch (InterruptedException e) {
-            LOG.error("Failed to stop the thread. ", e);
-        }
+    protected TraceSpanReceiver getTraceSpanReceiver() {
+        return Tracing.getTraceSpanReceiver();
     }
 
     public class FlushMetrics implements Runnable {
@@ -138,15 +138,16 @@ public class TraceWriter {
 
         @Override
         public void run() {
-
-            if(conn == null) return;
-            while (!spanQueue.isEmpty()) {
-                Span span = spanQueue.poll();
+            if (conn == null) return;
+            while (!traceSpanReceiver.isSpanAvailable()) {
+                Span span = traceSpanReceiver.getSpan();
                 if (null == span) break;
-                LOG.info("Span received: " + span.toJson());
+                if (LOG.isTraceEnabled()) {
+                    LOG.trace("Span received: " + span.toJson());
+                }
                 addToBatch(span);
                 counter++;
-                if (counter >= BATCH_SIZE) {
+                if (counter >= batchSize) {
                     commitBatch(conn);
                     counter = 0;
                 }
@@ -187,19 +188,22 @@ public class TraceWriter {
 
             // add the tags to the span. They were written in order received so we mark them as such
             for (TimelineAnnotation ta : span.getTimelineAnnotations()) {
-                addDynamicEntry(keys, values, variableValues, TAG_FAMILY, Long.toString(ta.getTime()), ta.getMessage(), TAG, tagCount);
+                addDynamicEntry(keys, values, variableValues, TAG_FAMILY,
+                    Long.toString(ta.getTime()), ta.getMessage(), TAG, tagCount);
                 tagCount++;
             }
 
-              // add the annotations. We assume they are serialized as strings and integers, but that can
-              // change in the future
-              Map<byte[], byte[]> annotations = span.getKVAnnotations();
-              for (Map.Entry<byte[], byte[]> annotation : annotations.entrySet()) {
-                  Pair<String, String> val =
-                          TracingUtils.readAnnotation(annotation.getKey(), annotation.getValue());
-                  addDynamicEntry(keys, values, variableValues, ANNOTATION_FAMILY, val.getFirst(), val.getSecond(), ANNOTATION, annotationCount);
-                  annotationCount++;
-              }
+            // add the annotations. We assume they are serialized as strings and integers, but that
+            // can
+            // change in the future
+            Map<byte[], byte[]> annotations = span.getKVAnnotations();
+            for (Map.Entry<byte[], byte[]> annotation : annotations.entrySet()) {
+                Pair<String, String> val =
+                        TracingUtils.readAnnotation(annotation.getKey(), annotation.getValue());
+                addDynamicEntry(keys, values, variableValues, ANNOTATION_FAMILY, val.getFirst(),
+                    val.getSecond(), ANNOTATION, annotationCount);
+                annotationCount++;
+            }
 
             // add the tag count, now that we know it
             keys.add(TAG_COUNT);
@@ -225,15 +229,16 @@ public class TraceWriter {
                     ps.setString(index++, tag);
                 }
 
-                // Not going through the standard route of using statement.execute() as that code path
+                // Not going through the standard route of using statement.execute() as that code
+                // path
                 // is blocked if the metadata hasn't been been upgraded to the new minor release.
-                 MutationPlan plan = ps.unwrap(PhoenixPreparedStatement.class).compileMutation(stmt);
-                 MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
-                 MutationState newState = plan.execute();
-                 state.join(newState);
+                MutationPlan plan = ps.unwrap(PhoenixPreparedStatement.class).compileMutation(stmt);
+                MutationState state = conn.unwrap(PhoenixConnection.class).getMutationState();
+                MutationState newState = plan.execute();
+                state.join(newState);
             } catch (SQLException e) {
-                LOG.error(
-                    "Could not write metric: \n" + span + " to prepared statement:\n" + stmt, e);
+                LOG.error("Could not write metric: \n" + span + " to prepared statement:\n" + stmt,
+                    e);
             }
         }
     }
@@ -243,15 +248,15 @@ public class TraceWriter {
     }
 
     private void addDynamicEntry(List<String> keys, List<Object> values,
-            List<String> variableValues, String family, String desc, String value, MetricInfo metric,
-            int count) {
+            List<String> variableValues, String family, String desc, String value,
+            MetricInfo metric, int count) {
         // <family><.dynColumn><count> <VARCHAR>
-            keys.add(getDynamicColumnName(family, metric.columnName, count) + " VARCHAR");
+        keys.add(getDynamicColumnName(family, metric.columnName, count) + " VARCHAR");
 
-            // build the annotation value
-            String val = desc + " - " + value;
-            values.add(VARIABLE_VALUE);
-            variableValues.add(val);
+        // build the annotation value
+        String val = desc + " - " + value;
+        values.add(VARIABLE_VALUE);
+        variableValues.add(val);
     }
 
     protected Connection getConnection(String tableName) {
@@ -271,7 +276,10 @@ public class TraceWriter {
                 "Created new connection for tracing " + conn.toString() + " Table: " + tableName);
             return conn;
         } catch (Exception e) {
-            LOG.error("New connection failed for tracing Table: " + tableName, e);
+            LOG.error("Tracing will NOT be pursued. New connection failed for tracing Table: "
+                    + tableName,
+                e);
+            LOG.error("Restart Phoenix to retry.");
             return null;
         }
     }
@@ -316,7 +324,9 @@ public class TraceWriter {
         try {
             conn.commit();
         } catch (SQLException e) {
-            LOG.error("Unable to commit traces on conn: " + conn.toString() + " to table: " + tableName, e);
+            LOG.error(
+                "Unable to commit traces on conn: " + conn.toString() + " to table: " + tableName,
+                e);
         }
     }
 

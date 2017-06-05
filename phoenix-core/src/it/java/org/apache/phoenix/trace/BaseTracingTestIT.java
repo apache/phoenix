@@ -23,39 +23,56 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.metrics2.AbstractMetric;
-import org.apache.hadoop.metrics2.MetricsInfo;
-import org.apache.hadoop.metrics2.MetricsRecord;
-import org.apache.hadoop.metrics2.MetricsTag;
-import org.apache.hadoop.metrics2.impl.ExposedMetricCounterLong;
-import org.apache.hadoop.metrics2.impl.ExposedMetricsRecordImpl;
-import org.apache.hadoop.metrics2.lib.ExposedMetricsInfoImpl;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.htrace.Span;
+import org.apache.htrace.Trace;
 import org.apache.htrace.impl.MilliSpan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.metrics.MetricInfo;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.trace.util.Tracing.Frequency;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.After;
+import org.junit.Before;
 
 /**
- * Base test for tracing tests - helps manage getting tracing/non-tracing
- * connections, as well as any supporting utils.
+ * Base test for tracing tests - helps manage getting tracing/non-tracing connections, as well as
+ * any supporting utils.
  */
 
 public class BaseTracingTestIT extends ParallelStatsDisabledIT {
 
+    private static final Log LOG = LogFactory.getLog(BaseTracingTestIT.class);
+
     protected CountDownLatch latch;
     protected int defaultTracingThreadPoolForTest = 1;
     protected int defaultTracingBatchSizeForTest = 1;
+    protected String tracingTableName;
+    protected TraceSpanReceiver traceSpanReceiver = null;
+    protected TestTraceWriter testTraceWriter = null;
+
+    @Before
+    public void setup() {
+        tracingTableName = "TRACING_" + generateUniqueName();
+        traceSpanReceiver = new TraceSpanReceiver();
+        Trace.addReceiver(traceSpanReceiver);
+        testTraceWriter =
+                new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest,
+                        defaultTracingBatchSizeForTest);
+    }
+
+    @After
+    public void cleanUp() {
+        Trace.removeReceiver(traceSpanReceiver);
+        if (testTraceWriter != null) testTraceWriter.stop();
+    }
 
     public static Connection getConnectionWithoutTracing() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -68,7 +85,7 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
     }
 
     public static Connection getTracingConnection() throws Exception {
-        return getTracingConnection(Collections.<String, String>emptyMap(), null);
+        return getTracingConnection(Collections.<String, String> emptyMap(), null);
     }
 
     public static Connection getTracingConnection(Map<String, String> customAnnotations,
@@ -89,72 +106,20 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl(), props);
     }
 
-    public static MetricsRecord createRecord(long traceid, long parentid, long spanid,
-            String desc, long startTime, long endTime, String hostname, String... tags) {
-
-        List<AbstractMetric> metrics = new ArrayList<AbstractMetric>();
-        AbstractMetric span = new ExposedMetricCounterLong(asInfo(MetricInfo
-                .SPAN.traceName),
-                spanid);
-        metrics.add(span);
-
-        AbstractMetric parent = new ExposedMetricCounterLong(asInfo(MetricInfo.PARENT.traceName),
-                parentid);
-        metrics.add(parent);
-
-        AbstractMetric start = new ExposedMetricCounterLong(asInfo(MetricInfo.START.traceName),
-                startTime);
-        metrics.add(start);
-
-        AbstractMetric
-                end =
-                new ExposedMetricCounterLong(asInfo(MetricInfo.END.traceName), endTime);
-        metrics.add(end);
-
-        List<MetricsTag> tagsList = new ArrayList<MetricsTag>();
-        int tagCount = 0;
-        for (String annotation : tags) {
-            MetricsTag tag =
-                    new PhoenixTagImpl(MetricInfo.ANNOTATION.traceName,
-                            Integer.toString(tagCount++), annotation);
-            tagsList.add(tag);
-        }
-        String hostnameValue = "host-name.value";
-        MetricsTag hostnameTag =
-                new PhoenixTagImpl(MetricInfo.HOSTNAME.traceName, "", hostnameValue);
-        tagsList.add(hostnameTag);
-
-        MetricsRecord record =
-                new ExposedMetricsRecordImpl(new ExposedMetricsInfoImpl(TracingUtils
-                        .getTraceMetricName(traceid), desc), System.currentTimeMillis(),
-                        tagsList, metrics);
-        return record;
-    }
-
-    private static MetricsInfo asInfo(String name) {
-        return new ExposedMetricsInfoImpl(name, "");
-    }
-
     protected Span createNewSpan(long traceid, long parentid, long spanid, String description,
             long startTime, long endTime, String processid, String... tags) {
 
-        Span span = new MilliSpan.Builder()
-                .description(description)
-                .traceId(traceid)
-                .parents(new long[] {parentid})
-                .spanId(spanid)
-                .processId(processid)
-                .begin(startTime)
-                .end(endTime)
-                .build();
+        Span span =
+                new MilliSpan.Builder().description(description).traceId(traceid)
+                        .parents(new long[] { parentid }).spanId(spanid).processId(processid)
+                        .begin(startTime).end(endTime).build();
 
         int tagCount = 0;
-        for(String annotation : tags) {
+        for (String annotation : tags) {
             span.addKVAnnotation((Integer.toString(tagCount++)).getBytes(), annotation.getBytes());
         }
         return span;
     }
-
 
     private static class CountDownConnection extends DelegateConnection {
         private CountDownLatch commit;
@@ -181,16 +146,33 @@ public class BaseTracingTestIT extends ParallelStatsDisabledIT {
         @Override
         protected Connection getConnection(String tableName) {
             try {
-                Connection connection = new CountDownConnection(getConnectionWithoutTracing(), latch);
-                if(!traceTableExists(connection, tableName)) {
+                Connection connection =
+                        new CountDownConnection(getConnectionWithoutTracing(), latch);
+                if (!traceTableExists(connection, tableName)) {
                     createTable(connection, tableName);
                 }
                 return connection;
             } catch (SQLException e) {
-                e.printStackTrace();
+                LOG.error("New connection failed for tracing Table: " + tableName, e);
+                return null;
             }
-            return null;
         }
+
+        @Override
+        protected TraceSpanReceiver getTraceSpanReceiver() {
+            return traceSpanReceiver;
+        }
+
+        public void stop() {
+            if (executor == null) return;
+            try {
+                executor.shutdownNow();
+                executor.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                LOG.error("Failed to stop the thread. ", e);
+            }
+        }
+
     }
 
 }
