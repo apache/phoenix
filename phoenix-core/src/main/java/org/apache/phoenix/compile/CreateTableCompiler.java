@@ -165,7 +165,7 @@ public class CreateTableCompiler {
                                     connection.addTable(table, resolvedTime);
                                 }
                             },
-                            connection, tableRef.getTimeStamp()+1);
+                            connection, tableRef.getCurrentTime()+1);
                     viewColumnConstantsToBe = new byte[nColumns][];
                     ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
                     where.accept(visitor);
