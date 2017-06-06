@@ -1054,7 +1054,7 @@ public class MetaDataClient {
         // Since the table won't be added to the current connection.
         TableRef tableRef = new TableRef(null, table, ts, false);
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, tableRef.getTimeStamp());
+        MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, ts);
         return connection.getQueryServices().updateData(plan);
     }
 
