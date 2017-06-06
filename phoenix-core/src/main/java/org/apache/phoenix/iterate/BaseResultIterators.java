@@ -512,6 +512,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             return scans;
     }
 
+    private List<HRegionLocation> getRegionBoundaries(ParallelScanGrouper scanGrouper)
+        throws SQLException{
+        return scanGrouper.getRegionBoundaries(context, physicalTableName);
+    }
+
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
         int nBoundaries = regionLocations.size() - 1;
         List<byte[]> ranges = Lists.newArrayListWithExpectedSize(nBoundaries);
@@ -575,7 +580,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
-            scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
+            if (regionLocation.getServerName() != null) {
+                scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
+            }
         	scans.add(scan);
         }
         if (startNewScan && !scans.isEmpty()) {
@@ -603,8 +610,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @throws SQLException
      */
     private List<List<Scan>> getParallelScans(Scan scan) throws SQLException {
-        List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
-                .getAllTableRegions(physicalTableName);
+        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int regionIndex = 0;
         int stopIndex = regionBoundaries.size();
@@ -656,8 +662,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @throws SQLException
      */
     private List<List<Scan>> getParallelScans(byte[] startKey, byte[] stopKey) throws SQLException {
-        List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
-                .getAllTableRegions(physicalTableName);
+        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         ScanRanges scanRanges = context.getScanRanges();
         PTable table = getTable();
