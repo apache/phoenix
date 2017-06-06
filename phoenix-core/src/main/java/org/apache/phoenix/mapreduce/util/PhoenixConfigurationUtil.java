@@ -111,6 +111,10 @@ public final class PhoenixConfigurationUtil {
 
     public static final boolean DEFAULT_SPLIT_BY_STATS = true;
 
+    public static final String SNAPSHOT_NAME_KEY = "phoenix.mapreduce.snapshot.name";
+
+    public static final String RESTORE_DIR_KEY = "phoenix.tableSnapshot.restore.dir";
+
     public enum SchemaType {
         TABLE,
         QUERY;
@@ -191,6 +195,18 @@ public final class PhoenixConfigurationUtil {
     
     public static void setUpsertColumnNames(final Configuration configuration,final String[] columns) {
         setValues(configuration, columns, MAPREDUCE_UPSERT_COLUMN_COUNT, MAPREDUCE_UPSERT_COLUMN_VALUE_PREFIX);
+    }
+
+    public static void setSnapshotNameKey(final Configuration configuration, final String snapshotName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(snapshotName);
+        configuration.set(SNAPSHOT_NAME_KEY, snapshotName);
+    }
+
+    public static void setRestoreDirKey(final Configuration configuration, final String restoreDir) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(restoreDir);
+        configuration.set(RESTORE_DIR_KEY, restoreDir);
     }
     
     public static List<String> getUpsertColumnNames(final Configuration configuration) {
