@@ -35,6 +35,7 @@ public class TableRef {
     private final String alias;
     private final long lowerBoundTimeStamp;
     private final boolean hasDynamicCols;
+    private final long currentTime;
 
     public TableRef(TableRef tableRef) {
         this(tableRef.alias, tableRef.table, tableRef.upperBoundTimeStamp, tableRef.lowerBoundTimeStamp, tableRef.hasDynamicCols);
@@ -64,7 +65,9 @@ public class TableRef {
         boolean hasDynamicCols) {
         this.alias = alias;
         this.table = table;
-        this.upperBoundTimeStamp = upperBoundTimeStamp;
+        this.currentTime = upperBoundTimeStamp;
+        // if UPDATE_CACHE_FREQUENCY is set, always let the server set timestamps
+        this.upperBoundTimeStamp = table.getUpdateCacheFrequency()!=0 ? QueryConstants.UNSET_TIMESTAMP : upperBoundTimeStamp;
         this.lowerBoundTimeStamp = lowerBoundTimeStamp;
         this.hasDynamicCols = hasDynamicCols;
     }
@@ -140,6 +143,10 @@ public class TableRef {
 
     public boolean hasDynamicCols() {
         return hasDynamicCols;
+    }
+    
+    public long getCurrentTime() {
+        return this.currentTime;
     }
 
 }
