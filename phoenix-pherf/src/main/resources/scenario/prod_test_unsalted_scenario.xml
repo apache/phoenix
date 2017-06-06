@@ -289,7 +289,6 @@
                     <maxValue>2014-10-17 00:00:00.000</maxValue>
                 </datavalue>
                 <datavalue distribution="2">
-                    <minValue>2014-10-17 00:00:00.000</minValue>
                     <maxValue>2014-10-18 00:00:00.000</maxValue>
                 </datavalue>
                 <datavalue distribution="2">
@@ -315,6 +314,16 @@
                     <name>TENANT_ID</name>
                 </column>
             </dataOverride>
+            
+           <preScenarioDdls>
+                <ddl>CREATE INDEX IDX_DIVISION ON PHERF.PHERF_PROD_TEST_UNSALTED (DIVISION)</ddl>
+            </preScenarioDdls>
+
+           <postScenarioDdls>
+                <ddl>CREATE INDEX IDX_OLDVAL_STRING ON PHERF.PHERF_PROD_TEST_UNSALTED (OLDVAL_STRING)</ddl>
+                <ddl>CREATE INDEX IDX_CONNECTION_ID ON PHERF.PHERF_PROD_TEST_UNSALTED (CONNECTION_ID)</ddl>
+            </postScenarioDdls>
+            
             <writeParams executionDurationInMs="10000">
                 <!--
                     Number of writer it insert into the threadpool
