@@ -585,16 +585,16 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             String indexName = "IDX_T_AUTO_MATIC_REPAIR";
             String indexName1 = "IDX_T_AUTO_MATIC_REPAIR_1";
             statement.execute("create table " + tableName + " (id integer not null,fn varchar,"
-                    + "cf1.ln varchar constraint pk primary key(id)) split on (1,2,3,4,5)");
+                    + "cf1.ln varchar constraint pk primary key(id)) split on (400,800,1200,1600)");
             statement.execute("create local index " + indexName + " on " + tableName + "  (fn,cf1.ln)");
             statement.execute("create local index " + indexName1 + " on " + tableName + "  (fn)");
-            for (int i = 0; i < 7; i++) {
+            for (int i = 0; i < 2000; i++) {
                 statement.execute("upsert into " + tableName + "  values(" + i + ",'fn" + i + "','ln" + i + "')");
             }
             conn.commit();
             ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName);
             assertTrue(rs.next());
-            assertEquals(7, rs.getLong(1));
+            assertEquals(2000, rs.getLong(1));
             List<HRegionInfo> tableRegions = admin.getTableRegions(TableName.valueOf(tableName));
             admin.disableTable(tableName);
             copyLocalIndexHFiles(config, tableRegions.get(0), tableRegions.get(1), false);
@@ -602,17 +602,20 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             admin.enableTable(tableName);
 
             int count=getCount(conn, tableName, "L#0");
-            assertTrue(count > 14);
+            assertTrue(count > 4000);
             admin.majorCompact(TableName.valueOf(tableName));
             int tryCount = 5;// need to wait for rebuilding of corrupted local index region
-            while (tryCount-- > 0 && count != 14) {
+            while (tryCount-- > 0 && count != 4000) {
                 Thread.sleep(15000);
                 count = getCount(conn, tableName, "L#0");
             }
-            assertEquals(14, count);
+            assertEquals(4000, count);
             rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName1);
             assertTrue(rs.next());
-            assertEquals(7, rs.getLong(1));
+            assertEquals(2000, rs.getLong(1));
+            rs = statement.executeQuery("SELECT COUNT(*) FROM " + indexName);
+            assertTrue(rs.next());
+            assertEquals(2000, rs.getLong(1));
             statement.execute("DROP INDEX " + indexName1 + " ON " + tableName);
             admin.majorCompact(TableName.valueOf(tableName));
             statement.execute("DROP INDEX " + indexName + " ON " + tableName);

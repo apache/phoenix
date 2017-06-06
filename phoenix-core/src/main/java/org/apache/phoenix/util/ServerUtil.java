@@ -213,4 +213,9 @@ public class ServerUtil {
         return new DoNotRetryIOException(msg, t);
     }
     
+    public static boolean readyToCommit(int rowCount, long mutationSize, int maxBatchSize, long maxBatchSizeBytes) {
+        return maxBatchSize > 0 && rowCount > maxBatchSize
+                || (maxBatchSizeBytes > 0 && mutationSize > maxBatchSizeBytes);
+    }
+    
 }
