@@ -200,6 +200,11 @@ public class ConfigurationParserTest extends ResultBaseTest {
             data.setDataMappingColumns(columnList);
 
             Scenario scenario = new Scenario();
+            scenario.setTenantId("00DXXXXXX");
+        	List<Ddl> preScenarioDdls = new ArrayList<Ddl>();
+        	preScenarioDdls.add(new Ddl("CREATE INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER) ASYNC", "FHAIDX_NEWVAL_NUMBER"));
+        	preScenarioDdls.add(new Ddl("CREATE LOCAL INDEX IF NOT EXISTS ? ON FHA (NEWVAL_NUMBER)", "FHAIDX_NEWVAL_NUMBER"));
+			scenario.setPreScenarioDdls(preScenarioDdls);
             scenario.setPhoenixProperties(new HashMap<String, String>());
             scenario.getPhoenixProperties().put("phoenix.query.threadPoolSize", "200");
             scenario.setDataOverride(new DataOverride());
