@@ -18,18 +18,24 @@
 
 package org.apache.phoenix.pherf.util;
 
+import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.automation.PhoenixMRJobSubmitter;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.*;
 import org.apache.phoenix.pherf.jmx.MonitorManager;
+import org.apache.phoenix.pherf.result.DataLoadThreadTime;
+import org.apache.phoenix.pherf.result.DataLoadTimeSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
@@ -42,6 +48,8 @@ public class PhoenixUtil {
     private static PhoenixUtil instance;
     private static boolean useThinDriver;
     private static String queryServerUrl;
+    private static final String ASYNC_KEYWORD = "ASYNC";
+    private static final int ONE_MIN_IN_MS = 60000;
 
     private PhoenixUtil() {
         this(false);
@@ -281,13 +289,19 @@ public class PhoenixUtil {
      * 
      * @throws Exception
      */
-    public void executeScenarioDdl(Scenario scenario) throws Exception {
-        if (null != scenario.getDdl()) {
+    public void executeScenarioDdl(List<Ddl> ddls, String tenantId, DataLoadTimeSummary dataLoadTimeSummary) throws Exception {
+        if (null != ddls) {
             Connection conn = null;
             try {
-                logger.info("\nExecuting DDL:" + scenario.getDdl() + " on tenantId:"
-                        + scenario.getTenantId());
-                executeStatement(scenario.getDdl(), conn = getConnection(scenario.getTenantId()));
+            	for (Ddl ddl : ddls) {
+	                logger.info("\nExecuting DDL:" + ddl + " on tenantId:" +tenantId);
+	                long startTime = System.currentTimeMillis();
+	                executeStatement(ddl.toString(), conn = getConnection(tenantId));
+	                if (ddl.getStatement().toUpperCase().contains(ASYNC_KEYWORD)) {
+	                	waitForAsyncIndexToFinish(ddl.getTableName());
+	                }
+	                dataLoadTimeSummary.add(ddl.getTableName(), 0, (int)(System.currentTimeMillis() - startTime));
+            	}
             } finally {
                 if (null != conn) {
                     conn.close();
@@ -296,7 +310,56 @@ public class PhoenixUtil {
         }
     }
 
-    public static String getZookeeper() {
+    /**
+     * Waits for ASYNC index to build
+     * @param tableName
+     * @throws InterruptedException
+     */
+    private void waitForAsyncIndexToFinish(String tableName) throws InterruptedException {
+    	//Wait for up to 15 mins for ASYNC index build to start
+    	boolean jobStarted = false;
+    	for (int i=0; i<15; i++) {
+    		if (isYarnJobInProgress(tableName)) {
+    			jobStarted = true;
+    			break;
+    		}
+    		Thread.sleep(ONE_MIN_IN_MS);
+    	}
+    	if (jobStarted == false) {
+    		throw new IllegalStateException("ASYNC index build did not start within 15 mins");
+    	}
+
+    	// Wait till ASYNC index job finishes to get approximate job E2E time
+    	for (;;) {
+    		if (!isYarnJobInProgress(tableName))
+    			break;
+    		Thread.sleep(ONE_MIN_IN_MS);
+    	}
+    }
+    
+    /**
+     * Checks if a YARN job with the specific table name is in progress
+     * @param tableName
+     * @return
+     */
+    boolean isYarnJobInProgress(String tableName) {
+		try {
+			logger.info("Fetching YARN apps...");
+			Set<String> response = new PhoenixMRJobSubmitter().getSubmittedYarnApps();
+			for (String str : response) {
+				logger.info("Runnng YARN app: " + str);
+				if (str.toUpperCase().contains(tableName.toUpperCase())) {
+					return true;
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		
+		return false;
+    }
+
+	public static String getZookeeper() {
         return zookeeper;
     }
 
