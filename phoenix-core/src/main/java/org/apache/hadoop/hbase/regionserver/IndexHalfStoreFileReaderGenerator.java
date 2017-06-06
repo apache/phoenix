@@ -26,6 +26,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.CellUtil;
@@ -68,6 +70,9 @@ import com.google.common.collect.Lists;
 
 public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
     
+    private static final String LOCAL_INDEX_AUTOMATIC_REPAIR = "local.index.automatic.repair";
+    public static final Log LOG = LogFactory.getLog(IndexHalfStoreFileReaderGenerator.class);
+
     @Override
     public Reader preStoreFileReaderOpen(ObserverContext<RegionCoprocessorEnvironment> ctx,
             FileSystem fs, Path p, FSDataInputStreamWrapper in, long size, CacheConfig cacheConf,
@@ -196,7 +201,13 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
         if (!store.hasReferences()) {
             InternalScanner repairScanner = null;
             if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))) {
-                repairScanner = getRepairScanner(c.getEnvironment(), store);
+                LOG.info("we have found inconsistent data for local index for region:"
+                        + c.getEnvironment().getRegion().getRegionInfo());
+                if (c.getEnvironment().getConfiguration().getBoolean(LOCAL_INDEX_AUTOMATIC_REPAIR, true)) {
+                    LOG.info("Starting automatic repair of local Index for region:"
+                            + c.getEnvironment().getRegion().getRegionInfo());
+                    repairScanner = getRepairScanner(c.getEnvironment(), store);
+                }
             }
             if (repairScanner != null) {
                 return repairScanner;
@@ -271,7 +282,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
             }
         }
         try {
-            PhoenixConnection conn = QueryUtil.getConnection(env.getConfiguration())
+            PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())
                     .unwrap(PhoenixConnection.class);
             PTable dataPTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDesc());
             final List<IndexMaintainer> maintainers = Lists
@@ -282,7 +293,7 @@ public class IndexHalfStoreFileReaderGenerator extends BaseRegionObserver {
                 }
             }
             return new DataTableLocalIndexRegionScanner(env.getRegion().getScanner(scan), env.getRegion(),
-                    maintainers, store.getFamily().getName());
+                    maintainers, store.getFamily().getName(),env.getConfiguration());
             
 
         } catch (ClassNotFoundException | SQLException e) {

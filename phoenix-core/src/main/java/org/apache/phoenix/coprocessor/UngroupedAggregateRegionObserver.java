@@ -287,7 +287,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return s;
     }
 
-    class MutationList extends ArrayList<Mutation> {
+   public static class MutationList extends ArrayList<Mutation> {
         private long byteSize = 0l;
         public MutationList() {
             super();
@@ -702,14 +702,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         }
-                        if (readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                     areMutationInSameRegion, targetHTable, useIndexProto);
                             mutations.clear();
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
-                        if (readyToCommit(rowCount, indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(rowCount, indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState,
                                     useIndexProto);
                             indexMutations.clear();
