@@ -287,7 +287,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return s;
     }
 
-    class MutationList extends ArrayList<Mutation> {
+   public static class MutationList extends ArrayList<Mutation> {
         private long byteSize = 0l;
         public MutationList() {
             super();
@@ -702,14 +702,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         }
-                        if (readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                     areMutationInSameRegion, targetHTable, useIndexProto);
                             mutations.clear();
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
-                        if (readyToCommit(rowCount, indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(rowCount, indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState,
                                     useIndexProto);
                             indexMutations.clear();
@@ -792,12 +792,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             commitBatch(region, mutations, indexUUID, blockingMemstoreSize, indexMaintainersPtr, txState, useIndexProto);
         }
     }
-
-    private boolean readyToCommit(int rowCount, long mutationSize, int maxBatchSize, long maxBatchSizeBytes) {
-        return maxBatchSize > 0 && rowCount > maxBatchSize
-                || (maxBatchSizeBytes > 0 && mutationSize > maxBatchSizeBytes);
-    }
-
+    
     @Override
     public InternalScanner preCompact(final ObserverContext<RegionCoprocessorEnvironment> c, final Store store,
             final InternalScanner scanner, final ScanType scanType) throws IOException {
@@ -888,7 +883,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 del.addDeleteMarker(cell);
                             }
                         }
-                        if (readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
                                     HConstants.NO_NONCE);
                             uuidValue = ServerCacheClient.generateId();
