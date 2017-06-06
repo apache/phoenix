@@ -565,10 +565,11 @@ public class FromCompiler {
             PName tenantId = connection.getTenantId();
             PTable theTable = null;
             if (updateCacheImmediately) {
-                if(mutatingTableName!=null && tableNode!=null ){
-                  if(tableNode.getName().equals(mutatingTableName)){
-                    alwaysHitServer = true;
-                  }
+                //Force update cache when mutating and ref table are same except for meta tables
+                if(!QueryConstants.SYSTEM_SCHEMA_NAME.equals(schemaName) &&
+                    mutatingTableName!=null && tableNode!=null &&
+                    tableNode.getName().equals(mutatingTableName) ){
+                  alwaysHitServer = true;
                 }
                 MetaDataMutationResult result = client.updateCache(tenantId, schemaName, tableName, alwaysHitServer);
                 timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
