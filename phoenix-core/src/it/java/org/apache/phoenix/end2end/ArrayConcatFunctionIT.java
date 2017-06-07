@@ -17,20 +17,25 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.schema.TypeMismatchException;
-import org.junit.Test;
-
-import java.sql.*;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import org.apache.phoenix.schema.TypeMismatchException;
+import org.junit.Test;
 
 public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     private String initTables(Connection conn) throws Exception {
         String tableName = generateUniqueName();
-        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[])";
+        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], nullvarchar VARCHAR[], nullbigint BIGINT[])";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + "(region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2) VALUES('SF Bay Area'," +
                 "ARRAY['2345','46345','23234']," +
@@ -62,6 +67,28 @@ public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
         Array array = conn.createArrayOf("VARCHAR", strings);
 
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testNullArrayConcat() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_CAT(nullvarchar,varchars) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+        assertTrue(rs.next());
+
+        String[] strings = new String[]{"2345", "46345", "23234"};
+
+        Array array = conn.createArrayOf("VARCHAR", strings);
+
+        assertEquals(array, rs.getArray(1));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_CAT(varchars,nullvarchar) FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+        assertTrue(rs.next());
         assertEquals(array, rs.getArray(1));
         assertFalse(rs.next());
     }

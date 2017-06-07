@@ -17,11 +17,16 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.Test;
@@ -29,7 +34,9 @@ import org.junit.Test;
 public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     private String initTables(Connection conn) throws Exception {
         String tableName = generateUniqueName();
-        String ddl = "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[])";
+        String ddl = "CREATE TABLE " + tableName
+                + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR[],integers INTEGER[],doubles DOUBLE[],bigints BIGINT[],"
+                + "chars CHAR(15)[],double1 DOUBLE,char1 CHAR(17),nullcheck INTEGER,chars2 CHAR(15)[], nullVarchar VARCHAR[], nullBigInt BIGINT[])";
         conn.createStatement().execute(ddl);
         String dml = "UPSERT INTO " + tableName + "(region_name,varchars,integers,doubles,bigints,chars,double1,char1,nullcheck,chars2) VALUES('SF Bay Area'," +
                 "ARRAY['2345','46345','23234']," +
@@ -68,6 +75,35 @@ public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
 
     }
 
+    @Test
+    public void testEmptyArrayModification() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = initTables(conn);
+
+        ResultSet rs;
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(nullVarChar,'34567'),ARRAY_PREPEND('34567',nullVarChar) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+
+        String[] strings = new String[]{"34567"};
+
+        Array array = conn.createArrayOf("VARCHAR", strings);
+
+        assertEquals(array, rs.getArray(1));
+        assertEquals(array, rs.getArray(2));
+        assertFalse(rs.next());
+
+        rs = conn.createStatement().executeQuery("SELECT ARRAY_APPEND(nullBigint,123),ARRAY_PREPEND(123,nullBigint) FROM " + tableName + " LIMIT 1");
+        assertTrue(rs.next());
+
+        Long[] longs = new Long[]{123L};
+
+        array = conn.createArrayOf("BIGINT", longs);
+
+        assertEquals(array, rs.getArray(1));
+        assertEquals(array, rs.getArray(2));
+        assertFalse(rs.next());
+    }
+    
     @Test
     public void testArrayAppendFunctionVarchar() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());

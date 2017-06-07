@@ -201,7 +201,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                     postFilter.reset();
                     ImmutableBytesPtr tempPtr = new ImmutableBytesPtr();
                     try {
-                        if (!postFilter.evaluate(t, tempPtr)) {
+                        if (!postFilter.evaluate(t, tempPtr) || tempPtr.getLength() == 0) {
                             iter.remove();
                             continue;
                         }
@@ -210,7 +210,7 @@ public class HashJoinRegionScanner implements RegionScanner {
                         continue;
                     }
                     Boolean b = (Boolean)postFilter.getDataType().toObject(tempPtr);
-                    if (!b.booleanValue()) {
+                    if (!Boolean.TRUE.equals(b)) {
                         iter.remove();
                     }
                 }
