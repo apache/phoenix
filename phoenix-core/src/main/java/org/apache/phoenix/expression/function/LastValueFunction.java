@@ -68,7 +68,7 @@ public class LastValueFunction extends FirstLastValueBaseFunction {
     public Aggregator newClientAggregator() {
 
         FirstLastValueBaseClientAggregator aggregator = new FirstLastValueBaseClientAggregator();
-        aggregator.init(0);
+        aggregator.init(0, false);
 
         return aggregator;
     }
