@@ -74,17 +74,19 @@ public class IndexExtendedIT extends BaseTest {
     private final boolean directApi;
     private final String tableDDLOptions;
     private final boolean mutable;
+    private final boolean useSnapshot;
     
     @AfterClass
     public static void doTeardown() throws Exception {
         tearDownMiniCluster();
     }
 
-    public IndexExtendedIT(boolean transactional, boolean mutable, boolean localIndex, boolean directApi) {
+    public IndexExtendedIT(boolean transactional, boolean mutable, boolean localIndex, boolean directApi, boolean useSnapshot) {
         this.localIndex = localIndex;
         this.transactional = transactional;
         this.directApi = directApi;
         this.mutable = mutable;
+        this.useSnapshot = useSnapshot;
         StringBuilder optionBuilder = new StringBuilder();
         if (!mutable) {
             optionBuilder.append(" IMMUTABLE_ROWS=true ");
@@ -110,13 +112,16 @@ public class IndexExtendedIT extends BaseTest {
                 .iterator()));
     }
     
-    @Parameters(name="transactional = {0} , mutable = {1} , localIndex = {2}, directApi = {3}")
+    @Parameters(name="transactional = {0} , mutable = {1} , localIndex = {2}, directApi = {3}, useSnapshot = {4}")
     public static Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {     
-                 { false, false, false, false }, { false, false, false, true }, { false, false, true, false }, { false, false, true, true }, 
-                 { false, true, false, false }, { false, true, false, true }, { false, true, true, false }, { false, true, true, true }, 
-                 { true, false, false, false }, { true, false, false, true }, { true, false, true, false }, { true, false, true, true }, 
-                 { true, true, false, false }, { true, true, false, true }, { true, true, true, false }, { true, true, true, true } 
+        return Arrays.asList(new Boolean[][] {
+                 { false, false, false, false, false }, { false, false, false, true, false }, { false, false, true, false, false }, { false, false, true, true, false },
+                 { false, true, false, false, false }, { false, true, false, true, false }, { false, true, true, false, false }, { false, true, true, true, false },
+                 { true, false, false, false, false }, { true, false, false, true, false }, { true, false, true, false, false }, { true, false, true, true, false },
+                 { true, true, false, false, false }, { true, true, false, true, false }, { true, true, true, false, false }, { true, true, true, true, false },
+                 { false, true, false, false, true }, { false, true, false, true, true }, { false, true, true, false, true }, { false, true, true, true, true },
+                 { true, false, false, false, true }, { true, false, false, true, true }, { true, false, true, false, true }, { true, false, true, true, true },
+                 { true, true, false, false, true }, { true, true, false, true, true }, { true, true, true, false, true }, { true, true, true, true, true }
            });
     }
     
@@ -305,6 +310,10 @@ public class IndexExtendedIT extends BaseTest {
             args.add("-direct");
             // Need to run this job in foreground for the test to be deterministic
             args.add("-runfg");
+        }
+
+        if(useSnapshot) {
+            args.add("-snap");
         }
 
         args.add("-op");
