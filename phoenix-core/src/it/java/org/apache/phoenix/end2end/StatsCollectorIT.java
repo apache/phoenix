@@ -41,7 +41,9 @@ import java.util.Properties;
 import java.util.Random;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -646,4 +648,64 @@ public class StatsCollectorIT extends BaseUniqueNamesOwnClusterIT {
             }
         }
     }
+
+    @Test
+    public void testRowCountWhenNumKVsExceedCompactionScannerThreshold() throws Exception {
+        String tableName = generateUniqueName();
+        StringBuilder sb = new StringBuilder(200);
+        sb.append("CREATE TABLE " + tableName + "(PK1 VARCHAR NOT NULL, ");
+        int numRows = 10;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            int compactionScannerKVThreshold =
+                    conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration()
+                            .getInt(HConstants.COMPACTION_KV_MAX,
+                                HConstants.COMPACTION_KV_MAX_DEFAULT);
+            int numKvColumns = compactionScannerKVThreshold * 2;
+            for (int i = 1; i <= numKvColumns; i++) {
+                sb.append("KV" + i + " VARCHAR");
+                if (i < numKvColumns) {
+                    sb.append(", ");
+                }
+            }
+            sb.append(" CONSTRAINT PK PRIMARY KEY (PK1))");
+            String ddl = sb.toString();
+            conn.createStatement().execute(ddl);
+            sb = new StringBuilder(200);
+            sb.append("UPSERT INTO " + tableName + " VALUES (");
+            for (int i = 1; i <= numKvColumns + 1; i++) {
+                sb.append("?");
+                if (i < numKvColumns + 1) {
+                    sb.append(", ");
+                }
+            }
+            sb.append(")");
+            String dml = sb.toString();
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            String keyValue = "KVVVVVV";
+            for (int j = 1; j <= numRows; j++) {
+                for (int i = 1; i <= numKvColumns + 1; i++) {
+                    if (i == 1) {
+                        stmt.setString(1, "" + j);
+                    } else {
+                        stmt.setString(i, keyValue);
+                    }
+                }
+                stmt.executeUpdate();
+            }
+            conn.commit();
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+            String q = "SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + tableName + "'";
+            ResultSet rs = conn.createStatement().executeQuery(q);
+            rs.next();
+            assertEquals("Number of expected rows in stats table after update stats didn't match!", numRows, rs.getInt(1));
+            conn.createStatement().executeUpdate("DELETE FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + tableName + "'");
+            conn.commit();
+            TestUtil.doMajorCompaction(conn, tableName);
+            q = "SELECT SUM(GUIDE_POSTS_ROW_COUNT) FROM SYSTEM.STATS WHERE PHYSICAL_NAME = '" + tableName + "'";
+            rs = conn.createStatement().executeQuery(q);
+            rs.next();
+            assertEquals("Number of expected rows in stats table after major compaction didn't match", numRows, rs.getInt(1));
+        }
+    }
+
 }
