@@ -26,33 +26,34 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.FirstLastValueBaseClientAggregator;
 import org.apache.phoenix.expression.aggregator.FirstLastValueServerAggregator;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.parse.NthValueAggregateParseNode;
+import org.apache.phoenix.parse.LastValuesAggregateParseNode;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 
 /**
- * Built-in function for NTH_VALUE(<expression>, <expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC)
- * aggregate function
+ * Built-in function for FIRST_VALUES(<expression>, <expression>) WITHIN GROUP (ORDER BY <expression> ASC/DESC) aggregate
+ * function
  *
  */
-@FunctionParseNode.BuiltInFunction(name = NthValueFunction.NAME, nodeClass = NthValueAggregateParseNode.class, args = {
+@FunctionParseNode.BuiltInFunction(name = LastValuesFunction.NAME, nodeClass = LastValuesAggregateParseNode.class, args = {
     @FunctionParseNode.Argument(),
     @FunctionParseNode.Argument(allowedTypes = { PBoolean.class }, isConstant = true),
     @FunctionParseNode.Argument(),
     @FunctionParseNode.Argument(allowedTypes = { PInteger.class }, isConstant = true)})
-public class NthValueFunction extends FirstLastValueBaseFunction {
-
-    public static final String NAME = "NTH_VALUE";
+public class LastValuesFunction extends FirstLastValueBaseFunction {
+    public static final String NAME = "LAST_VALUES";
     private int offset;
 
-    public NthValueFunction() {
+    public LastValuesFunction() {
     }
 
-    public NthValueFunction(List<Expression> childExpressions) {
+    public LastValuesFunction(List<Expression> childExpressions) {
         this(childExpressions, null);
     }
 
-    public NthValueFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {
+    public LastValuesFunction(List<Expression> childExpressions, CountAggregateFunction delegate) {
         super(childExpressions, delegate);
     }
 
@@ -61,7 +62,7 @@ public class NthValueFunction extends FirstLastValueBaseFunction {
         FirstLastValueServerAggregator aggregator = new FirstLastValueServerAggregator();
 
         offset = ((Number) ((LiteralExpression) children.get(3)).getValue()).intValue();
-        boolean order = (Boolean) ((LiteralExpression) children.get(1)).getValue();
+        boolean order = !(Boolean) ((LiteralExpression) children.get(1)).getValue();
 
         aggregator.init(children, order, offset);
 
@@ -70,12 +71,12 @@ public class NthValueFunction extends FirstLastValueBaseFunction {
 
     @Override
     public Aggregator newClientAggregator() {
-        FirstLastValueBaseClientAggregator aggregator = new FirstLastValueBaseClientAggregator();
+        FirstLastValueBaseClientAggregator aggregator = new FirstLastValueBaseClientAggregator(getDataType());
 
         if (children.size() < 3) {
-            aggregator.init(offset, false);
+            aggregator.init(offset, true);
         } else {
-            aggregator.init(((Number) ((LiteralExpression) children.get(3)).getValue()).intValue(), false);
+            aggregator.init(((Number) ((LiteralExpression) children.get(3)).getValue()).intValue(), true);
         }
 
         return aggregator;
@@ -86,4 +87,11 @@ public class NthValueFunction extends FirstLastValueBaseFunction {
         return NAME;
     }
 
+    @Override
+    public PDataType getDataType() {
+        if (children.size() < 3) {
+            return null;
+        }
+        return PDataType.fromTypeId(children.get(2).getDataType().getSqlType() + PArrayDataType.ARRAY_TYPE_BASE);
+    }
 }
