@@ -23,10 +23,10 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.Base62Encoder;
 
 /**
@@ -51,6 +51,9 @@ public class EncodeFunction extends ScalarFunction {
         Expression numExpr = getNumExpr();
         if (!numExpr.evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength() == 0) {
+            return true;
         }
         long num = numExpr.getDataType().getCodec().decodeLong(ptr, numExpr.getSortOrder());
         
