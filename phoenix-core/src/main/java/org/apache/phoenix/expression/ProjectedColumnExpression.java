@@ -32,6 +32,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class ProjectedColumnExpression extends ColumnExpression {
@@ -113,8 +114,10 @@ public class ProjectedColumnExpression extends ColumnExpression {
             int maxOffset = ptr.getOffset() + ptr.getLength() - bitSet.getEstimatedLength();
             schema.iterator(ptr, position, bitSet);
             Boolean hasValue = schema.next(ptr, position, maxOffset, bitSet);
-            if (hasValue == null || !hasValue.booleanValue())
-                return false;
+            if (hasValue == null || !hasValue.booleanValue()) {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                return true;
+            }
         } catch (IOException e) {
             return false;
         }

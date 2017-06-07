@@ -153,9 +153,9 @@ public class PArrayDataTypeEncoder implements ColumnValueEncoder {
             if (!baseType.isFixedWidth()) {
                 int noOfElements = offsetPos.size();
                 int[] offsetPosArray = new int[noOfElements];
-                int index = 0;
+                int index = 0, maxOffset = 0;
                 for (Integer i : offsetPos) {
-                    offsetPosArray[index] = i;
+                    maxOffset = offsetPosArray[index] = i;
                     ++index;
                 }
                 if (serializationVersion == PArrayDataType.SORTABLE_SERIALIZATION_VERSION) {
@@ -163,7 +163,7 @@ public class PArrayDataTypeEncoder implements ColumnValueEncoder {
                     PArrayDataType.writeEndSeperatorForVarLengthArray(oStream, sortOrder, rowKeyOrderOptimizable);
                 }
                 noOfElements = PArrayDataType.serializeOffsetArrayIntoStream(oStream, byteStream, noOfElements,
-                        offsetPosArray[offsetPosArray.length - 1], offsetPosArray, serializationVersion);
+                        maxOffset, offsetPosArray, serializationVersion);
                 PArrayDataType.serializeHeaderInfoIntoStream(oStream, noOfElements, serializationVersion);
             }
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
