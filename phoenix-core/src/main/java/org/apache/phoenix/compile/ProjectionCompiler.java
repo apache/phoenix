@@ -467,6 +467,15 @@ public class ProjectionCompiler {
             }
         }
 
+        boolean isProjectEmptyKeyValue = false;
+        if (isWildcard) {
+            projectAllColumnFamilies(table, scan);
+        } else {
+            isProjectEmptyKeyValue = where == null || LiteralExpression.isTrue(where) || where.requiresFinalEvaluation();
+            for (byte[] family : projectedFamilies) {
+                projectColumnFamily(table, scan, family);
+            }
+        }
         // TODO make estimatedByteSize more accurate by counting the joined columns.
         int estimatedKeySize = table.getRowKeySchema().getEstimatedValueLength();
         int estimatedByteSize = 0;
@@ -489,15 +498,8 @@ public class ProjectionCompiler {
                 //}
             }
         }
-        boolean isProjectEmptyKeyValue = false;
-        if (isWildcard) {
-            projectAllColumnFamilies(table, scan);
-        } else {
-            isProjectEmptyKeyValue = where == null || LiteralExpression.isTrue(where) || where.requiresFinalEvaluation();
-            for (byte[] family : projectedFamilies) {
-                projectColumnFamily(table, scan, family);
-            }
-        }
+        if (estimatedByteSize == 0)
+            estimatedByteSize = estimatedKeySize;
         return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue, resolver.hasUDFs(), isWildcard);
     }
 
