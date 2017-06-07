@@ -17,21 +17,22 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.SizedUtil;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.TreeMap;
+
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.FirstLastNthValueDataContainer;
+import org.apache.phoenix.util.SizedUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
