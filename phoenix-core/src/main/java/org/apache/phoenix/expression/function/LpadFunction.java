@@ -28,6 +28,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
 /**
@@ -90,6 +91,9 @@ public class LpadFunction extends ScalarFunction {
         if (!outputStrLenExpr.evaluate(tuple, ptr)) {
             return false;
         }
+        if (ptr.getLength()==0) {
+            return true;
+        }
         int outputStrLen = outputStrLenExpr.getDataType().getCodec().decodeInt(ptr, outputStrLenExpr.getSortOrder());
         if (outputStrLen < 0) {
             return false;
@@ -123,10 +127,9 @@ public class LpadFunction extends ScalarFunction {
         if (!fillExpr.evaluate(tuple, fillPtr)) {
             return false;
         }
-        int fillExprLen = fillPtr.getLength();
-        if (fillExprLen < 1) {
-            // return if fill is empty
-            return false;
+        if (fillPtr.getLength()==0) {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return true;
         }
 
         // if the padding to be added is not a multiple of the length of the

@@ -26,9 +26,9 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 @BuiltInFunction(name = MD5Function.NAME, args = { @Argument() })
 public class MD5Function extends ScalarFunction {
@@ -57,6 +57,7 @@ public class MD5Function extends ScalarFunction {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (!getChildExpression().evaluate(tuple, ptr)) { return false; }
+        if (ptr.getLength()==0) { return true; }
 
         // Update the digest value
         messageDigest.update(ptr.get(), ptr.getOffset(), ptr.getLength());

@@ -255,4 +255,31 @@ public class StringIT extends ParallelStatsDisabledIT {
         assertEquals(0, rs.getInt(1));
         assertFalse(rs.next());
     }
+    
+    @Test
+    public void testLpadWithNullArgs() throws Exception {
+        ResultSet rs;
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        conn.createStatement().execute("CREATE TABLE " + tableName + " (k CHAR(3) PRIMARY KEY, v1 VARCHAR, v2 INTEGER)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + "(k) VALUES('a')");
+        conn.commit();
+        
+        rs = conn.createStatement().executeQuery("SELECT LPAD(v1, 5, 'ab') FROM " + tableName );
+        assertTrue(rs.next());
+        assertEquals("ababa", rs.getString(1));
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT LPAD('abc', v2, 'a') FROM " + tableName );
+        assertTrue(rs.next());
+        rs.getString(1);
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+        
+        rs = conn.createStatement().executeQuery("SELECT LPAD('abc', 5, v1) FROM " + tableName );
+        assertTrue(rs.next());
+        rs.getString(1);
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+    }
 }
