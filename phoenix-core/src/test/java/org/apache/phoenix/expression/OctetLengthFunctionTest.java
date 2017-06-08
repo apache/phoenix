@@ -18,6 +18,7 @@
 package org.apache.phoenix.expression;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -44,7 +45,11 @@ public class OctetLengthFunctionTest {
         Integer result =
                 (Integer) octetLengthFunction.getDataType().toObject(ptr,
                     octetLengthFunction.getSortOrder());
-        assertEquals(expected, result.intValue());
+        if (expected == 0) {
+            assertNull(result);
+        } else {
+            assertEquals(expected, result.intValue());
+        }
     }
 
     private void testOctetLength(byte[] bytes, PBinaryBase dataType, int expected)

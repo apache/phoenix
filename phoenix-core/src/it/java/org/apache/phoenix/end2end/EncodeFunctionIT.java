@@ -26,6 +26,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Collections;
 import java.util.List;
 
@@ -119,6 +120,25 @@ public class EncodeFunctionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName + " WHERE pk = ENCODE(1, NULL)");
+        assertFalse(rs.next());
+    }
+    
+    @Test
+    public void testNullValue() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE " + tableName + " ( pk VARCHAR(10) NOT NULL, val INTEGER CONSTRAINT PK PRIMARY KEY (pk))";
+        conn.createStatement().execute(ddl);
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + tableName + " (pk,val) VALUES (?,?)");
+        ps.setString(1, "1");
+        ps.setNull(2, Types.INTEGER);
+        ps.execute();
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT ENCODE(val, 'BASE62') FROM " + tableName);
+        assertTrue(rs.next());
+        rs.getInt(1);
+        assertTrue(rs.wasNull());
         assertFalse(rs.next());
     }
 

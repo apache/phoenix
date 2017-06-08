@@ -101,6 +101,9 @@ public abstract class RegexpReplaceFunction extends ScalarFunction {
             if (!e.evaluate(tuple, ptr)) {
                 return false;
             }
+            if (ptr.getLength()==0) {
+                return true;
+            }
             String patternStr = (String) TYPE.toObject(ptr, e.getDataType(), e.getSortOrder());
             if (patternStr == null) {
                 return false;
@@ -116,6 +119,9 @@ public abstract class RegexpReplaceFunction extends ScalarFunction {
             if (!replaceStrExpression.evaluate(tuple, ptr)) {
                 return false;
             }
+            if (ptr.getLength()==0) {
+                return true;
+            }
             TYPE.coerceBytes(ptr, TYPE, replaceStrExpression.getSortOrder(), SortOrder.ASC);
             rStrBytes = ptr.get();
             rStrOffset = ptr.getOffset();
@@ -125,6 +131,9 @@ public abstract class RegexpReplaceFunction extends ScalarFunction {
         Expression sourceStrExpression = getSourceStrExpression();
         if (!sourceStrExpression.evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength()==0) {
+            return true;
         }
         TYPE.coerceBytes(ptr, TYPE, sourceStrExpression.getSortOrder(), SortOrder.ASC);
 

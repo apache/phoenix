@@ -22,12 +22,11 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 @FunctionParseNode.BuiltInFunction(name=LowerFunction.NAME,  args={
         @FunctionParseNode.Argument(allowedTypes={PVarchar.class})} )
@@ -45,6 +44,9 @@ public class LowerFunction extends ScalarFunction {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (!getStrExpression().evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength()==0) {
+            return true;
         }
 
         String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());

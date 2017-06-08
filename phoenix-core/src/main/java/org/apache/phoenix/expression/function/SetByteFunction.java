@@ -56,10 +56,12 @@ public class SetByteFunction extends ScalarFunction {
         // get offset parameter
         Expression offsetExpr = children.get(1);
         if (!offsetExpr.evaluate(tuple, ptr)) return false;
+        if (ptr.getLength()==0) return true;
         int offset = (Integer) PInteger.INSTANCE.toObject(ptr, offsetExpr.getSortOrder());
         // get newValue parameter
         Expression newValueExpr = children.get(2);
         if (!newValueExpr.evaluate(tuple, ptr)) return false;
+        if (ptr.getLength()==0) return true;
         int newValue = (Integer) PInteger.INSTANCE.toObject(ptr, newValueExpr.getSortOrder());
         byte newByteValue = (byte) (newValue & 0xff);
         // get binary data parameter
