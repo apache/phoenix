@@ -269,7 +269,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     
     private static void setQualifierRanges(boolean keyOnlyFilter, PTable table, Scan scan,
             StatementContext context) throws SQLException {
-        if (EncodedColumnsUtil.useEncodedQualifierListOptimization(table)) {
+        if (EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan)) {
             Pair<Integer, Integer> minMaxQualifiers = new Pair<>();
             for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
                 byte[] cq = whereCol.getSecond();
@@ -375,7 +375,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (statement.getHint().hasHint(Hint.SEEK_TO_COLUMN)) {
             // Allow seeking to column during filtering
             preventSeekToColumn = false;
-        } else if (!EncodedColumnsUtil.useEncodedQualifierListOptimization(table)) {
+        } else if (!EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan)) {
             /*
              * preventSeekToColumn cannot be true, even if hinted, when encoded qualifier list
              * optimization is being used. When using the optimization, it is necessary that we
