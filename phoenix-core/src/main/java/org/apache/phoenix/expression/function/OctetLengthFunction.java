@@ -54,6 +54,7 @@ public class OctetLengthFunction extends ScalarFunction {
         // get binary data parameter
         Expression dataExpr = children.get(0);
         if (!dataExpr.evaluate(tuple, ptr)) return false;
+        if (ptr.getLength()==0) return true;
         // set result
         ((PBinaryBase) dataExpr.getDataType()).octetLength(ptr, dataExpr.getSortOrder(), ptr);
         return true;

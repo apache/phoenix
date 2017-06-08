@@ -61,6 +61,7 @@ public class GetBitFunction extends PrefixFunction {
         if (offsetPreCompute == null) {
             Expression offsetExpr = children.get(1);
             if (!offsetExpr.evaluate(tuple, ptr)) return false;
+            if (ptr.getLength() == 0) return true;
             offset = (Integer) PInteger.INSTANCE.toObject(ptr, offsetExpr.getSortOrder());
         } else offset = offsetPreCompute;
         // get binary data parameter
