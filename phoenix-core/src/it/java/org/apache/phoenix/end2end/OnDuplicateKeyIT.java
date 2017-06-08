@@ -58,12 +58,6 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
                 "",
         });
         testCases.add(new String[] {
-                "create index %s_IDX on %s(counter1) include (counter2)",
-        });
-        testCases.add(new String[] {
-                "create index %s_IDX on %s(counter1, counter2)",
-        });
-        testCases.add(new String[] {
                 "create local index %s_IDX on %s(counter1) include (counter2)",
         });
         testCases.add(new String[] {
