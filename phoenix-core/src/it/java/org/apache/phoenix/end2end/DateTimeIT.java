@@ -737,6 +737,17 @@ public class DateTimeIT extends ParallelStatsDisabledIT {
         assertNull(rs.getDate(1, GregorianCalendar.getInstance()));
         assertFalse(rs.next());
     }
+
+    @Test
+    public void testFunctionOnNullDate() throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT YEAR(a_date), entity_id from " + ATABLE_NAME + " WHERE entity_id = '" + ROW10 + "'");
+        assertNotNull(rs);
+        assertTrue(rs.next());
+        assertEquals(ROW10, rs.getString(2));
+        assertNull(rs.getDate(1));
+        assertNull(rs.getDate(1, GregorianCalendar.getInstance()));
+        assertFalse(rs.next());
+    }
     
     @Test
     public void testCurrentDateWithNoTable() throws Exception {
