@@ -344,20 +344,15 @@ public class ProjectionCompiler {
      * @return projector used to access row values during scan
      * @throws SQLException 
      */
-    public static RowProjector compile(StatementContext context, SelectStatement statement,
-            GroupBy groupBy, List<? extends PDatum> targetColumns, Expression where)
-            throws SQLException {
+    public static RowProjector compile(StatementContext context, SelectStatement statement, GroupBy groupBy, List<? extends PDatum> targetColumns, Expression where) throws SQLException {
         List<KeyValueColumnExpression> arrayKVRefs = new ArrayList<KeyValueColumnExpression>();
-        List<ProjectedColumnExpression> arrayProjectedColumnRefs =
-                new ArrayList<ProjectedColumnExpression>();
+        List<ProjectedColumnExpression> arrayProjectedColumnRefs = new ArrayList<ProjectedColumnExpression>();
         List<Expression> arrayKVFuncs = new ArrayList<Expression>();
         List<Expression> arrayOldFuncs = new ArrayList<Expression>();
         Map<Expression, Integer> arrayExpressionCounts = new HashMap<>();
         List<AliasedNode> aliasedNodes = statement.getSelect();
         // Setup projected columns in Scan
-        SelectClauseVisitor selectVisitor =
-                new SelectClauseVisitor(context, groupBy, arrayKVRefs, arrayKVFuncs,
-                        arrayExpressionCounts, arrayProjectedColumnRefs, arrayOldFuncs, statement);
+        SelectClauseVisitor selectVisitor = new SelectClauseVisitor(context, groupBy, arrayKVRefs, arrayKVFuncs, arrayExpressionCounts, arrayProjectedColumnRefs, arrayOldFuncs, statement);
         List<ExpressionProjector> projectedColumns = new ArrayList<ExpressionProjector>();
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
@@ -366,8 +361,7 @@ public class ProjectionCompiler {
         boolean isWildcard = false;
         Scan scan = context.getScan();
         int index = 0;
-        List<Expression> projectedExpressions =
-                Lists.newArrayListWithExpectedSize(aliasedNodes.size());
+        List<Expression> projectedExpressions = Lists.newArrayListWithExpectedSize(aliasedNodes.size());
         List<byte[]> projectedFamilies = Lists.newArrayListWithExpectedSize(aliasedNodes.size());
         for (AliasedNode aliasedNode : aliasedNodes) {
             ParseNode node = aliasedNode.getNode();
@@ -377,18 +371,13 @@ public class ProjectionCompiler {
                     ExpressionCompiler.throwNonAggExpressionInAggException(node.toString());
                 }
                 if (tableRef == TableRef.EMPTY_TABLE_REF) {
-                    throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build()
-                                    .buildException();
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
                 }
                 isWildcard = true;
-                if (tableRef.getTable().getType() == PTableType.INDEX
-                        && ((WildcardParseNode) node).isRewrite()) {
-                    projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions,
-                        projectedColumns, targetColumns);
+                if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
+                	projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 } else {
-                    projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions,
-                        projectedColumns, targetColumns);
+                    projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 }
             } else if (node instanceof TableWildcardParseNode) {
                 TableName tName = ((TableWildcardParseNode) node).getTableName();
@@ -396,19 +385,14 @@ public class ProjectionCompiler {
                 if (tRef.equals(tableRef)) {
                     isWildcard = true;
                 }
-                if (tRef.getTable().getType() == PTableType.INDEX
-                        && ((TableWildcardParseNode) node).isRewrite()) {
-                    projectAllIndexColumns(context, tRef, true, projectedExpressions,
-                        projectedColumns, targetColumns);
+                if (tRef.getTable().getType() == PTableType.INDEX && ((TableWildcardParseNode)node).isRewrite()) {
+                    projectAllIndexColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
                 } else {
-                    projectAllTableColumns(context, tRef, true, projectedExpressions,
-                        projectedColumns, targetColumns);
-                }
-            } else if (node instanceof FamilyWildcardParseNode) {
+                    projectAllTableColumns(context, tRef, true, projectedExpressions, projectedColumns, targetColumns);
+                }                
+            } else if (node instanceof  FamilyWildcardParseNode) {
                 if (tableRef == TableRef.EMPTY_TABLE_REF) {
-                    throw new SQLExceptionInfo.Builder(
-                            SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build()
-                                    .buildException();
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
                 }
                 // Project everything for SELECT cf.*
                 String cfName = ((FamilyWildcardParseNode) node).getName();
@@ -419,42 +403,27 @@ public class ProjectionCompiler {
                 // around this, as this code depends on this function being the last place where
                 // columns are projected (which is currently true, but could change).
                 projectedFamilies.add(Bytes.toBytes(cfName));
-                if (tableRef.getTable().getType() == PTableType.INDEX
-                        && ((FamilyWildcardParseNode) node).isRewrite()) {
-                    projectIndexColumnFamily(context, cfName, tableRef, resolveColumn,
-                        projectedExpressions, projectedColumns);
+                if (tableRef.getTable().getType() == PTableType.INDEX && ((FamilyWildcardParseNode)node).isRewrite()) {
+                    projectIndexColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 } else {
-                    projectTableColumnFamily(context, cfName, tableRef, resolveColumn,
-                        projectedExpressions, projectedColumns);
+                    projectTableColumnFamily(context, cfName, tableRef, resolveColumn, projectedExpressions, projectedColumns);
                 }
             } else {
                 Expression expression = node.accept(selectVisitor);
                 projectedExpressions.add(expression);
                 expression = coerceIfNecessary(index, targetColumns, expression);
                 if (node instanceof BindParseNode) {
-                    context.getBindManager().addParamMetaData((BindParseNode) node, expression);
+                    context.getBindManager().addParamMetaData((BindParseNode)node, expression);
                 }
                 if (!node.isStateless()) {
                     if (!selectVisitor.isAggregate() && statement.isAggregate()) {
-                        ExpressionCompiler
-                                .throwNonAggExpressionInAggException(expression.toString());
+                        ExpressionCompiler.throwNonAggExpressionInAggException(expression.toString());
                     }
                 }
-                String columnAlias =
-                        aliasedNode.getAlias() != null ? aliasedNode.getAlias()
-                                : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
-                boolean isCaseSensitive =
-                        aliasedNode.getAlias() != null ? aliasedNode.isCaseSensitve()
-                                : (columnAlias != null
-                                        ? SchemaUtil
-                                                .isCaseSensitive(aliasedNode.getNode().getAlias())
-                                        : selectVisitor.isCaseSensitive);
+                String columnAlias = aliasedNode.getAlias() != null ? aliasedNode.getAlias() : SchemaUtil.normalizeIdentifier(aliasedNode.getNode().getAlias());
+                boolean isCaseSensitive = aliasedNode.getAlias() != null ? aliasedNode.isCaseSensitve() : (columnAlias != null ? SchemaUtil.isCaseSensitive(aliasedNode.getNode().getAlias()) : selectVisitor.isCaseSensitive);
                 String name = columnAlias == null ? expression.toString() : columnAlias;
-                projectedColumns.add(new ExpressionProjector(name,
-                        tableRef.getTableAlias() == null
-                                ? (table.getName() == null ? "" : table.getName().getString())
-                                : tableRef.getTableAlias(),
-                        expression, isCaseSensitive));
+                projectedColumns.add(new ExpressionProjector(name, tableRef.getTableAlias() == null ? (table.getName() == null ? "" : table.getName().getString()) : tableRef.getTableAlias(), expression, isCaseSensitive));
             }
 
             selectVisitor.reset();
@@ -486,67 +455,50 @@ public class ProjectionCompiler {
             KeyValueSchema arrayIndexesSchema = builder.build();
 
             Map<Expression, Expression> replacementMap = new HashMap<>();
-            for (int i = 0; i < arrayOldFuncs.size(); i++) {
-                Expression function = arrayKVFuncs.get(i);
-                replacementMap.put(arrayOldFuncs.get(i), new ArrayIndexExpression(i,
-                        function.getDataType(), arrayIndexesBitSet, arrayIndexesSchema));
+            for(int i = 0; i < arrayOldFuncs.size(); i++){
+                Expression function =arrayKVFuncs.get(i);
+                replacementMap.put(arrayOldFuncs.get(i), new ArrayIndexExpression(i, function.getDataType(), arrayIndexesBitSet, arrayIndexesSchema));
             }
 
-            ReplaceArrayFunctionExpressionVisitor visitor =
-                    new ReplaceArrayFunctionExpressionVisitor(replacementMap);
+            ReplaceArrayFunctionExpressionVisitor visitor = new ReplaceArrayFunctionExpressionVisitor(replacementMap);
             for (int i = 0; i < projectedColumns.size(); i++) {
                 ExpressionProjector projector = projectedColumns.get(i);
-                projectedColumns.set(i, new ExpressionProjector(projector.getName(),
-                        tableRef.getTableAlias() == null
-                                ? (table.getName() == null ? "" : table.getName().getString())
-                                : tableRef.getTableAlias(),
-                        projector.getExpression().accept(visitor), projector.isCaseSensitive()));
+                projectedColumns.set(i, new ExpressionProjector(projector.getName(), tableRef.getTableAlias() == null ? (table.getName() == null ? "" : table.getName().getString()) : tableRef.getTableAlias(), projector.getExpression().accept(visitor), projector.isCaseSensitive()));
+            }
+        }
+
+        // TODO make estimatedByteSize more accurate by counting the joined columns.
+        int estimatedKeySize = table.getRowKeySchema().getEstimatedValueLength();
+        int estimatedByteSize = 0;
+        for (Map.Entry<byte[],NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
+            PColumnFamily family = table.getColumnFamily(entry.getKey());
+            if (entry.getValue() == null) {
+                for (PColumn column : family.getColumns()) {
+                    Integer maxLength = column.getMaxLength();
+                    int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+                    estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
+                }
+            } else {
+                for (byte[] cq : entry.getValue()) {
+                    //if (!Bytes.equals(cq, ByteUtil.EMPTY_BYTE_ARRAY) || cq.length > 0) {
+                        PColumn column = family.getPColumnForColumnQualifier(cq);
+                        Integer maxLength = column.getMaxLength();
+                        int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+                        estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
+                    }
+                //}
             }
         }
         boolean isProjectEmptyKeyValue = false;
         if (isWildcard) {
             projectAllColumnFamilies(table, scan);
         } else {
-            isProjectEmptyKeyValue =
-                    where == null || LiteralExpression.isTrue(where)
-                            || where.requiresFinalEvaluation();
+            isProjectEmptyKeyValue = where == null || LiteralExpression.isTrue(where) || where.requiresFinalEvaluation();
             for (byte[] family : projectedFamilies) {
                 projectColumnFamily(table, scan, family);
             }
         }
-        // TODO make estimatedByteSize more accurate by counting the joined columns.
-        int estimatedKeySize = table.getRowKeySchema().getEstimatedValueLength();
-        int estimatedByteSize = 0;
-        for (Map.Entry<byte[], NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
-            PColumnFamily family = table.getColumnFamily(entry.getKey());
-            if (entry.getValue() == null) {
-                for (PColumn column : family.getColumns()) {
-                    Integer maxLength = column.getMaxLength();
-                    int byteSize =
-                            column.getDataType().isFixedWidth()
-                                    ? maxLength == null ? column.getDataType().getByteSize()
-                                            : maxLength
-                                    : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-                    estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
-                }
-            } else {
-                for (byte[] cq : entry.getValue()) {
-                    PColumn column = family.getPColumnForColumnQualifier(cq);
-                    Integer maxLength = column.getMaxLength();
-                    int byteSize =
-                            column.getDataType().isFixedWidth()
-                                    ? maxLength == null ? column.getDataType().getByteSize()
-                                            : maxLength
-                                    : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-                    estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
-                }
-            }
-        }
-        if (estimatedByteSize == 0) {
-            estimatedByteSize = estimatedKeySize;
-        }
-        return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue,
-                resolver.hasUDFs(), isWildcard);
+        return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue, resolver.hasUDFs(), isWildcard);
     }
 
     private static void projectAllColumnFamilies(PTable table, Scan scan) {
