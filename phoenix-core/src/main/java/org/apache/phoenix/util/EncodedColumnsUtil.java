@@ -125,8 +125,12 @@ public class EncodedColumnsUtil {
         return new Pair<>(minQ, maxQ);
     }
 
-    public static boolean useEncodedQualifierListOptimization(PTable table) {
-        return table.getImmutableStorageScheme() != null
+    public static boolean useEncodedQualifierListOptimization(PTable table, Scan scan) {
+        /*
+         * HBase doesn't allow raw scans to have columns set. And we need columns to be set
+         * explicitly on the scan to use this optimization.
+         */
+        return !scan.isRaw() && table.getImmutableStorageScheme() != null
                 && table.getImmutableStorageScheme() == ImmutableStorageScheme.ONE_CELL_PER_COLUMN
                 && usesEncodedColumnNames(table) && !table.isTransactional()
                 && !ScanUtil.hasDynamicColumns(table);
