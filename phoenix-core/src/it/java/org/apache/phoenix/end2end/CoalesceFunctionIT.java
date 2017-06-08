@@ -322,5 +322,20 @@ public class CoalesceFunctionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
     }
 
+    @Test
+    public void testNull() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute("CREATE TABLE " + tableName + "(k1 decimal, k2 decimal, constraint pk primary key (k1))");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (1,1)");
+        conn.commit();
+        
+        ResultSet rs = conn.createStatement().executeQuery("SELECT coalesce(null, null) FROM " + tableName);
+        assertTrue(rs.next());
+        rs.getInt(1);
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+    }
 
 }
