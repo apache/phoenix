@@ -44,7 +44,7 @@ import org.junit.runners.Parameterized.Parameters;
 public class CastAndCoerceIT extends BaseQueryIT {
 
     public CastAndCoerceIT(String indexDDL, boolean mutable, boolean columnEncoded) {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, mutable, columnEncoded);
     }
     
     @Parameters(name="CastAndCoerceIT_{index}") // name is used by failsafe as file name in reports
