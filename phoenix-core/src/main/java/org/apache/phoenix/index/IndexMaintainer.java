@@ -781,32 +781,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * return the view index id from the index row key
      */
     public byte[] getViewIndexIdFromIndexRowKey(ImmutableBytesWritable indexRowKeyPtr) {
-        assert(isLocalIndex);
-        RowKeySchema indexRowKeySchema = getIndexRowKeySchema();
-        // TODO add logic to skip region start key as well because we cannot find the region startkey in indexhalfstorefilereader.
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        TrustedByteArrayOutputStream stream =
-                new TrustedByteArrayOutputStream(estimatedIndexRowKeyBytes);
-        DataOutput output = new DataOutputStream(stream);
-        try {
-            int indexPosOffset = (!isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0) + (isMultiTenant ? 1 : 0) + (viewIndexId == null ? 0 : 1);
-            Boolean hasValue =
-                    indexRowKeySchema.iterator(indexRowKeyPtr, ptr, indexPosOffset);
-            if (Boolean.TRUE.equals(hasValue)) {
-                    output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
-            }
-            int length = stream.size();
-            byte[] dataRowKey = stream.getBuffer();
-            return dataRowKey.length == length ? dataRowKey : Arrays.copyOf(dataRowKey, length);
-        } catch (IOException e) {
-            throw new RuntimeException(e); // Impossible
-        } finally {
-            try {
-                stream.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e); // Impossible
-            }
-        }
+        assert (isLocalIndex);
+        ImmutableBytesPtr ptr =
+                new ImmutableBytesPtr(indexRowKeyPtr.get(),( indexRowKeyPtr.getOffset()
+                        + (nIndexSaltBuckets > 0 ? 1 : 0)), viewIndexId.length);
+        return ptr.copyBytesIfNecessary();
     }
 
     private volatile RowKeySchema indexRowKeySchema;
