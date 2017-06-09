@@ -44,7 +44,6 @@ import static org.apache.phoenix.util.TestUtil.E_VALUE;
 import static org.apache.phoenix.util.TestUtil.FUNKY_NAME;
 import static org.apache.phoenix.util.TestUtil.HBASE_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.util.TestUtil.HBASE_NATIVE;
-import static org.apache.phoenix.util.TestUtil.MDTEST_NAME;
 import static org.apache.phoenix.util.TestUtil.MULTI_CF_NAME;
 import static org.apache.phoenix.util.TestUtil.PARENTID1;
 import static org.apache.phoenix.util.TestUtil.PARENTID2;
@@ -310,14 +309,6 @@ public abstract class BaseTest {
                 "    \"1\".\"value\" integer,\n" +
                 "    \"1\".\"_blah^\" varchar)"
                 );
-        builder.put(MDTEST_NAME,"create table " + MDTEST_NAME +
-                "   (id char(1) primary key,\n" +
-                "    a.col1 integer,\n" +
-                "    b.col2 bigint,\n" +
-                "    b.col3 decimal,\n" +
-                "    b.col4 decimal(5),\n" +
-                "    b.col5 decimal(6,3))\n" +
-                "    a." + HConstants.VERSIONS + "=" + 1 + "," + "a." + HColumnDescriptor.DATA_BLOCK_ENCODING + "='" + DataBlockEncoding.NONE +  "'");
         builder.put(MULTI_CF_NAME,"create table " + MULTI_CF_NAME +
                 "   (id char(15) not null primary key,\n" +
                 "    a.unique_user_count integer,\n" +
