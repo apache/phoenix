@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -55,6 +56,7 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.FSUtils;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
@@ -118,6 +120,8 @@ public class IndexTool extends Configured implements Tool {
                             + "If specified, runs index build in Foreground. Default - Runs the build in background.");
     private static final Option OUTPUT_PATH_OPTION = new Option("op", "output-path", true,
             "Output path where the files are written");
+    private static final Option SNAPSHOT_OPTION = new Option("snap", "snapshot", false,
+        "If specified, uses Snapshots for async index building (optional)");
     private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s_INDX_%s";
 
@@ -130,6 +134,7 @@ public class IndexTool extends Configured implements Tool {
         options.addOption(DIRECT_API_OPTION);
         options.addOption(RUN_FOREGROUND_OPTION);
         options.addOption(OUTPUT_PATH_OPTION);
+        options.addOption(SNAPSHOT_OPTION);
         options.addOption(HELP_OPTION);
         return options;
     }
@@ -203,11 +208,12 @@ public class IndexTool extends Configured implements Tool {
 
         }
 
-        public Job getJob(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean isPartialBuild) throws Exception {
+        public Job getJob(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean isPartialBuild,
+            boolean useSnapshot) throws Exception {
             if (isPartialBuild) {
                 return configureJobForPartialBuild(schemaName, dataTable);
             } else {
-                return configureJobForAysncIndex(schemaName, indexTable, dataTable, useDirectApi);
+                return configureJobForAysncIndex(schemaName, indexTable, dataTable, useDirectApi, useSnapshot);
             }
         }
         
@@ -320,7 +326,7 @@ public class IndexTool extends Configured implements Tool {
             
         }
 
-        private Job configureJobForAysncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi)
+        private Job configureJobForAysncIndex(String schemaName, String indexTable, String dataTable, boolean useDirectApi, boolean useSnapshot)
                 throws Exception {
             final String qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
             final String qIndexTable;
@@ -374,11 +380,33 @@ public class IndexTool extends Configured implements Tool {
             job.setJarByClass(IndexTool.class);
             job.setMapOutputKeyClass(ImmutableBytesWritable.class);
             FileOutputFormat.setOutputPath(job, outputPath);
-            
-            PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
-                selectQuery);
+
+            if (!useSnapshot) {
+                PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, qDataTable,
+                    selectQuery);
+            } else {
+                HBaseAdmin admin = null;
+                String snapshotName;
+                try {
+                    admin = pConnection.getQueryServices().getAdmin();
+                    String pdataTableName = pdataTable.getName().getString();
+                    snapshotName = new StringBuilder(pdataTableName).append("-Snapshot").toString();
+                    admin.snapshot(snapshotName, TableName.valueOf(pdataTableName));
+                } finally {
+                    if (admin != null) {
+                        admin.close();
+                    }
+                }
+                // root dir not a subdirectory of hbase dir
+                Path rootDir = new Path("hdfs:///index-snapshot-dir");
+                FSUtils.setRootDir(configuration, rootDir);
+                Path restoreDir = new Path(FSUtils.getRootDir(configuration), "restore-dir");
+
+                // set input for map reduce job using hbase snapshots
+                PhoenixMapReduceUtil
+                    .setInput(job, PhoenixIndexDBWritable.class, snapshotName, qDataTable, restoreDir, selectQuery);
+            }
             TableMapReduceUtil.initCredentials(job);
-            
             
             if (useDirectApi) {
                 return configureSubmittableJobUsingDirectApi(job, false);
@@ -464,6 +492,7 @@ public class IndexTool extends Configured implements Tool {
             boolean useDirectApi = cmdLine.hasOption(DIRECT_API_OPTION.getOpt());
             String basePath=cmdLine.getOptionValue(OUTPUT_PATH_OPTION.getOpt());
             boolean isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
+            boolean useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
             connection = ConnectionUtil.getInputConnection(configuration);
             byte[][] splitKeysBeforeJob = null;
             boolean isLocalIndexBuild = false;
@@ -494,7 +523,7 @@ public class IndexTool extends Configured implements Tool {
 			}
             
             Job job = new JobFactory(connection, configuration, outputPath).getJob(schemaName, indexTable, dataTable,
-                    useDirectApi, isPartialBuild);
+                    useDirectApi, isPartialBuild, useSnapshot);
             if (!isForeground && useDirectApi) {
                 LOG.info("Running Index Build in Background - Submit async and exit");
                 job.submit();
