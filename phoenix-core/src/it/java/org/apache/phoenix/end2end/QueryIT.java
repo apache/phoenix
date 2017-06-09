@@ -63,7 +63,7 @@ import org.junit.Test;
 public class QueryIT extends BaseQueryIT {
     
     public QueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, mutable, columnEncoded);
     }
     
     @Test
