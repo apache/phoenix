@@ -184,6 +184,13 @@ public class PhoenixInputFormat<T extends DBWritable> extends InputFormat<NullWr
             if (txnScnValue!=null) {
                 scan.setAttribute(BaseScannerRegionObserver.TX_SCN, Bytes.toBytes(Long.valueOf(txnScnValue)));
             }
+
+            // setting the snapshot configuration
+            String snapshotName = configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
+            if (snapshotName != null)
+                PhoenixConfigurationUtil.setSnapshotNameKey(queryPlan.getContext().getConnection().
+                    getQueryServices().getConfiguration(), snapshotName);
+
             // Initialize the query plan so it sets up the parallel scans
             queryPlan.iterator(MapReduceParallelScanGrouper.getInstance());
             return queryPlan;
