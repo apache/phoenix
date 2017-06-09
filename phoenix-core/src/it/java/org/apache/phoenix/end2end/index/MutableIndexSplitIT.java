@@ -51,9 +51,11 @@ import org.junit.runners.Parameterized.Parameters;
 public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
     
     protected final boolean localIndex;
+    protected final boolean multiTenant;
 	
-    public MutableIndexSplitIT(boolean localIndex) {
+    public MutableIndexSplitIT(boolean localIndex,boolean multiTenant) {
 		this.localIndex = localIndex;
+		this.multiTenant = multiTenant;
 	}
     
     private static Connection getConnection(Properties props) throws SQLException {
@@ -62,10 +64,10 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
         return conn;
     }
     
-	@Parameters(name="MutableIndexSplitIT_localIndex={0}") // name is used by failsafe as file name in reports
+	@Parameters(name="MutableIndexSplitIT_localIndex={0},multiTenant={1}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] { 
-                { false }, { true } });
+                { false, false },{ false, true },{true, false}, { true, true } });
     }
     
     protected void testSplitDuringIndexScan(boolean isReverse) throws Exception {
@@ -172,7 +174,7 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
                 "k2 INTEGER NOT NULL,\n" +
                 "k3 INTEGER,\n" +
                 "v1 VARCHAR,\n" +
-                "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
+                "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))" + (multiTenant ? " MULTI_TENANT=true ":"") +"\n"
                     + (splits != null ? (" split on " + splits) : "");
         conn.createStatement().execute(ddl);
     }

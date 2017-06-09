@@ -21,8 +21,8 @@ import org.junit.Test;
 
 public class MutableIndexSplitForwardScanIT extends MutableIndexSplitIT {
 
-    public MutableIndexSplitForwardScanIT(boolean localIndex) {
-        super(localIndex);
+    public MutableIndexSplitForwardScanIT(boolean localIndex, boolean multiTenant) {
+        super(localIndex, multiTenant);
     }
 
     @Test
