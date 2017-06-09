@@ -53,7 +53,7 @@ import com.google.common.primitives.Floats;
 public class NotQueryIT extends BaseQueryIT {
 
     public NotQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, mutable, columnEncoded);
     }
     
     @Parameters(name="NotQueryIT_{index}") // name is used by failsafe as file name in reports

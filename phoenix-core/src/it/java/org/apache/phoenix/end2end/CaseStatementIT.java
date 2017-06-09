@@ -56,7 +56,7 @@ import com.google.common.collect.Lists;
 public class CaseStatementIT extends BaseQueryIT {
 
     public CaseStatementIT(String indexDDL, boolean mutable, boolean columnEncoded) {
-        super(indexDDL, mutable, columnEncoded, false);
+        super(indexDDL, mutable, columnEncoded);
     }
     
     @Parameters(name="CaseStatementIT_{index}") // name is used by failsafe as file name in reports
