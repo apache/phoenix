@@ -63,6 +63,7 @@ import org.junit.Test;
 
 public class ColumnProjectionOptimizationIT extends BaseClientManagedTimeIT {
 
+    private String tableName; 
     @Test
     public void testSelect() throws Exception {
         long ts = nextTimestamp();
