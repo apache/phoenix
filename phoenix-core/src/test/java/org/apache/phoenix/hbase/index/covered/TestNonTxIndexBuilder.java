@@ -271,7 +271,7 @@ public class TestNonTxIndexBuilder extends BaseConnectionlessQueryTest {
      * Tests getting an index update for a mutation with 200 versions Before, the issue PHOENIX-3807
      * was causing this test to take >90 seconds, so here we set a timeout of 5 seconds
      */
-    @Test(timeout = 5000)
+    @Test(timeout = 10000)
     public void testManyVersions() throws IOException {
         // when doing a rebuild, we are replaying mutations so we want to ignore newer mutations
         // see LocalTable#getCurrentRowState()
