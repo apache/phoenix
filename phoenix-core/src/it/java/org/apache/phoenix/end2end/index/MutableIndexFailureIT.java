@@ -102,11 +102,6 @@ public class MutableIndexFailureIT extends BaseTest {
     private String schema = generateUniqueName();
     private List<CommitException> exceptions = Lists.newArrayList();
 
-    @AfterClass
-    public static void doTeardown() throws Exception {
-        tearDownMiniCluster();
-    }
-
     public MutableIndexFailureIT(boolean transactional, boolean localIndex, boolean isNamespaceMapped, Boolean disableIndexOnWriteFailure, Boolean rebuildIndexOnWriteFailure) {
         this.transactional = transactional;
         this.localIndex = localIndex;
