@@ -63,6 +63,8 @@ public final class PhoenixConfigurationUtil {
     public static final String UPSERT_STATEMENT = "phoenix.upsert.stmt";
     
     public static final String SELECT_STATEMENT = "phoenix.select.stmt";
+
+    public static final String SELECT_TARGET_STATEMENT = "phoenix.select.target.stmt";
     
     public static final String UPSERT_BATCH_SIZE = "phoenix.upsert.batch.size";
     
@@ -77,6 +79,8 @@ public final class PhoenixConfigurationUtil {
     public static final String MAPREDUCE_UPSERT_COLUMN_COUNT = "phoenix.mr.upsert.column.count";
     
     public static final String INPUT_TABLE_NAME = "phoenix.input.table.name" ;
+
+    public static final String INPUT_TARGET_TABLE_NAME = "phoenix.input.target.table.name" ;
     
     public static final String OUTPUT_TABLE_NAME = "phoenix.colinfo.table.name" ;
     
@@ -97,6 +101,9 @@ public final class PhoenixConfigurationUtil {
     public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
 
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
+
+    public static final String MAPREDUCE_INPUT_TARGET_CLUSTER_QUORUM =
+            "phoenix.mapreduce.input.target.cluster.quorum";
     
     public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
 
@@ -131,6 +138,13 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         Preconditions.checkNotNull(tableName);
         configuration.set(INPUT_TABLE_NAME, tableName);
+    }
+
+    public static void setInputTargetTableName(final Configuration configuration,
+            final String targetTableName) {
+        Preconditions.checkNotNull(configuration);
+        Preconditions.checkNotNull(targetTableName);
+        configuration.set(INPUT_TARGET_TABLE_NAME, targetTableName);
     }
     
     public static void setInputTableConditions(final Configuration configuration, final String conditions) {
@@ -230,6 +244,17 @@ public final class PhoenixConfigurationUtil {
     }
 
     /**
+     * Sets the target HBase cluster a Phoenix MapReduce job should read from
+     * @param configuration MapReduce job configuration
+     * @param targetQuorum ZooKeeper quorum string for the target HBase cluster
+     */
+    public static void setInputTargetCluster(final Configuration configuration,
+            final String targetQuorum) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(MAPREDUCE_INPUT_TARGET_CLUSTER_QUORUM, targetQuorum);
+    }
+
+    /**
      * Sets which HBase cluster a Phoenix MapReduce job should write to
      * @param configuration
      * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will write to
@@ -324,20 +349,31 @@ public final class PhoenixConfigurationUtil {
         }
         return selectColumnList;
     }
-    
+
     public static String getSelectStatement(final Configuration configuration) throws SQLException {
+        return getSelectStatement(configuration, false);
+    }
+
+    public static String getSelectStatement(final Configuration configuration,
+            boolean isTargetStatement) throws SQLException {
         Preconditions.checkNotNull(configuration);
-        String selectStmt = configuration.get(SELECT_STATEMENT);
+        String selectKey = (isTargetStatement) ? SELECT_TARGET_STATEMENT : SELECT_STATEMENT;
+        String selectStmt = configuration.get(selectKey);
         if(isNotEmpty(selectStmt)) {
             return selectStmt;
         }
-        final String tableName = getInputTableName(configuration);
+        final String tableName;
+        if (isTargetStatement) {
+            tableName = getInputTargetTableName(configuration);
+        } else {
+            tableName = getInputTableName(configuration);
+        }
         Preconditions.checkNotNull(tableName);
         final List<ColumnInfo> columnMetadataList = getSelectColumnMetadataList(configuration);
         final String conditions = configuration.get(INPUT_TABLE_CONDITIONS);
         selectStmt = QueryUtil.constructSelectStatement(tableName, columnMetadataList, conditions);
-        LOG.info("Select Statement: "+ selectStmt);
-        configuration.set(SELECT_STATEMENT, selectStmt);
+        LOG.info("Select Statement: " + selectStmt + ", isTargetStatement: " + isTargetStatement);
+        configuration.set(selectKey, selectStmt);
         return selectStmt;
     }
     
@@ -374,6 +410,11 @@ public final class PhoenixConfigurationUtil {
         return configuration.get(INPUT_TABLE_NAME);
     }
 
+    public static String getInputTargetTableName(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(INPUT_TARGET_TABLE_NAME);
+    }
+
     public static String getPhysicalTableName(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(PHYSICAL_TABLE_NAME);
@@ -396,6 +437,11 @@ public final class PhoenixConfigurationUtil {
             quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
         }
         return quorum;
+    }
+
+    public static String getInputTargetCluster(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        return configuration.get(MAPREDUCE_INPUT_TARGET_CLUSTER_QUORUM);
     }
 
     /**

@@ -25,7 +25,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -33,18 +32,12 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.iterate.*;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.monitoring.ReadMetricQueue;
-import org.apache.phoenix.monitoring.ScanMetricsHolder;
-import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
 
 /**
  * {@link RecordReader} implementation that iterates over the the records.
@@ -100,52 +93,10 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
         final PhoenixInputSplit pSplit = (PhoenixInputSplit)split;
         final List<Scan> scans = pSplit.getScans();
         try {
-            List<PeekingResultIterator> iterators = Lists.newArrayListWithExpectedSize(scans.size());
-            StatementContext ctx = queryPlan.getContext();
-            ReadMetricQueue readMetrics = ctx.getReadMetricsQueue();
-            String tableName = queryPlan.getTableRef().getTable().getPhysicalName().getString();
-            String snapshotName = this.configuration.get(PhoenixConfigurationUtil.SNAPSHOT_NAME_KEY);
-
-            // Clear the table region boundary cache to make sure long running jobs stay up to date
-            byte[] tableNameBytes = queryPlan.getTableRef().getTable().getPhysicalName().getBytes();
-            ConnectionQueryServices services = queryPlan.getContext().getConnection().getQueryServices();
-            services.clearTableRegionCache(tableNameBytes);
-
-            long renewScannerLeaseThreshold = queryPlan.getContext().getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
-            boolean isRequestMetricsEnabled = readMetrics.isRequestMetricsEnabled();
-            for (Scan scan : scans) {
-                // For MR, skip the region boundary check exception if we encounter a split. ref: PHOENIX-2599
-                scan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
-
-                PeekingResultIterator peekingResultIterator;
-                ScanMetricsHolder scanMetricsHolder =
-                  ScanMetricsHolder.getInstance(readMetrics, tableName, scan,
-                      isRequestMetricsEnabled);
-                if (snapshotName != null) {
-                  // result iterator to read snapshots
-                  final TableSnapshotResultIterator tableSnapshotResultIterator = new TableSnapshotResultIterator(configuration, scan,
-                      scanMetricsHolder);
-                    peekingResultIterator = LookAheadResultIterator.wrap(tableSnapshotResultIterator);
-                } else {
-                  final TableResultIterator tableResultIterator =
-                      new TableResultIterator(
-                          queryPlan.getContext().getConnection().getMutationState(), scan,
-                          scanMetricsHolder, renewScannerLeaseThreshold, queryPlan,
-                          MapReduceParallelScanGrouper.getInstance());
-                  peekingResultIterator = LookAheadResultIterator.wrap(tableResultIterator);
-                }
-
-                iterators.add(peekingResultIterator);
-            }
-            ResultIterator iterator = queryPlan.useRoundRobinIterator() ? RoundRobinResultIterator.newIterator(iterators, queryPlan) : ConcatResultIterator.newIterator(iterators);
-            if(queryPlan.getContext().getSequenceManager().getSequenceCount() > 0) {
-                iterator = new SequenceResultIterator(iterator, queryPlan.getContext().getSequenceManager());
-            }
-            this.resultIterator = iterator;
-            // Clone the row projector as it's not thread safe and would be used simultaneously by
-            // multiple threads otherwise.
-
-            this.resultSet = new PhoenixResultSet(this.resultIterator, queryPlan.getProjector().cloneIfNecessary(), queryPlan.getContext());
+            this.resultIterator =
+                    PhoenixMapReduceUtil.initializeIterator(this.configuration, scans, queryPlan);
+            this.resultSet =
+                    PhoenixMapReduceUtil.initializeResultSet(this.resultIterator, this.queryPlan);
         } catch (SQLException e) {
             LOG.error(String.format(" Error [%s] initializing PhoenixRecordReader. ",e.getMessage()));
             Throwables.propagate(e);
@@ -171,6 +122,14 @@ public class PhoenixRecordReader<T extends DBWritable> extends RecordReader<Null
             LOG.error(String.format(" Error [%s] occurred while iterating over the resultset. ",e.getMessage()));
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Visible to o.a.p.mapreduce classes.
+     * @return Underlying ResultSet
+     */
+    PhoenixResultSet getResultSet() {
+        return resultSet;
     }
 
 }

@@ -82,8 +82,13 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     public void readFields(DataInput input) throws IOException {
         regionLocation = WritableUtils.readString(input);
         regionSize = WritableUtils.readVLong(input);
+        scans = readScans(input);
+        init();
+    }
+
+    List<Scan> readScans(DataInput input) throws IOException {
         int count = WritableUtils.readVInt(input);
-        scans = Lists.newArrayListWithExpectedSize(count);
+        List<Scan> scans = Lists.newArrayListWithExpectedSize(count);
         for (int i = 0; i < count; i++) {
             byte[] protoScanBytes = new byte[WritableUtils.readVInt(input)];
             input.readFully(protoScanBytes);
@@ -91,14 +96,17 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
             Scan scan = ProtobufUtil.toScan(protoScan);
             scans.add(scan);
         }
-        init();
+        return scans;
     }
     
     @Override
     public void write(DataOutput output) throws IOException {
         WritableUtils.writeString(output, regionLocation);
         WritableUtils.writeVLong(output, regionSize);
+        writeScans(output, scans);
+    }
 
+    void writeScans(DataOutput output, List<Scan> scans) throws IOException {
         Preconditions.checkNotNull(scans);
         WritableUtils.writeVInt(output, scans.size());
         for (Scan scan : scans) {
