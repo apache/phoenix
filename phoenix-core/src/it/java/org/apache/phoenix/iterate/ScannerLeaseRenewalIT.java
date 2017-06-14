@@ -93,15 +93,6 @@ public class ScannerLeaseRenewalIT {
         }
     }
     
-    @AfterClass
-    public static void tearDownAfterClass() throws Exception {
-        try {
-            DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
-        } finally {
-            hbaseTestUtil.shutdownMiniCluster();
-        }
-    }
-
     @Test
     public void testRenewLeasePreventsSelectQueryFromFailing() throws Exception {
         String tableName = "testRenewLeasePreventsSelectQueryFromFailing";
