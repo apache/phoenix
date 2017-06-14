@@ -107,11 +107,6 @@ public class EndToEndCoveredColumnsIndexBuilderIT {
     UTIL.startMiniCluster();
   }
 
-  @AfterClass
-  public static void shutdownCluster() throws Exception {
-    UTIL.shutdownMiniCluster();
-  }
-
   @Before
   public void setup() throws Exception {
     this.state = setupTest(TestTable.getTableNameString());

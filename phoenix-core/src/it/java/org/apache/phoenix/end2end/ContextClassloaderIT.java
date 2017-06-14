@@ -77,13 +77,8 @@ public class ContextClassloaderIT  extends BaseTest {
                 File.createTempFile("invalid", ".jar").toURI().toURL() }, null);
     }
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        try {
-            destroyDriver(driver);
-        } finally {
-            hbaseTestUtil.shutdownMiniCluster();
-        }
+    protected static String getUrl() {
+        return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster().getClientPort() + ";test=true";
     }
 
     @Test

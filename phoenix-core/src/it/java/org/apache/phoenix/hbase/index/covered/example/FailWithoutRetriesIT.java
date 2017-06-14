@@ -84,11 +84,6 @@ public class FailWithoutRetriesIT {
         UTIL.startMiniCluster();
     }
 
-    @AfterClass
-    public static void teardownCluster() throws Exception {
-        UTIL.shutdownMiniCluster();
-    }
-
     /**
      * If this test times out, then we didn't fail quickly enough. {@link Indexer} maybe isn't rethrowing the exception
      * correctly?
