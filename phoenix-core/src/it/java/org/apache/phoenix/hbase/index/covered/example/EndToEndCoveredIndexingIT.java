@@ -132,11 +132,6 @@ public class EndToEndCoveredIndexingIT {
         initDriver();
     }
 
-    @AfterClass
-    public static void teardownCluster() throws Exception {
-        UTIL.shutdownMiniCluster();
-    }
-
     @Before
     public void setup() throws Exception {
         setupColumns();

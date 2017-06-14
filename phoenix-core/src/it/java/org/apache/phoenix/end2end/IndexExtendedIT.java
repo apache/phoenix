@@ -76,11 +76,6 @@ public class IndexExtendedIT extends BaseTest {
     private final boolean mutable;
     private final boolean useSnapshot;
     
-    @AfterClass
-    public static void doTeardown() throws Exception {
-        tearDownMiniCluster();
-    }
-
     public IndexExtendedIT(boolean transactional, boolean mutable, boolean localIndex, boolean directApi, boolean useSnapshot) {
         this.localIndex = localIndex;
         this.transactional = transactional;

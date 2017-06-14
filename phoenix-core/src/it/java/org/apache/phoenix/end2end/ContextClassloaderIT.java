@@ -80,15 +80,6 @@ public class ContextClassloaderIT  extends BaseTest {
         return "jdbc:phoenix:localhost:" + hbaseTestUtil.getZkCluster().getClientPort() + ";test=true";
     }
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        try {
-            destroyDriver(driver);
-        } finally {
-            hbaseTestUtil.shutdownMiniCluster();
-        }
-    }
-
     @Test
     public void testQueryWithDifferentContextClassloader() throws SQLException, InterruptedException {
         Runnable target = new Runnable() {
