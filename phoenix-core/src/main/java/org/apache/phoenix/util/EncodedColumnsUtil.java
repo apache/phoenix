@@ -129,8 +129,11 @@ public class EncodedColumnsUtil {
         /*
          * HBase doesn't allow raw scans to have columns set. And we need columns to be set
          * explicitly on the scan to use this optimization.
+         *
+         * Disabling this optimization for tables with more than one column family.
+         * See PHOENIX-3890.
          */
-        return !scan.isRaw() && table.getImmutableStorageScheme() != null
+        return !scan.isRaw() && table.getColumnFamilies().size() <= 1 && table.getImmutableStorageScheme() != null
                 && table.getImmutableStorageScheme() == ImmutableStorageScheme.ONE_CELL_PER_COLUMN
                 && usesEncodedColumnNames(table) && !table.isTransactional()
                 && !ScanUtil.hasDynamicColumns(table);
