@@ -1895,6 +1895,11 @@ public class UpgradeUtil {
             if (table.getType() == PTableType.VIEW) {
                 updateLink(conn, oldPhysicalName, newPhysicalTablename,table.getSchemaName(),table.getTableName());
                 conn.commit();
+
+                conn.getQueryServices().clearTableFromCache(
+                    conn.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : conn.getTenantId().getBytes(),
+                    table.getSchemaName().getBytes(), table.getTableName().getBytes(),
+                    PhoenixRuntime.getCurrentScn(readOnlyProps));
             }
         }
     }

@@ -184,9 +184,9 @@ public class FromCompiler {
             // A tenant-specific connection may not create a mapped VIEW.
             if (connection.getTenantId() == null && statement.getTableType() == PTableType.VIEW) {
                 ConnectionQueryServices services = connection.getQueryServices();
-                byte[] fullTableName = SchemaUtil.getPhysicalName(
-                        SchemaUtil.getTableNameAsBytes(baseTable.getSchemaName(), baseTable.getTableName()),
-                        connection.getQueryServices().getProps()).getName();
+                boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(), connection.getQueryServices().getProps());
+                byte[] fullTableName = SchemaUtil.getPhysicalHBaseTableName(
+                    baseTable.getSchemaName(), baseTable.getTableName(), isNamespaceMapped).getBytes();
                 HTableInterface htable = null;
                 try {
                     htable = services.getTable(fullTableName);
@@ -196,7 +196,7 @@ public class FromCompiler {
                     if (htable != null) Closeables.closeQuietly(htable);
                 }
                 tableNode = NamedTableNode.create(null, baseTable, statement.getColumnDefs());
-                return new SingleTableColumnResolver(connection, tableNode, e.getTimeStamp(), new HashMap<String, UDFParseNode>(1), false);
+                return new SingleTableColumnResolver(connection, tableNode, e.getTimeStamp(), new HashMap<String, UDFParseNode>(1), isNamespaceMapped);
             }
             throw e;
         }

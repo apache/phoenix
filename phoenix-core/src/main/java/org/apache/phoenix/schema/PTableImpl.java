@@ -1184,8 +1184,11 @@ public class PTableImpl implements PTable {
 
     @Override
     public PName getPhysicalName() {
-        return SchemaUtil.getPhysicalHBaseTableName(physicalNames.isEmpty() ? getName() : physicalNames.get(0),
-                isNamespaceMapped, type);
+        if (physicalNames.isEmpty()) {
+            return SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMapped);
+        } else {
+            return PNameFactory.newName(physicalNames.get(0).getBytes());
+        }
     }
 
     @Override
