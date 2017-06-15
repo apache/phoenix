@@ -27,6 +27,7 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 
 /**
  * Client side Aggregator for PERCENTILE_CONT aggregations
@@ -78,7 +79,10 @@ public class PercentileClientAggregator extends DistinctValueWithCountClientAggr
 
             double result = 0.0;
             Number n1 = (Number)o1;
-            if (o2 == null || o1 == o2) {
+            if (o1 == null && o2 == null) {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                return true;
+            } else if (o2 == null || o1 == o2) {
                 result = n1.doubleValue();
             } else {
                 Number n2 = (Number)o2;
