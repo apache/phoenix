@@ -35,6 +35,8 @@ import static org.apache.phoenix.util.TestUtil.ROW9;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
@@ -44,6 +46,8 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.Statement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Properties;
@@ -466,6 +470,31 @@ public class PercentileIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testPercentileOnEmptyTable() throws Exception {
+        final String tableName = generateUniqueName();
+        // Ensure the test table is created
+        ensureTableCreated(getUrl(), tableName, ATABLE_NAME, null, null);
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props);
+                Statement stmt = conn.createStatement()) {
+            // Remove all the records in the table
+            assertFalse(stmt.execute("DELETE FROM " + tableName));
+
+            // Execute a query with PERCENTILE_CONT against the empty table
+            String query = "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY A_INTEGER ASC) FROM "
+                    + tableName;
+            ResultSet rs = stmt.executeQuery(query);
+            assertNotNull(rs);
+            assertTrue(rs.next());
+            // PERCENTILE_CONT can't compute anything, so return `null`
+            assertNull(rs.getBigDecimal(1));
+            assertFalse(rs.next());
         }
     }
 
