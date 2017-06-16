@@ -27,6 +27,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -68,21 +69,42 @@ public class ScanningResultIterator implements ResultIterator {
         scanner.close();
     }
 
+    private static void changeMetric(CombinableMetric metric, Long value) {
+        if(value != null) {
+            metric.change(value);
+        }
+    }
+
     private void getScanMetrics() {
 
         if (!scanMetricsUpdated && scanMetricsEnabled) {
             Map<String, Long> scanMetricsMap = scan.getScanMetrics().getMetricsMap();
-            scanMetricsHolder.getCountOfRPCcalls().change(scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
-            scanMetricsHolder.getCountOfRemoteRPCcalls().change(scanMetricsMap.get(REMOTE_RPC_CALLS_METRIC_NAME));
-            scanMetricsHolder.getSumOfMillisSecBetweenNexts().change(scanMetricsMap.get(MILLIS_BETWEEN_NEXTS_METRIC_NAME));
-            scanMetricsHolder.getCountOfNSRE().change(scanMetricsMap.get(NOT_SERVING_REGION_EXCEPTION_METRIC_NAME));
-            scanMetricsHolder.getCountOfBytesInResults().change(scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
-            scanMetricsHolder.getCountOfBytesInRemoteResults().change(scanMetricsMap.get(BYTES_IN_REMOTE_RESULTS_METRIC_NAME));
-            scanMetricsHolder.getCountOfRegions().change(scanMetricsMap.get(REGIONS_SCANNED_METRIC_NAME));
-            scanMetricsHolder.getCountOfRPCRetries().change(scanMetricsMap.get(RPC_RETRIES_METRIC_NAME));
-            scanMetricsHolder.getCountOfRemoteRPCRetries().change(scanMetricsMap.get(REMOTE_RPC_RETRIES_METRIC_NAME));
-            scanMetricsHolder.getCountOfRowsScanned().change(scanMetricsMap.get(COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME));
-            scanMetricsHolder.getCountOfRowsFiltered().change(scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
+            if(scanMetricsMap == null) {
+                return;
+            }
+
+            changeMetric(scanMetricsHolder.getCountOfRPCcalls(),
+                    scanMetricsMap.get(RPC_CALLS_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfRemoteRPCcalls(),
+                    scanMetricsMap.get(REMOTE_RPC_CALLS_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getSumOfMillisSecBetweenNexts(),
+                    scanMetricsMap.get(MILLIS_BETWEEN_NEXTS_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfNSRE(),
+                    scanMetricsMap.get(NOT_SERVING_REGION_EXCEPTION_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfBytesInResults(),
+                    scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfBytesInRemoteResults(),
+                    scanMetricsMap.get(BYTES_IN_REMOTE_RESULTS_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfRegions(),
+                    scanMetricsMap.get(REGIONS_SCANNED_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfRPCRetries(),
+                    scanMetricsMap.get(RPC_RETRIES_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfRemoteRPCRetries(),
+                    scanMetricsMap.get(REMOTE_RPC_RETRIES_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfRowsFiltered(),
+                    scanMetricsMap.get(COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getCountOfRowsFiltered(),
+                    scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
 
             GLOBAL_SCAN_BYTES.update(scanMetricsMap.get(GLOBAL_BYTES_IN_RESULTS_METRIC_NAME));
             scanMetricsUpdated = true;
