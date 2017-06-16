@@ -19,7 +19,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.filter.CompareFilter;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
@@ -29,6 +31,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
+import org.apache.phoenix.expression.visitor.TraverseAllExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ParseNode;
@@ -37,6 +40,8 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 
 import java.sql.DriverManager;
@@ -52,48 +57,39 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
 public class WhereConstantParser {
 
-    static List<PColumn> addConstantsToPColumnsIfNeeded(PTable table, List<PColumn> allColumns) throws SQLException {
-        Set<ComparisonExpression> comparisonExpressions = getComparisonExpressions(table);
-        Map<String, byte[]> columnMap = toMap(comparisonExpressions);
+    static PTable addConstantsToPColumnsIfNeeded(PTable table) throws SQLException {
+        byte[][] comparisonExpressions = getComparisonExpressions(table);
         List<PColumn> result = Lists.newArrayList();
-        for (PColumn aColumn : allColumns) {
-            byte[] expression = columnMap.get(aColumn.getName().getString());
-            if (expression != null) {
-                result.add(new PColumnImpl(aColumn, expression));
+        for (PColumn aColumn : PTableImpl.getColumnsToClone(table)) {
+            if (comparisonExpressions[aColumn.getPosition()] != null) {
+                result.add(new PColumnImpl(aColumn, comparisonExpressions[aColumn.getPosition()]));
             } else {
                 result.add(aColumn);
             }
         }
-        return result;
+        return PTableImpl.makePTable(table, result);
     }
 
-
-
-    static Map<String, byte[]> toMap(Set<ComparisonExpression> expressions) throws SQLException {
-        HashMap<String, byte[]> result = Maps.newHashMap();
-        for (ComparisonExpression expression : expressions) {
-            List<Expression> children = expression.getChildren();
-            KeyValueColumnExpression keyValueExpression = (KeyValueColumnExpression) children.get(0);
-            LiteralExpression rightChild = (LiteralExpression) children.get(1);
-            result.put(keyValueExpression.toString(), rightChild.getBytes());
+    static byte[][] getComparisonExpressions(PTable table) throws SQLException {
+        byte[][] viewColumnConstantsToBe = new byte[table.getColumns().size()][];
+        if (table.getViewStatement() == null) {
+            return viewColumnConstantsToBe;
         }
-        return result;
-    }
-
-    static Set<ComparisonExpression> getComparisonExpressions(PTable table) throws SQLException {
         SelectStatement select = new SQLParser(table.getViewStatement()).parseQuery();
         ParseNode parseNode = select.getWhere();
         ColumnResolver resolver = FromCompiler.getResolver(new TableRef(table));
         StatementContext context = new StatementContext(new PhoenixStatement(getConnectionlessConnection()), resolver);
         Expression expression = WhereCompiler.compile(context, parseNode);
-        Set<ComparisonExpression> result = Sets.newHashSetWithExpectedSize(expression.getChildren().size());
-        for (Expression child : expression.getChildren()) {
-            if (child instanceof ComparisonExpression) {
-                result.add((ComparisonExpression) child);
-
-            }
+        CreateTableCompiler.ViewWhereExpressionVisitor visitor =
+            new CreateTableCompiler.ViewWhereExpressionVisitor(table, viewColumnConstantsToBe);
+        expression.accept(visitor);
+        // If view is not updatable, viewColumnConstants should be empty. We will still
+        // inherit our parent viewConstants, but we have no additional ones.
+        PTable.ViewType viewTypeToBe = visitor.isUpdatable() ? PTable.ViewType.UPDATABLE : PTable.ViewType.READ_ONLY;
+        if (viewTypeToBe != PTable.ViewType.UPDATABLE) {
+            viewColumnConstantsToBe = null;
         }
-        return result;
+        return viewColumnConstantsToBe;
     }
 
     private static PhoenixConnection getConnectionlessConnection() throws SQLException {
