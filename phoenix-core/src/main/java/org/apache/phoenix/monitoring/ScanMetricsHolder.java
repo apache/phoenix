@@ -43,8 +43,6 @@ public class ScanMetricsHolder {
     private final CombinableMetric countOfRegions;
     private final CombinableMetric countOfRPCRetries;
     private final CombinableMetric countOfRemoteRPCRetries;
-    private final CombinableMetric countOfRowsScanned;
-    private final CombinableMetric countOfRowsFiltered;
 
     private static final ScanMetricsHolder NO_OP_INSTANCE =
             new ScanMetricsHolder(new ReadMetricQueue(false), "");
@@ -70,8 +68,6 @@ public class ScanMetricsHolder {
         countOfRegions = readMetrics.allotMetric(COUNT_SCANNED_REGIONS, tableName);
         countOfRPCRetries = readMetrics.allotMetric(COUNT_RPC_RETRIES, tableName);
         countOfRemoteRPCRetries = readMetrics.allotMetric(COUNT_REMOTE_RPC_RETRIES, tableName);
-        countOfRowsScanned = readMetrics.allotMetric(COUNT_ROWS_SCANNED, tableName);
-        countOfRowsFiltered = readMetrics.allotMetric(COUNT_ROWS_FILTERED, tableName);
     }
 
     public CombinableMetric getCountOfRemoteRPCcalls() {
@@ -102,20 +98,12 @@ public class ScanMetricsHolder {
         return countOfRemoteRPCRetries;
     }
 
-    public CombinableMetric getCountOfRowsFiltered() {
-        return countOfRowsFiltered;
-    }
-
     public CombinableMetric getCountOfRPCcalls() {
         return countOfRPCcalls;
     }
 
     public CombinableMetric getCountOfBytesInResults() {
         return countOfBytesInResults;
-    }
-
-    public CombinableMetric getCountOfRowsScanned() {
-        return countOfRowsScanned;
     }
 
 }
