@@ -36,9 +36,6 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -46,18 +43,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import javax.annotation.Nullable;
 
 public class ViewIT extends BaseViewIT {
 	
@@ -212,9 +204,7 @@ public class ViewIT extends BaseViewIT {
         assertFalse(rs.next());
     }
 
-    // TODO rg: This is no longer valid anymore - talk to james
     @Test
-    @Ignore
     public void testDisallowDropOfReferencedColumn() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))" + tableDDLOptions;
@@ -402,10 +392,7 @@ public class ViewIT extends BaseViewIT {
     }
 
 
-    // TODO rg: Without locking we can not ensure this doesn't happen, this test is no longer valid.
-    @Test
-    @Ignore
-    public void testDisallowDropOfColumnOnParentTable() throws Exception {
+    public void testDropOfColumnOnParentTableInvalidatesView() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))" + tableDDLOptions;
         conn.createStatement().execute(ddl);
@@ -413,11 +400,15 @@ public class ViewIT extends BaseViewIT {
         ddl = "CREATE VIEW " + viewName + "(v2 VARCHAR, v3 VARCHAR) AS SELECT * FROM " + fullTableName + " WHERE v1 = 1.0";
         conn.createStatement().execute(ddl);
         
-        try {
-            conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        conn.createStatement().execute("ALTER TABLE " + fullTableName + " DROP COLUMN v1");
+        // the view should be invalid
+        try 
+        {
+	        conn.createStatement().execute("SELECT * FROM " + viewName);
+	        fail();
+        }
+        catch (SQLException e) {
+        	assertEquals(SQLExceptionCode.INVALID_VIEW, e.getErrorCode());
         }
     }
    
@@ -652,7 +643,7 @@ public class ViewIT extends BaseViewIT {
         }
     }
     
-    @Test
+    @Test(expected=ColumnAlreadyExistsException.class)
     public void testViewAddsClashingPKColumn() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String ddl = "CREATE TABLE " + fullTableName + " (k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 DECIMAL, CONSTRAINT pk PRIMARY KEY (k1, k2))" + tableDDLOptions;
@@ -662,20 +653,6 @@ public class ViewIT extends BaseViewIT {
         conn.createStatement().execute(ddl);
         ddl = "ALTER VIEW " + fullViewName + " ADD k3 VARCHAR PRIMARY KEY, k2 VARCHAR PRIMARY KEY, v2 INTEGER";
         conn.createStatement().execute(ddl);
-        conn.unwrap(PhoenixConnection.class).removeTable(null, fullViewName.toUpperCase(), fullTableName.toUpperCase(), HConstants.LATEST_TIMESTAMP);
-        PTable view = PhoenixRuntime.getTable(conn, fullViewName);
-        // ensure we keep the column that was added first
-        List<PColumn> columns = view.getColumns();
-        Iterables.tryFind(columns, new Predicate<PColumn>() {
-            @Override
-            public boolean apply(PColumn input) {
-                if (input.getName().getString().equals("K2")) {
-                    assertEquals(PDataType.fromSqlTypeName("INTEGER"), input.getDataType());
-                    return true;
-                }
-                return false;
-            }
-        });
     }
 
     @Test

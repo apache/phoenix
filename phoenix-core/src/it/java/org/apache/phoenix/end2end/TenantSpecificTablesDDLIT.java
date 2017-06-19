@@ -529,7 +529,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
             assertTrue(rs.next());
             // (tenant_id column is not visible in tenant-specific connection)
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "tenant_type_id", 2);
-            assertEquals(1, rs.getInt(KEY_SEQ));
+            assertEquals(1, rs.getShort(KEY_SEQ));
             assertTrue(rs.next());
             assertColumnMetaData(rs, null, TENANT_TABLE_NAME, "id", 3);
             assertTrue(rs.next());

@@ -15,10 +15,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.client.Result;
-
 import java.util.List;
+
+import com.google.common.collect.Lists;
 
 /**
  * Certain operations, such as DROP TABLE are not allowed if there a table has child views. This class wraps the
@@ -27,24 +26,24 @@ import java.util.List;
  */
 class TableViewFinderResult {
 
-    private List<Result> results = Lists.newArrayList();
+    private List<TableInfo> viewInfoList = Lists.newArrayList();
 
     TableViewFinderResult() {
     }
 
-    TableViewFinderResult(List<Result> results) {
-        this.results = results;
+    TableViewFinderResult(List<TableInfo> results) {
+        this.viewInfoList = results;
     }
 
     public boolean hasViews() {
-        return !results.isEmpty();
+        return !viewInfoList.isEmpty();
     }
 
-    List<Result> getResults() {
-        return results;
+    List<TableInfo> getResults() {
+        return viewInfoList;
     }
 
     void addResult(TableViewFinderResult result) {
-        this.results.addAll(result.getResults());
+        this.viewInfoList.addAll(result.getResults());
     }
 }

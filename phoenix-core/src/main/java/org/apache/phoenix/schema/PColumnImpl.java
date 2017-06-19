@@ -53,8 +53,10 @@ public class PColumnImpl implements PColumn {
         this(column, column.isDerived(), position);
     }
 
-    public PColumnImpl(PColumn column, byte[] viewConstant) {
-        this(column, column.isDerived(), column.getPosition(), viewConstant);
+    public PColumnImpl(PColumn column, byte[] viewConstant, boolean isViewReferenced) {
+        this(column.getName(), column.getFamilyName(), column.getDataType(), column.getMaxLength(),
+                column.getScale(), column.isNullable(), column.getPosition(), column.getSortOrder(), column.getArraySize(), viewConstant, isViewReferenced, column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
+                column.getTimestamp(), column.isDerived());
     }
 
     public PColumnImpl(PColumn column, boolean derivedColumn, int position) {
@@ -66,7 +68,7 @@ public class PColumnImpl implements PColumn {
             column.getScale(), column.isNullable(), position, column.getSortOrder(), column.getArraySize(), viewConstant, column.isViewReferenced(), column.getExpressionStr(), column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
             column.getTimestamp(), derivedColumn);
     }
-
+    
     public PColumnImpl(PName name, PName familyName, PDataType dataType, Integer maxLength, Integer scale, boolean nullable,
         int position, SortOrder sortOrder, Integer arrSize, byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp, boolean isDynamic,
         byte[] columnQualifierBytes, long timestamp) {
@@ -79,18 +81,20 @@ public class PColumnImpl implements PColumn {
         init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic, columnQualifierBytes, timestamp, derived);
     }
 
-    private PColumnImpl(PName familyName, PName columnName, long timestamp) {
+    private PColumnImpl(PName familyName, PName columnName, Long timestamp) {
         this.familyName = familyName;
         this.name = columnName;
-        this.timestamp = timestamp;
         this.derived = true;
+        if (timestamp!=null) {
+            this.timestamp = timestamp;
+        }
     }
 
-    // an excluded column has null type
-    public static PColumnImpl createExcludedColumn(PName familyName, PName columnName, long timestamp) {
+    // a derived column has null type
+    public static PColumnImpl createExcludedColumn(PName familyName, PName columnName, Long timestamp) {
         return new PColumnImpl(familyName, columnName, timestamp);
     }
-
+    
     private void init(PName name,
             PName familyName,
             PDataType dataType,

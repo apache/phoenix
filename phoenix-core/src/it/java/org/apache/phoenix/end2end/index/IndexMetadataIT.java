@@ -422,7 +422,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "create table test_table (char_pk varchar not null,"
+            String ddl = "create table " + generateUniqueName() + " (char_pk varchar not null,"
         		+ " int_col integer, long_col integer, int_col integer"
         		+ " constraint pk primary key (char_pk))";
             conn.createStatement().execute(ddl);
@@ -440,7 +440,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         try {
-            String ddl = "create table test_table (char_pk varchar not null,"
+            String ddl = "create table " + generateUniqueName() + " (char_pk varchar not null,"
         		+ " a.int_col integer, a.long_col integer,"
         		+ " a.int_col integer, b.long_col integer"
         		+ " constraint pk primary key (char_pk))";

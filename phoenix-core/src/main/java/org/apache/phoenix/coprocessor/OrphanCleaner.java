@@ -15,23 +15,20 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import com.google.common.collect.Lists;
-import org.apache.hadoop.hbase.Cell;
+import java.io.IOException;
+import java.util.List;
+
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.KeyOnlyFilter;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import java.io.IOException;
-import java.util.List;
-
-import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+import com.google.common.collect.Lists;
 
 class OrphanCleaner {
 
@@ -39,13 +36,8 @@ class OrphanCleaner {
         List<byte[]> listOBytes = Lists.newArrayList();
         TableViewFinderResult viewFinderResult = new TableViewFinderResult();
         ViewFinder.findAllRelatives(hTable, tenantId, schema, name, PTable.LinkType.CHILD_TABLE, viewFinderResult);
-        for (Result aResult : viewFinderResult.getResults()) {
-            byte[][] rowViewKeyMetaData = new byte[5][];
-            getVarChars(aResult.getRow(), 5, rowViewKeyMetaData);
-            byte[] resultTenantId = rowViewKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
-            byte[] resultSchema = SchemaUtil.getSchemaNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
-            byte[] resultTable = SchemaUtil.getTableNameFromFullName(rowViewKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes();
-            byte[] rowKeyInQuestion = SchemaUtil.getTableKey(resultTenantId, resultSchema, resultTable);
+        for (TableInfo viewInfo : viewFinderResult.getResults()) {
+            byte[] rowKeyInQuestion = SchemaUtil.getTableKey(viewInfo.getTenantId(), viewInfo.getSchemaName(), viewInfo.getTableName());
             listOBytes.add(rowKeyInQuestion);
         }
         for (int i = listOBytes.size() - 1; i >= 0; i--) {
@@ -54,8 +46,8 @@ class OrphanCleaner {
             deletes.add(new Delete(listOBytes.get(i)));
             hTable.delete(deletes);
         }
-        for (Result result : viewFinderResult.getResults()) {
-            byte[] rowArray = result.getRow();
+        for (TableInfo viewInfo : viewFinderResult.getResults()) {
+            byte[] rowArray = viewInfo.getRow();
             Delete linkedDelete = new Delete(rowArray);
             hTable.delete(linkedDelete);
         }

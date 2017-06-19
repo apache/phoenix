@@ -155,7 +155,11 @@ public interface PTable extends PMetaDataEntity {
         /**
          * Link for an dropped column
          */
-        DROPPED_COLUMN((byte)5);
+        DROPPED_COLUMN((byte)5),
+        /**
+         * Link from an index to its parent table
+         */
+        INDEX_PARENT_TABLE((byte)6);
 
         private final byte[] byteValue;
         private final byte serializedValue;

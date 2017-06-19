@@ -65,6 +65,7 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
+import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
@@ -297,6 +298,24 @@ public class MetaDataUtil {
             return PTableType.fromSerializedValue(value.get()[value.getOffset()]);
         }
         return null;
+    }
+    
+    public static ViewType getViewType(List<Mutation> tableMetaData, KeyValueBuilder builder,
+    	      ImmutableBytesWritable value) {
+    	        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
+    	            PhoenixDatabaseMetaData.VIEW_TYPE_BYTES, builder, value)) {
+    	            return ViewType.fromSerializedValue(value.get()[value.getOffset()]);
+    	        }
+    	        return null;
+    	    }
+    
+    public static int getSaltBuckets(List<Mutation> tableMetaData, KeyValueBuilder builder,
+      ImmutableBytesWritable value) {
+        if (getMutationValue(getPutOnlyTableHeaderRow(tableMetaData),
+            PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES, builder, value)) {
+            return PInteger.INSTANCE.getCodec().decodeInt(value, SortOrder.getDefault());
+        }
+        return 0;
     }
     
     public static long getParentSequenceNumber(List<Mutation> tableMetaData) {

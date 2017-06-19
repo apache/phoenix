@@ -1,39 +1,31 @@
 package org.apache.phoenix.coprocessor;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Test;
+
+import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -81,6 +73,8 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE VIEW " + leftGrandChild + " (dropped_calls BIGINT) AS SELECT * FROM " + leftChild);
 
         PTable table = PhoenixRuntime.getTable(conn, baseTable.toUpperCase());
+        PTable rightChildTable = PhoenixRuntime.getTable(conn, rightChild.toUpperCase());
+        System.err.println(rightChildTable);
 
         TableViewFinderResult childViews = new TableViewFinderResult();
         ViewFinder.findAllRelatives(getTable(catalogTable), HConstants.EMPTY_BYTE_ARRAY, table.getSchemaName().getBytes(),
@@ -191,18 +185,22 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
             .build();
 
         assertColumnNamesAndDefinitionsEqual(PhoenixRuntime.getTable(conn , view.toUpperCase()), expected);
-        conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD carrier VARCHAR");
+        try {
+            conn.createStatement().execute("ALTER TABLE " + baseTable + " ADD carrier VARCHAR");
+        }
+        catch(SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_MUTATE_TABLE.getErrorCode(), e.getErrorCode());
+        }
 
         Map<String, String> expectedBaseTableColumns = new ImmutableMap.Builder<String, String>()
             .put("PK2", "VARCHAR")
             .put("V1", "VARCHAR")
             .put("V2", "VARCHAR")
-            .put("CARRIER", "VARCHAR")
             .build();
 
         assertColumnNamesAndDefinitionsEqual(PhoenixRuntime.getTable(conn , baseTable.toUpperCase()), expectedBaseTableColumns);
 
-        // the view column "CARRIER" should still be a BIGINT since it was created first
+        // the view column "CARRIER" should still be unchanged
         Map<String, String> expectedViewColumnDefinition = new ImmutableMap.Builder<String, String>()
             .put("PK2", "VARCHAR")
             .put("V1", "VARCHAR")
@@ -275,7 +273,7 @@ public class MetaDataEndpointImplTest extends ParallelStatsDisabledIT {
         for (PColumn column : table.getColumns()) {
             actual.put(column.getName().getString().trim(), column.getDataType().getSqlTypeName());
         }
-        assertEquals(Joiner.on(", ").withKeyValueSeparator(" => ").join(expected), Joiner.on(", ").withKeyValueSeparator(" => ").join(actual));
+        assertEquals(expected, actual);
     }
 
     private HTable getTable(TableName catalogTable) throws IOException {

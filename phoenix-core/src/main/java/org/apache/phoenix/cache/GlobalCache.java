@@ -62,7 +62,7 @@ public class GlobalCache extends TenantCacheImpl {
     // TODO: Use Guava cache with auto removal after lack of access 
     private final ConcurrentMap<ImmutableBytesWritable,TenantCache> perTenantCacheMap = new ConcurrentHashMap<ImmutableBytesWritable,TenantCache>();
     // Cache for lastest PTable for a given Phoenix table
-    private volatile Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache = new NoOpCache();
+    private volatile Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache;
     
     public long clearTenantCache() {
         long unfreedBytes = getMemoryManager().getMaxMemory() - getMemoryManager().getAvailableMemory();

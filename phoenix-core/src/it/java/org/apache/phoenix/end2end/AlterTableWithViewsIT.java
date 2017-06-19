@@ -32,24 +32,29 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 
 @RunWith(Parameterized.class)
 public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
@@ -71,6 +76,14 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 { false, false }, { false, true },
                 { true, false }, { true, true } });
     }
+    
+    // transform PColumn to String
+    private Function<PColumn,String> function = new Function<PColumn,String>(){
+        @Override
+        public String apply(PColumn input) {
+            return input.getName().getString();
+        }
+    };
     
     private String generateDDL(String format) {
         return generateDDL("", format);
@@ -108,13 +121,13 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // adding a new pk column and a new regular column
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD COL3 varchar(10) PRIMARY KEY, COL4 integer");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "COL4");
             // nothing changes for this view. The sequence ID is not update because we are no longer updating that row.
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "COL3", "COL4", "VIEW_COL1", "VIEW_COL2");
 
         } 
     }
@@ -163,7 +176,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             
             viewTable1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
             assertTrue(viewTable1.isImmutableRows());
-            assertEquals(3, viewTable1.getUpdateCacheFrequency());
+            assertEquals(2, viewTable1.getUpdateCacheFrequency());
             
             viewTable2 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
             assertTrue(viewTable2.isImmutableRows());
@@ -190,15 +203,15 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             viewConn.createStatement()
                     .execute(
                         "CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
-                "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
+            		"ID", "COL1", "COL2", "COL3", "COL4", "COL5", "VIEW_COL1", "VIEW_COL2");
 
             // drop two columns from the base table - shouldn't affect the view at all since we resolve at read time.
             conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN COL3, COL5");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 4,
                 QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL4");
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
-                "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 8, 6,
+            		"ID", "COL1", "COL2", "COL4", "VIEW_COL1", "VIEW_COL2");
         }
     }
     
@@ -215,26 +228,28 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                             + " %s ID char(10) NOT NULL,"
                             + " COL1 integer NOT NULL,"
                             + " COL2 bigint NOT NULL,"
+                            + " COL3 varchar,"
                             + " CONSTRAINT NAME_PK PRIMARY KEY (%s ID, COL1, COL2)"
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 4, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256), VIEW_COL3 VARCHAR, VIEW_COL4 DECIMAL, VIEW_COL5 DECIMAL(10,2), VIEW_COL6 VARCHAR, CONSTRAINT pk PRIMARY KEY (VIEW_COL5, VIEW_COL6) ) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn,viewOfTable, PTableType.VIEW, tableName, 0, 9, 3, "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
+            assertTableDefinition(viewConn,viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
             
             // upsert single row into view
-            String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?, ?, ?, ?, ?)";
+            String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?, ?, ?, ?, ?, ?)";
             PreparedStatement stmt = viewConn.prepareStatement(dml);
             stmt.setString(1, "view1");
             stmt.setInt(2, 12);
             stmt.setInt(3, 13);
-            stmt.setInt(4, 14);
-            stmt.setString(5, "view5");
+            stmt.setString(4, "view4");
+            stmt.setInt(5, 15);
             stmt.setString(6, "view6");
-            stmt.setInt(7, 17);
+            stmt.setString(7, "view7");
             stmt.setInt(8, 18);
-            stmt.setString(9, "view9");
+            stmt.setInt(9, 19);
+            stmt.setString(10, "view10");
             stmt.execute();
             viewConn.commit();
             
@@ -275,8 +290,8 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             }
             
             // validate that there were no columns added to the table or view, if its table is column encoded the sequence number changes when we increment the cq counter
-            assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 1 : 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 9, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
+            assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 1 : 0, 4, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL1", "VIEW_COL2", "VIEW_COL3", "VIEW_COL4", "VIEW_COL5", "VIEW_COL6");
             
             if (columnEncoded) {
                 try {
@@ -290,17 +305,20 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             else {
                 // should succeed 
                 conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL4 DECIMAL, VIEW_COL2 VARCHAR(256)");
-                assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "VIEW_COL4", "VIEW_COL2");
-                assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 9, 5, "ID", "COL1", "COL2", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
-            
+                assertTableDefinition(conn, tableName, PTableType.TABLE, null, columnEncoded ? 2 : 1, 6, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2");
+                // even though we added columns to the base table, the sequence number and base column count is not updated in the view metadata (in SYSTEM.CATALOG)
+                // the ordinal positions of the existings view columns that were added to the base table also do not change
+                assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 10, 4, "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
+                
                 // query table
                 ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
                 assertTrue(rs.next());
                 assertEquals("view1", rs.getString("ID"));
                 assertEquals(12, rs.getInt("COL1"));
                 assertEquals(13, rs.getInt("COL2"));
-                assertEquals("view5", rs.getString("VIEW_COL2"));
-                assertEquals(17, rs.getInt("VIEW_COL4"));
+                assertEquals("view4", rs.getString("COL3"));
+                assertEquals("view6", rs.getString("VIEW_COL2"));
+                assertEquals(18, rs.getInt("VIEW_COL4"));
                 assertFalse(rs.next());
     
                 // query view
@@ -309,13 +327,20 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                 assertEquals("view1", rs.getString("ID"));
                 assertEquals(12, rs.getInt("COL1"));
                 assertEquals(13, rs.getInt("COL2"));
-                assertEquals(14, rs.getInt("VIEW_COL1"));
-                assertEquals("view5", rs.getString("VIEW_COL2"));
-                assertEquals("view6", rs.getString("VIEW_COL3"));
-                assertEquals(17, rs.getInt("VIEW_COL4"));
-                assertEquals(18, rs.getInt("VIEW_COL5"));
-                assertEquals("view9", rs.getString("VIEW_COL6"));
+                assertEquals("view4", rs.getString("COL3"));
+                assertEquals(15, rs.getInt("VIEW_COL1"));
+                assertEquals("view6", rs.getString("VIEW_COL2"));
+                assertEquals("view7", rs.getString("VIEW_COL3"));
+                assertEquals(18, rs.getInt("VIEW_COL4"));
+                assertEquals(19, rs.getInt("VIEW_COL5"));
+                assertEquals("view10", rs.getString("VIEW_COL6"));
                 assertFalse(rs.next());
+                
+                // the base column count and ordinal positions of columns is updated in the ptable (at read time) 
+                PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+                PTable view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+                assertEquals(isMultiTenant ? 7 : 6, view.getBaseColumnCount());
+                assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "COL3", "VIEW_COL4", "VIEW_COL2", "VIEW_COL1", "VIEW_COL3", "VIEW_COL5", "VIEW_COL6");
             }
         } 
     }
@@ -337,9 +362,13 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
                             + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
+            PTable table = PhoenixRuntime.getTableNoCache(conn, tableName.toUpperCase());
+            assertColumnsMatch(table.getColumns(), "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            PTable view = PhoenixRuntime.getTableNoCache(viewConn, viewOfTable.toUpperCase());
+            assertColumnsMatch(view.getColumns(), "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // upsert single row into view
             String dml = "UPSERT INTO " + viewOfTable + " VALUES(?,?,?,?,?)";
@@ -409,7 +438,8 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             // add the pk column of the view to the base table
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, tableName, 1, 5, 5, "VIEW_COL1", "VIEW_COL2");
+            // even though we added columns to the base table, the sequence number and base column count is not updated in the view metadata (in SYSTEM.CATALOG)
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // query table
             ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
@@ -430,6 +460,11 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertEquals(14, rs.getInt("VIEW_COL1"));
             assertEquals("view5", rs.getString("VIEW_COL2"));
             assertFalse(rs.next());
+            
+            // the base column count is updated in the ptable
+            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
+            assertEquals(isMultiTenant ? 6 : 5, view.getBaseColumnCount());
         } 
     }
     
@@ -450,10 +485,10 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL3 VARCHAR(256), VIEW_COL4 DECIMAL(10,2) CONSTRAINT pk PRIMARY KEY (VIEW_COL3, VIEW_COL4)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL3", "VIEW_COL4");
+            assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL3", "VIEW_COL4");
             
             try {
                 // should fail because there are two view with different pk columns
@@ -514,10 +549,13 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            
+            PTable view = PhoenixRuntime.getTableNoCache(viewConn, viewOfTable1);
+            System.err.println(view);
             
             viewConn2.createStatement().execute("CREATE VIEW " + viewOfTable2 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR(256) CONSTRAINT pk PRIMARY KEY (VIEW_COL1, VIEW_COL2)) AS SELECT * FROM " + tableName);
-            assertTableDefinition(conn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn2, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3,  "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // upsert single row into both view
             String dml = "UPSERT INTO " + viewOfTable1 + " VALUES(?,?,?,?,?)";
@@ -568,8 +606,9 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             
             conn.createStatement().execute("ALTER TABLE " + tableName + " ADD VIEW_COL1 DECIMAL(10,2) PRIMARY KEY, VIEW_COL2 VARCHAR(256) PRIMARY KEY");
             assertTableDefinition(conn, tableName, PTableType.TABLE, null, 1, 5, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            assertTableDefinition(conn, viewOfTable1, PTableType.VIEW, tableName, 1, 5, 5, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
-            assertTableDefinition(conn, viewOfTable2, PTableType.VIEW, tableName, 1, 5, 5, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            // even though we added columns to the base table, the sequence number and base column count is not updated in the view metadata (in SYSTEM.CATALOG)
+            assertTableDefinition(viewConn, viewOfTable1, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable2, PTableType.VIEW, tableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             // query table
             ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
@@ -598,13 +637,20 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertEquals(14, rs.getInt("VIEW_COL1"));
             assertEquals("view5", rs.getString("VIEW_COL2"));
             assertFalse(rs.next());
+            
+            // the base column count is updated in the ptable
+            PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
+            PTable view1 = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable1));
+            PTable view2 = viewConn2.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable2));
+            assertEquals(isMultiTenant ? 6 : 5, view1.getBaseColumnCount());
+            assertEquals(isMultiTenant ? 6 : 5, view2.getBaseColumnCount());
         }
     }
     
     public void assertTableDefinition(Connection conn, String tableName, PTableType tableType, String parentTableName, int sequenceNumber, int columnCount, int baseColumnCount, String... columnNames) throws Exception {
         int delta = isMultiTenant ? 1 : 0;
         String[] cols;
-        if (isMultiTenant) {
+        if (isMultiTenant && tableType!=PTableType.VIEW) {
             cols = (String[])ArrayUtils.addAll(new String[]{"TENANT_ID"}, columnNames);
         }
         else {
@@ -612,6 +658,14 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
         }
         AlterMultiTenantTableWithViewsIT.assertTableDefinition(conn, tableName, tableType, parentTableName, sequenceNumber, columnCount + delta,
             baseColumnCount==QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT ? baseColumnCount : baseColumnCount +delta, cols);
+    }
+    
+    public void assertColumnsMatch(List<PColumn> actual, String... expected) {
+        List<String> expectedCols = Lists.newArrayList(expected);
+        if (isMultiTenant) {
+            expectedCols.add(0, "TENANT_ID");
+        }
+        assertEquals(expectedCols, Lists.transform(actual, function));
     }
     
     public static String getSystemCatalogEntriesForTable(Connection conn, String tableName, String message) throws Exception {
@@ -632,60 +686,65 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
     }
     
     
-    
     @Test
     public void testAlteringViewThatHasChildViews() throws Exception {
         String baseTable = generateUniqueName();
-        String childView = baseTable + "cildView";
+        String childView = baseTable + "childView";
         String grandChildView = baseTable + "grandChildView";
         try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ) {
-            String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
-                    + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (%s PK2)"
-                    + " ) %s";
+                Connection viewConn =
+                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+            String ddlFormat =
+                    "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
+                            + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
+                            + " CONSTRAINT NAME_PK PRIMARY KEY (%s PK2)" + " ) %s";
             conn.createStatement().execute(generateDDL(ddlFormat));
 
             String childViewDDL = "CREATE VIEW " + childView + " AS SELECT * FROM " + baseTable;
             viewConn.createStatement().execute(childViewDDL);
+            
+            PTable view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            assertColumnsMatch(view.getColumns(), "PK2", "V1", "V2");
 
             String addColumnToChildViewDDL =
                     "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";
             viewConn.createStatement().execute(addColumnToChildViewDDL);
 
+            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            assertColumnsMatch(view.getColumns(), "PK2", "V1", "V2", "CHILD_VIEW_COL");
+
             String grandChildViewDDL =
                     "CREATE VIEW " + grandChildView + " AS SELECT * FROM " + childView;
             viewConn.createStatement().execute(grandChildViewDDL);
 
+            PTable gcView = PhoenixRuntime.getTableNoCache(viewConn, grandChildView.toUpperCase());
+            assertColumnsMatch(gcView.getColumns(), "PK2", "V1", "V2", "CHILD_VIEW_COL");
+
             // dropping base table column from child view should succeed
             String dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN V2";
             viewConn.createStatement().execute(dropColumnFromChildView);
+            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            assertColumnsMatch(view.getColumns(), "PK2", "V1", "CHILD_VIEW_COL");
 
             // dropping view specific column from child view should succeed
             dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN CHILD_VIEW_COL";
             viewConn.createStatement().execute(dropColumnFromChildView);
-            
+            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            assertColumnsMatch(view.getColumns(), "PK2", "V1");
+
             // Adding column to view that has child views is allowed
             String addColumnToChildView = "ALTER VIEW " + childView + " ADD V5 VARCHAR";
             viewConn.createStatement().execute(addColumnToChildView);
-            // V5 column should be visible now for childView
-            viewConn.createStatement().execute("SELECT V5 FROM " + childView);    
-            
-            // However, column V5 shouldn't have propagated to grandChildView. Not till PHOENIX-2054 is fixed.
-            try {
-                viewConn.createStatement().execute("SELECT V5 FROM " + grandChildView);
-            } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-            }
+            // V5 column should be visible now for both childView and grandChildView
+            viewConn.createStatement().execute("SELECT V5 FROM " + childView);
+            viewConn.createStatement().execute("SELECT V5 FROM " + grandChildView);
 
-            // dropping column from the grand child view, however, should work.
-            String dropColumnFromGrandChildView =
-                    "ALTER VIEW " + grandChildView + " DROP COLUMN CHILD_VIEW_COL";
-            viewConn.createStatement().execute(dropColumnFromGrandChildView);
+            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            assertColumnsMatch(view.getColumns(), "PK2", "V1", "V5");
 
-            // similarly, dropping column inherited from the base table should work.
-            dropColumnFromGrandChildView = "ALTER VIEW " + grandChildView + " DROP COLUMN V2";
-            viewConn.createStatement().execute(dropColumnFromGrandChildView);
+            // grand child view should have the same columns
+            gcView = PhoenixRuntime.getTableNoCache(viewConn, grandChildView.toUpperCase());
+            assertColumnsMatch(gcView.getColumns(), "PK2", "V1", "V5");
         }
     }
     
@@ -746,7 +805,7 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             assertTableDefinition(conn, baseTableName, PTableType.TABLE, null, 0, 3, QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT, "ID", "COL1", "COL2");
             
             viewConn.createStatement().execute("CREATE VIEW " + viewOfTable + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 VARCHAR ) AS SELECT * FROM "+baseTableName);
-            assertTableDefinition(conn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(viewConn, viewOfTable, PTableType.VIEW, baseTableName, 0, 5, 3, "ID", "COL1", "COL2", "VIEW_COL1", "VIEW_COL2");
             
             PName tenantId = isMultiTenant ? PNameFactory.newName("tenant1") : null;
             PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
@@ -838,7 +897,6 @@ public class AlterTableWithViewsIT extends ParallelStatsDisabledIT {
             viewConn.createStatement().execute("SELECT * FROM "+viewOfTable);
             
             phoenixConn = conn.unwrap(PhoenixConnection.class);
-            phoenixConn.removeTable(tenantId, viewOfTable, baseTableName, HConstants.LATEST_TIMESTAMP);
             table = phoenixConn.getTable(new PTableKey(null, baseTableName));
             assertTrue(table.isAppendOnlySchema());
             viewTable = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));

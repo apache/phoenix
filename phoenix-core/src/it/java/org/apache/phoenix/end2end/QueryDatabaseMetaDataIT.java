@@ -1238,7 +1238,7 @@ public class QueryDatabaseMetaDataIT extends BaseClientManagedTimeIT {
         // Retrieve the database metadata
         DatabaseMetaData dbmd = conn.getMetaData();
         ResultSet rs = dbmd.getColumns(null, null, null, null);
-        rs.next();
+        assertTrue(rs.next());
 
         // Lookup column by name, this should return null but not throw an exception
         String remarks = rs.getString("REMARKS");

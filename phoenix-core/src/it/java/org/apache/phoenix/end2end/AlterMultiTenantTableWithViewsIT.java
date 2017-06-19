@@ -354,7 +354,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             globalConn.commit();
         }
 
-        // Verify now that the sequence number of data table, indexes and views have changed.
+        // Verify now that the sequence number of data table, indexes and views have *not* changed.
         // Also verify that the newly added pk columns show up as pk columns of data table, indexes and views.
         try (Connection viewConn = getTenantConnection(tenant1)) {
 
@@ -362,7 +362,7 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             PhoenixConnection phxConn = viewConn.unwrap(PhoenixConnection.class);
             assertEquals(2, getIndexOfPkColumn(phxConn, "k2", view1));
             assertEquals(3, getIndexOfPkColumn(phxConn, "k3", view1));
-            assertEquals(1, getTableSequenceNumber(phxConn, view1));
+            assertEquals(0, getTableSequenceNumber(phxConn, view1));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view1));
             verifyNewColumns(rs, "K2", "K3", "V3");
 
@@ -370,13 +370,13 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             rs = viewConn.createStatement().executeQuery("SELECT K2, K3, V3 FROM " + view2);
             assertEquals(2, getIndexOfPkColumn(phxConn, "k2", view2));
             assertEquals(3, getIndexOfPkColumn(phxConn, "k3", view2));
-            assertEquals(1, getTableSequenceNumber(phxConn, view2));
+            assertEquals(0, getTableSequenceNumber(phxConn, view2));
             assertEquals(4, getMaxKeySequenceNumber(phxConn, view2));
             verifyNewColumns(rs, "K2", "K3", "V3");
 
             assertEquals(4, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view2Index));
             assertEquals(5, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view2Index));
-            assertEquals(1, getTableSequenceNumber(phxConn, view2Index));
+            assertEquals(0, getTableSequenceNumber(phxConn, view2Index));
             assertEquals(6, getMaxKeySequenceNumber(phxConn, view2Index));
         }
         try (Connection viewConn = getTenantConnection(tenant2)) {
@@ -384,12 +384,12 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             PhoenixConnection phxConn = viewConn.unwrap(PhoenixConnection.class);
             assertEquals(2, getIndexOfPkColumn(phxConn, "k2", view3));
             assertEquals(3, getIndexOfPkColumn(phxConn, "k3", view3));
-            assertEquals(1, getTableSequenceNumber(phxConn, view3));
+            assertEquals(0, getTableSequenceNumber(phxConn, view3));
             verifyNewColumns(rs, "K22", "K33", "V33");
 
             assertEquals(4, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k2"), view3Index));
             assertEquals(5, getIndexOfPkColumn(phxConn, IndexUtil.getIndexColumnName(null, "k3"), view3Index));
-            assertEquals(1, getTableSequenceNumber(phxConn, view3Index));
+            assertEquals(0, getTableSequenceNumber(phxConn, view3Index));
             assertEquals(6, getMaxKeySequenceNumber(phxConn, view3Index));
         }
         // Verify that the index is actually being used when using newly added pk col
@@ -418,44 +418,38 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
                          view1(tenant1)         divergedView(tenant2)    
                             
         */
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+        		Connection tenant1Conn = getTenantConnection("tenant1");
+        		Connection tenant2Conn = getTenantConnection("tenant2")) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
             
-            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
-                String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
-                tenant1Conn.createStatement().execute(view1DDL);
-            }
+            String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
+            tenant1Conn.createStatement().execute(view1DDL);
             
-            try (Connection tenant2Conn = getTenantConnection("tenant2")) {
-                String divergedViewDDL = "CREATE VIEW " + divergedView + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
-                tenant2Conn.createStatement().execute(divergedViewDDL);
-                // Drop column V2 from the view to have it diverge from the base table
-                tenant2Conn.createStatement().execute("ALTER VIEW " + divergedView + " DROP COLUMN V2");
-                
-                // create an index on the diverged view
-                String indexDDL = "CREATE INDEX " + divergedViewIndex + " ON " + divergedView + " (V1) include (V3)";
-                tenant2Conn.createStatement().execute(indexDDL);
-            }
+            String divergedViewDDL = "CREATE VIEW " + divergedView + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
+            tenant2Conn.createStatement().execute(divergedViewDDL);
+            // Drop column V2 from the view to have it diverge from the base table
+            tenant2Conn.createStatement().execute("ALTER VIEW " + divergedView + " DROP COLUMN V2");
+            
+            // create an index on the diverged view
+            String indexDDL = "CREATE INDEX " + divergedViewIndex + " ON " + divergedView + " (V1) include (V3)";
+            tenant2Conn.createStatement().execute(indexDDL);
             
             String alterBaseTable = "ALTER TABLE " + baseTable + " ADD KV VARCHAR, PK2 VARCHAR PRIMARY KEY";
             conn.createStatement().execute(alterBaseTable);
             
             
             // verify that the both columns were added to view1
-            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
-                tenant1Conn.createStatement().execute("SELECT KV from " + view1);
-                tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
-            }
+            tenant1Conn.createStatement().execute("SELECT KV from " + view1);
+            tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
             
             // verify that only the primary key column PK2 was added to diverged view
-            try (Connection tenant2Conn = getTenantConnection("tenant2")) {
-                tenant2Conn.createStatement().execute("SELECT PK2 from " + divergedView);
-                try {
-                    tenant2Conn.createStatement().execute("SELECT KV FROM " + divergedView);
-                } catch (SQLException e) {
-                    assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-                }
+            tenant2Conn.createStatement().execute("SELECT PK2 from " + divergedView);
+            try {
+                tenant2Conn.createStatement().execute("SELECT KV FROM " + divergedView);
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
             
             // Upsert records in diverged view. Verify that the PK column was added to the index on it.
@@ -472,9 +466,9 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
             }
             
             // For non-diverged view, base table columns will be added at the same position as base table
-            assertTableDefinition(conn, view1, PTableType.VIEW, baseTable, 1, 9, 7, "TENANT_ID", "PK1", "V1", "V2", "V3", "KV", "PK2", "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5,  "PK1", "V1", "V2", "V3", "KV", "PK2", "VIEW_COL1", "VIEW_COL2");
             // For a diverged view, only base table's pk column will be added and that too at the end.
-            assertTableDefinition(conn, divergedView, PTableType.VIEW, baseTable, 2, 7, DIVERGED_VIEW_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V3", "VIEW_COL1", "VIEW_COL2", "PK2");
+            assertTableDefinition(tenant2Conn, divergedView, PTableType.VIEW, baseTable, 1, 6, DIVERGED_VIEW_BASE_COLUMN_COUNT, "PK1", "V1", "V3", "PK2", "VIEW_COL1", "VIEW_COL2");
             
             // Adding existing column VIEW_COL2 to the base table isn't allowed.
             try {
@@ -492,29 +486,26 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     public void testAddColumnsToSaltedBaseTableWithViews() throws Exception {
         String baseTable = "testAddColumnsToSaltedBaseTableWithViews".toUpperCase();
         String view1 = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+        		Connection tenant1Conn = getTenantConnection("tenant1")) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
 
-            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
-                String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
-                tenant1Conn.createStatement().execute(view1DDL);
-            }
+            String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
+            tenant1Conn.createStatement().execute(view1DDL);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 1, 5, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3");
-            assertTableDefinition(conn, view1, PTableType.VIEW, baseTable, 0, 7, 5,  "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5,  "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
 
             String alterBaseTable = "ALTER TABLE " + baseTable + " ADD KV VARCHAR, PK2 VARCHAR PRIMARY KEY";
             conn.createStatement().execute(alterBaseTable);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 2, 7, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3", "KV", "PK2");
-            assertTableDefinition(conn, view1, PTableType.VIEW, baseTable, 1, 9, 7, "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1", "V2", "V3", "KV", "PK2", "VIEW_COL1", "VIEW_COL2");
 
             // verify that the both columns were added to view1
-            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
-                tenant1Conn.createStatement().execute("SELECT KV from " + view1);
-                tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
-            }
+            tenant1Conn.createStatement().execute("SELECT KV from " + view1);
+            tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
         }
     }
     
@@ -522,38 +513,35 @@ public class AlterMultiTenantTableWithViewsIT extends ParallelStatsDisabledIT {
     public void testDropColumnsFromSaltedBaseTableWithViews() throws Exception {
         String baseTable = "testDropColumnsFromSaltedBaseTableWithViews".toUpperCase();
         String view1 = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+        		Connection tenant1Conn = getTenantConnection("tenant1")) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR, V3 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
 
-            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
-                String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
-                tenant1Conn.createStatement().execute(view1DDL);
-            }
+            String view1DDL = "CREATE VIEW " + view1 + " ( VIEW_COL1 DECIMAL(10,2), VIEW_COL2 CHAR(256)) AS SELECT * FROM " + baseTable;
+            tenant1Conn.createStatement().execute(view1DDL);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 1, 5, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V2", "V3");
-            assertTableDefinition(conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1", "V2", "V3", "VIEW_COL1", "VIEW_COL2");
 
             String alterBaseTable = "ALTER TABLE " + baseTable + " DROP COLUMN V2";
             conn.createStatement().execute(alterBaseTable);
 
             assertTableDefinition(conn, baseTable, PTableType.TABLE, null, 2, 4, BASE_TABLE_BASE_COLUMN_COUNT, "TENANT_ID", "PK1", "V1", "V3");
-            assertTableDefinition(conn, view1, PTableType.VIEW, baseTable, 1, 6, 4, "VIEW_COL1", "VIEW_COL2");
+            assertTableDefinition(tenant1Conn, view1, PTableType.VIEW, baseTable, 0, 7, 5, "PK1", "V1", "V3", "VIEW_COL1", "VIEW_COL2");
 
             // verify that the dropped columns aren't visible
-            try (Connection tenant1Conn = getTenantConnection("tenant1")) {
-                try {
-                    tenant1Conn.createStatement().execute("SELECT KV from " + view1);
-                    fail();
-                } catch (SQLException e) {
-                    assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-                }
-                try {
-                    tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
-                    fail();
-                } catch (SQLException e) {
-                    assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
-                }
+            try {
+                tenant1Conn.createStatement().execute("SELECT KV from " + view1);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
+            }
+            try {
+                tenant1Conn.createStatement().execute("SELECT PK2 from " + view1);
+                fail();
+            } catch (SQLException e) {
+                assertEquals(SQLExceptionCode.COLUMN_NOT_FOUND.getErrorCode(), e.getErrorCode());
             }
         }
     }

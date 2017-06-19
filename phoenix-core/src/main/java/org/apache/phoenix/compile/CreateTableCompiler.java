@@ -224,7 +224,7 @@ public class CreateTableCompiler {
         };
     }
     
-    private static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
+    public static class ColumnTrackingExpressionCompiler extends ExpressionCompiler {
         private final BitSet isColumnReferenced;
         
         public ColumnTrackingExpressionCompiler(StatementContext context, BitSet isColumnReferenced) {

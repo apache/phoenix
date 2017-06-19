@@ -17,21 +17,30 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.RowIdLifetime;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExpressionProjector;
@@ -40,7 +49,13 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.expression.ByteBasedLikeExpression;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.expression.LikeExpression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
+import org.apache.phoenix.expression.StringBasedLikeExpression;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
@@ -52,21 +67,34 @@ import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PNameImpl;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.KeyValueUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
@@ -446,180 +474,321 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     private static void appendConjunction(StringBuilder buf) {
         buf.append(buf.length() == 0 ? "" : " and ");
     }
-
-    // TODO: rg change this to go through the cache...
-    @Override
+    
+    private static final PColumnImpl TENANT_ID_COLUMN = new PColumnImpl(PNameFactory.newName(TENANT_ID),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl TABLE_SCHEM_COLUMN = new PColumnImpl(PNameFactory.newName(TABLE_SCHEM),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl TABLE_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(TABLE_NAME),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+    private static final PColumnImpl COLUMN_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_NAME),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(DATA_TYPE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, DATA_TYPE_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl TYPE_NAME_COLUMN = new PColumnImpl(PNameFactory.newName(TYPE_NAME),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(TYPE_NAME), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl COLUMN_SIZE_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, COLUMN_SIZE_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl BUFFER_LENGTH_COLUMN = new PColumnImpl(PNameFactory.newName(BUFFER_LENGTH),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(BUFFER_LENGTH), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl DECIMAL_DIGITS_COLUMN = new PColumnImpl(PNameFactory.newName(DECIMAL_DIGITS),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, DECIMAL_DIGITS_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl NUM_PREC_RADIX_COLUMN = new PColumnImpl(PNameFactory.newName(NUM_PREC_RADIX),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(NUM_PREC_RADIX), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl NULLABLE_COLUMN = new PColumnImpl(PNameFactory.newName(NULLABLE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, NULLABLE_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl REMARKS_COLUMN = new PColumnImpl(PNameFactory.newName(REMARKS),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(REMARKS), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl COLUMN_DEF_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_DEF),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(COLUMN_DEF), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl SQL_DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(SQL_DATA_TYPE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(SQL_DATA_TYPE), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl SQL_DATETIME_SUB_COLUMN = new PColumnImpl(PNameFactory.newName(SQL_DATETIME_SUB),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(SQL_DATETIME_SUB), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl CHAR_OCTET_LENGTH_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(CHAR_OCTET_LENGTH), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl ORDINAL_POSITION_COLUMN = new PColumnImpl(PNameFactory.newName(ORDINAL_POSITION),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, ORDINAL_POSITION_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl IS_NULLABLE_COLUMN = new PColumnImpl(PNameFactory.newName(IS_NULLABLE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(IS_NULLABLE), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl SCOPE_CATALOG_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_CATALOG),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(SCOPE_CATALOG), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl SCOPE_SCHEMA_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_SCHEMA),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(SCOPE_SCHEMA), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl SCOPE_TABLE_COLUMN = new PColumnImpl(PNameFactory.newName(SCOPE_TABLE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(SCOPE_TABLE), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl SOURCE_DATA_TYPE_COLUMN = new PColumnImpl(PNameFactory.newName(SOURCE_DATA_TYPE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(SOURCE_DATA_TYPE), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl IS_AUTOINCREMENT_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PSmallint.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(SCOPE_CATALOG), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl ARRAY_SIZE_COLUMN = new PColumnImpl(PNameFactory.newName(ARRAY_SIZE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, ARRAY_SIZE_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl COLUMN_FAMILY_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_FAMILY),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarchar.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, COLUMN_FAMILY_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl TYPE_ID_COLUMN = new PColumnImpl(PNameFactory.newName(COLUMN_SIZE),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PInteger.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, Bytes.toBytes(TYPE_ID), HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl VIEW_CONSTANT_COLUMN = new PColumnImpl(PNameFactory.newName(VIEW_CONSTANT),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PVarbinary.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, VIEW_CONSTANT_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl MULTI_TENANT_COLUMN = new PColumnImpl(PNameFactory.newName(MULTI_TENANT),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PBoolean.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, MULTI_TENANT_BYTES, HConstants.LATEST_TIMESTAMP);
+	private static final PColumnImpl KEY_SEQ_COLUMN = new PColumnImpl(PNameFactory.newName(KEY_SEQ),
+			PNameFactory.newName(TABLE_FAMILY_BYTES), PSmallint.INSTANCE, null, null, false, 1, SortOrder.getDefault(),
+			0, null, false, null, false, false, KEY_SEQ_BYTES, HConstants.LATEST_TIMESTAMP);
+	
+	private static final List<PColumnImpl> PK_DATUM_LIST = Lists.newArrayList(TENANT_ID_COLUMN, TABLE_SCHEM_COLUMN, TABLE_NAME_COLUMN, COLUMN_NAME_COLUMN);
+	
+	private static final RowProjector GET_COLUMNS_ROW_PROJECTOR = new RowProjector(
+			Arrays.<ColumnProjector> asList(
+					new ExpressionProjector(TABLE_CAT, SYSTEM_CATALOG,
+							new RowKeyColumnExpression(TENANT_ID_COLUMN,
+									new RowKeyValueAccessor(PK_DATUM_LIST, 0)), false),
+					new ExpressionProjector(TABLE_SCHEM, SYSTEM_CATALOG,
+							new RowKeyColumnExpression(TABLE_SCHEM_COLUMN,
+									new RowKeyValueAccessor(PK_DATUM_LIST, 1)), false),
+					new ExpressionProjector(TABLE_NAME, SYSTEM_CATALOG,
+							new RowKeyColumnExpression(TABLE_NAME_COLUMN,
+									new RowKeyValueAccessor(PK_DATUM_LIST, 2)), false),
+					new ExpressionProjector(COLUMN_NAME, SYSTEM_CATALOG,
+							new RowKeyColumnExpression(COLUMN_NAME_COLUMN,
+									new RowKeyValueAccessor(PK_DATUM_LIST, 3)), false),
+					new ExpressionProjector(DATA_TYPE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(DATA_TYPE_COLUMN), false),
+					new ExpressionProjector(TYPE_NAME, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(TYPE_NAME_COLUMN), false),
+					new ExpressionProjector(COLUMN_SIZE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(COLUMN_SIZE_COLUMN), false),
+					new ExpressionProjector(BUFFER_LENGTH, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(BUFFER_LENGTH_COLUMN), false),
+					new ExpressionProjector(DECIMAL_DIGITS, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(DECIMAL_DIGITS_COLUMN), false),
+					new ExpressionProjector(NUM_PREC_RADIX, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(NUM_PREC_RADIX_COLUMN), false),
+					new ExpressionProjector(NULLABLE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(NULLABLE_COLUMN), false),
+					new ExpressionProjector(REMARKS, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(REMARKS_COLUMN), false),
+					new ExpressionProjector(COLUMN_DEF, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(COLUMN_DEF_COLUMN), false),
+					new ExpressionProjector(SQL_DATA_TYPE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(SQL_DATA_TYPE_COLUMN), false),
+					new ExpressionProjector(SQL_DATETIME_SUB, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(SQL_DATETIME_SUB_COLUMN), false),
+					new ExpressionProjector(CHAR_OCTET_LENGTH, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(CHAR_OCTET_LENGTH_COLUMN), false),
+					new ExpressionProjector(ORDINAL_POSITION, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(ORDINAL_POSITION_COLUMN), false),
+					new ExpressionProjector(IS_NULLABLE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(IS_NULLABLE_COLUMN), false),
+					new ExpressionProjector(SCOPE_CATALOG, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(SCOPE_CATALOG_COLUMN), false),
+					new ExpressionProjector(SCOPE_SCHEMA, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(SCOPE_SCHEMA_COLUMN), false),
+					new ExpressionProjector(SCOPE_TABLE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(SCOPE_TABLE_COLUMN), false),
+					new ExpressionProjector(SOURCE_DATA_TYPE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(SOURCE_DATA_TYPE_COLUMN), false),
+					new ExpressionProjector(IS_AUTOINCREMENT, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(IS_AUTOINCREMENT_COLUMN), false),
+					new ExpressionProjector(ARRAY_SIZE, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(ARRAY_SIZE_COLUMN), false),
+					new ExpressionProjector(COLUMN_FAMILY, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(COLUMN_FAMILY_COLUMN), false),
+					new ExpressionProjector(TYPE_ID, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(TYPE_ID_COLUMN), false),
+					new ExpressionProjector(VIEW_CONSTANT, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(VIEW_CONSTANT_COLUMN), false),
+					new ExpressionProjector(MULTI_TENANT, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(MULTI_TENANT_COLUMN), false),
+					new ExpressionProjector(KEY_SEQ, SYSTEM_CATALOG,
+							new KeyValueColumnExpression(KEY_SEQ_COLUMN), false)
+					), 0, true);
+	
+	private boolean match(String str, String pattern) throws SQLException {
+		LiteralExpression strExpr = LiteralExpression.newConstant(str, PVarchar.INSTANCE, SortOrder.ASC);
+		LiteralExpression patternExpr = LiteralExpression.newConstant(pattern, PVarchar.INSTANCE, SortOrder.ASC);
+		List<Expression> children = Arrays.<Expression>asList(strExpr, patternExpr);
+		LikeExpression likeExpr = StringBasedLikeExpression.create(children, LikeType.CASE_SENSITIVE);
+		ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+		boolean evaluated = likeExpr.evaluate(null, ptr);
+		Boolean result = (Boolean)likeExpr.getDataType().toObject(ptr);
+		if (evaluated) {
+			return result;
+		}
+		return false;
+	}
+    
+	@Override
     public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
             throws SQLException {
-        StringBuilder buf = new StringBuilder("select \n " +
-                TENANT_ID + " " + TABLE_CAT + "," + // use this for tenant id
-                TABLE_SCHEM + "," +
-                TABLE_NAME + " ," +
-                COLUMN_NAME + "," +
-                ExternalSqlTypeIdFunction.NAME + "(" + DATA_TYPE + ") AS " + DATA_TYPE + "," +
-                SqlTypeNameFunction.NAME + "(" + DATA_TYPE + ") AS " + TYPE_NAME + "," +
-                COLUMN_SIZE + "," +
-                BUFFER_LENGTH + "," +
-                DECIMAL_DIGITS + "," +
-                NUM_PREC_RADIX + "," +
-                NULLABLE + "," +
-                REMARKS + "," +
-                COLUMN_DEF + "," +
-                SQL_DATA_TYPE + "," +
-                SQL_DATETIME_SUB + "," +
-                CHAR_OCTET_LENGTH + "," +
-                "CASE WHEN " + TENANT_POS_SHIFT + " THEN " + ORDINAL_POSITION + "-1 ELSE " + ORDINAL_POSITION + " END AS " + ORDINAL_POSITION + "," +
-                "CASE " + NULLABLE + " WHEN " + DatabaseMetaData.attributeNoNulls +  " THEN '" + Boolean.FALSE.toString() + "' WHEN " + DatabaseMetaData.attributeNullable + " THEN '" + Boolean.TRUE.toString() + "' END AS " + IS_NULLABLE + "," +
-                SCOPE_CATALOG + "," +
-                SCOPE_SCHEMA + "," +
-                SCOPE_TABLE + "," +
-                SOURCE_DATA_TYPE + "," +
-                IS_AUTOINCREMENT + "," +
-                ARRAY_SIZE + "," +
-                COLUMN_FAMILY + "," +
-                DATA_TYPE + " " + TYPE_ID + "," +// raw type id for potential internal consumption
-                VIEW_CONSTANT + "," +
-                MULTI_TENANT + "," +
-                "CASE WHEN " + TENANT_POS_SHIFT + " THEN " + KEY_SEQ + "-1 ELSE " + KEY_SEQ + " END AS " + KEY_SEQ +
-                " from " + SYSTEM_CATALOG + " " + SYSTEM_CATALOG_ALIAS + "(" + TENANT_POS_SHIFT + " BOOLEAN)");
-        StringBuilder where = new StringBuilder();
-        addTenantIdFilter(where, catalog);
-        if (schemaPattern != null) {
-            appendConjunction(where);
-            where.append(TABLE_SCHEM + (schemaPattern.length() == 0 ? " is null" : " like '" + StringUtil.escapeStringConstant(schemaPattern) + "'" ));
-        }
-        if (tableNamePattern != null && tableNamePattern.length() > 0) {
-            appendConjunction(where);
-            where.append(TABLE_NAME + " like '" + StringUtil.escapeStringConstant(tableNamePattern) + "'" );
-        }
-        // Allow a "." in columnNamePattern for column family match
-        String colPattern = null;
-        if (columnNamePattern != null && columnNamePattern.length() > 0) {
+		boolean isTenantSpecificConnection = connection.getTenantId() != null;
+    	List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
+    	ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null);
+    	while (rs.next()) {
+    		String schemaName = rs.getString(TABLE_SCHEM);
+    		boolean systemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
+    		// Allow a "." in columnNamePattern for column family match
+            String colPattern = null;
             String cfPattern = null;
-            int index = columnNamePattern.indexOf('.');
-            if (index <= 0) {
-                colPattern = columnNamePattern;
-            } else {
-                cfPattern = columnNamePattern.substring(0, index);
-                if (columnNamePattern.length() > index+1) {
-                    colPattern = columnNamePattern.substring(index+1);
+            if (columnNamePattern != null && columnNamePattern.length() > 0) {
+                int index = columnNamePattern.indexOf('.');
+                if (index <= 0) {
+                    colPattern = columnNamePattern;
+                } else {
+                    cfPattern = columnNamePattern.substring(0, index);
+                    if (columnNamePattern.length() > index+1) {
+                        colPattern = columnNamePattern.substring(index+1);
+                    }
                 }
             }
-            if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will pick up all columns
-                // Will pick up only KV columns
-                appendConjunction(where);
-                where.append(COLUMN_FAMILY + " like '" + StringUtil.escapeStringConstant(cfPattern) + "'" );
-            }
-            if (colPattern != null && colPattern.length() > 0) {
-                appendConjunction(where);
-                where.append(COLUMN_NAME + " like '" + StringUtil.escapeStringConstant(colPattern) + "'" );
-            }
-        }
-        if (colPattern == null || colPattern.length() == 0) {
-            appendConjunction(where);
-            where.append(COLUMN_NAME + " is not null" );
-            appendConjunction(where);
-            where.append(LINK_TYPE + " is null" );
-        }
-        boolean isTenantSpecificConnection = connection.getTenantId() != null;
-        if (isTenantSpecificConnection) {
-            buf.append(" where (" + where + ") OR ("
-                    + COLUMN_FAMILY + " is null AND " +  COLUMN_NAME + " is null)");
-        } else {
-            buf.append(" where " + where);
-        }
-        buf.append(" order by " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + "," + SYSTEM_CATALOG_ALIAS + "." + ORDINAL_POSITION);
-
-        Statement stmt;
-        if (isTenantSpecificConnection) {
-            stmt = connection.createStatement(new PhoenixStatementFactory() {
-                @Override
-                public PhoenixStatement newStatement(PhoenixConnection connection) {
-                    return new PhoenixStatement(connection) {
-                        @Override
-                        public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector,
-                                StatementContext context) throws SQLException {
-                            return new PhoenixResultSet(new TenantColumnFilteringIterator(iterator, projector),
-                                    projector, context);
-                        }
-                    };
+			String tableName = rs.getString(TABLE_NAME);
+    		String tenantId = rs.getString(TABLE_CAT);
+    		String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+    		// if its a SYSTEM table we prevent the rpc to fetch the table so look it up in the cache
+			PTable table = systemTable ? PhoenixRuntime.getTable(connection, fullTableName)
+					: PhoenixRuntime.getTableNoCache(connection, fullTableName);
+    		boolean isSalted = table.getBucketNum()!=null;
+    		boolean tenantColSkipped = false;
+    		for (PColumn column : table.getColumns()) {
+    			if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(0))) {
+    				// skip the tenant column
+    				tenantColSkipped = true;
+    				continue;
+    			}
+    			String columnFamily = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
+    			String columnName = column.getName().getString();
+    			if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will pick up all columns
+    				if (columnFamily==null || !match(columnFamily, cfPattern)) {
+    					continue;
+    				}
                 }
-            });
-        } else {
-            stmt = connection.createStatement();
-        }
-        return stmt.executeQuery(buf.toString());
-    }
-    
-//    private ColumnResolver getColumnResolverForCatalogTable() throws SQLException {
-//        TableRef tableRef = new TableRef(getTable(connection, SYSTEM_CATALOG_NAME));
-//        return FromCompiler.getResolver(tableRef);
-//    }
-    
-    /**
-     * Filters the tenant id column out of a column metadata result set (thus, where each row is a column definition).
-     * The tenant id is by definition the first column of the primary key, but the primary key does not necessarily
-     * start at the first column. Assumes columns are sorted on ordinal position.
-     */
-    private static class TenantColumnFilteringIterator extends DelegateResultIterator {
-        private final RowProjector rowProjector;
-        private final int columnFamilyIndex;
-        private final int columnNameIndex;
-        private final int multiTenantIndex;
-        private final int keySeqIndex;
-        private boolean inMultiTenantTable;
-        private boolean tenantColumnSkipped;
-
-        private TenantColumnFilteringIterator(ResultIterator delegate, RowProjector rowProjector) throws SQLException {
-            super(delegate);
-            this.rowProjector = rowProjector;
-            this.columnFamilyIndex = rowProjector.getColumnIndex(COLUMN_FAMILY);
-            this.columnNameIndex = rowProjector.getColumnIndex(COLUMN_NAME);
-            this.multiTenantIndex = rowProjector.getColumnIndex(MULTI_TENANT);
-            this.keySeqIndex = rowProjector.getColumnIndex(KEY_SEQ);
-        }
-
-        @Override
-        public Tuple next() throws SQLException {
-            Tuple tuple = super.next();
-
-            while (tuple != null
-                    && getColumn(tuple, columnFamilyIndex) == null && getColumn(tuple, columnNameIndex) == null) {
-                // new table, check if it is multitenant
-                inMultiTenantTable = getColumn(tuple, multiTenantIndex) == Boolean.TRUE;
-                tenantColumnSkipped = false;
-                // skip row representing table
-                tuple = super.next();
-            }
-
-            if (tuple != null && inMultiTenantTable && !tenantColumnSkipped) {
-                Object value = getColumn(tuple, keySeqIndex);
-                if (value != null && ((Number)value).longValue() == 1L) {
-                    tenantColumnSkipped = true;
-                    // skip tenant id primary key column
-                    return next();
+                if (colPattern != null && colPattern.length() > 0) {
+                	if (!match(columnName, colPattern)) {
+                		continue;
+                	}
                 }
-            }
-
-            if (tuple != null && tenantColumnSkipped) {
-                ResultTuple resultTuple = (ResultTuple)tuple;
-                List<Cell> cells = resultTuple.getResult().listCells();
-                KeyValue kv = new KeyValue(resultTuple.getResult().getRow(), TABLE_FAMILY_BYTES,
-                        TENANT_POS_SHIFT_BYTES, PDataType.TRUE_BYTES);
-                List<Cell> newCells = Lists.newArrayListWithCapacity(cells.size() + 1);
-                newCells.addAll(cells);
-                newCells.add(kv);
-                Collections.sort(newCells, KeyValue.COMPARATOR);
-                tuple = new ResultTuple(Result.create(newCells));
-            }
-            return tuple;
-        }
-
-        private Object getColumn(Tuple tuple, int index) throws SQLException {
-            ColumnProjector projector = this.rowProjector.getColumnProjector(index);
-            PDataType type = projector.getExpression().getDataType();
-            return projector.getValue(tuple, type, new ImmutableBytesPtr());
-        }
+    			// generate row key
+    			// TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
+    			byte[] rowKey = SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, null);
+    			
+    			// add one cell for each column info
+    			List<Cell> cells = Lists.newArrayListWithCapacity(25);
+    			// DATA_TYPE
+    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DATA_TYPE_BYTES,
+    	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
+    	    	// TYPE_NAME
+    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(TYPE_NAME),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getDataType().getSqlTypeNameBytes()));
+    	    	// COLUMN_SIZE
+    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getMaxLength()!=null ? PInteger.INSTANCE.toBytes(column.getMaxLength()) : ByteUtil.EMPTY_BYTE_ARRAY ));
+    	    	// BUFFER_LENGTH
+    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(BUFFER_LENGTH),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+    	    	// DECIMAL_DIGITS
+    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getScale()!=null ? PInteger.INSTANCE.toBytes(column.getScale()) : ByteUtil.EMPTY_BYTE_ARRAY ));
+    	    	// NUM_PREC_RADIX
+    	    	cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(NUM_PREC_RADIX),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+    	    	// NULLABLE
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, NULLABLE_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP,  PInteger.INSTANCE.toBytes(SchemaUtil.getIsNullableInt(column.isNullable()))));
+				// REMARKS 
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(REMARKS),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// COLUMN_DEF 
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(COLUMN_DEF),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// SQL_DATA_TYPE
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SQL_DATA_TYPE),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// SQL_DATETIME_SUB
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SQL_DATETIME_SUB),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// CHAR_OCTET_LENGTH
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(CHAR_OCTET_LENGTH),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// ORDINAL_POSITION
+				int ordinal = column.getPosition() + (isSalted ? 0 : 1) - (tenantColSkipped ? 1 : 0);
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ORDINAL_POSITION_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(ordinal)));
+				String isNullable = column.isNullable() ? Boolean.TRUE.toString() : Boolean.FALSE.toString();
+				// IS_NULLABLE
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(IS_NULLABLE),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PVarchar.INSTANCE.toBytes(isNullable)));
+				// SCOPE_CATALOG
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_CATALOG),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// SCOPE_SCHEMA
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_SCHEMA),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// SCOPE_TABLE
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SCOPE_TABLE),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// SOURCE_DATA_TYPE
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(SOURCE_DATA_TYPE),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// IS_AUTOINCREMENT
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(IS_AUTOINCREMENT),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+				// ARRAY_SIZE
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getArraySize()!=null ? PInteger.INSTANCE.toBytes(column.getArraySize()) : ByteUtil.EMPTY_BYTE_ARRAY ));
+				// COLUMN_FAMILY
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_FAMILY_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getFamilyName()!=null  ? column.getFamilyName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY));
+				// TYPE_ID
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, Bytes.toBytes(TYPE_ID),
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
+				// VIEW_CONSTANT
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getViewConstant()!=null ? column.getViewConstant() : ByteUtil.EMPTY_BYTE_ARRAY ));
+				// MULTI_TENANT
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, MULTI_TENANT_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, PBoolean.INSTANCE.toBytes(table.isMultiTenant())));
+				// KEY_SEQ_COLUMN
+				byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+				int pkPos = table.getPKColumns().indexOf(column);
+				if (pkPos!=-1) {
+					short keySeq = (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));
+			        keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
+				}
+				cells.add(KeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
+        	    	    MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
+				Collections.sort(cells, new CellComparator());
+    	    	Tuple tuple = new MultiKeyValueTuple(cells);
+    	    	tuples.add(tuple);
+    		}
+    	}
+    	return new PhoenixResultSet(new MaterializedResultIterator(tuples), GET_COLUMNS_ROW_PROJECTOR, new StatementContext(new PhoenixStatement(connection), false));
     }
 
     @Override
@@ -972,6 +1141,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     }
 
     @Override
+    // TODO does this need to change to use the PARENT_TABLE link
     public ResultSet getSuperTables(String catalog, String schemaPattern, String tableNamePattern) throws SQLException {
         StringBuilder buf = new StringBuilder("select \n" +
                 TENANT_ID + " " + TABLE_CAT + "," + // Use tenantId for catalog
@@ -1008,11 +1178,11 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             throws SQLException {
         return emptyResultSet;
     }
-
+    
     private static final PDatum TABLE_TYPE_DATUM = new PDatum() {
         @Override
         public boolean isNullable() {
-            return false;
+            return true;
         }
         @Override
         public PDataType getDataType() {
@@ -1031,6 +1201,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 			return SortOrder.getDefault();
 		}
     };
+
     private static final RowProjector TABLE_TYPE_ROW_PROJECTOR = new RowProjector(Arrays.<ColumnProjector>asList(
             new ExpressionProjector(TABLE_TYPE, SYSTEM_CATALOG,
                     new RowKeyColumnExpression(TABLE_TYPE_DATUM,

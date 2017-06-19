@@ -50,6 +50,7 @@ enum MutationCode {
   AUTO_PARTITION_SEQUENCE_NOT_FOUND = 20;
   CANNOT_COERCE_AUTO_PARTITION_ID = 21;
   TOO_MANY_INDEXES = 22;
+  INVALID_VIEW = 23;
 };
 
 message SharedTableState {

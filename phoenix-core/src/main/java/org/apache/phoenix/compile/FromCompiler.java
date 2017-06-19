@@ -31,6 +31,9 @@ import org.apache.hadoop.hbase.client.HTableInterface;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.AliasedNode;
@@ -557,8 +560,14 @@ public class FromCompiler {
                 MetaDataMutationResult result = client.updateCache(tenantId, schemaName, tableName, alwaysHitServer);
                 timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
                 theTable = result.getTable();
+                MutationCode mutationCode = result.getMutationCode();
                 if (theTable == null) {
-                    throw new TableNotFoundException(schemaName, tableName, timeStamp);
+					if (mutationCode == MutationCode.INVALID_VIEW) {
+						throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VIEW).setSchemaName(schemaName)
+								.setTableName(tableName).build().buildException();
+					} else {
+						throw new TableNotFoundException(schemaName, tableName, timeStamp);
+					}
                 }
             } else {
                 try {

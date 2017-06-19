@@ -164,11 +164,14 @@ public class InListIT extends ParallelStatsDisabledIT {
     private static final String TENANT_URL = getUrl() + ";" + PhoenixRuntime.TENANT_ID_ATTRIB + '=' + TENANT_ID;
     
     // the different combinations to check each test against
-    private static final List<Boolean> TENANCIES = Arrays.asList(false, true);
-    private static final List<? extends PDataType> INTEGER_TYPES = Arrays.asList(PInteger.INSTANCE, PLong.INSTANCE);
-    private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(0, 4);
+    private static final List<Boolean> TENANCIES = Arrays.asList(/*false, */true);
+//    private static final List<? extends PDataType> INTEGER_TYPES = Arrays.asList(PInteger.INSTANCE, PLong.INSTANCE);
+    private static final List<? extends PDataType> INTEGER_TYPES = Arrays.asList(PInteger.INSTANCE);
+//    private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(0, 4);
+    private static final List<Integer> SALT_BUCKET_NUMBERS = Arrays.asList(4);
 
-    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
+//    private static final List<String> HINTS = Arrays.asList("", "/*+ SKIP_SCAN */", "/*+ RANGE_SCAN */");
+    private static final List<String> HINTS = Arrays.asList("");
     
     /**
      * Tests the given where clause against the given upserts by comparing against the list of
@@ -206,7 +209,7 @@ public class InListIT extends ParallelStatsDisabledIT {
                             String sql = "SELECT " + hint + " nonPk FROM " + tableName + " " + whereClause;
                             ResultSet rs = conn.createStatement().executeQuery(sql);
                             for (String expected : expecteds) {
-                                assertTrue("did not include result '" + expected + "' (" + context + ")", rs.next());
+                                assertTrue("did not include result '" + expected + "' (" + context + ") ", rs.next());
                                 assertEquals(context, expected, rs.getString(1));
                             }
                             assertFalse(context, rs.next());

@@ -1985,4 +1985,6 @@ public class UpgradeUtil {
     public static void doNotUpgradeOnFirstConnection(Properties props) {
         props.setProperty(DO_NOT_UPGRADE, String.valueOf(true));
     }
+    
+    //TODO add link from index to parent table 
 }
