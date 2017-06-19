@@ -137,7 +137,7 @@ public enum SQLExceptionCode {
     ORDER_BY_NOT_IN_SELECT_DISTINCT(511, "42890", "All ORDER BY expressions must appear in SELECT DISTINCT:"),
     INVALID_PRIMARY_KEY_CONSTRAINT(512, "42891", "Invalid column reference in primary key constraint."),
     ARRAY_NOT_ALLOWED_IN_PRIMARY_KEY(513, "42892", "Array type not allowed as primary key constraint."),
-    COLUMN_EXIST_IN_DEF(514, "42892", "A duplicate column name was detected in the object definition or ALTER TABLE statement.", new Factory() {
+    COLUMN_EXIST_IN_DEF(514, "42892", "A duplicate column name was detected in the object definition or ALTER TABLE/VIEW statement.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
             return new ColumnAlreadyExistsException(info.getSchemaName(), info.getTableName(), info.getColumnName());
