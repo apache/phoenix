@@ -51,6 +51,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 
 /**
  * This class manages all the Phoenix/Hive table initial configurations and SerDe Election
@@ -108,6 +109,12 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
     @Override
     public Class<? extends OutputFormat> getOutputFormatClass() {
         return PhoenixOutputFormat.class;
+    }
+
+    @SuppressWarnings("rawtypes")
+    @Override
+    public Class<? extends InputFormat> getInputFormatClass() {
+        return PhoenixInputFormat.class;
     }
 
     @Override
@@ -182,7 +189,12 @@ public class PhoenixStorageHandler extends DefaultStorageHandler implements
         }
         SessionState sessionState = SessionState.get();
 
-        String sessionId = sessionState.getSessionId();
+        String sessionId;
+        if(sessionState!= null) {
+            sessionId = sessionState.getSessionId();
+        }  else {
+            sessionId = UUID.randomUUID().toString();
+        }
         jobProperties.put(PhoenixConfigurationUtil.SESSION_ID, sessionId);
         jobProperties.put(PhoenixConfigurationUtil.INPUT_TABLE_NAME, tableName);
         jobProperties.put(PhoenixStorageHandlerConstants.ZOOKEEPER_QUORUM, tableProperties
