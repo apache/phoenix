@@ -63,7 +63,7 @@ public class ScanQueryIT extends BaseQueryIT {
     }
 
     public ScanQueryIT(String indexDDL, boolean mutable, boolean columnEncoded) {
-        super(indexDDL, mutable, columnEncoded);
+        super(indexDDL, mutable, columnEncoded, false);
     }
     
     @Test
