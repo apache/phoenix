@@ -354,6 +354,10 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             LOG.info("Loading HFiles for {} from {}", tableName , tableOutputPath);
             loader.doBulkLoad(tableOutputPath, htable);
             LOG.info("Incremental load complete for table=" + tableName);
+
+            if (!tableOutputPath.getFileSystem(conf).delete(tableOutputPath, true)) {
+                LOG.error("Failed to delete the table output directory {}", tableOutputPath);
+            }
         }
     }
 
