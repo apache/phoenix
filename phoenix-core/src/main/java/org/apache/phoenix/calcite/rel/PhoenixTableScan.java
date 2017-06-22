@@ -51,6 +51,7 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
+
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableList.Builder;
@@ -339,7 +340,7 @@ public class PhoenixTableScan extends TableScan implements PhoenixQueryRel {
             PColumn column = mappedColumns.get(index);
             PName familyName = column.getFamilyName();
             if (familyName != null) {
-                scan.addColumn(familyName.getBytes(), column.getColumnQualifierBytes());
+                scan.addFamily(familyName.getBytes());
             }
         }
     }
