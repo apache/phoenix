@@ -84,7 +84,7 @@ public class AggregationManager {
                 @Override
                 public Iterator<Expression> visitEnter(SingleAggregateFunction function) {
                     aggFuncSet.add(function);
-                    return Iterators.emptyIterator();
+                    return Collections.emptyIterator();
                 }
             });
         }

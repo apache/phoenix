@@ -26,13 +26,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP
 
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeMap;
+import java.util.*;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
@@ -823,7 +817,7 @@ public class ScanUtil {
         Iterator<Filter> filterIterator;
         Filter topLevelFilter = scan.getFilter();
         if (topLevelFilter == null) {
-            filterIterator = Iterators.emptyIterator();
+            filterIterator = Collections.emptyIterator();
         } else if (topLevelFilter instanceof FilterList) {
             filterIterator = ((FilterList) topLevelFilter).getFilters().iterator();
         } else {

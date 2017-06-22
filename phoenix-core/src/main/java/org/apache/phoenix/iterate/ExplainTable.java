@@ -263,7 +263,7 @@ public abstract class ExplainTable {
         // TODO: review this and potentially intersect the scan ranges
         // with the minMaxRange in ScanRanges to prevent having to do all this.
         KeyRange minMaxRange = scanRanges.getMinMaxRange();
-        Iterator<byte[]> minMaxIterator = Iterators.emptyIterator();
+        Iterator<byte[]> minMaxIterator = Collections.emptyIterator();
         if (minMaxRange != KeyRange.EVERYTHING_RANGE) {
             RowKeySchema schema = tableRef.getTable().getRowKeySchema();
             if (!minMaxRange.isUnbound(bound)) {
@@ -286,7 +286,7 @@ public abstract class ExplainTable {
                     b = bMinMax;
                     isNull = null;
                 } else if (cmp < 0) {
-                    minMaxIterator = Iterators.emptyIterator();
+                    minMaxIterator = Collections.emptyIterator();
                 }
             }
             if (isLocalIndex && i == 0) {

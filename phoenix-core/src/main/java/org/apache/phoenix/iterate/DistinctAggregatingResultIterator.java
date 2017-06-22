@@ -18,6 +18,7 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -122,7 +123,7 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
             aggregate(tuple);
             return tuple;
         }
-        resultIterator = Iterators.emptyIterator();
+        resultIterator = Collections.emptyIterator();
         return null;
     }
     
@@ -147,7 +148,7 @@ public class DistinctAggregatingResultIterator implements AggregatingResultItera
 
     @Override
     public void close()  {
-        resultIterator = Iterators.emptyIterator();
+        resultIterator = Collections.emptyIterator();
     }
 
 
