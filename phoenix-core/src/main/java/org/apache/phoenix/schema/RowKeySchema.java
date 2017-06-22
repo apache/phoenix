@@ -162,7 +162,9 @@ public class RowKeySchema extends ValueSchema {
         }
         Field field = this.getField(position);
         if (field.getDataType().isFixedWidth()) {
-            ptr.set(ptr.get(),ptr.getOffset(), field.getByteSize());
+            // It is possible that the number of remaining row key bytes are less than the fixed
+            // width size. See PHOENIX-3968.
+            ptr.set(ptr.get(), ptr.getOffset(), Math.min(maxOffset - ptr.getOffset(), field.getByteSize()));
         } else {
             if (position+1 == getFieldCount() ) {
                 // Last field has no terminator unless it's descending sort order
