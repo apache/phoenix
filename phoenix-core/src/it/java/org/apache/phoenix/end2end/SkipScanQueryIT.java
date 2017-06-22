@@ -34,10 +34,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.client.HBaseAdmin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 
@@ -472,6 +474,92 @@ public class SkipScanQueryIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("upsert into " + tableName + "(CREATETIME,ACCOUNTID,SERVICENAME,SPAN.APPID) values('20160116151006','2404787','jdbc','ios')");
             ResultSet rs = conn.createStatement().executeQuery("select * from " + tableName + " where CREATETIME>='20160116121006' and  CREATETIME<='20160116181006' and ACCOUNTID='2404787'");
             assertTrue(rs.next());
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testSkipScanQueryWhenSplitKeyIsSmaller() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            StringBuffer buf =
+                    new StringBuffer("CREATE TABLE IF NOT EXISTS " + tableName
+                            + "(ORGANIZATION_ID CHAR(15) NOT NULL,"
+                            + "FEED_ITEM_ID CHAR(15) NOT NULL," + "EXTENSION VARCHAR(128) NOT NULL,"
+                            + "CREATED_TIME TIMESTAMP," + "LAST_UPDATE TIMESTAMP,"
+                            + "LAST_ACCESSED TIMESTAMP," + "VERSION INTEGER,"
+                            + "DATA.PAYLOAD VARCHAR(512000)" + "CONSTRAINT PK PRIMARY KEY" + "("
+                            + "        ORGANIZATION_ID," + "        FEED_ITEM_ID,"
+                            + "        EXTENSION" + ")" + ")");
+            conn.createStatement().execute(buf.toString());
+            String upsert =
+                    "UPSERT INTO " + tableName
+                            + " (ORGANIZATION_ID, FEED_ITEM_ID, EXTENSION) VALUES (?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsert);
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002MK5Uu");
+            stmt.setString(3, "FI");
+            stmt.executeUpdate();
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002MK5Uu");
+            stmt.setString(3, "T0");
+            stmt.executeUpdate();
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002QWbP0");
+            stmt.setString(3, "FI");
+            stmt.executeUpdate();
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002QWbP0");
+            stmt.setString(3, "T0");
+            stmt.executeUpdate();
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002QXXL2");
+            stmt.setString(3, "FI");
+            stmt.executeUpdate();
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002QXXL2");
+            stmt.setString(3, "T0");
+            stmt.executeUpdate();
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002RhvtQ");
+            stmt.setString(3, "FI");
+            stmt.executeUpdate();
+            stmt.setString(1, "00Do0000000a8w1");
+            stmt.setString(2, "0D5o000002RhvtQ");
+            stmt.setString(3, "T0");
+            stmt.executeUpdate();
+            conn.commit();
+            try (HBaseAdmin admin =
+                    conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                /*
+                 * The split key is 27 bytes instead of at least 30 bytes (CHAR(15) + CHAR(15)).
+                 * Note that we cannot use the phoenix way of giving split points in the ddl because
+                 * it ends up padding the split point bytes to 30.
+                 */
+                byte[] smallSplitKey = Bytes.toBytes("00Do0000000a8w10D5o000002Rhv");
+                admin.split(Bytes.toBytes(tableName), smallSplitKey);
+            }
+            ResultSet rs =
+                    conn.createStatement().executeQuery("SELECT EXTENSION FROM " + tableName
+                            + " WHERE " + "ORGANIZATION_ID = '00Do0000000a8w1' AND "
+                            + "FEED_ITEM_ID IN "
+                            + "('0D5o000002MK5Uu','0D5o000002QWbP0','0D5o000002QXXL2','0D5o000002RhvtQ') ORDER BY ORGANIZATION_ID, FEED_ITEM_ID, EXTENSION");
+            assertTrue(rs.next());
+            assertEquals("FI", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("T0", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("FI", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("T0", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("FI", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("T0", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("FI", rs.getString(1));
+            assertTrue(rs.next());
+            assertEquals("T0", rs.getString(1));
             assertFalse(rs.next());
         }
     }
