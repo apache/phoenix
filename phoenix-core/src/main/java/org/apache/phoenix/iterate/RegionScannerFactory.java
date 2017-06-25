@@ -19,6 +19,7 @@
 package org.apache.phoenix.iterate;
 
 import com.google.common.collect.ImmutableList;
+
 import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -38,6 +39,7 @@ import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.*;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -95,7 +97,7 @@ public abstract class RegionScannerFactory {
       final Expression[] arrayFuncRefs, final int offset, final Scan scan,
       final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
       final Region dataRegion, final IndexMaintainer indexMaintainer,
-      Transaction tx,
+      PhoenixTransactionContext tx,
       final byte[][] viewConstants, final KeyValueSchema kvSchema,
       final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
       final ImmutableBytesWritable ptr, final boolean useQualifierAsListIndex) {

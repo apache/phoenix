@@ -30,12 +30,12 @@ import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.tephra.Transaction;
 
 public class PhoenixIndexMetaData implements IndexMetaData {
     private final Map<String, byte[]> attributes;
@@ -56,7 +56,7 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         byte[] txState = attributes.get(BaseScannerRegionObserver.TX_STATE);
         if (md != null) {
             final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md, useProto);
-            final Transaction txn = MutationState.decodeTransaction(txState);
+            final PhoenixTransactionContext txnContext = TransactionFactory.getTransactionFactory().getTransactionContext(txState);
             return new IndexMetaDataCache() {
 
                 @Override
@@ -68,8 +68,8 @@ public class PhoenixIndexMetaData implements IndexMetaData {
                 }
 
                 @Override
-                public Transaction getTransaction() {
-                    return txn;
+                public PhoenixTransactionContext getTransactionContext() {
+                    return txnContext;
                 }
 
             };
@@ -101,8 +101,8 @@ public class PhoenixIndexMetaData implements IndexMetaData {
         this.ignoreNewerMutations = attributes.get(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
     }
     
-    public Transaction getTransaction() {
-        return indexMetaDataCache.getTransaction();
+    public PhoenixTransactionContext getTransactionContext() {
+        return indexMetaDataCache.getTransactionContext();
     }
     
     public List<IndexMaintainer> getIndexMaintainers() {
