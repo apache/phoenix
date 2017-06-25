@@ -49,8 +49,10 @@ import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+
 import org.apache.phoenix.iterate.RegionScannerFactory;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
+
 
 abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
 

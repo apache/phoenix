@@ -20,6 +20,7 @@ package org.apache.phoenix.iterate;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
@@ -54,11 +55,12 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
-import org.apache.tephra.Transaction;
+
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -111,7 +113,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     Region dataRegion = null;
     IndexMaintainer indexMaintainer = null;
     byte[][] viewConstants = null;
-    Transaction tx = null;
+    PhoenixTransactionContext tx = null;
     ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
     if (dataColumns != null) {
       tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);

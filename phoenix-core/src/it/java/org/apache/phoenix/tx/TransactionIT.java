@@ -43,10 +43,10 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.apache.tephra.TxConstants;
 import org.junit.Test;
 
 public class TransactionIT  extends ParallelStatsDisabledIT {
@@ -147,21 +147,24 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
+            assertEquals(1000, Integer.parseInt(propertyTTL));
         }
 
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX1"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
+            assertEquals(1000, Integer.parseInt(propertyTTL));
         }
         
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes("IDX2"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
+            assertEquals(1000, Integer.parseInt(propertyTTL));
         }
         
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "2(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
@@ -170,14 +173,15 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
             assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
-            assertEquals(null, colDesc.getValue(TxConstants.PROPERTY_TTL));
+            assertEquals(null, colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL));
         }
         conn.createStatement().execute("ALTER TABLE " + nonTxTableName + "2 SET TTL=1000");
         desc = conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(Bytes.toBytes( nonTxTableName + "2"));
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(10, colDesc.getMaxVersions());
             assertEquals(1000, colDesc.getTimeToLive());
-            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
+            assertEquals(1000, Integer.parseInt(propertyTTL));
         }
 
         conn.createStatement().execute("CREATE TABLE " + nonTxTableName + "3(k INTEGER PRIMARY KEY, a.v VARCHAR, b.v VARCHAR, c.v VARCHAR)");
@@ -207,7 +211,8 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
         for (HColumnDescriptor colDesc : desc.getFamilies()) {
             assertEquals(QueryServicesOptions.DEFAULT_MAX_VERSIONS_TRANSACTIONAL, colDesc.getMaxVersions());
             assertEquals(HColumnDescriptor.DEFAULT_TTL, colDesc.getTimeToLive());
-            assertEquals(1000, Integer.parseInt(colDesc.getValue(TxConstants.PROPERTY_TTL)));
+            String propertyTTL = colDesc.getValue(PhoenixTransactionContext.PROPERTY_TTL);
+            assertEquals(1000, Integer.parseInt(propertyTTL));
         }
     }
     
