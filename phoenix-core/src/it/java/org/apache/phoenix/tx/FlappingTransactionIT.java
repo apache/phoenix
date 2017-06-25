@@ -42,12 +42,11 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionalTable;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
-import org.apache.tephra.TransactionContext;
-import org.apache.tephra.TransactionSystemClient;
-import org.apache.tephra.TxConstants;
-import org.apache.tephra.hbase.TransactionAwareHTable;
 import org.junit.Test;
 
 /**
@@ -213,8 +212,6 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         String fullTableName = generateUniqueName();
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         
-        TransactionSystemClient txServiceClient = pconn.getQueryServices().getTransactionSystemClient();
-
         Statement stmt = conn.createStatement();
         stmt.execute("CREATE TABLE " + fullTableName + "(K VARCHAR PRIMARY KEY, V1 VARCHAR, V2 VARCHAR) TRANSACTIONAL=true");
         HTableInterface htable = pconn.getQueryServices().getTable(Bytes.toBytes(fullTableName));
@@ -227,16 +224,18 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
             assertEquals(1,rs.getInt(1));
         }
 
-        // Use HBase level Tephra APIs to start a new transaction
-        TransactionAwareHTable txAware = new TransactionAwareHTable(htable, TxConstants.ConflictDetection.ROW);
-        TransactionContext txContext = new TransactionContext(txServiceClient, txAware);
-        txContext.start();
-        
+        PhoenixTransactionContext txContext =
+              TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
+        PhoenixTransactionalTable txTable =
+              TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
+
+        txContext.begin();
+
         // Use HBase APIs to add a new row
         Put put = new Put(Bytes.toBytes("z"));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("V1"), Bytes.toBytes("b"));
-        txAware.put(put);
+        txTable.put(put);
         
         // Use Phoenix APIs to add new row (sharing the transaction context)
         pconn.setTransactionContext(txContext);
@@ -258,8 +257,8 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(3,rs.getInt(1));
         
-        // Use Tephra APIs directly to finish (i.e. commit) the transaction
-        txContext.finish();
+        // Use TM APIs directly to finish (i.e. commit) the transaction
+        txContext.commit();
         
         // Confirm that attempt to commit row with conflict fails
         try {
@@ -279,14 +278,18 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         }
         
         // Repeat the same as above, but this time abort the transaction
-        txContext = new TransactionContext(txServiceClient, txAware);
-        txContext.start();
+        txContext =
+              TransactionFactory.getTransactionFactory().getTransactionContext(pconn);
+        txTable =
+              TransactionFactory.getTransactionFactory().getTransactionalTable(txContext, htable);
+
+        txContext.begin();
         
         // Use HBase APIs to add a new row
         put = new Put(Bytes.toBytes("j"));
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, QueryConstants.EMPTY_COLUMN_BYTES, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
         put.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, Bytes.toBytes("V1"), Bytes.toBytes("e"));
-        txAware.put(put);
+        txTable.put(put);
         
         // Use Phoenix APIs to add new row (sharing the transaction context)
         pconn.setTransactionContext(txContext);
@@ -302,7 +305,7 @@ public class FlappingTransactionIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(4,rs.getInt(1));
 
-        // Use Tephra APIs directly to abort (i.e. rollback) the transaction
+        // Use TM APIs directly to abort (i.e. rollback) the transaction
         txContext.abort();
         
         rs = conn.createStatement().executeQuery("select count(*) from " + fullTableName);

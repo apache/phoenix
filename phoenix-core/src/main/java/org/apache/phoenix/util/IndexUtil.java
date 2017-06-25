@@ -111,7 +111,7 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.tephra.TxConstants;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 
 import com.google.common.collect.Lists;
 import com.google.protobuf.ServiceException;
@@ -274,7 +274,7 @@ public class IndexUtil {
                     regionEndkey = tableRegionLocation.getRegionInfo().getEndKey();
                 }
                 Delete delete = maintainer.buildDeleteMutation(kvBuilder, null, ptr, Collections.<KeyValue>emptyList(), ts, regionStartKey, regionEndkey);
-                delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY));
+                delete.setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, dataMutation.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY));
                 indexMutations.add(delete);
             }
             return indexMutations;

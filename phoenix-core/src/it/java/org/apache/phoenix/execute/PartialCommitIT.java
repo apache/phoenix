@@ -271,11 +271,11 @@ public class PartialCommitIT extends BaseOwnClusterIT {
         return new PhoenixConnection(phxCon, null) {
             @Override
             protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
-                return new MutationState(maxSize, maxSizeBytes, this, mutations, null, null);
+                return new MutationState(maxSize, maxSizeBytes, this, mutations, false, null);
             };
         };
     }
-    
+
     public static class FailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,

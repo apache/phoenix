@@ -75,14 +75,14 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
+import org.apache.phoenix.transaction.PhoenixTransactionalTable;
+import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TransactionUtil;
-import org.apache.tephra.Transaction;
-import org.apache.tephra.Transaction.VisibilityLevel;
-import org.apache.tephra.TxConstants;
-import org.apache.tephra.hbase.TransactionAwareHTable;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -160,7 +160,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         Map<String,byte[]> updateAttributes = m.getAttributesMap();
         String tableName = c.getEnvironment().getRegion().getTableDesc().getNameAsString();
         PhoenixIndexMetaData indexMetaData = new PhoenixIndexMetaData(c.getEnvironment(),updateAttributes);
-        byte[] txRollbackAttribute = m.getAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY);
+        byte[] txRollbackAttribute = m.getAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY);
         Collection<Pair<Mutation, byte[]>> indexUpdates = null;
         // get the current span, or just use a null-span to avoid a bunch of if statements
         try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -249,14 +249,14 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     }
     
     private Collection<Pair<Mutation, byte[]>> getIndexUpdates(RegionCoprocessorEnvironment env, PhoenixIndexMetaData indexMetaData, Iterator<Mutation> mutationIterator, byte[] txRollbackAttribute) throws IOException {
-        Transaction tx = indexMetaData.getTransaction();
-        if (tx == null) {
+        PhoenixTransactionContext txnContext = indexMetaData.getTransactionContext();
+        if (txnContext == null) {
             throw new NullPointerException("Expected to find transaction in metadata for " + env.getRegionInfo().getTable().getNameAsString());
         }
         boolean isRollback = txRollbackAttribute!=null;
         boolean isImmutable = indexMetaData.isImmutableRows();
         ResultScanner currentScanner = null;
-        TransactionAwareHTable txTable = null;
+        PhoenixTransactionalTable txTable = null;
         // Collect up all mutations in batch
         Map<ImmutableBytesPtr, MultiMutation> mutations =
                 new HashMap<ImmutableBytesPtr, MultiMutation>();
@@ -321,23 +321,22 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
                 scanRanges.initializeScan(scan);
                 TableName tableName = env.getRegion().getRegionInfo().getTable();
                 HTableInterface htable = env.getTable(tableName);
-                txTable = new TransactionAwareHTable(htable);
-                txTable.startTx(tx);
+                txTable = TransactionFactory.getTransactionFactory().getTransactionalTable(txnContext, htable);
                 // For rollback, we need to see all versions, including
                 // the last committed version as there may be multiple
                 // checkpointed versions.
                 SkipScanFilter filter = scanRanges.getSkipScanFilter();
                 if (isRollback) {
                     filter = new SkipScanFilter(filter,true);
-                    tx.setVisibility(VisibilityLevel.SNAPSHOT_ALL);
+                    txnContext.setVisibilityLevel(PhoenixVisibilityLevel.SNAPSHOT_ALL);
                 }
                 scan.setFilter(filter);
                 currentScanner = txTable.getScanner(scan);
             }
             if (isRollback) {
-                processRollback(env, indexMetaData, txRollbackAttribute, currentScanner, tx, mutableColumns, indexUpdates, mutations);
+                processRollback(env, indexMetaData, txRollbackAttribute, currentScanner, txnContext, mutableColumns, indexUpdates, mutations);
             } else {
-                processMutation(env, indexMetaData, txRollbackAttribute, currentScanner, tx, mutableColumns, indexUpdates, mutations, findPriorValueMutations);
+                processMutation(env, indexMetaData, txRollbackAttribute, currentScanner, txnContext, mutableColumns, indexUpdates, mutations, findPriorValueMutations);
             }
         } finally {
             if (txTable != null) txTable.close();
@@ -360,7 +359,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     private void processMutation(RegionCoprocessorEnvironment env,
             PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
             ResultScanner scanner,
-            Transaction tx, 
+            PhoenixTransactionContext txnContext, 
             Set<ColumnReference> upsertColumns, 
             Collection<Pair<Mutation, byte[]>> indexUpdates,
             Map<ImmutableBytesPtr, MultiMutation> mutations,
@@ -372,14 +371,14 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
             // Process existing data table rows by removing the old index row and adding the new index row
             while ((result = scanner.next()) != null) {
                 Mutation m = mutationsToFindPreviousValue.remove(new ImmutableBytesPtr(result.getRow()));
-                TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m, emptyColRef, result);
+                TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), txnContext.getWritePointer(), m, emptyColRef, result);
                 generateDeletes(indexMetaData, indexUpdates, txRollbackAttribute, state);
                 generatePuts(indexMetaData, indexUpdates, state);
             }
         }
         // Process new data table by adding new index rows
         for (Mutation m : mutations.values()) {
-            TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), tx.getWritePointer(), m);
+            TxTableState state = new TxTableState(env, upsertColumns, indexMetaData.getAttributes(), txnContext.getWritePointer(), m);
             generatePuts(indexMetaData, indexUpdates, state);
         }
     }
@@ -387,7 +386,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
     private void processRollback(RegionCoprocessorEnvironment env,
             PhoenixIndexMetaData indexMetaData, byte[] txRollbackAttribute,
             ResultScanner scanner,
-            Transaction tx, Set<ColumnReference> mutableColumns,
+            PhoenixTransactionContext tx, Set<ColumnReference> mutableColumns,
             Collection<Pair<Mutation, byte[]>> indexUpdates,
             Map<ImmutableBytesPtr, MultiMutation> mutations) throws IOException {
         if (scanner != null) {
@@ -474,7 +473,7 @@ public class PhoenixTransactionalIndexer extends BaseRegionObserver {
         Iterable<IndexUpdate> deletes = codec.getIndexDeletes(state, indexMetaData);
         for (IndexUpdate delete : deletes) {
             if (delete.isValid()) {
-                delete.getUpdate().setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, attribValue);
+                delete.getUpdate().setAttribute(PhoenixTransactionContext.TX_ROLLBACK_ATTRIBUTE_KEY, attribValue);
                 indexUpdates.add(new Pair<Mutation, byte[]>(delete.getUpdate(),delete.getTableName()));
             }
         }

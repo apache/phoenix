@@ -320,7 +320,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             final Region dataRegion, final IndexMaintainer indexMaintainer,
             final byte[][] viewConstants, final TupleProjector projector,
             final ImmutableBytesWritable ptr, final boolean useQualiferAsListIndex) {
-
         RegionScannerFactory regionScannerFactory = new NonAggregateRegionScannerFactory(c.getEnvironment(),
             useNewValueColumnQualifier, encodingScheme);
 

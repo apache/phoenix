@@ -37,9 +37,9 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.tephra.Transaction.VisibilityLevel;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -53,21 +53,21 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 
 	public TxCheckpointIT(boolean localIndex, boolean mutable, boolean columnEncoded) {
 	    StringBuilder optionBuilder = new StringBuilder();
-		this.localIndex = localIndex;
-		if (!columnEncoded) {
-            if (optionBuilder.length()!=0)
-                optionBuilder.append(",");
-            optionBuilder.append("COLUMN_ENCODED_BYTES=0");
-        }
-        if (!mutable) {
-            if (optionBuilder.length()!=0)
-                optionBuilder.append(",");
-            optionBuilder.append("IMMUTABLE_ROWS=true");
-            if (!columnEncoded) {
-                optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
-            }
-        }
-        this.tableDDLOptions = optionBuilder.toString();
+	    this.localIndex = localIndex;
+	    if (!columnEncoded) {
+	        if (optionBuilder.length()!=0)
+	            optionBuilder.append(",");
+	        optionBuilder.append("COLUMN_ENCODED_BYTES=0");
+	    }
+	    if (!mutable) {
+	        if (optionBuilder.length()!=0)
+	            optionBuilder.append(",");
+	        optionBuilder.append("IMMUTABLE_ROWS=true");
+	        if (!columnEncoded) {
+	            optionBuilder.append(",IMMUTABLE_STORAGE_SCHEME="+PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+	        }
+	    }
+	    this.tableDDLOptions = optionBuilder.toString();
 	}
 	
     private static Connection getConnection() throws SQLException {
@@ -83,8 +83,8 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	@Parameters(name="TxCheckpointIT_localIndex={0},mutable={1},columnEncoded={2}") // name is used by failsafe as file name in reports
     public static Collection<Boolean[]> data() {
         return Arrays.asList(new Boolean[][] {     
-                 { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },
-                 { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
+                { false, false, false }, { false, false, true }, { false, true, false }, { false, true, true },
+                { true, false, false }, { true, false, true }, { true, true, false }, { true, true, true }
            });
     }
     
@@ -101,7 +101,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         Connection conn = getConnection(props);
         conn.setAutoCommit(true);
         conn.createStatement().execute("CREATE SEQUENCE "+seqName);
-        conn.createStatement().execute("CREATE TABLE " + fullTableName + "(pk INTEGER PRIMARY KEY, val INTEGER)" + tableDDLOptions);
+        conn.createStatement().execute("CREATE TABLE " + fullTableName + "(pk INTEGER PRIMARY KEY, val INTEGER)"+tableDDLOptions);
         conn.createStatement().execute("CREATE "+(localIndex? "LOCAL " : "")+"INDEX " + indexName + " ON " + fullTableName + "(val)");
 
         conn.createStatement().execute("UPSERT INTO " + fullTableName + " VALUES (NEXT VALUE FOR " + seqName + ",1)");
@@ -132,11 +132,12 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
     }
     
     private void testRollbackOfUncommittedDelete(String indexDDL, String fullTableName) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = getConnection();
         conn.setAutoCommit(false);
         try {
             Statement stmt = conn.createStatement();
-            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)" + tableDDLOptions);
+            stmt.execute("CREATE TABLE " + fullTableName + "(k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"+tableDDLOptions);
             stmt.execute(indexDDL);
             
             stmt.executeUpdate("upsert into " + fullTableName + " values('x1', 'y1', 'a1')");
@@ -220,11 +221,13 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
         String tableName = "TBL_" + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(tableName, tableName);
+		Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 		try (Connection conn = getConnection()) {
 			conn.setAutoCommit(false);
 			Statement stmt = conn.createStatement();
 
-			stmt.execute("CREATE TABLE " + fullTableName + "(ID BIGINT NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)" + tableDDLOptions);
+			stmt.execute("CREATE TABLE " + fullTableName + "(ID BIGINT NOT NULL PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)"
+					+ tableDDLOptions);
 			stmt.execute("CREATE " + (localIndex ? "LOCAL " : "")
 					+ "INDEX " + indexName + " ON " + fullTableName + " (v1) INCLUDE(v2)");
 
@@ -266,7 +269,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 		long wp = state.getWritePointer();
 		conn.createStatement().execute(
 				"upsert into " + fullTableName + " select max(id)+1, 'a4', 'b4' from " + fullTableName + "");
-		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+		assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
 				state.getVisibilityLevel());
 		assertEquals(wp, state.getWritePointer()); // Make sure write ptr
 													// didn't move
@@ -278,7 +281,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 
 		conn.createStatement().execute(
 				"upsert into " + fullTableName + " select max(id)+1, 'a5', 'b5' from " + fullTableName + "");
-		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+		assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
 				state.getVisibilityLevel());
 		assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr
 														// moves
@@ -291,7 +294,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 		
 		conn.createStatement().execute(
 				"upsert into " + fullTableName + " select max(id)+1, 'a6', 'b6' from " + fullTableName + "");
-		assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
+		assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT,
 				state.getVisibilityLevel());
 		assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr
 														// moves
@@ -313,8 +316,10 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 		try (Connection conn = getConnection()) {
 			conn.setAutoCommit(false);
 			Statement stmt = conn.createStatement();
-			stmt.execute("CREATE TABLE " + fullTableName + "1(ID1 BIGINT NOT NULL PRIMARY KEY, FK1A INTEGER, FK1B INTEGER)" + tableDDLOptions);
-			stmt.execute("CREATE TABLE " + fullTableName + "2(ID2 BIGINT NOT NULL PRIMARY KEY, FK2 INTEGER)" + tableDDLOptions);
+			stmt.execute("CREATE TABLE " + fullTableName + "1(ID1 BIGINT NOT NULL PRIMARY KEY, FK1A INTEGER, FK1B INTEGER)"
+					+ tableDDLOptions);
+			stmt.execute("CREATE TABLE " + fullTableName + "2(ID2 BIGINT NOT NULL PRIMARY KEY, FK2 INTEGER)"
+					+ tableDDLOptions);
 			stmt.execute("CREATE " + (localIndex ? "LOCAL " : "")
 					+ "INDEX " + indexName + " ON " + fullTableName + "1 (FK1B)");
 			
@@ -328,7 +333,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	        state.startTransaction();
 	        long wp = state.getWritePointer();
 	        conn.createStatement().execute("delete from " + fullTableName + "1 where id1=fk1b AND fk1b=id1");
-	        assertEquals(VisibilityLevel.SNAPSHOT, state.getVisibilityLevel());
+	        assertEquals(PhoenixVisibilityLevel.SNAPSHOT, state.getVisibilityLevel());
 	        assertEquals(wp, state.getWritePointer()); // Make sure write ptr didn't move
 	
 	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from " + fullTableName + "1");
@@ -346,7 +351,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
 	        assertFalse(rs.next());
 	
 	        conn.createStatement().execute("delete from " + fullTableName + "1 where id1 in (select fk1a from " + fullTableName + "1 join " + fullTableName + "2 on (fk2=id1))");
-	        assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
+	        assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
 	        assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
 	
 	        rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from " + fullTableName + "1");
@@ -363,7 +368,7 @@ public class TxCheckpointIT extends ParallelStatsDisabledIT {
             stmt.executeUpdate("upsert into " + fullTableName + "2 values (2, 4)");
 
             conn.createStatement().execute("delete from " + fullTableName + "1 where id1 in (select fk1a from " + fullTableName + "1 join " + fullTableName + "2 on (fk2=id1))");
-            assertEquals(VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
+            assertEquals(PhoenixVisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT, state.getVisibilityLevel());
             assertNotEquals(wp, state.getWritePointer()); // Make sure write ptr moved
     
             rs = conn.createStatement().executeQuery("select /*+ NO_INDEX */ id1 from " + fullTableName + "1");
