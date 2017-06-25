@@ -321,5 +321,6 @@ abstract public class BaseScannerRegionObserver extends BaseRegionObserver {
             useNewValueColumnQualifier, encodingScheme);
         return regionScannerFactory.getWrappedScanner(c.getEnvironment(), s, null, null, offset, scan, dataColumns, tupleProjector,
             dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
+
     }
 }

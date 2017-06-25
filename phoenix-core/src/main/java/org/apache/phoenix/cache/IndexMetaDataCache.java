@@ -23,9 +23,8 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.tephra.Transaction;
-
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
 
 public interface IndexMetaDataCache extends Closeable {
     public static final IndexMetaDataCache EMPTY_INDEX_META_DATA_CACHE = new IndexMetaDataCache() {
@@ -40,11 +39,11 @@ public interface IndexMetaDataCache extends Closeable {
         }
 
         @Override
-        public Transaction getTransaction() {
+        public PhoenixTransactionContext getTransactionContext() {
             return null;
         }
         
     };
     public List<IndexMaintainer> getIndexMaintainers();
-    public Transaction getTransaction();
+    public PhoenixTransactionContext getTransactionContext();
 }

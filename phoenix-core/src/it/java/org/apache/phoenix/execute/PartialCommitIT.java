@@ -270,12 +270,13 @@ public class PartialCommitIT extends BaseOwnClusterIT {
         // passing a null mutation state forces the connection.newMutationState() to be used to create the MutationState
         return new PhoenixConnection(phxCon, null) {
             @Override
+
             protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
-                return new MutationState(maxSize, maxSizeBytes, this, mutations, null, null);
+                return new MutationState(maxSize, maxSizeBytes, this, mutations, false, null);
             };
         };
     }
-    
+
     public static class FailingRegionObserver extends SimpleRegionObserver {
         @Override
         public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,

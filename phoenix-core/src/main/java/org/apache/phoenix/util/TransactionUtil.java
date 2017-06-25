@@ -29,10 +29,10 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
-import org.apache.tephra.TransactionConflictException;
-import org.apache.tephra.TransactionFailureException;
-import org.apache.tephra.TxConstants;
-import org.apache.tephra.hbase.TransactionAwareHTable;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.PhoenixTransactionalTable;
+import org.apache.phoenix.transaction.TephraTransactionTable;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 public class TransactionUtil {
     private TransactionUtil() {
@@ -43,30 +43,15 @@ public class TransactionUtil {
     }
     
     public static long convertToNanoseconds(long serverTimeStamp) {
-        return serverTimeStamp * TxConstants.MAX_TX_PER_MS;
+        return serverTimeStamp * TransactionFactory.getTransactionFactory().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
     public static long convertToMilliseconds(long serverTimeStamp) {
-        return serverTimeStamp / TxConstants.MAX_TX_PER_MS;
+        return serverTimeStamp / TransactionFactory.getTransactionFactory().getTransactionContext().getMaxTransactionsPerSecond();
     }
     
-    public static SQLException getTransactionFailureException(TransactionFailureException e) {
-        if (e instanceof TransactionConflictException) { 
-            return new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_CONFLICT_EXCEPTION)
-                .setMessage(e.getMessage())
-                .setRootCause(e)
-                .build().buildException();
-
-        }
-        return new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_FAILED)
-            .setMessage(e.getMessage())
-            .setRootCause(e)
-            .build().buildException();
-    }
-    
-    public static TransactionAwareHTable getTransactionAwareHTable(HTableInterface htable, boolean isImmutableRows) {
-    	// Conflict detection is not needed for tables with write-once/append-only data
-    	return new TransactionAwareHTable(htable, isImmutableRows ? TxConstants.ConflictDetection.NONE : TxConstants.ConflictDetection.ROW);
+    public static PhoenixTransactionalTable getPhoenixTransactionTable(PhoenixTransactionContext phoenixTransactionContext, HTableInterface htable, PTable pTable) {
+        return new TephraTransactionTable(phoenixTransactionContext, htable, pTable);
     }
     
     // we resolve transactional tables at the txn read pointer

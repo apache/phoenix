@@ -24,15 +24,13 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.tephra.Transaction;
-
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.IndexMetaDataCache;
 import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
-import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
-import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.transaction.TransactionFactory;
 
 public class IndexMetaDataCacheFactory implements ServerCacheFactory {
     public IndexMetaDataCacheFactory() {
@@ -49,11 +47,12 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
     @Override
     public Closeable newCache (ImmutableBytesWritable cachePtr, byte[] txState, final MemoryChunk chunk, boolean useProtoForIndexMaintainer) throws SQLException {
         // just use the standard keyvalue builder - this doesn't really need to be fast
+        
         final List<IndexMaintainer> maintainers = 
                 IndexMaintainer.deserialize(cachePtr, GenericKeyValueBuilder.INSTANCE, useProtoForIndexMaintainer);
-        final Transaction txn;
+        final PhoenixTransactionContext txnContext;
         try {
-            txn = txState.length!=0 ? MutationState.decodeTransaction(txState) : null;
+            txnContext = txState.length != 0 ? TransactionFactory.getTransactionFactory().getTransactionContext(txState) : null;
         } catch (IOException e) {
             throw new SQLException(e);
         }
@@ -70,8 +69,8 @@ public class IndexMetaDataCacheFactory implements ServerCacheFactory {
             }
 
             @Override
-            public Transaction getTransaction() {
-                return txn;
+            public PhoenixTransactionContext getTransactionContext() {
+                return txnContext;
             }
         };
     }
