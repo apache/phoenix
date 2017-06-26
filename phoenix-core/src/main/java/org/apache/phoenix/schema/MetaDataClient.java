@@ -85,6 +85,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
@@ -144,6 +145,7 @@ import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.PostDDLCompiler;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.compile.PostLocalIndexDDLCompiler;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -164,6 +166,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
+import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
@@ -172,6 +175,7 @@ import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
 import org.apache.phoenix.parse.DropFunctionStatement;
 import org.apache.phoenix.parse.DropIndexStatement;
@@ -180,6 +184,7 @@ import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.IndexKeyConstraint;
 import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.OpenStatement;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.parse.PSchema;
@@ -213,6 +218,7 @@ import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -230,7 +236,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
@@ -277,8 +282,9 @@ public class MetaDataClient {
                     APPEND_ONLY_SCHEMA + "," +
                     GUIDE_POSTS_WIDTH + "," +
                     IMMUTABLE_STORAGE_SCHEME + "," +
-                    ENCODING_SCHEME + 
-                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    ENCODING_SCHEME + "," +
+                    USE_STATS_FOR_PARALLELIZATION +
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -665,7 +671,7 @@ public class MetaDataClient {
         return result;
     }
 
-    private MetaDataMutationResult updateCache(PName tenantId, List<String> functionNames,
+    public MetaDataMutationResult updateCache(PName tenantId, List<String> functionNames,
             boolean alwaysHitServer) throws SQLException { // TODO: pass byte[] herez
         long clientTimeStamp = getClientTimeStamp();
         List<PFunction> functions = new ArrayList<PFunction>(functionNames.size());
@@ -977,7 +983,8 @@ public class MetaDataClient {
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps);
 
         boolean isAppendOnlySchema = false;
-        long updateCacheFrequency = 0;
+        long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
+            QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
         if (parent==null) {
 	        Boolean appendOnlySchemaProp = (Boolean) TableProperty.APPEND_ONLY_SCHEMA.getValue(tableProps);
 	        if (appendOnlySchemaProp != null) {
@@ -1033,7 +1040,7 @@ public class MetaDataClient {
         table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
 
         if (table == null || table.getType() == PTableType.VIEW /*|| table.isTransactional()*/) {
-            return new MutationState(0,connection);
+            return new MutationState(0, 0, connection);
         }
         // Hack to get around the case when an SCN is specified on the connection.
         // In this case, we won't see the table we just created yet, so we hack
@@ -1047,7 +1054,7 @@ public class MetaDataClient {
         // Since the table won't be added to the current connection.
         TableRef tableRef = new TableRef(null, table, ts, false);
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, tableRef.getTimeStamp());
+        MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, ts);
         return connection.getQueryServices().updateData(plan);
     }
 
@@ -1107,7 +1114,7 @@ public class MetaDataClient {
             }
         }
         final long count = rowCount;
-        return new MutationState(1, connection) {
+        return new MutationState(1, 1000, connection) {
             @Override
             public long getUpdateCount() {
                 return count;
@@ -1364,6 +1371,21 @@ public class MetaDataClient {
         return fullName;
     }
 
+    public MutationState declareCursor(DeclareCursorStatement statement, QueryPlan queryPlan) throws SQLException {
+        CursorUtil.declareCursor(statement, queryPlan);
+        return new MutationState(0, 0, connection);
+    }
+
+    public MutationState open(OpenStatement statement) throws SQLException {
+        CursorUtil.openCursor(statement, connection);
+        return new MutationState(0, 0, connection);
+    }
+
+    public MutationState close(CloseStatement statement) throws SQLException {
+        CursorUtil.closeCursor(statement);
+        return new MutationState(0, 0, connection);
+    }
+
     /**
      * Create an index table by morphing the CreateIndexStatement into a CreateTableStatement and calling
      * MetaDataClient.createTable. In doing so, we perform the following translations:
@@ -1573,7 +1595,7 @@ public class MetaDataClient {
             }
         }
         if (table == null) {
-            return new MutationState(0,connection);
+            return new MutationState(0, 0, connection);
         }
 
         if (logger.isInfoEnabled()) logger.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
@@ -1582,7 +1604,7 @@ public class MetaDataClient {
                 QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
         // In async process, we return immediately as the MR job needs to be triggered .
         if(statement.isAsync() && asyncIndexBuildEnabled) {
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         }
 
         // If our connection is at a fixed point-in-time, we need to open a new
@@ -1604,11 +1626,11 @@ public class MetaDataClient {
             connection.getQueryServices().dropSequence(tenantId, schemaName, sequenceName, timestamp);
         } catch (SequenceNotFoundException e) {
             if (statement.ifExists()) {
-                return new MutationState(0, connection);
+                return new MutationState(0, 0, connection);
             }
             throw e;
         }
-        return new MutationState(1, connection);
+        return new MutationState(1, 1000, connection);
     }
 
     public MutationState createSequence(CreateSequenceStatement statement, long startWith,
@@ -1639,11 +1661,11 @@ public class MetaDataClient {
                     startWith, incrementBy, cacheSize, minValue, maxValue, cycle, timestamp);
         } catch (SequenceAlreadyExistsException e) {
             if (ifNotExists) {
-                return new MutationState(0, connection);
+                return new MutationState(0, 0, connection);
             }
             throw e;
         }
-        return new MutationState(1, connection);
+        return new MutationState(1, 1000, connection);
     }
 
     public MutationState createFunction(CreateFunctionStatement stmt) throws SQLException {
@@ -1705,7 +1727,7 @@ public class MetaDataClient {
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
-        return new MutationState(1, connection);
+        return new MutationState(1, 1000, connection);
     }
 
     private static ColumnDef findColumnDefOrNull(List<ColumnDef> colDefs, ColumnName colName) {
@@ -1910,7 +1932,8 @@ public class MetaDataClient {
             if (disableWALProp != null) {
                 disableWAL = disableWALProp;
             }
-            long updateCacheFrequency = 0;
+            long updateCacheFrequency = connection.getQueryServices().getProps().getLong(
+                QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
             Long updateCacheFrequencyProp = (Long) TableProperty.UPDATE_CACHE_FREQUENCY.getValue(tableProps);
             if (updateCacheFrequencyProp != null) {
                 updateCacheFrequency = updateCacheFrequencyProp;
@@ -1968,6 +1991,16 @@ public class MetaDataClient {
                 if (ttl != null) {
                     commonFamilyProps.put(TxConstants.PROPERTY_TTL, ttl);
                 }
+            }
+
+            boolean useStatsForParallelization = true;
+            Boolean useStatsForParallelizationProp = (Boolean) TableProperty.USE_STATS_FOR_PARALLELIZATION.getValue(tableProps);
+            if (useStatsForParallelizationProp != null) {
+                useStatsForParallelization = useStatsForParallelizationProp;
+            } else {
+                useStatsForParallelization = connection.getQueryServices().getProps().getBoolean(
+                    QueryServices.USE_STATS_FOR_PARALLELIZATION,
+                    QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION);
             }
 
             boolean sharedTable = statement.getTableType() == PTableType.VIEW || allocateIndexId;
@@ -2406,7 +2439,7 @@ public class MetaDataClient {
                         Collections.<PTable>emptyList(), isImmutableRows,
                         Collections.<PName>emptyList(), defaultFamilyName == null ? null :
                                 PNameFactory.newName(defaultFamilyName), null,
-                        Boolean.TRUE.equals(disableWAL), false, false, null, null, indexType, true, false, 0, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER);
+                        Boolean.TRUE.equals(disableWAL), false, false, null, null, indexType, true, false, 0, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, PTable.EncodedCQCounter.NULL_COUNTER, true);
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
             
@@ -2562,6 +2595,7 @@ public class MetaDataClient {
             }
             tableUpsert.setByte(26, immutableStorageScheme.getSerializedMetadataValue());
             tableUpsert.setByte(27, encodingScheme.getSerializedMetadataValue());
+            tableUpsert.setBoolean(28, useStatsForParallelization);
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -2666,7 +2700,7 @@ public class MetaDataClient {
                         PTable.INITIAL_SEQ_NUM, pkName == null ? null : PNameFactory.newName(pkName), saltBucketNum, columns.values(),
                         parent == null ? null : parent.getSchemaName(), parent == null ? null : parent.getTableName(), Collections.<PTable>emptyList(), isImmutableRows,
                         physicalNames, defaultFamilyName == null ? null : PNameFactory.newName(defaultFamilyName), viewStatement, Boolean.TRUE.equals(disableWAL), multiTenant, storeNulls, viewType,
-                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe);
+                        result.getViewIndexId(), indexType, rowKeyOrderOptimizable, transactional, updateCacheFrequency, 0L, isNamespaceMapped, autoPartitionSeq, isAppendOnlySchema, immutableStorageScheme, encodingScheme, cqCounterToBe, useStatsForParallelization);
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
                 return table;
@@ -2752,7 +2786,7 @@ public class MetaDataClient {
                 PFunction function = connection.getMetaDataCache().getFunction(new PTableKey(tenantId, functionName));
                 if (function.isTemporaryFunction()) {
                     connection.removeFunction(tenantId, functionName, clientTimeStamp);
-                    return new MutationState(0, connection);
+                    return new MutationState(0, 0, connection);
                 }
             } catch(FunctionNotFoundException e) {
 
@@ -2772,7 +2806,7 @@ public class MetaDataClient {
                 connection.removeFunction(tenantId, functionName, result.getMutationTime());
                 break;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -2850,7 +2884,7 @@ public class MetaDataClient {
                                 PTable viewIndexTable = new PTableImpl(null,
                                         SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName),
                                         SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName), ts,
-                                        table.getColumnFamilies(),table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme());
+                                        table.getColumnFamilies(),table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.useStatsForParallelization());
                                 tableRefs.add(new TableRef(null, viewIndexTable, ts, false));
                             }
                         }
@@ -2870,7 +2904,7 @@ public class MetaDataClient {
                 }
                 break;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -2971,12 +3005,13 @@ public class MetaDataClient {
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional, Long updateCacheFrequency) throws SQLException {
-        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null, -1L, null, null);
+        return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, updateCacheFrequency, null, null, null, null, -1L, null, null, null);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
             Boolean isTransactional, Long updateCacheFrequency, Boolean isImmutableRows, Boolean disableWAL,
-            Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema, ImmutableStorageScheme immutableStorageScheme)
+            Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema, ImmutableStorageScheme immutableStorageScheme
+            , Boolean useStatsForParallelization)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3023,7 +3058,9 @@ public class MetaDataClient {
         if (immutableStorageScheme !=null) {
             mutateStringProperty(tenantId, schemaName, tableName, IMMUTABLE_STORAGE_SCHEME, immutableStorageScheme.name());
         }
-        
+        if (useStatsForParallelization != null) {
+            mutateBooleanProperty(tenantId, schemaName, tableName, USE_STATS_FOR_PARALLELIZATION, useStatsForParallelization);
+        }
         return seqNum;
     }
 
@@ -3107,6 +3144,7 @@ public class MetaDataClient {
             Boolean appendOnlySchemaProp = null;
             Long guidePostWidth = -1L;
             ImmutableStorageScheme immutableStorageSchemeProp = null;
+            Boolean useStatsForParallelizationProp = null;
 
             Map<String, List<Pair<String, Object>>> properties = new HashMap<>(stmtProperties.size());
             List<ColumnDef> columnDefs = null;
@@ -3171,6 +3209,8 @@ public class MetaDataClient {
                             appendOnlySchemaProp = (Boolean) value;
                         } else if (propName.equalsIgnoreCase(IMMUTABLE_STORAGE_SCHEME)) {
                             immutableStorageSchemeProp = (ImmutableStorageScheme)value;
+                        } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
+                            useStatsForParallelizationProp = (Boolean)value;
                         }
                     }
                     // if removeTableProps is true only add the property if it is not a HTable or Phoenix Table property
@@ -3269,6 +3309,13 @@ public class MetaDataClient {
                 if (storeNullsProp != null) {
                     if (storeNullsProp.booleanValue() != table.getStoreNulls()) {
                         storeNulls = storeNullsProp;
+                        changingPhoenixTableProperty = true;
+                    }
+                }
+                Boolean useStatsForParallelization = null;
+                if (useStatsForParallelizationProp != null) {
+                    if (useStatsForParallelizationProp.booleanValue() != table.useStatsForParallelization()) {
+                        useStatsForParallelization = useStatsForParallelizationProp;
                         changingPhoenixTableProperty = true;
                     }
                 }
@@ -3446,7 +3493,7 @@ public class MetaDataClient {
                 
                 if (changingPhoenixTableProperty || columnDefs.size() > 0) {
                     incrementTableSeqNum(table, tableType, columnDefs.size(), isTransactional, updateCacheFrequency, isImmutableRows,
-                            disableWAL, multiTenant, storeNulls, guidePostWidth, appendOnlySchema, immutableStorageScheme);
+                            disableWAL, multiTenant, storeNulls, guidePostWidth, appendOnlySchema, immutableStorageScheme, useStatsForParallelization);
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
                 }
@@ -3509,7 +3556,7 @@ public class MetaDataClient {
                         if (!ifNotExists) {
                             throw new ColumnAlreadyExistsException(schemaName, tableName, SchemaUtil.findExistingColumn(result.getTable(), columns));
                         }
-                        return new MutationState(0,connection);
+                        return new MutationState(0, 0, connection);
                     }
                     // Only update client side cache if we aren't adding a PK column to a table with indexes or
                     // transitioning a table from non transactional to transactional.
@@ -3543,7 +3590,7 @@ public class MetaDataClient {
                             PTable viewIndexTable = new PTableImpl(null,
                                     SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName),
                                     SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName), ts,
-                                    table.getColumnFamilies(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme());
+                                    table.getColumnFamilies(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.useStatsForParallelization());
                             List<TableRef> tableRefs = Collections.singletonList(new TableRef(null, viewIndexTable, ts, false));
                             MutationPlan plan = new PostDDLCompiler(connection).compile(tableRefs, null, null,
                                     Collections.<PColumn> emptyList(), ts);
@@ -3558,7 +3605,7 @@ public class MetaDataClient {
                         MutationPlan plan = new PostDDLCompiler(connection).compile(Collections.singletonList(new TableRef(null, table, ts, false)), emptyCF, projectCF == null ? null : Collections.singletonList(projectCF), null, ts);
                         return connection.getQueryServices().updateData(plan);
                     }
-                    return new MutationState(0,connection);
+                    return new MutationState(0, 0, connection);
                 } catch (ConcurrentTableMutationException e) {
                     if (retried) {
                         throw e;
@@ -3673,7 +3720,7 @@ public class MetaDataClient {
                         columnRef = resolver.resolveColumn(null, column.getFamilyName(), column.getColumnName());
                     } catch (ColumnNotFoundException e) {
                         if (statement.ifExists()) {
-                            return new MutationState(0,connection);
+                            return new MutationState(0, 0, connection);
                         }
                         throw e;
                     }
@@ -3777,7 +3824,7 @@ public class MetaDataClient {
                         if (!statement.ifExists()) {
                             throw new ColumnNotFoundException(schemaName, tableName, Bytes.toString(result.getFamilyName()), Bytes.toString(result.getColumnName()));
                         }
-                        return new MutationState(0, connection);
+                        return new MutationState(0, 0, connection);
                     }
                     // If we've done any index metadata updates, don't bother trying to update
                     // client-side cache as it would be too painful. Just let it pull it over from
@@ -3808,7 +3855,7 @@ public class MetaDataClient {
                                         sharedTableState.getSchemaName(), sharedTableState.getTableName(), ts,
                                         table.getColumnFamilies(), sharedTableState.getColumns(),
                                         sharedTableState.getPhysicalNames(), sharedTableState.getViewIndexId(),
-                                        table.isMultiTenant(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter());
+                                        table.isMultiTenant(), table.isNamespaceMapped(), table.getImmutableStorageScheme(), table.getEncodingScheme(), table.getEncodedCQCounter(), table.useStatsForParallelization());
                                 TableRef indexTableRef = new TableRef(viewIndexTable);
                                 PName indexTableTenantId = sharedTableState.getTenantId();
                                 if (indexTableTenantId==null) {
@@ -3870,7 +3917,7 @@ public class MetaDataClient {
                         // Return the last MutationState
                         return state;
                     }
-                    return new MutationState(0, connection);
+                    return new MutationState(0, 0, connection);
                 } catch (ConcurrentTableMutationException e) {
                     if (retried) {
                         throw e;
@@ -3978,12 +4025,12 @@ public class MetaDataClient {
                 TableRef dataTableRef = FromCompiler.getResolver(dataTableNode, connection).getTables().get(0);
                 return buildIndex(index, dataTableRef);
             }
-            return new MutationState(1, connection);
+            return new MutationState(1, 1000, connection);
         } catch (TableNotFoundException e) {
             if (!statement.ifExists()) {
                 throw e;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -4069,7 +4116,7 @@ public class MetaDataClient {
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
-        return new MutationState(0, connection);
+        return new MutationState(0, 0, connection);
     }
 
     private void validateSchema(String schemaName) throws SQLException {
@@ -4108,7 +4155,7 @@ public class MetaDataClient {
                 connection.removeSchema(schema, result.getMutationTime());
                 break;
             }
-            return new MutationState(0, connection);
+            return new MutationState(0, 0, connection);
         } finally {
             connection.setAutoCommit(wasAutoCommit);
         }
@@ -4123,6 +4170,6 @@ public class MetaDataClient {
             .resolveSchema(useSchemaStatement.getSchemaName());
             connection.setSchema(useSchemaStatement.getSchemaName());
         }
-        return new MutationState(0, connection);
+        return new MutationState(0, 0, connection);
     }
 }

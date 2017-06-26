@@ -18,18 +18,17 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
  * (FIRST|LAST|NTH)_VALUE build in function interface
  *
  */
 abstract public class FirstLastValueBaseFunction extends DelegateConstantToCountAggregateFunction {
-
-    public static String NAME = null;
 
     public FirstLastValueBaseFunction() {
     }
@@ -51,12 +50,17 @@ abstract public class FirstLastValueBaseFunction extends DelegateConstantToCount
     }
 
     @Override
-    public String getName() {
-        return NAME;
-    }
-
-    @Override
     public PDataType getDataType() {
         return children.get(2).getDataType();
+    }
+    
+    @Override
+    public Integer getMaxLength() {
+        return children.get(2).getMaxLength();
+    }
+    
+    @Override
+    public Integer getScale() {
+        return children.get(2).getScale();
     }
 }

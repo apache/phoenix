@@ -50,4 +50,14 @@ public class LogUtil {
         	return con.getCustomTracingAnnotations().toString();
         }
     }
+
+    public static String getCallerStackTrace() {
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        StringBuilder sb = new StringBuilder();
+        for (StackTraceElement element : st) {
+            sb.append(element.toString());
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
 }

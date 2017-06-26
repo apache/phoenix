@@ -261,4 +261,14 @@ public class TraceQueryPlan implements QueryPlan {
     public boolean useRoundRobinIterator() {
         return false;
     }
+
+    @Override
+    public Long getEstimatedRowsToScan() {
+        return 0l;
+    }
+
+    @Override
+    public Long getEstimatedBytesToScan() {
+        return 0l;
+    }
 }

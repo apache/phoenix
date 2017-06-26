@@ -53,6 +53,7 @@ import org.apache.phoenix.expression.function.EncodeFunction;
 import org.apache.phoenix.expression.function.ExpFunction;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.FirstValueFunction;
+import org.apache.phoenix.expression.function.FirstValuesFunction;
 import org.apache.phoenix.expression.function.FloorDateExpression;
 import org.apache.phoenix.expression.function.FloorDecimalExpression;
 import org.apache.phoenix.expression.function.FloorFunction;
@@ -67,6 +68,7 @@ import org.apache.phoenix.expression.function.InstrFunction;
 import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.function.LTrimFunction;
 import org.apache.phoenix.expression.function.LastValueFunction;
+import org.apache.phoenix.expression.function.LastValuesFunction;
 import org.apache.phoenix.expression.function.LengthFunction;
 import org.apache.phoenix.expression.function.LnFunction;
 import org.apache.phoenix.expression.function.LogFunction;
@@ -288,7 +290,9 @@ public enum ExpressionType {
     DayOfWeekFunction(DayOfWeekFunction.class),
     DayOfYearFunction(DayOfYearFunction.class),
     DefaultValueExpression(DefaultValueExpression.class),
-    ArrayColumnExpression(SingleCellColumnExpression.class);
+    ArrayColumnExpression(SingleCellColumnExpression.class),
+    FirstValuesFunction(FirstValuesFunction.class),
+    LastValuesFunction(LastValuesFunction.class);
 
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;

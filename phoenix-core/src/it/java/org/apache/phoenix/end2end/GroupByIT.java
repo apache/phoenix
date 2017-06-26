@@ -35,39 +35,26 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Collection;
-import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-
-import com.google.common.collect.Maps;
 
 
 @RunWith(Parameterized.class)
 public class GroupByIT extends BaseQueryIT {
 
     public GroupByIT(String indexDDL, boolean mutable, boolean columnEncoded) {
-        super(indexDDL, mutable, columnEncoded);
+        super(indexDDL, mutable, columnEncoded, true);
     }
     
     @Parameters(name="GroupByIT_{index}") // name is used by failsafe as file name in reports
     public static Collection<Object> data() {
         return QueryIT.data();
-    }
-    
-    @BeforeClass
-    @Shadower(classBeingShadowed = BaseQueryIT.class)
-    public static void doSetup() throws Exception {
-    	Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
-    	props.put(QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, "true");
-    	BaseQueryIT.doSetup(props);
     }
     
     @Test
@@ -456,19 +443,20 @@ public class GroupByIT extends BaseQueryIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table test1(\"time\" integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(\"time\", hostname))";
+        String table = generateUniqueName();
+        String ddl = "create table " + table + "(\"time\" integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(\"time\", hostname))";
         conn.createStatement().execute(ddl);
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement stmt = conn.prepareStatement("upsert into test1 values(1439853462,'qa9',8.27,1439853462)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into " + table + " values(1439853462,'qa9',8.27,1439853462)");
         stmt.execute();
-        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',8.27,1439853362)");
+        stmt = conn.prepareStatement("upsert into " + table + " values(1439853461,'qa9',8.27,1439853362)");
         stmt.execute();
-        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',5.27,1439853461)");
+        stmt = conn.prepareStatement("upsert into " + table + " values(1439853461,'qa9',5.27,1439853461)");
         stmt.execute();
-        stmt = conn.prepareStatement("upsert into test1 values(1439853451,'qa9',4.27,1439853451)");
+        stmt = conn.prepareStatement("upsert into " + table + " values(1439853451,'qa9',4.27,1439853451)");
         stmt.execute();
         conn.commit();
         conn.close();
@@ -476,7 +464,7 @@ public class GroupByIT extends BaseQueryIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
-        stmt = conn.prepareStatement("select \"time\"/10 as tm, hostname, avg(usage) from test1 group by hostname, tm");
+        stmt = conn.prepareStatement("select \"time\"/10 as tm, hostname, avg(usage) from " + table + " group by hostname, tm");
         rs = stmt.executeQuery();
         assertTrue(rs.next());
         assertEquals(143985345, rs.getInt(1));
@@ -492,19 +480,20 @@ public class GroupByIT extends BaseQueryIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        String ddl = "create table test1(\"time\" integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(\"time\", hostname))";
+        String table = generateUniqueName();
+        String ddl = "create table " + table + "(\"time\" integer not null, hostname varchar not null,usage float,period integer constraint pk PRIMARY KEY(\"time\", hostname))";
         conn.createStatement().execute(ddl);
         conn.close();
 
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 30));
         conn = DriverManager.getConnection(getUrl(), props);
-        PreparedStatement stmt = conn.prepareStatement("upsert into test1 values(1439853462,'qa9',8.27,1439853462)");
+        PreparedStatement stmt = conn.prepareStatement("upsert into " + table + " values(1439853462,'qa9',8.27,1439853462)");
         stmt.execute();
-        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',8.27,1439853362)");
+        stmt = conn.prepareStatement("upsert into " + table + " values(1439853461,'qa9',8.27,1439853362)");
         stmt.execute();
-        stmt = conn.prepareStatement("upsert into test1 values(1439853461,'qa9',5.27,1439853461)");
+        stmt = conn.prepareStatement("upsert into " + table + " values(1439853461,'qa9',5.27,1439853461)");
         stmt.execute();
-        stmt = conn.prepareStatement("upsert into test1 values(1439853451,'qa9',4.27,1439853451)");
+        stmt = conn.prepareStatement("upsert into " + table + " values(1439853451,'qa9',4.27,1439853451)");
         stmt.execute();
         conn.commit();
         conn.close();
@@ -512,7 +501,7 @@ public class GroupByIT extends BaseQueryIT {
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
         ResultSet rs;
-        stmt = conn.prepareStatement("select period/10 as tm, hostname, avg(usage) from test1 group by hostname, tm");
+        stmt = conn.prepareStatement("select period/10 as tm, hostname, avg(usage) from " + table + " group by hostname, tm");
         rs = stmt.executeQuery();
         assertTrue(rs.next());
         assertEquals(143985345, rs.getInt(1));

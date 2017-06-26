@@ -33,7 +33,9 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
@@ -47,7 +49,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
 
-public class GroupByCaseIT extends ParallelStatsDisabledIT {
+public class AggregateIT extends ParallelStatsDisabledIT {
     private static void initData(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("create table " + tableName +
                 "   (id varchar not null primary key,\n" +
@@ -926,6 +928,50 @@ public class GroupByCaseIT extends ParallelStatsDisabledIT {
             if(conn!=null) {
                 conn.close();
             }
+        }
+    }
+
+    @Test
+    public void testCountNullInEncodedNonEmptyKeyValueCF() throws Exception {
+        testCountNullInNonEmptyKeyValueCF(1);
+    }
+    
+    @Test
+    public void testCountNullInNonEncodedNonEmptyKeyValueCF() throws Exception {
+        testCountNullInNonEmptyKeyValueCF(0);
+    }
+    
+    private void testCountNullInNonEmptyKeyValueCF(int columnEncodedBytes) throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            //Type is INT
+            String intTableName=generateUniqueName();
+            String sql="create table " + intTableName + " (mykey integer not null primary key, A.COLA integer, B.COLB integer) "
+                    + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME = ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES = " + columnEncodedBytes + ", DISABLE_WAL=true";
+
+            conn.createStatement().execute(sql);
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (1,1)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (2,1)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (3,1,2)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (4,1)");
+            conn.createStatement().execute("UPSERT INTO "+intTableName+" VALUES (5,1)");
+            conn.commit();
+
+            TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(Bytes.toBytes(intTableName)));
+
+            sql="select count(*) from "+intTableName;
+            ResultSet rs=conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            
+            sql="select count(*) from "+intTableName + " where b.colb is not null";
+            rs=conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+
+            sql="select count(*) from "+intTableName + " where b.colb is null";
+            rs=conn.createStatement().executeQuery(sql);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
         }
     }
 

@@ -43,14 +43,14 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
 
     public LiteralResultIterationPlan(StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
-            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
+            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)), 
                 context, statement, tableRef, projection, limit, offset, orderBy, parallelIteratorFactory);
     }
 
     public LiteralResultIterationPlan(Iterable<Tuple> tuples, StatementContext context, 
             FilterableStatement statement, TableRef tableRef, RowProjector projection, 
-            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) {
+            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
         super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
         this.tuples = tuples;
     }
@@ -110,4 +110,14 @@ public class LiteralResultIterationPlan extends BaseQueryPlan {
         
         return scanner;
     }
+
+	@Override
+	public Long getEstimatedRowsToScan() {
+		return 0l;
+	}
+
+	@Override
+	public Long getEstimatedBytesToScan() {
+		return 0l;
+	}
 }

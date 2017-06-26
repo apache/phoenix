@@ -38,8 +38,8 @@ public class MultiCFCQKeyValueComparisonFilter extends MultiKeyValueComparisonFi
     public MultiCFCQKeyValueComparisonFilter() {
     }
 
-    public MultiCFCQKeyValueComparisonFilter(Expression expression) {
-        super(expression);
+    public MultiCFCQKeyValueComparisonFilter(Expression expression, boolean allCFs, byte[] essentialCF) {
+        super(expression, allCFs, essentialCF);
     }
 
     @Override

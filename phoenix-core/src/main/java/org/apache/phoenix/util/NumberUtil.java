@@ -53,4 +53,18 @@ public class NumberUtil {
         }
         return decimal;
     }
+
+    public static Long add(Long num1, Long num2) {
+        if (num1 == null) {
+            if (num2 == null) {
+                return null;
+            }
+            return num2;
+        } else {
+            if (num2 == null) {
+                return num1;
+            }
+            return num1 + num2;
+        }
+    }
 }

@@ -36,7 +36,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.TraceStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.TraceMetricSource;
+import org.apache.phoenix.trace.TraceSpanReceiver;
 import org.apache.htrace.Sampler;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
@@ -45,6 +45,7 @@ import org.apache.htrace.Tracer;
 import org.apache.htrace.impl.ProbabilitySampler;
 import org.apache.htrace.wrappers.TraceCallable;
 import org.apache.htrace.wrappers.TraceRunnable;
+import org.apache.phoenix.trace.TraceWriter;
 
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -258,6 +259,7 @@ public class Tracing {
      * Track if the tracing system has been initialized for phoenix
      */
     private static boolean initialized = false;
+    private static TraceSpanReceiver traceSpanReceiver = null;
 
     /**
      * Add the phoenix span receiver so we can log the traces. We have a single trace source for the
@@ -265,8 +267,12 @@ public class Tracing {
      */
     public synchronized static void addTraceMetricsSource() {
         try {
-            if (!initialized) {
-                Trace.addReceiver(new TraceMetricSource());
+            QueryServicesOptions options = QueryServicesOptions.withDefaults();
+            if (!initialized && options.isTracingEnabled()) {
+                traceSpanReceiver = new TraceSpanReceiver();
+                Trace.addReceiver(traceSpanReceiver);
+                TraceWriter traceWriter = new TraceWriter(options.getTableName(), options.getTracingThreadPoolSize(), options.getTracingBatchSize());
+                traceWriter.start();
             }
         } catch (RuntimeException e) {
             LOG.warn("Tracing will outputs will not be written to any metrics sink! No "
@@ -279,6 +285,10 @@ public class Tracing {
             LOG.warn("Class incompatibility while initializing metrics, metrics will be disabled", e);
         }
         initialized = true;
+    }
+
+    public static TraceSpanReceiver getTraceSpanReceiver() {
+        return traceSpanReceiver;
     }
 
     public static boolean isTraceOn(String traceOption) {

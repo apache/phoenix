@@ -43,11 +43,13 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
+import org.apache.phoenix.compile.CloseStatementCompiler;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.CreateFunctionCompiler;
@@ -55,6 +57,7 @@ import org.apache.phoenix.compile.CreateIndexCompiler;
 import org.apache.phoenix.compile.CreateSchemaCompiler;
 import org.apache.phoenix.compile.CreateSequenceCompiler;
 import org.apache.phoenix.compile.CreateTableCompiler;
+import org.apache.phoenix.compile.DeclareCursorCompiler;
 import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -63,6 +66,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ListJarsQueryPlan;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.compile.OpenStatementCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -81,6 +85,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
@@ -91,6 +96,7 @@ import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.AlterIndexStatement;
 import org.apache.phoenix.parse.AlterSessionStatement;
 import org.apache.phoenix.parse.BindableStatement;
+import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.CreateFunctionStatement;
@@ -98,6 +104,8 @@ import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSchemaStatement;
 import org.apache.phoenix.parse.CreateSequenceStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.CursorName;
+import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -108,6 +116,7 @@ import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ExecuteUpgradeStatement;
 import org.apache.phoenix.parse.ExplainStatement;
+import org.apache.phoenix.parse.FetchStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.IndexKeyConstraint;
@@ -117,6 +126,7 @@ import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OffsetNode;
+import org.apache.phoenix.parse.OpenStatement;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.ParseNode;
@@ -140,8 +150,11 @@ import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
+import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
@@ -149,12 +162,14 @@ import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
-import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
+import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
@@ -264,6 +279,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt) throws SQLException {
+      return executeQuery(stmt,true);
+    }
+    private PhoenixResultSet executeQuery(final CompilableStatement stmt,
+        final boolean doRetryOnMetaNotFoundError) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
         try {
             return CallRunner.run(
@@ -294,7 +313,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         StatementContext context = plan.getContext();
                         context.getOverallQueryMetrics().startQuery();
-                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), context);
+                        PhoenixResultSet rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
                         resultSets.add(rs);
                         setLastQueryPlan(plan);
                         setLastResultSet(rs);
@@ -306,7 +325,19 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         }
                         connection.incrementStatementExecutionCounter();
                         return rs;
-                    } catch (RuntimeException e) {
+                    }
+                    //Force update cache and retry if meta not found error occurs
+                    catch (MetaDataEntityNotFoundException e) {
+                        if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
+                            if(logger.isDebugEnabled())
+                                logger.debug("Reloading table "+ e.getTableName()+" data from server");
+                            if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
+                                e.getSchemaName(), e.getTableName(), true).wasUpdated()){
+                                return executeQuery(stmt, false);
+                            }
+                        }
+                        throw e;
+                    }catch (RuntimeException e) {
                         // FIXME: Expression.evaluate does not throw SQLException
                         // so this will unwrap throws from that.
                         if (e.getCause() instanceof SQLException) {
@@ -321,7 +352,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     }
                 }
                 }, PhoenixContextExecutor.inContext());
-        } catch (Exception e) {
+        }catch (Exception e) {
             Throwables.propagateIfInstanceOf(e, SQLException.class);
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
@@ -329,6 +360,10 @@ public class PhoenixStatement implements Statement, SQLCloseable {
     }
     
     protected int executeMutation(final CompilableStatement stmt) throws SQLException {
+      return executeMutation(stmt, true);
+    }
+
+    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError) throws SQLException {
 	 if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
@@ -369,7 +404,19 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                                 setLastUpdateOperation(stmt.getOperation());
                                 connection.incrementStatementExecutionCounter();
                                 return lastUpdateCount;
-                            } catch (RuntimeException e) {
+                            }
+                            //Force update cache and retry if meta not found error occurs
+                            catch (MetaDataEntityNotFoundException e) {
+                                if(doRetryOnMetaNotFoundError && e.getTableName()!=null){
+                                    if(logger.isDebugEnabled())
+                                        logger.debug("Reloading table "+ e.getTableName()+" data from server");
+                                    if(new MetaDataClient(connection).updateCache(connection.getTenantId(),
+                                        e.getSchemaName(), e.getTableName(), true).wasUpdated()){
+                                        return executeMutation(stmt, false);
+                                    }
+                                }
+                                throw e;
+                            }catch (RuntimeException e) {
                                 // FIXME: Expression.evaluate does not throw SQLException
                                 // so this will unwrap throws from that.
                                 if (e.getCause() instanceof SQLException) {
@@ -403,6 +450,13 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             super(from, hint, isDistinct, select, where, groupBy, having, orderBy, limit, offset, bindCount, isAggregate, hasSequence, selects, udfParseNodes);
         }
         
+        private ExecutableSelectStatement(ExecutableSelectStatement select) {
+            this(select.getFrom(), select.getHint(), select.isDistinct(), select.getSelect(), select.getWhere(),
+                    select.getGroupBy(), select.getHaving(), select.getOrderBy(), select.getLimit(), select.getOffset(), select.getBindCount(),
+                    select.isAggregate(), select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
+        }
+		
+        
         @SuppressWarnings("unchecked")
         @Override
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
@@ -417,6 +471,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 resolver = FromCompiler.getResolverForQuery(transformedSelect, stmt.getConnection());
                 select = StatementNormalizer.normalize(transformedSelect, resolver);
             }
+
             QueryPlan plan = new QueryCompiler(stmt, select, resolver, Collections.<PDatum>emptyList(), stmt.getConnection().getIteratorFactory(), new SequenceManager(stmt), true).compile();
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
@@ -450,12 +505,45 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             return SortOrder.getDefault();
         }
     };
+    private static final String EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_NAME = "BytesEstimate";
+    private static final byte[] EXPLAIN_PLAN_BYTES_ESTIMATE =
+            PVarchar.INSTANCE.toBytes(EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_NAME);
+    private static final String EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME = "RowsEstimate";
+    private static final byte[] EXPLAIN_PLAN_ROWS_ESTIMATE =
+            PVarchar.INSTANCE.toBytes(EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN_NAME);
 
-    private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR = new RowProjector(Arrays.<ColumnProjector>asList(
-            new ExpressionProjector(EXPLAIN_PLAN_ALIAS, EXPLAIN_PLAN_TABLE_NAME, 
-                    new RowKeyColumnExpression(EXPLAIN_PLAN_DATUM,
-                            new RowKeyValueAccessor(Collections.<PDatum>singletonList(EXPLAIN_PLAN_DATUM), 0)), false)
-            ), 0, true);
+    public static final String EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS = "EST_BYTES_READ";
+    public static final String EXPLAIN_PLAN_ROWS_COLUMN_ALIAS = "EST_ROWS_READ";
+
+    private static final PColumnImpl EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN =
+            new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_BYTES_ESTIMATE),
+                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 1,
+                    SortOrder.getDefault(), 0, null, false, null, false, false,
+                    EXPLAIN_PLAN_BYTES_ESTIMATE);
+
+    private static final PColumnImpl EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN =
+            new PColumnImpl(PNameFactory.newName(EXPLAIN_PLAN_ROWS_ESTIMATE),
+                    PNameFactory.newName(EXPLAIN_PLAN_FAMILY), PLong.INSTANCE, null, null, false, 2,
+                    SortOrder.getDefault(), 0, null, false, null, false, false,
+                    EXPLAIN_PLAN_ROWS_ESTIMATE);
+
+    private static final RowProjector EXPLAIN_PLAN_ROW_PROJECTOR_WITH_BYTE_ROW_ESTIMATES =
+            new RowProjector(Arrays
+                    .<ColumnProjector> asList(
+                        new ExpressionProjector(EXPLAIN_PLAN_ALIAS, EXPLAIN_PLAN_TABLE_NAME,
+                                new RowKeyColumnExpression(EXPLAIN_PLAN_DATUM,
+                                        new RowKeyValueAccessor(Collections
+                                                .<PDatum> singletonList(EXPLAIN_PLAN_DATUM), 0)),
+                                false),
+                        new ExpressionProjector(
+                                EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS, EXPLAIN_PLAN_TABLE_NAME,
+                                new KeyValueColumnExpression(EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN), false),
+                        new ExpressionProjector(EXPLAIN_PLAN_ROWS_COLUMN_ALIAS,
+                                EXPLAIN_PLAN_TABLE_NAME, new KeyValueColumnExpression(
+                                        EXPLAIN_PLAN_ROWS_ESTIMATE_COLUMN),
+                                false)),
+                    0, true);
+
     private static class ExecutableExplainStatement extends ExplainStatement implements CompilableStatement {
 
         public ExecutableExplainStatement(BindableStatement statement) {
@@ -479,10 +567,28 @@ public class PhoenixStatement implements Statement, SQLCloseable {
             final StatementPlan plan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
             List<String> planSteps = plan.getExplainPlan().getPlanSteps();
             List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
+            Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
+            Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
             for (String planStep : planSteps) {
-                Tuple tuple = new SingleKeyValueTuple(KeyValueUtil.newKeyValue(PVarchar.INSTANCE.toBytes(planStep), EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN, MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                byte[] row = PVarchar.INSTANCE.toBytes(planStep);
+                List<Cell> cells = Lists.newArrayListWithCapacity(3);
+                cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
+                    MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
+                if (estimatedBytesToScan != null) {
+                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_BYTES_ESTIMATE,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        PLong.INSTANCE.toBytes(estimatedBytesToScan)));
+                }
+                if (estimatedRowsToScan != null) {
+                    cells.add(KeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
+                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        PLong.INSTANCE.toBytes(estimatedRowsToScan)));
+                }
+                Tuple tuple = new MultiKeyValueTuple(cells);
                 tuples.add(tuple);
             }
+            final Long estimatedBytes = estimatedBytesToScan;
+            final Long estimatedRows = estimatedRowsToScan;
             final ResultIterator iterator = new MaterializedResultIterator(tuples);
             return new QueryPlan() {
 
@@ -528,7 +634,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
 
                 @Override
                 public RowProjector getProjector() {
-                    return EXPLAIN_PLAN_ROW_PROJECTOR;
+                    return EXPLAIN_PLAN_ROW_PROJECTOR_WITH_BYTE_ROW_ESTIMATES;
                 }
 
                 @Override
@@ -588,6 +694,16 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 @Override
                 public boolean useRoundRobinIterator() throws SQLException {
                     return false;
+                }
+
+                @Override
+                public Long getEstimatedRowsToScan() {
+                    return estimatedRows;
+                }
+
+                @Override
+                public Long getEstimatedBytesToScan() {
+                    return estimatedBytes;
                 }
                 
             };
@@ -758,11 +874,61 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     } catch(IOException e) {
                         throw new SQLException(e);
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
             
         }
+    }
+    
+    private static class ExecutableDeclareCursorStatement extends DeclareCursorStatement implements CompilableStatement {
+        public ExecutableDeclareCursorStatement(CursorName cursor, SelectStatement select){
+            super(cursor, select);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            ExecutableSelectStatement wrappedSelect = new ExecutableSelectStatement(
+            		(ExecutableSelectStatement) stmt.parseStatement(this.getQuerySQL()));
+            DeclareCursorCompiler compiler = new DeclareCursorCompiler(stmt, this.getOperation(),wrappedSelect.compilePlan(stmt, seqAction));
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableOpenStatement extends OpenStatement implements CompilableStatement {
+        public ExecutableOpenStatement(CursorName cursor){
+            super(cursor);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            OpenStatementCompiler compiler = new OpenStatementCompiler(stmt, this.getOperation());
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableCloseStatement extends CloseStatement implements CompilableStatement {
+        public ExecutableCloseStatement(CursorName cursor){
+            super(cursor);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            CloseStatementCompiler compiler = new CloseStatementCompiler(stmt, this.getOperation());
+            return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableFetchStatement extends FetchStatement implements CompilableStatement {
+        public ExecutableFetchStatement(CursorName cursor, boolean isNext, int fetchLimit){
+            super(cursor, isNext, fetchLimit);
+        }
+
+        @Override
+        public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            return CursorUtil.getFetchPlan(this.getCursorName().getName(), this.isNext(), this.getFetchSize());
+        }
+
     }
 
     private static class ExecutableDeleteJarStatement extends DeleteJarStatement implements CompilableStatement {
@@ -812,7 +978,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     } catch(IOException e) {
                         throw new SQLException(e);
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
             
@@ -1063,7 +1229,7 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                         	getContext().getConnection().setConsistency(Consistency.STRONG);
                         }
                     }
-                    return new MutationState(0, context.getConnection());
+                    return new MutationState(0, 0, context.getConnection());
                 }
             };
         }
@@ -1137,7 +1303,17 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                     PhoenixConnection phxConn = stmt.getConnection();
                     Properties props = new Properties();
                     phxConn.getQueryServices().upgradeSystemTables(phxConn.getURL(), props);
-                    return MutationState.emptyMutationState(-1, phxConn);
+                    return MutationState.emptyMutationState(-1, -1, phxConn);
+                }
+
+                @Override
+                public Long getEstimatedRowsToScan() throws SQLException {
+                    return 0l;
+                }
+
+                @Override
+                public Long getEstimatedBytesToScan() throws SQLException {
+                    return 0l;
                 }
             };
         }
@@ -1209,7 +1385,27 @@ public class PhoenixStatement implements Statement, SQLCloseable {
                 Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName,ParseNode>> onDupKeyPairs) {
             return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs);
         }
-        
+
+        @Override
+        public ExecutableDeclareCursorStatement declareCursor(CursorName cursor, SelectStatement select){
+            return new ExecutableDeclareCursorStatement(cursor, select);
+        }
+
+        @Override
+        public ExecutableFetchStatement fetch(CursorName cursor, boolean isNext, int fetchLimit){
+            return new ExecutableFetchStatement(cursor, isNext, fetchLimit);
+        }
+
+        @Override
+        public ExecutableOpenStatement open(CursorName cursor){
+            return new ExecutableOpenStatement(cursor);
+        }
+
+        @Override
+        public ExecutableCloseStatement close(CursorName cursor){
+            return new ExecutableCloseStatement(cursor);
+        }
+
         @Override
         public ExecutableDeleteStatement delete(NamedTableNode table, HintNode hint, ParseNode whereNode, List<OrderByNode> orderBy, LimitNode limit, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
             return new ExecutableDeleteStatement(table, hint, whereNode, orderBy, limit, bindCount, udfParseNodes);

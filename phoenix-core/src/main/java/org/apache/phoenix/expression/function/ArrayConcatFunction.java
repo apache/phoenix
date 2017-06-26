@@ -48,7 +48,7 @@ public class ArrayConcatFunction extends ArrayModifierFunction {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
 
-        if (!getLHSExpr().evaluate(tuple, ptr)|| ptr.getLength() == 0){
+        if (!getLHSExpr().evaluate(tuple, ptr)){
             return false;
         }
         boolean isLHSRowKeyOrderOptimized = PArrayDataType.isRowKeyOrderOptimized(getLHSExpr().getDataType(), getLHSExpr().getSortOrder(), ptr);
@@ -58,8 +58,11 @@ public class ArrayConcatFunction extends ArrayModifierFunction {
         int lengthArray1 = ptr.getLength();
         int offsetArray1 = ptr.getOffset();
         byte[] array1Bytes = ptr.get();
-        if (!getRHSExpr().evaluate(tuple, ptr)|| ptr.getLength() == 0){
-            sortOrder = getLHSExpr().getSortOrder();
+        if (!getRHSExpr().evaluate(tuple, ptr)) {
+            return false;
+        }
+        // If second array is null, return first array
+        if (ptr.getLength() == 0){
             ptr.set(array1Bytes, offsetArray1, lengthArray1);
             return true;
         }
@@ -73,6 +76,9 @@ public class ArrayConcatFunction extends ArrayModifierFunction {
         getLHSExpr().getDataType().coerceBytes(ptr, null, getRHSExpr().getDataType(), getRHSExpr().getMaxLength(),
                 getRHSExpr().getScale(), getRHSExpr().getSortOrder(), getLHSExpr().getMaxLength(),
                 getLHSExpr().getScale(), getLHSExpr().getSortOrder(), isLHSRowKeyOrderOptimized);
+        if (lengthArray1 == 0) {
+            return true;
+        }
         return modifierFunction(ptr, lengthArray1, offsetArray1, array1Bytes, getLHSBaseType(), actualLengthOfArray1, getMaxLength(), getLHSExpr());
     }
 

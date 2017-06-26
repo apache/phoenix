@@ -27,16 +27,17 @@ import java.util.TreeMap;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes.ByteArrayComparator;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.FirstLastNthValueDataContainer;
 
 /**
- * Base client aggregator for (FIRST|LAST|NTH)_VALUE functions
+ * Base client aggregator for (FIRST|LAST|NTH)_VALUE and (FIRST|LAST)_VALUES functions
  *
  */
 public class FirstLastValueBaseClientAggregator extends BaseAggregator {
@@ -47,9 +48,19 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
     protected byte[] topValue = null;
     protected TreeMap<byte[], LinkedList<byte[]>> topValues = new TreeMap<byte[], LinkedList<byte[]>>(new ByteArrayComparator());
     protected boolean isAscending;
+    protected PDataType dataType;
+
+    // Set to true for retrieving multiple top values for FIRST_VALUES or LAST_VALUES
+    protected boolean isArrayReturnType = false;
 
     public FirstLastValueBaseClientAggregator() {
         super(SortOrder.getDefault());
+        this.dataType = PVarbinary.INSTANCE;
+    }
+
+    public FirstLastValueBaseClientAggregator(PDataType type) {
+        super(SortOrder.getDefault());
+        this.dataType = (type == null) ? PVarbinary.INSTANCE : type;
     }
 
     @Override
@@ -73,20 +84,44 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
                 entrySet = topValues.descendingMap().entrySet();
             }
 
-            int counter = offset;
+            int counter = 0;
+            ImmutableBytesWritable arrPtr = new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY);
             for (Map.Entry<byte[], LinkedList<byte[]>> entry : entrySet) {
                 ListIterator<byte[]> it = entry.getValue().listIterator();
                 while (it.hasNext()) {
-                    if (--counter == 0) {
-                        ptr.set(it.next());
-                        return true;
+                    if (isArrayReturnType) {
+                        ImmutableBytesWritable newArrPtr = new ImmutableBytesWritable(it.next());
+                        PArrayDataType.appendItemToArray(
+                            newArrPtr,
+                            arrPtr.getLength(),
+                            arrPtr.getOffset(),
+                            arrPtr.get(),
+                            PDataType.fromTypeId(dataType.getSqlType() - PDataType.ARRAY_TYPE_BASE),
+                            counter,
+                            null,
+                            sortOrder);
+                        arrPtr = newArrPtr;
+
+                        if (++counter == offset) {
+                            break;
+                        }
+                    } else {
+                        if (++counter == offset) {
+                            ptr.set(it.next());
+                            return true;
+                        }
+                        it.next();
                     }
-                    it.next();
                 }
             }
 
-            //not enought values to return Nth
-            return false;
+            if (isArrayReturnType) {
+                ptr.set(arrPtr.get());
+                return true;
+            }
+
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return true;
         }
 
         if (topValue == null) {
@@ -100,7 +135,7 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
     @Override
     public void aggregate(Tuple tuple, ImmutableBytesWritable ptr) {
 
-        //if is called cause aggregation in ORDER BY clausule
+        //if is called cause aggregation in ORDER BY clause
         if (tuple instanceof SingleKeyValueTuple) {
             topValue = ptr.copyBytes();
             return;
@@ -143,13 +178,15 @@ public class FirstLastValueBaseClientAggregator extends BaseAggregator {
 
     @Override
     public PDataType getDataType() {
-        return PVarbinary.INSTANCE;
+        return dataType;
     }
 
-    public void init(int offset) {
-        if (offset != 0) {
+    public void init(int offset, boolean isArrayReturnType) {
+        if (offset > 0) {
             useOffset = true;
             this.offset = offset;
         }
+
+        this.isArrayReturnType = isArrayReturnType;
     }
 }

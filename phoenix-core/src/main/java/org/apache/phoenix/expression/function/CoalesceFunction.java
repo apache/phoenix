@@ -65,7 +65,7 @@ public class CoalesceFunction extends ScalarFunction {
             ImmutableBytesWritable ptr = new ImmutableBytesPtr();
             secondChild.evaluate(null, ptr);
 
-            if (!secondChild.getDataType().isCoercibleTo(firstChild.getDataType(), secondChild.getDataType().toObject(ptr))) {
+            if (ptr.getLength()!=0 && !secondChild.getDataType().isCoercibleTo(firstChild.getDataType(), secondChild.getDataType().toObject(ptr))) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
                     .setMessage(getName() + " expected " + firstChild.getDataType() + ", but got " + secondChild.getDataType())
                     .build().buildException();

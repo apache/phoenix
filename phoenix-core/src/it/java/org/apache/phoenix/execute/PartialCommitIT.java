@@ -270,8 +270,8 @@ public class PartialCommitIT extends BaseOwnClusterIT {
         // passing a null mutation state forces the connection.newMutationState() to be used to create the MutationState
         return new PhoenixConnection(phxCon, null) {
             @Override
-            protected MutationState newMutationState(int maxSize) {
-                return new MutationState(maxSize, this, mutations, null, null);
+            protected MutationState newMutationState(int maxSize, int maxSizeBytes) {
+                return new MutationState(maxSize, maxSizeBytes, this, mutations, null, null);
             };
         };
     }

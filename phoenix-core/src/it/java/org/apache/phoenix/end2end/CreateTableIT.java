@@ -35,6 +35,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -52,6 +53,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Test;
 
 
@@ -114,6 +116,9 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
         }
         HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
         assertNotNull(admin.getTableDescriptor(Bytes.toBytes(tableName)));
+        HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes(tableName)).getColumnFamilies();
+        assertEquals(BloomType.NONE, columnFamilies[0].getBloomFilterType());
+
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 10));
         try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
             conn.createStatement().execute(ddl);
@@ -384,6 +389,24 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
     	assertEquals(10000, columnFamilies[0].getTimeToLive());
     }
     
+    @Test
+    public void testCreateTableColumnFamilyHBaseAttribs8() throws Exception {
+        String ddl = "create table IF NOT EXISTS TEST8 ("
+                + " id char(1) NOT NULL,"
+                + " col1 integer NOT NULL,"
+                + " col2 bigint NOT NULL,"
+                + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+                + " ) BLOOMFILTER = 'ROW', SALT_BUCKETS = 4";
+        long ts = nextTimestamp();
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.createStatement().execute(ddl);
+        HBaseAdmin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+        HColumnDescriptor[] columnFamilies = admin.getTableDescriptor(Bytes.toBytes("TEST8")).getColumnFamilies();
+        assertEquals(BloomType.ROW, columnFamilies[0].getBloomFilterType());
+    }
+    
     
     /**
      * Test to ensure that NOT NULL constraint isn't added to a non primary key column.
@@ -637,5 +660,52 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
                     oneByteQualifierSingleCellArrayWithOffsetsMultitenantTable, conn);
 
         }
+    }
+
+    @Test
+    public void testCreateTableWithUpdateCacheFrequencyAttrib() throws Exception {
+      Connection connection = null;
+      String TABLE_NAME = "UPDATECACHEDEFAULTVALUE";
+      try {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        connection = DriverManager.getConnection(getUrl(), props);
+
+        //Assert update cache frequency to default value zero
+        connection.createStatement().execute(
+          "create table "+TABLE_NAME+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        String readSysCatQuery =
+            "select TABLE_NAME,UPDATE_CACHE_FREQUENCY from SYSTEM.CATALOG where "
+            + "TABLE_NAME = '"+TABLE_NAME+"'  AND TABLE_TYPE='u'";
+        ResultSet rs = connection.createStatement().executeQuery(readSysCatQuery);
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(0, rs.getLong(2));
+        connection.createStatement().execute("drop table "+TABLE_NAME);
+        connection.close();
+
+        //Assert update cache frequency to configured default value 10sec
+        int defaultUpdateCacheFrequency = 10000;
+        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, ""+defaultUpdateCacheFrequency);
+        connection = DriverManager.getConnection(getUrl(), props);
+        connection.createStatement().execute(
+            "create table "+TABLE_NAME+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+        rs = connection.createStatement().executeQuery(readSysCatQuery);
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(defaultUpdateCacheFrequency, rs.getLong(2));
+        connection.createStatement().execute("drop table "+TABLE_NAME);
+
+        //Assert update cache frequency to table specific  value 30sec
+        int tableSpecificUpdateCacheFrequency = 30000;
+        connection.createStatement().execute(
+          "create table "+TABLE_NAME+" (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR) "
+              + "UPDATE_CACHE_FREQUENCY="+tableSpecificUpdateCacheFrequency);
+        rs = connection.createStatement().executeQuery(readSysCatQuery);
+        Assert.assertTrue(rs.next());
+        Assert.assertEquals(tableSpecificUpdateCacheFrequency, rs.getLong(2));
+      } finally {
+        if(connection!=null){
+          connection.createStatement().execute("drop table if exists "+TABLE_NAME);
+          connection.close();
+        }
+      }
     }
 }

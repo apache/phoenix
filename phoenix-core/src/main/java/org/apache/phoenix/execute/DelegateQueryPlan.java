@@ -141,4 +141,14 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     public QueryPlan getDelegate() {
         return delegate;
     }
+
+    @Override
+    public Long getEstimatedRowsToScan() throws SQLException {
+        return delegate.getEstimatedRowsToScan();
+    }
+
+    @Override
+    public Long getEstimatedBytesToScan() throws SQLException {
+        return delegate.getEstimatedBytesToScan();
+    }
 }

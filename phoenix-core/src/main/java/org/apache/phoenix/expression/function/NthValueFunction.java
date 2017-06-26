@@ -18,14 +18,15 @@
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.FirstLastValueBaseClientAggregator;
 import org.apache.phoenix.expression.aggregator.FirstLastValueServerAggregator;
-import org.apache.phoenix.parse.NthValueAggregateParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.NthValueAggregateParseNode;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PInteger;
 
@@ -72,12 +73,17 @@ public class NthValueFunction extends FirstLastValueBaseFunction {
         FirstLastValueBaseClientAggregator aggregator = new FirstLastValueBaseClientAggregator();
 
         if (children.size() < 3) {
-            aggregator.init(offset);
+            aggregator.init(offset, false);
         } else {
-            aggregator.init(((Number) ((LiteralExpression) children.get(3)).getValue()).intValue());
+            aggregator.init(((Number) ((LiteralExpression) children.get(3)).getValue()).intValue(), false);
         }
 
         return aggregator;
+    }
+
+    @Override
+    public String getName() {
+        return NAME;
     }
 
 }

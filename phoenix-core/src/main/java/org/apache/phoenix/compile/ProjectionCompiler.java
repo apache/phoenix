@@ -196,7 +196,9 @@ public class ProjectionCompiler {
         if (index.getIndexType() != IndexType.LOCAL) {
             if (index.getColumns().size()-minIndexPKOffset != dataTable.getColumns().size()-minTablePKOffset) {
                 // We'll end up not using this by the optimizer, so just throw
-                throw new ColumnNotFoundException(WildcardParseNode.INSTANCE.toString());
+                String schemaNameStr = dataTable.getSchemaName()==null?null:dataTable.getSchemaName().getString();
+                String tableNameStr = dataTable.getTableName()==null?null:dataTable.getTableName().getString();
+                throw new ColumnNotFoundException(schemaNameStr, tableNameStr,null, WildcardParseNode.INSTANCE.toString());
             }
         }
         for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
@@ -465,28 +467,6 @@ public class ProjectionCompiler {
             }
         }
 
-        // TODO make estimatedByteSize more accurate by counting the joined columns.
-        int estimatedKeySize = table.getRowKeySchema().getEstimatedValueLength();
-        int estimatedByteSize = 0;
-        for (Map.Entry<byte[],NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
-            PColumnFamily family = table.getColumnFamily(entry.getKey());
-            if (entry.getValue() == null) {
-                for (PColumn column : family.getColumns()) {
-                    Integer maxLength = column.getMaxLength();
-                    int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-                    estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
-                }
-            } else {
-                for (byte[] cq : entry.getValue()) {
-                    //if (!Bytes.equals(cq, ByteUtil.EMPTY_BYTE_ARRAY) || cq.length > 0) {
-                        PColumn column = family.getPColumnForColumnQualifier(cq);
-                        Integer maxLength = column.getMaxLength();
-                        int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
-                        estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
-                    }
-                //}
-            }
-        }
         boolean isProjectEmptyKeyValue = false;
         if (isWildcard) {
             projectAllColumnFamilies(table, scan);
@@ -496,7 +476,32 @@ public class ProjectionCompiler {
                 projectColumnFamily(table, scan, family);
             }
         }
-        return new RowProjector(projectedColumns, estimatedByteSize, isProjectEmptyKeyValue, resolver.hasUDFs(), isWildcard);
+        
+        // TODO make estimatedByteSize more accurate by counting the joined columns.
+        int estimatedKeySize = table.getRowKeySchema().getEstimatedValueLength();
+        int estimatedByteSize = 0;
+        for (Map.Entry<byte[],NavigableSet<byte[]>> entry : scan.getFamilyMap().entrySet()) {
+            try {
+                PColumnFamily family = table.getColumnFamily(entry.getKey());
+                if (entry.getValue() == null) {
+                    for (PColumn column : family.getColumns()) {
+                        Integer maxLength = column.getMaxLength();
+                        int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+                        estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
+                    }
+                } else {
+                    for (byte[] cq : entry.getValue()) {
+                            PColumn column = family.getPColumnForColumnQualifier(cq);
+                            Integer maxLength = column.getMaxLength();
+                            int byteSize = column.getDataType().isFixedWidth() ? maxLength == null ? column.getDataType().getByteSize() : maxLength : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
+                            estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
+                        }
+                }
+            } catch (ColumnFamilyNotFoundException e) {
+                // Ignore as this can happen for local indexes when the data table has a column family, but there are no covered columns in the family
+            }
+        }
+        return new RowProjector(projectedColumns, Math.max(estimatedKeySize, estimatedByteSize), isProjectEmptyKeyValue, resolver.hasUDFs(), isWildcard);
     }
 
     private static void projectAllColumnFamilies(PTable table, Scan scan) {

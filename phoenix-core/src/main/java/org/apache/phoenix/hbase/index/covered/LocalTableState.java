@@ -136,6 +136,7 @@ public class LocalTableState implements TableState {
      * @param ignoreNewerMutations ignore mutations newer than m when determining current state. Useful
      *        when replaying mutation state for partial index rebuild where writes succeeded to the data
      *        table, but not to the index table.
+     * @param indexMetaData TODO
      * @return an iterator over the columns and the {@link IndexUpdate} that should be passed back to
      *         the builder. Even if no update is necessary for the requested columns, you still need
      *         to return the {@link IndexUpdate}, just don't set the update for the
@@ -143,8 +144,8 @@ public class LocalTableState implements TableState {
      * @throws IOException
      */
     public Pair<Scanner, IndexUpdate> getIndexedColumnsTableState(
-        Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound) throws IOException {
-        ensureLocalStateInitialized(indexedColumns, ignoreNewerMutations);
+        Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData) throws IOException {
+        ensureLocalStateInitialized(indexedColumns, ignoreNewerMutations, indexMetaData);
         // filter out things with a newer timestamp and track the column references to which it applies
         ColumnTracker tracker = new ColumnTracker(indexedColumns);
         synchronized (this.trackedColumns) {
@@ -163,16 +164,21 @@ public class LocalTableState implements TableState {
      * Initialize the managed local state. Generally, this will only be called by
      * {@link #getNonIndexedColumnsTableState(List)}, which is unlikely to be called concurrently from the outside. Even
      * then, there is still fairly low contention as each new Put/Delete will have its own table state.
+     * @param indexMetaData TODO
      */
-    private synchronized void ensureLocalStateInitialized(Collection<? extends ColumnReference> columns, boolean ignoreNewerMutations)
+    private synchronized void ensureLocalStateInitialized(Collection<? extends ColumnReference> columns, boolean ignoreNewerMutations, IndexMetaData indexMetaData)
             throws IOException {
         // check to see if we haven't initialized any columns yet
         Collection<? extends ColumnReference> toCover = this.columnSet.findNonCoveredColumns(columns);
         // we have all the columns loaded, so we are good to go.
         if (toCover.isEmpty()) { return; }
 
-        // add the current state of the row
-        this.addUpdate(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).list(), false);
+        // no need to perform scan to find prior row values when the indexed columns are immutable, as
+        // by definition, there won't be any.
+        if (!indexMetaData.isImmutableRows()) {
+            // add the current state of the row
+            this.addUpdate(this.table.getCurrentRowState(update, toCover, ignoreNewerMutations).list(), false);
+        }
 
         // add the covered columns to the set
         for (ColumnReference ref : toCover) {
@@ -238,9 +244,9 @@ public class LocalTableState implements TableState {
     }
 
     @Override
-    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound)
+    public Pair<ValueGetter, IndexUpdate> getIndexUpdateState(Collection<? extends ColumnReference> indexedColumns, boolean ignoreNewerMutations, boolean returnNullScannerIfRowNotFound, IndexMetaData indexMetaData)
             throws IOException {
-        Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations, returnNullScannerIfRowNotFound);
+        Pair<Scanner, IndexUpdate> pair = getIndexedColumnsTableState(indexedColumns, ignoreNewerMutations, returnNullScannerIfRowNotFound, indexMetaData);
         ValueGetter valueGetter = IndexManagementUtil.createGetterFromScanner(pair.getFirst(), getCurrentRowKey());
         return new Pair<ValueGetter, IndexUpdate>(valueGetter, pair.getSecond());
     }

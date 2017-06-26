@@ -66,6 +66,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.query.QueryConstants;
@@ -124,6 +125,20 @@ public class PhoenixRuntime {
     public static final String CURRENT_SCN_ATTRIB = "CurrentSCN";
 
     /**
+     * Use this connection property to set the long time stamp value at
+     * which to replay DML statements after a write failure. The time
+     * stamp value must match the value returned by 
+     * {@link org.apache.phoenix.execute.CommitException#getServerTimestamp()}
+     * when the exception occurred. Used in conjunction with the 
+     * {@link org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy}
+     * index write failure policy to provide a means of the client replaying
+     * updates to ensure that secondary indexes are correctly caught up
+     * with any data updates when a write failure occurs. The updates
+     * should be replayed in ascending time stamp order.
+     */
+    public static final String REPLAY_AT_ATTRIB = "ReplayAt";
+
+    /**
      * Use this connection property to help with fairness of resource allocation
      * for the client and server. The value of the attribute determines the
      * bucket used to rollup resource usage for a particular tenant/organization. Each tenant
@@ -170,6 +185,20 @@ public class PhoenixRuntime {
      * Use this connection property to explicitly enable or disable request level metric collection.
      */
     public static final String REQUEST_METRIC_ATTRIB = "RequestMetric";
+
+    /**
+     * Use this column name on the row returned by explain plan result set to get estimate of number
+     * of bytes read.
+     */
+    public static final String EXPLAIN_PLAN_ESTIMATED_BYTES_READ_COLUMN =
+            PhoenixStatement.EXPLAIN_PLAN_BYTES_ESTIMATE_COLUMN_ALIAS;
+
+    /**
+     * Use this column name on the row returned by explain plan result set to get estimate of number
+     * of rows read.
+     */
+    public static final String EXPLAIN_PLAN_ESTIMATED_ROWS_READ_COLUMN =
+            PhoenixStatement.EXPLAIN_PLAN_ROWS_COLUMN_ALIAS;
 
     /**
      * All Phoenix specific connection properties
