@@ -147,6 +147,10 @@
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-all</artifactId>
+    </dependency>
     <!-- for tests -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
