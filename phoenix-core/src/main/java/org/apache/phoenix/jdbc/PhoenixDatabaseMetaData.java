@@ -92,6 +92,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] SYSTEM_CATALOG_SCHEMA_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
     public static final String SYSTEM_SCHEMA_NAME = QueryConstants.SYSTEM_SCHEMA_NAME;
     public static final byte[] SYSTEM_SCHEMA_NAME_BYTES = QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
+    public static final TableName SYSTEM_SCHEMA_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_SCHEMA_NAME);
 
     public static final String SYSTEM_CATALOG_TABLE = "CATALOG";
     public static final byte[] SYSTEM_CATALOG_TABLE_BYTES = Bytes.toBytes(SYSTEM_CATALOG_TABLE);
@@ -106,6 +107,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] IS_NAMESPACE_MAPPED_BYTES = Bytes.toBytes(IS_NAMESPACE_MAPPED);
     public static final byte[] SYSTEM_STATS_NAME_BYTES = Bytes.toBytes(SYSTEM_STATS_NAME);
     public static final byte[] SYSTEM_STATS_TABLE_BYTES = Bytes.toBytes(SYSTEM_STATS_TABLE);
+    public static final TableName SYSTEM_STATS_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_STATS_NAME);
     public static final String SYSTEM_CATALOG_ALIAS = "\"SYSTEM.TABLE\"";
 
     public static final byte[] SYSTEM_SEQUENCE_FAMILY_BYTES = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
@@ -116,6 +118,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_SEQUENCE = SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_SEQUENCE_TABLE + "\"";
     public static final String SYSTEM_SEQUENCE_NAME = SchemaUtil.getTableName(SYSTEM_SEQUENCE_SCHEMA, SYSTEM_SEQUENCE_TABLE);
     public static final byte[] SYSTEM_SEQUENCE_NAME_BYTES = Bytes.toBytes(SYSTEM_SEQUENCE_NAME);
+    public static final TableName SYSTEM_SEQUENCE_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_SEQUENCE_NAME);
     
     public static final String TABLE_NAME = "TABLE_NAME";
     public static final byte[] TABLE_NAME_BYTES = Bytes.toBytes(TABLE_NAME);
@@ -215,6 +218,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_FUNCTION_TABLE = "FUNCTION";
     public static final String SYSTEM_FUNCTION_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_FUNCTION_TABLE);
     public static final byte[] SYSTEM_FUNCTION_NAME_BYTES = Bytes.toBytes(SYSTEM_FUNCTION_NAME);
+    public static final TableName SYSTEM_FUNCTION_HBASE_TABLE_NAME = TableName.valueOf(SYSTEM_FUNCTION_NAME);
 
     public static final String FUNCTION_NAME = "FUNCTION_NAME";
     public static final byte[] FUNCTION_NAME_BYTES = Bytes.toBytes(FUNCTION_NAME);
