@@ -24,6 +24,7 @@ import java.util.Map;
 
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlRootElement;
 
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -39,8 +40,10 @@ public class Scenario {
     private WriteParams writeParams;
     private String name;
     private String tenantId;
-    private String ddl;
-
+    private List<Ddl> preScenarioDdls;
+    private List<Ddl> postScenarioDdls;
+    
+   
     public Scenario() {
         writeParams = new WriteParams();
     }
@@ -92,7 +95,7 @@ public class Scenario {
     public void setRowCount(int rowCount) {
         this.rowCount = rowCount;
     }
-
+    
     /**
      * Phoenix properties
      *
@@ -179,18 +182,6 @@ public class Scenario {
         this.tenantId = tenantId;
     }
 
-    /**
-     * Scenario level DDL that is executed before running the scenario.
-     */
-    @XmlAttribute
-    public String getDdl() {
-        return ddl;
-    }
-    
-    public void setDdl(String ddl) {
-        this.ddl = ddl;
-    }
-    
     public WriteParams getWriteParams() {
         return writeParams;
     }
@@ -211,4 +202,30 @@ public class Scenario {
         }
         return stringBuilder.toString();
     }
+
+	public List<Ddl> getPreScenarioDdls() {
+		return preScenarioDdls;
+	}
+
+    /**
+     * Scenario level DDLs (for views/index/async) that are executed before data load
+     */
+    @XmlElementWrapper(name = "preScenarioDdls")
+    @XmlElement(name = "ddl")
+	public void setPreScenarioDdls(List<Ddl> preScenarioDdls) {
+		this.preScenarioDdls = preScenarioDdls;
+	}
+
+	public List<Ddl> getPostScenarioDdls() {
+		return postScenarioDdls;
+	}
+
+    /**
+     * Scenario level DDLs (for views/index/async) that are executed after data load
+     */
+    @XmlElementWrapper(name = "postScenarioDdls")
+    @XmlElement(name = "ddl")
+	public void setPostScenarioDdls(List<Ddl> postScenarioDdls) {
+		this.postScenarioDdls = postScenarioDdls;
+	}
 }

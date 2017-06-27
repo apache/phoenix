@@ -58,7 +58,6 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.io.HeapSize;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
@@ -88,7 +87,6 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -112,6 +110,7 @@ import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.KeyValueUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -288,8 +287,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return s;
     }
 
-    class MutationList extends ArrayList<Mutation> implements HeapSize {
-        private long heapSize = 0l;
+   public static class MutationList extends ArrayList<Mutation> {
+        private long byteSize = 0l;
         public MutationList() {
             super();
         }
@@ -302,23 +301,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         public boolean add(Mutation e) {
             boolean r = super.add(e);
             if (r) {
-                incrementHeapSize(e.heapSize());
+                this.byteSize += KeyValueUtil.calculateMutationDiskSize(e);
             }
             return r;
         }
 
-        @Override
-        public long heapSize() {
-            return heapSize;
-        }
-
-        private void incrementHeapSize(long heapSize) {
-            this.heapSize += heapSize;
+        public long byteSize() {
+            return byteSize;
         }
 
         @Override
         public void clear() {
-            heapSize = 0l;
+            byteSize = 0l;
             super.clear();
         }
     }
@@ -378,6 +372,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         
         RegionScanner theScanner = s;
         
+        boolean replayMutations = scan.getAttribute(BaseScannerRegionObserver.IGNORE_NEWER_MUTATIONS) != null;
         byte[] indexUUID = scan.getAttribute(PhoenixIndexCodec.INDEX_UUID);
         byte[] txState = scan.getAttribute(BaseScannerRegionObserver.TX_STATE);
         List<Expression> selectExpressions = null;
@@ -398,7 +393,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             values = new byte[projectedTable.getPKColumns().size()][];
             areMutationInSameRegion = Bytes.compareTo(targetHTable.getTableName(),
                     region.getTableDesc().getTableName().getName()) == 0
-                    && !isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
+                    && !ExpressionUtil.isPkPositionChanging(new TableRef(projectedTable), selectExpressions);
             
         } else {
             byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserver.DELETE_AGG);
@@ -470,7 +465,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (logger.isDebugEnabled()) {
             logger.debug(LogUtil.addCustomAnnotations("Starting ungrouped coprocessor scan " + scan + " "+region.getRegionInfo(), ScanUtil.getCustomAnnotations(scan)));
         }
-        long rowCount = 0;
+        int rowCount = 0;
         final RegionScanner innerScanner = theScanner;
         boolean useIndexProto = true;
         byte[] indexMaintainersPtr = scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD);
@@ -609,6 +604,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             Cell firstKV = results.get(0);
                             Delete delete = new Delete(firstKV.getRowArray(),
                                 firstKV.getRowOffset(), firstKV.getRowLength(),ts);
+                            if (replayMutations) {
+                                delete.setAttribute(IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                            }
                             mutations.add(delete);
                             // force tephra to ignore this deletes
                             delete.setAttribute(TxConstants.TX_ROLLBACK_ATTRIBUTE_KEY, new byte[0]);
@@ -660,6 +658,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                             for (Mutation mutation : row.toRowMutations()) {
+                                if (replayMutations) {
+                                    mutation.setAttribute(IGNORE_NEWER_MUTATIONS, PDataType.TRUE_BYTES);
+                                }
                                 mutations.add(mutation);
                             }
                             for (i = 0; i < selectExpressions.size(); i++) {
@@ -701,14 +702,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         }
-                        if (readyToCommit(mutations, maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                     areMutationInSameRegion, targetHTable, useIndexProto);
                             mutations.clear();
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
-                        if (readyToCommit(indexMutations, maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(rowCount, indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState,
                                     useIndexProto);
                             indexMutations.clear();
@@ -792,20 +793,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private boolean isPkPositionChanging(TableRef tableRef, List<Expression> projectedExpressions) throws SQLException {
-        // If the row ends up living in a different region, we'll get an error otherwise.
-        for (int i = 0; i < tableRef.getTable().getPKColumns().size(); i++) {
-            PColumn column = tableRef.getTable().getPKColumns().get(i);
-            Expression source = projectedExpressions.get(i);
-            if (source == null || !source
-                    .equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) { return true; }
-        }
-        return false;
-    }
-
-    private boolean readyToCommit(MutationList mutations, int maxBatchSize, long maxBatchSizeBytes) {
-        return !mutations.isEmpty() && (maxBatchSize > 0 && mutations.size() > maxBatchSize)
-                || (maxBatchSizeBytes > 0 && mutations.heapSize() > maxBatchSizeBytes);
+    private boolean readyToCommit(int rowCount, long mutationSize, int maxBatchSize, long maxBatchSizeBytes) {
+        return maxBatchSize > 0 && rowCount > maxBatchSize
+                || (maxBatchSizeBytes > 0 && mutationSize > maxBatchSizeBytes);
     }
 
     @Override
@@ -859,10 +849,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
         boolean hasMore;
-        long rowCount = 0;
+        int rowCount = 0;
         try {
-            int batchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
-            List<Mutation> mutations = Lists.newArrayListWithExpectedSize(batchSize);
+            int maxBatchSize = config.getInt(MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
+            long maxBatchSizeBytes = config.getLong(MUTATE_BATCH_SIZE_BYTES_ATTRIB,
+                QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE_BYTES);
+            MutationList mutations = new MutationList(maxBatchSize);
             region.startRegionOperation();
             byte[] uuidValue = ServerCacheClient.generateId();
             synchronized (innerScanner) {
@@ -896,7 +888,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 del.addDeleteMarker(cell);
                             }
                         }
-                        if (mutations.size() >= batchSize) {
+                        if (readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
                                     HConstants.NO_NONCE);
                             uuidValue = ServerCacheClient.generateId();

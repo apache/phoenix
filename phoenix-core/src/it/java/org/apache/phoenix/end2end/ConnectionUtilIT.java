@@ -73,12 +73,4 @@ public class ConnectionUtilIT {
 		assertEquals(1, rs.getInt(1));
 	}
 
-	@AfterClass
-	public static void tearDownAfterClass() throws Exception {
-		try {
-            DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
-		} finally {
-		    hbaseTestUtil.shutdownMiniCluster();
-		}
-	}
 }

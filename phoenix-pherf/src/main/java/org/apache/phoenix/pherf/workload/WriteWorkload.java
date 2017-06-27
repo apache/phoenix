@@ -171,14 +171,13 @@ public class WriteWorkload implements Workload {
     private synchronized void exec(DataLoadTimeSummary dataLoadTimeSummary,
             DataLoadThreadTime dataLoadThreadTime, Scenario scenario) throws Exception {
         logger.info("\nLoading " + scenario.getRowCount() + " rows for " + scenario.getTableName());
-        long start = System.currentTimeMillis();
         
-        // Execute any Scenario DDL before running workload
-        pUtil.executeScenarioDdl(scenario);
-        
-        List<Future<Info>> writeBatches = getBatches(dataLoadThreadTime, scenario);
+        // Execute any pre dataload scenario DDLs
+        pUtil.executeScenarioDdl(scenario.getPreScenarioDdls(), scenario.getTenantId(), dataLoadTimeSummary);
 
-        waitForBatches(dataLoadTimeSummary, scenario, start, writeBatches);
+        // Write data
+        List<Future<Info>> writeBatches = getBatches(dataLoadThreadTime, scenario);
+        waitForBatches(dataLoadTimeSummary, scenario, System.currentTimeMillis(), writeBatches);
 
         // Update Phoenix Statistics
         if (this.generateStatistics == GeneratePhoenixStats.YES) {
@@ -188,6 +187,9 @@ public class WriteWorkload implements Workload {
         } else {
         	logger.info("Phoenix table stats update not requested.");
         }
+        
+        // Execute any post data load scenario DDLs before starting query workload
+        pUtil.executeScenarioDdl(scenario.getPostScenarioDdls(), scenario.getTenantId(), dataLoadTimeSummary);
     }
 
     private List<Future<Info>> getBatches(DataLoadThreadTime dataLoadThreadTime, Scenario scenario)

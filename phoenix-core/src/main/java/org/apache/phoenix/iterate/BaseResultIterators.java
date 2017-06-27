@@ -17,12 +17,13 @@
  */
 package org.apache.phoenix.iterate;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.PTable.IndexType.LOCAL;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -142,6 +143,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private Long estimatedSize;
     private boolean hasGuidePosts;
     private Scan scan;
+    private boolean useStatsForParallelization;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -211,7 +213,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // selected column values are returned back to client.
                             context.getWhereConditionColumns().clear();
                             for (PColumnFamily family : table.getColumnFamilies()) {
-                                context.addWhereCoditionColumn(family.getName().getBytes(), null);
+                                context.addWhereConditionColumn(family.getName().getBytes(), null);
                             }
                         } else {
                             byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
@@ -256,13 +258,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             scan.setAttribute(BaseScannerRegionObserver.USE_NEW_VALUE_COLUMN_QUALIFIER, Bytes.toBytes(true));
             // When analyzing the table, there is no look up for key values being done.
             // So there is no point setting the range.
-            if (EncodedColumnsUtil.setQualifierRanges(table) && !ScanUtil.isAnalyzeTable(scan)) {
-                Pair<Integer, Integer> range = getEncodedQualifierRange(scan, context);
-                if (range != null) {
-                    scan.setAttribute(BaseScannerRegionObserver.MIN_QUALIFIER, Bytes.toBytes(range.getFirst()));
-                    scan.setAttribute(BaseScannerRegionObserver.MAX_QUALIFIER, Bytes.toBytes(range.getSecond()));
-                    ScanUtil.setQualifierRangesOnFilter(scan, range);
-                }
+            if (!ScanUtil.isAnalyzeTable(scan)) {
+                setQualifierRanges(keyOnlyFilter, table, scan, context);
             }
             if (optimizeProjection) {
                 optimizeProjection(context, scan, table, statement);
@@ -270,61 +267,70 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         }
     }
     
-    private static Pair<Integer, Integer> getEncodedQualifierRange(Scan scan, StatementContext context)
-            throws SQLException {
-        PTable table = context.getCurrentTable().getTable();
-        QualifierEncodingScheme encodingScheme = table.getEncodingScheme();
-        checkArgument(encodingScheme != QualifierEncodingScheme.NON_ENCODED_QUALIFIERS,
-            "Method should only be used for tables using encoded column names");
-        Pair<Integer, Integer> minMaxQualifiers = new Pair<>();
-        for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
-            byte[] cq = whereCol.getSecond();
-            if (cq != null) {
-                int qualifier = table.getEncodingScheme().decode(cq);
-                determineQualifierRange(qualifier, minMaxQualifiers);
+    private static void setQualifierRanges(boolean keyOnlyFilter, PTable table, Scan scan,
+            StatementContext context) throws SQLException {
+        if (EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan)) {
+            Pair<Integer, Integer> minMaxQualifiers = new Pair<>();
+            for (Pair<byte[], byte[]> whereCol : context.getWhereConditionColumns()) {
+                byte[] cq = whereCol.getSecond();
+                if (cq != null) {
+                    int qualifier = table.getEncodingScheme().decode(cq);
+                    adjustQualifierRange(qualifier, minMaxQualifiers);
+                }
             }
-        }
-        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
-
-        Map<String, Pair<Integer, Integer>> qualifierRanges = EncodedColumnsUtil.getFamilyQualifierRanges(table);
-        for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
-            if (entry.getValue() != null) {
-                for (byte[] cq : entry.getValue()) {
-                    if (cq != null) {
-                        int qualifier = table.getEncodingScheme().decode(cq);
-                        determineQualifierRange(qualifier, minMaxQualifiers);
+            Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
+            for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
+                if (entry.getValue() != null) {
+                    for (byte[] cq : entry.getValue()) {
+                        if (cq != null) {
+                            int qualifier = table.getEncodingScheme().decode(cq);
+                            adjustQualifierRange(qualifier, minMaxQualifiers);
+                        }
+                    }
+                } else {
+                    byte[] cf = entry.getKey();
+                    String family = Bytes.toString(cf);
+                    if (table.getType() == INDEX && table.getIndexType() == LOCAL
+                            && !IndexUtil.isLocalIndexFamily(family)) {
+                        // TODO: samarth confirm with James why do we need this hack here :(
+                        family = IndexUtil.getLocalIndexColumnFamily(family);
+                    }
+                    byte[] familyBytes = Bytes.toBytes(family);
+                    NavigableSet<byte[]> qualifierSet = new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+                    if (Bytes.equals(familyBytes, SchemaUtil.getEmptyColumnFamily(table))) {
+                        // If the column family is also the empty column family, project the
+                        // empty key value column
+                        Pair<byte[], byte[]> emptyKeyValueInfo =
+                                EncodedColumnsUtil.getEmptyKeyValueInfo(table);
+                        qualifierSet.add(emptyKeyValueInfo.getFirst());
+                    }
+                    // In case of a keyOnlyFilter, we only need to project the 
+                    // empty key value column
+                    if (!keyOnlyFilter) {
+                        Pair<Integer, Integer> qualifierRangeForFamily =
+                                EncodedColumnsUtil.setQualifiersForColumnsInFamily(table, family,
+                                    qualifierSet);
+                        familyMap.put(familyBytes, qualifierSet);
+                        if (qualifierRangeForFamily != null) {
+                            adjustQualifierRange(qualifierRangeForFamily.getFirst(),
+                                minMaxQualifiers);
+                            adjustQualifierRange(qualifierRangeForFamily.getSecond(),
+                                minMaxQualifiers);
+                        }
                     }
                 }
-            } else {
-                /*
-                 * All the columns of the column family are being projected. So we will need to
-                 * consider all the columns in the column family to determine the min-max range.
-                 */
-                String family = Bytes.toString(entry.getKey());
-                if (table.getType() == INDEX && table.getIndexType() == LOCAL && !IndexUtil.isLocalIndexFamily(family)) {
-                    //TODO: samarth confirm with James why do we need this hack here :(
-                    family = IndexUtil.getLocalIndexColumnFamily(family);
-                }
-                Pair<Integer, Integer> range = qualifierRanges.get(family);
-                if (range != null) {
-                    determineQualifierRange(range.getFirst(), minMaxQualifiers);
-                    determineQualifierRange(range.getSecond(), minMaxQualifiers);
-                }
+            }
+            if (minMaxQualifiers.getFirst() != null) {
+                scan.setAttribute(BaseScannerRegionObserver.MIN_QUALIFIER,
+                    Bytes.toBytes(minMaxQualifiers.getFirst()));
+                scan.setAttribute(BaseScannerRegionObserver.MAX_QUALIFIER,
+                    Bytes.toBytes(minMaxQualifiers.getSecond()));
+                ScanUtil.setQualifierRangesOnFilter(scan, minMaxQualifiers);
             }
         }
-        if (minMaxQualifiers.getFirst() == null) {
-            return null;
-        }
-        return minMaxQualifiers;
     }
 
-    /**
-     * 
-     * @param cq
-     * @param minMaxQualifiers
-     * @return true if the empty column was projected
-     */
-    private static void determineQualifierRange(Integer qualifier, Pair<Integer, Integer> minMaxQualifiers) {
+    private static void adjustQualifierRange(Integer qualifier, Pair<Integer, Integer> minMaxQualifiers) {
         if (minMaxQualifiers.getFirst() == null) {
             minMaxQualifiers.setFirst(qualifier);
             minMaxQualifiers.setSecond(qualifier);
@@ -365,19 +371,27 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
         }
-        boolean preventSeekToColumn;
+        boolean preventSeekToColumn = false;
         if (statement.getHint().hasHint(Hint.SEEK_TO_COLUMN)) {
             // Allow seeking to column during filtering
             preventSeekToColumn = false;
-        } else if (statement.getHint().hasHint(Hint.NO_SEEK_TO_COLUMN)) {
-            // Prevent seeking to column during filtering
-            preventSeekToColumn = true;
-        } else {
-            int hbaseServerVersion = context.getConnection().getQueryServices().getLowestClusterHBaseVersion();
-            // When only a single column family is referenced, there are no hints, and HBase server version
-            // is less than when the fix for HBASE-13109 went in (0.98.12), then we prevent seeking to a
-            // column.
-            preventSeekToColumn = referencedCfCount == 1 && hbaseServerVersion < MIN_SEEK_TO_COLUMN_VERSION;
+        } else if (!EncodedColumnsUtil.useEncodedQualifierListOptimization(table, scan)) {
+            /*
+             * preventSeekToColumn cannot be true, even if hinted, when encoded qualifier list
+             * optimization is being used. When using the optimization, it is necessary that we
+             * explicitly set the column qualifiers of the column family in the scan and not just
+             * project the entire column family.
+             */
+            if (statement.getHint().hasHint(Hint.NO_SEEK_TO_COLUMN)) {
+                // Prevent seeking to column during filtering
+                preventSeekToColumn = true;
+            } else {
+                int hbaseServerVersion = context.getConnection().getQueryServices().getLowestClusterHBaseVersion();
+                // When only a single column family is referenced, there are no hints, and HBase server version
+                // is less than when the fix for HBASE-13109 went in (0.98.12), then we prevent seeking to a
+                // column.
+                preventSeekToColumn = referencedCfCount == 1 && hbaseServerVersion < MIN_SEEK_TO_COLUMN_VERSION;
+            }
         }
         for (Entry<byte[], NavigableSet<byte[]>> entry : familyMap.entrySet()) {
             ImmutableBytesPtr cf = new ImmutableBytesPtr(entry.getKey());
@@ -440,7 +454,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             // the ExplicitColumnTracker not to be used, though.
             if (!statement.isAggregate() && filteredColumnNotInProjection) {
                 ScanUtil.andFilterAtEnd(scan, 
-                        trackedColumnsBitset != null ? new EncodedQualifiersColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table), trackedColumnsBitset, conditionOnlyCfs, table.getEncodingScheme()) : new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
+                    trackedColumnsBitset != null ? new EncodedQualifiersColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table), trackedColumnsBitset, conditionOnlyCfs, table.getEncodingScheme()) : new ColumnProjectionFilter(SchemaUtil.getEmptyColumnFamily(table),
                         columnsTracker, conditionOnlyCfs, EncodedColumnsUtil.usesEncodedColumnNames(table.getEncodingScheme())));
             }
         }
@@ -467,7 +481,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
-        
+        this.useStatsForParallelization =
+                context.getConnection().getQueryServices().getConfiguration().getBoolean(
+                    USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION);
         this.scans = getParallelScans();
         List<KeyRange> splitRanges = Lists.newArrayListWithExpectedSize(scans.size() * ESTIMATED_GUIDEPOSTS_PER_REGION);
         for (List<Scan> scanList : scans) {
@@ -494,6 +510,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             return Collections.emptyList();
         else
             return scans;
+    }
+
+    private List<HRegionLocation> getRegionBoundaries(ParallelScanGrouper scanGrouper)
+        throws SQLException{
+        return scanGrouper.getRegionBoundaries(context, physicalTableName);
     }
 
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
@@ -559,7 +580,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private List<Scan> addNewScan(List<List<Scan>> parallelScans, List<Scan> scans, Scan scan, byte[] startKey, boolean crossedRegionBoundary, HRegionLocation regionLocation) {
         boolean startNewScan = scanGrouper.shouldStartNewScan(plan, scans, startKey, crossedRegionBoundary);
         if (scan != null) {
-            scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
+            if (regionLocation.getServerName() != null) {
+                scan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER, regionLocation.getServerName().getVersionedBytes());
+            }
         	scans.add(scan);
         }
         if (startNewScan && !scans.isEmpty()) {
@@ -587,8 +610,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @throws SQLException
      */
     private List<List<Scan>> getParallelScans(Scan scan) throws SQLException {
-        List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
-                .getAllTableRegions(physicalTableName);
+        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int regionIndex = 0;
         int stopIndex = regionBoundaries.size();
@@ -640,8 +662,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @throws SQLException
      */
     private List<List<Scan>> getParallelScans(byte[] startKey, byte[] stopKey) throws SQLException {
-        List<HRegionLocation> regionLocations = context.getConnection().getQueryServices()
-                .getAllTableRegions(physicalTableName);
+        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         ScanRanges scanRanges = context.getScanRanges();
         PTable table = getTable();
@@ -727,7 +748,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             estimatedRows += gps.getRowCounts()[guideIndex];
                             estimatedSize += gps.getByteCounts()[guideIndex];
                         }
-                        scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                        if (useStatsForParallelization) {
+                            scans = addNewScan(parallelScans, scans, newScan, currentGuidePostBytes, false, regionLocation);
+                        }
                         currentKeyBytes = currentGuidePostBytes;
                         currentGuidePost = PrefixByteCodec.decode(decoder, input);
                         currentGuidePostBytes = currentGuidePost.copyBytes();

@@ -36,6 +36,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -75,12 +76,14 @@ import com.google.common.collect.Sets;
 
 public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
-    private static final List<String> mutationMetricsToSkip = Lists
-            .newArrayList(MetricType.MUTATION_COMMIT_TIME.name());
-    private static final List<String> readMetricsToSkip = Lists.newArrayList(MetricType.TASK_QUEUE_WAIT_TIME.name(),
-            MetricType.TASK_EXECUTION_TIME.name(), MetricType.TASK_END_TO_END_TIME.name());
+    private static final List<String> mutationMetricsToSkip =
+            Lists.newArrayList(MetricType.MUTATION_COMMIT_TIME.name());
+    private static final List<String> readMetricsToSkip =
+            Lists.newArrayList(MetricType.TASK_QUEUE_WAIT_TIME.name(),
+                MetricType.TASK_EXECUTION_TIME.name(), MetricType.TASK_END_TO_END_TIME.name(),
+                MetricType.COUNT_MILLS_BETWEEN_NEXTS.name());
     private static final String CUSTOM_URL_STRING = "SESSION";
-    private static final AtomicInteger numConnections = new AtomicInteger(0); 
+    private static final AtomicInteger numConnections = new AtomicInteger(0);
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -229,7 +232,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         resultSetBeingTested.close();
         Set<String> expectedTableNames = Sets.newHashSet(tableName);
         assertReadMetricValuesForSelectSql(Lists.newArrayList(numRows), Lists.newArrayList(numExpectedTasks),
-                resultSetBeingTested, expectedTableNames);
+            resultSetBeingTested, expectedTableNames);
     }
 
     @Test
@@ -616,7 +619,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             assertMetricsHaveSameValues(metrics.get(index1), metrics.get(index3), mutationMetricsToSkip);
         }
     }
-    
+
     @Test
     public void testOpenConnectionsCounter() throws Exception {
         long numOpenConnections = GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue();
@@ -625,7 +628,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         }
         assertEquals(numOpenConnections, GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue());
     }
-    
+
     private void createTableAndInsertValues(boolean commit, int numRows, Connection conn, String tableName)
             throws SQLException {
         String ddl = "CREATE TABLE " + tableName + " (K VARCHAR NOT NULL PRIMARY KEY, V VARCHAR)";
@@ -683,20 +686,14 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             String tableName = entry.getKey();
             expectedTableNames.remove(tableName);
             Map<String, Long> metricValues = entry.getValue();
-            boolean scanMetricsPresent = false;
             boolean taskCounterMetricsPresent = false;
             boolean taskExecutionTimeMetricsPresent = false;
             boolean memoryMetricsPresent = false;
             for (Entry<String, Long> pair : metricValues.entrySet()) {
                 String metricName = pair.getKey();
                 long metricValue = pair.getValue();
-                long n = numRows.get(counter);
                 long numTask = numExpectedTasks.get(counter);
-                if (metricName.equals(SCAN_BYTES.name())) {
-                    // we are using a SCAN_BYTES_DELTA of 1. So number of scan bytes read should be number of rows read
-                    assertEquals(n, metricValue);
-                    scanMetricsPresent = true;
-                } else if (metricName.equals(TASK_EXECUTED_COUNTER.name())) {
+                if (metricName.equals(TASK_EXECUTED_COUNTER.name())) {
                     assertEquals(numTask, metricValue);
                     taskCounterMetricsPresent = true;
                 } else if (metricName.equals(TASK_EXECUTION_TIME.name())) {
@@ -708,7 +705,6 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
                 }
             }
             counter++;
-            assertTrue(scanMetricsPresent);
             assertTrue(taskCounterMetricsPresent);
             assertTrue(taskExecutionTimeMetricsPresent);
             assertTrue(memoryMetricsPresent);
@@ -821,7 +817,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             }
         }
     }
-    
+
     @Test
     public void testGetConnectionsForSameUrlConcurrently()  throws Exception {
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
@@ -856,14 +852,15 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
 
     @Test
     public void testGetConnectionsThrottledForSameUrl() throws Exception {
-        int expectedPhoenixConnections = 11;
+        int attemptedPhoenixConnections = 11;
+        int maxConnections = attemptedPhoenixConnections -1;
         List<Connection> connections = Lists.newArrayList();
         String zkQuorum = "localhost:" + getUtility().getZkCluster().getClientPort();
         String url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum +
         ':' +  CUSTOM_URL_STRING + '=' + "throttletest";
 
         Properties props = new Properties();
-        props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, "10");
+        props.setProperty(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, Integer.toString(maxConnections));
 
         GLOBAL_HCONNECTIONS_COUNTER.getMetric().reset();
         GLOBAL_QUERY_SERVICES_COUNTER.getMetric().reset();
@@ -871,7 +868,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().reset();
         boolean wasThrottled = false;
         try {
-            for (int k = 0; k < expectedPhoenixConnections; k++) {
+            for (int k = 0; k < attemptedPhoenixConnections; k++) {
                 connections.add(DriverManager.getConnection(url, props));
             }
         } catch (SQLException se) {
@@ -885,7 +882,25 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
         assertEquals(1, GLOBAL_QUERY_SERVICES_COUNTER.getMetric().getValue());
         assertTrue("No connection was throttled!", wasThrottled);
         assertEquals(1, GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.getMetric().getValue());
-        assertEquals(expectedPhoenixConnections, GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+        assertEquals(maxConnections, connections.size());
+        assertTrue("Not all connections were attempted!",
+            attemptedPhoenixConnections <= GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.getMetric().getValue());
+        connections.clear();
+        //now check that we decremented the counter for the connections we just released
+        try {
+            for (int k = 0; k < maxConnections; k++){
+                connections.add(DriverManager.getConnection(url, props));
+            }
+        } catch(SQLException se) {
+            if (se.getErrorCode() == (SQLExceptionCode.NEW_CONNECTION_THROTTLED).getErrorCode()){
+                fail("Connection was throttled when it shouldn't be!");
+            }
+        } finally {
+            for (Connection c : connections) {
+                c.close();
+            }
+        }
+        assertEquals(maxConnections, connections.size());
     }
 
     @Test
@@ -920,7 +935,7 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
             exec.shutdownNow();
         }
     }
-    
+
     @Test
     public void testGetConnectionsWithDifferentJDBCParamsConcurrently()  throws Exception {
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
@@ -957,9 +972,9 @@ public class PhoenixMetricsIT extends BaseUniqueNamesOwnClusterIT {
                     c.close();
                 } catch (Exception ignore) {}
             }
-        } 
+        }
     }
-    
+
     private static class GetConnectionCallable implements Callable<Connection> {
         private final String url;
         GetConnectionCallable(String url) {

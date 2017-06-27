@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -335,6 +336,74 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testBug3890() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String ddl =
+                    "CREATE TABLE IF NOT EXISTS " + tableName + " (HOST CHAR(2) NOT NULL,"
+                            + " DOMAIN VARCHAR NOT NULL," + " FEATURE VARCHAR NOT NULL,"
+                            + " DATE DATE NOT NULL," + " USAGE.CORE BIGINT," + " USAGE.DB BIGINT,"
+                            + " STATS.ACTIVE_VISITOR INTEGER"
+                            + " CONSTRAINT PK PRIMARY KEY (HOST, DOMAIN, FEATURE, DATE))";
+            conn.createStatement().execute(ddl);
+            String upsert = "UPSERT INTO " + tableName + " VALUES (?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement stmt = conn.prepareStatement(upsert)) {
+                stmt.setString(1, "H1");
+                stmt.setString(2, "Salesforce");
+                stmt.setString(3, "F1");
+                stmt.setDate(4, new Date(100));
+                stmt.setLong(5, 100l);
+                stmt.setLong(6, 2000l);
+                stmt.setLong(7, 10);
+                stmt.executeUpdate();
+                stmt.setString(1, "H2");
+                stmt.setString(2, "Heroku");
+                stmt.setString(3, "F1");
+                stmt.setDate(4, new Date(100));
+                stmt.setLong(5, 100l);
+                stmt.setLong(6, 1000l);
+                stmt.setLong(7, 10);
+                stmt.executeUpdate();
+                conn.commit();
+            }
+            String query =
+                    "SELECT DOMAIN, AVG(CORE) Average_CPU_Usage, AVG(DB) Average_DB_Usage FROM "
+                            + tableName + " GROUP BY DOMAIN ORDER BY DOMAIN DESC";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            rs.next();
+            assertEquals("Salesforce", rs.getString(1));
+            assertEquals(0, Double.compare(100, rs.getDouble(2)));
+            assertEquals(0, Double.compare(2000, rs.getDouble(3)));
+            assertTrue(rs.next());
+            assertEquals("Heroku", rs.getString(1));
+            assertEquals(0, Double.compare(100, rs.getDouble(2)));
+            assertEquals(0, Double.compare(1000, rs.getDouble(3)));
+            assertFalse(rs.next());
+
+            query =
+                    "SELECT TRUNC(DATE,'DAY') DAY, SUM(CORE) TOTAL_CPU_Usage, MIN(CORE) MIN_CPU_Usage, MAX(CORE) MAX_CPU_Usage"
+                            + " FROM " + tableName + " WHERE DOMAIN LIKE 'Salesforce%'"
+                            + " GROUP BY TRUNC(DATE,'DAY')";
+            rs = conn.createStatement().executeQuery(query);
+            rs.next();
+            assertEquals(0, rs.getLong(1));
+            assertEquals((Long) 100l, Long.valueOf(rs.getLong(2)));
+            assertEquals((Long) 100l, Long.valueOf(rs.getLong(3)));
+            assertEquals((Long) 100l, Long.valueOf(rs.getLong(4)));
+            assertFalse(rs.next());
+
+            query =
+                    "SELECT HOST, SUM(ACTIVE_VISITOR) TOTAL_ACTIVE_VISITORS FROM " + tableName
+                            + " WHERE DB > (CORE * 10)" + " GROUP BY HOST";
+            rs = conn.createStatement().executeQuery(query);
+            rs.next();
+            assertEquals("H1", rs.getString(1));
+            assertEquals(10, rs.getInt(2));
+            assertFalse(rs.next());
         }
     }
 }

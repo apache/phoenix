@@ -24,8 +24,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 public class SequenceNotFoundException extends MetaDataEntityNotFoundException {
 	private static final long serialVersionUID = 1L;
 	private static SQLExceptionCode code = SQLExceptionCode.SEQUENCE_UNDEFINED;
-	private final String schemaName;
-	private final String tableName;
 
 	public SequenceNotFoundException(String tableName) {
 		this(null, tableName);
@@ -33,16 +31,6 @@ public class SequenceNotFoundException extends MetaDataEntityNotFoundException {
 
 	public SequenceNotFoundException(String schemaName, String tableName) {
 		super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName).build().toString(),
-				code.getSQLState(), code.getErrorCode(), null);
-		this.tableName = tableName;
-		this.schemaName = schemaName;
-	}
-
-	public String getTableName() {
-		return tableName;
-	}
-
-	public String getSchemaName() {
-		return schemaName;
+				code.getSQLState(), code.getErrorCode(), schemaName, tableName, null);
 	}
 }

@@ -98,12 +98,10 @@ public class PhoenixQueryBuilder {
 
         if (conditionColumnList.size() > 0) {
             addConditionColumnToReadColumn(readColumnList, conditionColumnList);
-            readColumnList = ColumnMappingUtils.quoteColumns(readColumnList);
             sql.insert(0, queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
         } else {
-            readColumnList = ColumnMappingUtils.quoteColumns(readColumnList);
             sql.append(queryTemplate.replace("$HINT$", hints).replace("$COLUMN_LIST$",
                     getSelectColumns(jobConf, tableName, readColumnList)).replace("$TABLE_NAME$",
                     tableName));
@@ -251,7 +249,7 @@ public class PhoenixQueryBuilder {
         for (String columnName : columnTypeMap.keySet()) {
             if (whereClause.contains(columnName)) {
                 String column = findReplacement(jobConf, columnName);
-                whereClause = StringUtils.replaceEach(whereClause, new String[] {columnName}, new String[] {"\""+column + "\""});
+                whereClause = whereClause.replaceAll("\\b" + columnName + "\\b", "\"" + column + "\"");
                 conditionColumnList.add(column);
 
 

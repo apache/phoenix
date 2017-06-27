@@ -177,4 +177,8 @@ public class ReadMetricQueue {
         return q;
     }
 
+	public boolean isRequestMetricsEnabled() {
+		return isRequestMetricsEnabled;
+	}
+
 }

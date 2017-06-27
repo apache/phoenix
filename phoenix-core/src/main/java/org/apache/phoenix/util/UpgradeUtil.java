@@ -1079,7 +1079,7 @@ public class UpgradeUtil {
      * @param oldMetaConnection caller should take care of closing the passed connection appropriately
      * @throws SQLException
      */
-    public static void upgradeTo4_11_0(PhoenixConnection oldMetaConnection) throws SQLException {
+    public static void addParentToChildLinks(PhoenixConnection oldMetaConnection) throws SQLException {
         PhoenixConnection metaConnection = null;
         try {
             // Need to use own connection with max time stamp to be able to read all data from SYSTEM.CATALOG 
@@ -1832,7 +1832,7 @@ public class UpgradeUtil {
             MetaDataMutationResult result = new MetaDataClient(conn).updateCache(conn.getTenantId(),schemaName,
                     SchemaUtil.getTableNameFromFullName(tableName),true);
             if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) { throw new TableNotFoundException(
-                    tableName); }
+              schemaName, tableName); }
             table = result.getTable();
             
             // check whether table is properly upgraded before upgrading indexes

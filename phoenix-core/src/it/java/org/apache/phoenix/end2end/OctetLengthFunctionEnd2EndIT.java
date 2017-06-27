@@ -46,7 +46,7 @@ public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
             conn = DriverManager.getConnection(getUrl());
             String ddl;
             ddl = "CREATE TABLE " + TABLE_NAME
-                + " (k VARCHAR NOT NULL PRIMARY KEY, b BINARY(4), vb VARBINARY)";
+                + " (k VARCHAR NOT NULL PRIMARY KEY, b BINARY(4), vb1 VARBINARY, vb2 VARBINARY)";
             conn.createStatement().execute(ddl);
             conn.commit();
         } finally {
@@ -58,7 +58,7 @@ public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
     public void test() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         PreparedStatement stmt = conn.prepareStatement(
-            "UPSERT INTO " + TABLE_NAME + " VALUES (?, ?, ?)");
+            "UPSERT INTO " + TABLE_NAME + "(k,b,vb1) VALUES (?, ?, ?)");
         stmt.setString(1, KEY);
         stmt.setBytes(2, new byte[] { 1, 2, 3, 4 });
         stmt.setBytes(3, new byte[] { 1, 2, 3, 4 });
@@ -66,11 +66,12 @@ public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
         conn.commit();
         ResultSet rs =
                 conn.createStatement()
-                        .executeQuery("SELECT OCTET_LENGTH(vb), OCTET_LENGTH(b) FROM " + TABLE_NAME
-                            + " WHERE OCTET_LENGTH(vb)=4 and OCTET_LENGTH(b)=4");
+                        .executeQuery("SELECT OCTET_LENGTH(vb1), OCTET_LENGTH(b), OCTET_LENGTH(vb2) FROM " + TABLE_NAME);
         assertTrue(rs.next());
         assertEquals(4, rs.getInt(1));
         assertEquals(4, rs.getInt(2));
+        rs.getInt(3);
+        assertTrue(rs.wasNull());
         assertTrue(!rs.next());
     }
 }

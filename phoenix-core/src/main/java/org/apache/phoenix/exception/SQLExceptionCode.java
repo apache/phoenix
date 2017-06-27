@@ -182,6 +182,8 @@ public enum SQLExceptionCode {
      ROWTIMESTAMP_COL_INVALID_TYPE(530, "42907", "A column can be added as ROW_TIMESTAMP only if it is of type DATE, BIGINT, TIME OR TIMESTAMP."),
      ROWTIMESTAMP_NOT_ALLOWED_ON_VIEW(531, "42908", "Declaring a column as row_timestamp is not allowed for views."),
      INVALID_SCN(532, "42909", "Value of SCN cannot be less than zero."),
+     INVALID_REPLAY_AT(533, "42910", "Value of REPLAY_AT cannot be less than zero."),
+     UNEQUAL_SCN_AND_REPLAY_AT(534, "42911", "If both specified, values of CURRENT_SCN and REPLAY_AT must be equal."),
      /**
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.
@@ -192,7 +194,7 @@ public enum SQLExceptionCode {
     COLUMN_FAMILY_NOT_FOUND(1001, "42I01", "Undefined column family.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            return new ColumnFamilyNotFoundException(info.getFamilyName());
+            return new ColumnFamilyNotFoundException(info.getSchemaName(), info.getTableName(), info.getFamilyName());
         }
     }),
     PROPERTIES_FOR_FAMILY(1002, "42I02","Properties may not be defined for an unused family name."),
@@ -333,6 +335,7 @@ public enum SQLExceptionCode {
     DUPLICATE_COLUMN_IN_ON_DUP_KEY(1221, "42Z21", "Duplicate column in ON DUPLICATE KEY UPDATE." ),
     AGGREGATION_NOT_ALLOWED_IN_ON_DUP_KEY(1222, "42Z22", "Aggregation in ON DUPLICATE KEY UPDATE is not allowed." ),
     CANNOT_SET_SCN_IN_ON_DUP_KEY(1223, "42Z23", "The CURRENT_SCN may not be set for statement using ON DUPLICATE KEY." ),
+    CANNOT_USE_ON_DUP_KEY_WITH_GLOBAL_IDX(1224, "42Z24", "The ON DUPLICATE KEY clause may not be used when a table has a global index." ),
 
     /** Parser error. (errorcode 06, sqlState 42P) */
     PARSER_ERROR(601, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),
@@ -430,7 +433,10 @@ public enum SQLExceptionCode {
                                     727, "43M11", " ASYNC option is not allowed.. "),
     NEW_CONNECTION_THROTTLED(728, "410M1", "Could not create connection " +
         "because this client already has the maximum number" +
-        " of connections to the target cluster.");
+        " of connections to the target cluster."),
+    
+    MAX_MUTATION_SIZE_EXCEEDED(729, "LIM01", "MutationState size is bigger than maximum allowed number of rows"),
+    MAX_MUTATION_SIZE_BYTES_EXCEEDED(730, "LIM02", "MutationState size is bigger than maximum allowed number of bytes");
 
     private final int errorCode;
     private final String sqlState;

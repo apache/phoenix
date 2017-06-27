@@ -19,6 +19,7 @@ package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
 import java.util.List;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.JodaTimezoneCache;
 import org.apache.phoenix.expression.Expression;
@@ -60,15 +61,24 @@ public class ConvertTimezoneFunction extends ScalarFunction {
         if (!children.get(0).evaluate(tuple, ptr)) {
             return false;
         }
+        if (ptr.getLength() == 0) {
+            return true;
+        }
         long date = PDate.INSTANCE.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
 
         if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
         }
+        if (ptr.getLength() == 0) {
+            return true;
+        }
         DateTimeZone timezoneFrom = JodaTimezoneCache.getInstance(ptr);
 
         if (!children.get(2).evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength() == 0) {
+            return true;
         }
         DateTimeZone timezoneTo = JodaTimezoneCache.getInstance(ptr);
 

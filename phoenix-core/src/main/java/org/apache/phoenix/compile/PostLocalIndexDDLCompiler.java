@@ -108,7 +108,7 @@ public class PostLocalIndexDDLCompiler {
                     // The contract is to return a MutationState that contains the number of rows modified. In this
                     // case, it's the number of rows in the data table which corresponds to the number of index
                     // rows that were added.
-                    return new MutationState(0, connection, rowCount);
+                    return new MutationState(0, 0, connection, rowCount);
                 }
 
             };

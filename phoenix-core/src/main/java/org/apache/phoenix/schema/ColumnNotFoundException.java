@@ -32,8 +32,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 public class ColumnNotFoundException extends MetaDataEntityNotFoundException {
     private static final long serialVersionUID = 1L;
     private static SQLExceptionCode code = SQLExceptionCode.COLUMN_NOT_FOUND;
-    private final String schemaName;
-    private final String tableName;
     private final String columnName;
 
     public ColumnNotFoundException(String columnName) {
@@ -43,18 +41,8 @@ public class ColumnNotFoundException extends MetaDataEntityNotFoundException {
     public ColumnNotFoundException(String schemaName, String tableName, String familyName, String columnName) {
         super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName)
                 .setFamilyName(familyName).setColumnName(columnName).build().toString(),
-                code.getSQLState(), code.getErrorCode(), null);
-        this.schemaName = schemaName;
-        this.tableName = tableName;
+                code.getSQLState(), code.getErrorCode(), schemaName, tableName, null);
         this.columnName = columnName;
-    }
-
-    public String getTableName() {
-        return tableName;
-    }
-
-    public String getSchemaName() {
-        return schemaName;
     }
 
     public String getColumnName() {

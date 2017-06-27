@@ -58,7 +58,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
 import static org.apache.phoenix.util.UpgradeUtil.getSysCatalogSnapshotName;
-import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_11_0;
+import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.upgradeTo4_5_0;
 
 import java.io.IOException;
@@ -68,7 +68,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -120,6 +119,7 @@ import org.apache.hadoop.hbase.ipc.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.util.ByteStringer;
@@ -225,6 +225,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.JDBCUtil;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -434,7 +435,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     QueryServicesOptions.DEFAULT_TRANSACTIONS_ENABLED);
             this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
             GLOBAL_HCONNECTIONS_COUNTER.increment();
-            logger.info("HConnnection established. Details: " + connection + " " +  Throwables.getStackTraceAsString(new Exception()));
+            logger.info("HConnection established. Stacktrace for informational purposes: " + connection + " " +  LogUtil.getCallerStackTrace());
             // only initialize the tx service client if needed and if we succeeded in getting a connection
             // to HBase
             if (transactionsEnabled) {
@@ -734,6 +735,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         QueryServices.DEFAULT_KEEP_DELETED_CELLS_ATTRIB, QueryServicesOptions.DEFAULT_KEEP_DELETED_CELLS));
             }
             columnDesc.setDataBlockEncoding(SchemaUtil.DEFAULT_DATA_BLOCK_ENCODING);
+            columnDesc.setBloomFilterType(BloomType.NONE);
             for (Entry<String,Object> entry : family.getSecond().entrySet()) {
                 String key = entry.getKey();
                 Object value = entry.getValue();
@@ -781,6 +783,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         HTableDescriptor tableDescriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc)
         : new HTableDescriptor(
                 SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, tableType).getBytes());
+        // By default, do not automatically rebuild/catch up an index on a write failure
         for (Entry<String,Object> entry : tableProps.entrySet()) {
             String key = entry.getKey();
             if (!TableProperty.isPhoenixTableProperty(key)) {
@@ -2068,7 +2071,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // and merge them with the common family properties.
         for (String f : stmtFamiliesPropsMap.keySet()) {
             if (!addingColumns && !existingColumnFamilies.contains(f)) {
-                throw new ColumnFamilyNotFoundException(f);
+                String schemaNameStr = table.getSchemaName()==null?null:table.getSchemaName().getString();
+                String tableNameStr = table.getTableName()==null?null:table.getTableName().getString();
+                throw new ColumnFamilyNotFoundException(schemaNameStr, tableNameStr, f);
             }
             if (addingColumns && !colFamiliesForPColumnsToBeAdded.contains(f)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_PROPERTY_FOR_COLUMN_NOT_ADDED).build().buildException();
@@ -2404,7 +2409,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         boolean success = false;
                         try {
                             GLOBAL_QUERY_SERVICES_COUNTER.increment();
-                            logger.info("An instance of ConnectionQueryServices was created: " + Throwables.getStackTraceAsString(new Exception()));
+                            logger.info("An instance of ConnectionQueryServices was created.");
                             openConnection();
                             hConnectionEstablished = true;
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
@@ -2791,7 +2796,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     clearCache();
                 }
                 if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0) {
-                    upgradeTo4_11_0(metaConnection);
+                    metaConnection = addColumnsIfNotExists(
+                        metaConnection,
+                        PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                        MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_11_0,
+                        PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION + " "
+                                + PBoolean.INSTANCE.getSqlTypeName());
+                    addParentToChildLinks(metaConnection);
                 }
             }
 
@@ -3858,11 +3869,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (returnSequenceValues) {
             ConcurrentMap<SequenceKey,Sequence> formerSequenceMap = null;
             synchronized (connectionCountLock) {
-                if (--connectionCount == 0) {
+                if (--connectionCount <= 0) {
                     if (!this.sequenceMap.isEmpty()) {
                         formerSequenceMap = this.sequenceMap;
                         this.sequenceMap = Maps.newConcurrentMap();
                     }
+                }
+                if (connectionCount < 0) {
+                    connectionCount = 0;
                 }
             }
             // Since we're using the former sequenceMap, we can do this outside
@@ -3870,6 +3884,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             if (formerSequenceMap != null) {
                 // When there are no more connections, attempt to return any sequences
                 returnAllSequences(formerSequenceMap);
+            }
+        } else if (shouldThrottleNumConnections){ //still need to decrement connection count
+            synchronized (connectionCountLock) {
+                if (connectionCount > 0) {
+                    --connectionCount;
+                }
             }
         }
     }

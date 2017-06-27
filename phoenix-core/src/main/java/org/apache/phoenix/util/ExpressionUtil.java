@@ -10,11 +10,15 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 
@@ -50,6 +54,16 @@ public class ExpressionUtil {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             expression.evaluate(null, ptr);
             return Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr));
+        }
+        return false;
+    }
+
+    public static boolean isPkPositionChanging(TableRef tableRef, List<Expression> projectedExpressions) throws SQLException {
+        for (int i = 0; i < tableRef.getTable().getPKColumns().size(); i++) {
+            PColumn column = tableRef.getTable().getPKColumns().get(i);
+            Expression source = projectedExpressions.get(i);
+            if (source == null || !source
+                    .equals(new ColumnRef(tableRef, column.getPosition()).newColumnExpression())) { return true; }
         }
         return false;
     }

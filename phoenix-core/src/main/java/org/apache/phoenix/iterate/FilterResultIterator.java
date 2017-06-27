@@ -21,10 +21,9 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBoolean;
 
 
 /**
@@ -60,7 +59,7 @@ public class FilterResultIterator  extends LookAheadResultIterator {
         do {
             next = delegate.next();
             expression.reset();
-        } while (next != null && (!expression.evaluate(next, ptr) || Boolean.FALSE.equals(expression.getDataType().toObject(ptr))));
+        } while (next != null && (!expression.evaluate(next, ptr) || ptr.getLength() == 0 || !Boolean.TRUE.equals(expression.getDataType().toObject(ptr))));
         return next;
     }
     

@@ -81,7 +81,7 @@ public class TestPerRegionIndexWriteCache {
       Random rn = new Random();
       tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
       WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), null, "TestPerRegionIndexWriteCache");
-      wal = walFactory.getWAL(Bytes.toBytes("logs"));
+      wal = walFactory.getWAL(Bytes.toBytes("logs"), null);
       HTableDescriptor htd = new HTableDescriptor(tableName);
       HColumnDescriptor a = new HColumnDescriptor(Bytes.toBytes("a"));
       htd.addFamily(a);

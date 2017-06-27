@@ -152,7 +152,7 @@ public class LiteralResultIteratorPlanTest {
         assertNull(iter.next());
     }
 
-    private QueryPlan newLiteralResultIterationPlan(Integer offset, Integer limit) {
+    private QueryPlan newLiteralResultIterationPlan(Integer offset, Integer limit) throws SQLException {
         List<Tuple> tuples = Lists.newArrayList();
 
         Tuple baseTuple = new SingleKeyValueTuple(KeyValue.LOWESTKEY);
@@ -183,7 +183,7 @@ public class LiteralResultIteratorPlanTest {
             PTable pTable = PTableImpl.makePTable(null, PName.EMPTY_NAME, PName.EMPTY_NAME, PTableType.SUBQUERY, null,
                     MetaDataProtocol.MIN_TABLE_TIMESTAMP, PTable.INITIAL_SEQ_NUM, null, null, columns, null, null,
                     Collections.<PTable> emptyList(), false, Collections.<PName> emptyList(), null, null, false, false,
-                    false, null, null, null, true, false, 0, 0L, false, null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, EncodedCQCounter.NULL_COUNTER);
+                    false, null, null, null, true, false, 0, 0L, false, null, false, ImmutableStorageScheme.ONE_CELL_PER_COLUMN, QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, EncodedCQCounter.NULL_COUNTER, true);
             TableRef sourceTable = new TableRef(pTable);
             List<ColumnRef> sourceColumnRefs = Lists.<ColumnRef> newArrayList();
             for (PColumn column : sourceTable.getTable().getColumns()) {

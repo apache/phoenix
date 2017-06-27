@@ -48,11 +48,11 @@ public class ResultBaseTestIT extends BaseHBaseManagedTimeIT {
         String dir = properties.getProperty("pherf.default.results.dir");
         resultUtil.ensureBaseDirExists(dir);
 
-        util.setZookeeper("localhost");
+        PhoenixUtil.setZookeeper("localhost");
         reader = new SchemaReader(util, matcherSchema);
         parser = new XMLConfigParser(matcherScenario);
     }
-    
+
     @AfterClass public static void tearDown() throws Exception {
     	resultUtil.deleteDir(properties.getProperty("pherf.default.results.dir"));
     }

@@ -487,5 +487,60 @@ public class NthValueFunctionIT extends ParallelStatsDisabledIT {
         }
         assertTrue(shouldList.contains(actualValue));
     }
+    
+    @Test
+    public void testUnionAll() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+
+        String nthValue = generateUniqueName();
+        String ddl = "CREATE TABLE IF NOT EXISTS " + nthValue + " "
+                + "(id INTEGER NOT NULL, feid UNSIGNED_LONG NOT NULL,"
+                + " uid CHAR(1) NOT NULL, lrd INTEGER"
+                + " CONSTRAINT PKVIEW PRIMARY KEY ( id, feid, uid))";
+        conn.createStatement().execute(ddl);
+
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, '1', 7)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, '2', 9)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, '3', 4)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 8, '4', 2)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, '5', 1)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, '6', 3)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, '8', 5)");
+        conn.createStatement().execute(
+            "UPSERT INTO " + nthValue + " (id, feid, uid, lrd) VALUES (2, 9, '7', 8)");
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery(
+            "SELECT feid, NTH_VALUE(uid, 1) WITHIN GROUP (ORDER BY lrd DESC) as user_id, NTH_VALUE(lrd, 1) WITHIN GROUP (ORDER BY lrd DESC) as lrd FROM " + nthValue
+                + " where id=2 and feid in (8, 9) GROUP BY feid" 
+                + " UNION ALL" 
+                + " SELECT feid, NTH_VALUE(uid, 2) WITHIN GROUP (ORDER BY lrd DESC) as user_id, NTH_VALUE(lrd, 2) WITHIN GROUP (ORDER BY lrd DESC) as lrd  FROM " + nthValue
+                + " where id=2 and feid in (8, 9) GROUP BY feid");
+        
+        assertTrue(rs.next());
+        assertEquals(8, rs.getInt(1));
+        assertEquals("2", rs.getString(2));
+        assertEquals(9, rs.getInt(3));
+        assertTrue(rs.next());
+        assertEquals(9, rs.getInt(1));
+        assertEquals("7", rs.getString(2));
+        assertEquals(8, rs.getInt(3));
+        assertTrue(rs.next());
+        assertEquals(8, rs.getInt(1));
+        assertEquals("1", rs.getString(2));
+        assertEquals(7, rs.getInt(3));
+        assertTrue(rs.next());
+        assertEquals(9, rs.getInt(1));
+        assertEquals("8", rs.getString(2));
+        assertEquals(5, rs.getInt(3));
+        assertFalse(rs.next());
+    }
 
 }

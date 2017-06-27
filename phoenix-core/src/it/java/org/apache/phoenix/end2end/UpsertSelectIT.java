@@ -78,20 +78,31 @@ public class UpsertSelectIT extends BaseClientManagedTimeIT {
     
     @Test
     public void testUpsertSelectWithNoIndex() throws Exception {
-        testUpsertSelect(false);
+        testUpsertSelect(false, false);
     }
     
     @Test
     public void testUpsertSelecWithIndex() throws Exception {
-        testUpsertSelect(true);
+        testUpsertSelect(true, false);
     }
     
-    private void testUpsertSelect(boolean createIndex) throws Exception {
+    @Test
+    public void testUpsertSelecWithIndexWithSalt() throws Exception {
+        testUpsertSelect(true, true);
+    }
+
+    @Test
+    public void testUpsertSelecWithNoIndexWithSalt() throws Exception {
+        testUpsertSelect(false, true);
+    }
+
+    private void testUpsertSelect(boolean createIndex, boolean saltTable) throws Exception {
         long ts = nextTimestamp();
         String tenantId = getOrganizationId();
-        initATableValues(ATABLE_NAME, tenantId, getDefaultSplits(tenantId), null, ts-1, getUrl(), null);
+        byte[][] splits = getDefaultSplits(tenantId);
+        initATableValues(ATABLE_NAME, tenantId, saltTable ? null : splits, null, ts-1, getUrl(), saltTable ? "salt_buckets = 2" : null);
 
-        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, ts-1);
+        ensureTableCreated(getUrl(), CUSTOM_ENTITY_DATA_FULL_NAME, CUSTOM_ENTITY_DATA_FULL_NAME, null, ts-1, saltTable ? "salt_buckets = 2" : null);
         String indexName = "IDX1";
         if (createIndex) {
             Properties props = new Properties();

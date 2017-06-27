@@ -55,6 +55,9 @@ public class SignFunction extends ScalarFunction {
         Expression childExpr = children.get(0);
         PDataType dataType = childExpr.getDataType();
         if (childExpr.evaluate(tuple, ptr)) {
+            if (ptr.getLength()==0) {
+                return true;
+            }
             int ret = ((PNumericType) dataType).signum(ptr, childExpr.getSortOrder());
             ptr.set(RESULT[ret + 1]);
             return true;

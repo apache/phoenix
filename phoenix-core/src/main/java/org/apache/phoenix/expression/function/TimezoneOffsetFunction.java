@@ -20,15 +20,16 @@ package org.apache.phoenix.expression.function;
 
 import java.sql.SQLException;
 import java.util.List;
+
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.cache.JodaTimezoneCache;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.tuple.Tuple;
 import org.joda.time.DateTimeZone;
 
 /**
@@ -59,10 +60,16 @@ public class TimezoneOffsetFunction extends ScalarFunction {
         if (!children.get(0).evaluate(tuple, ptr)) {
             return false;
         }
+        if (ptr.getLength() == 0) {
+            return true;
+        }
         DateTimeZone timezoneInstance = JodaTimezoneCache.getInstance(ptr);
 
         if (!children.get(1).evaluate(tuple, ptr)) {
             return false;
+        }
+        if (ptr.getLength() == 0) {
+            return true;
         }
         long date = PDate.INSTANCE.getCodec().decodeLong(ptr, children.get(1).getSortOrder());
 

@@ -73,6 +73,7 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     private long guidePostDepth;
     private long maxTimeStamp = MetaDataProtocol.MIN_TABLE_TIMESTAMP;
     private static final Log LOG = LogFactory.getLog(DefaultStatisticsCollector.class);
+    private ImmutableBytesWritable currentRow;
 
     DefaultStatisticsCollector(RegionCoprocessorEnvironment env, String tableName, long clientTimeStamp, byte[] family,
             byte[] gp_width_bytes, byte[] gp_per_region_bytes) throws IOException {
@@ -246,11 +247,22 @@ class DefaultStatisticsCollector implements StatisticsCollector {
     @Override
     public void collectStatistics(final List<Cell> results) {
         // A guide posts depth of zero disables the collection of stats
-        if (guidePostDepth == 0) {
+        if (guidePostDepth == 0 || results.size() == 0) {
             return;
         }
         Map<ImmutableBytesPtr, Boolean> famMap = Maps.newHashMap();
-        boolean incrementRow = true;
+        boolean incrementRow = false;
+        Cell c = results.get(0);
+        ImmutableBytesWritable row = new ImmutableBytesWritable(c.getRowArray(), c.getRowOffset(), c.getRowLength());
+        /*
+         * During compaction, it is possible that HBase will not return all the key values when
+         * internalScanner.next() is called. So we need the below check to avoid counting a row more
+         * than once.
+         */
+        if (currentRow == null || !row.equals(currentRow)) {
+            currentRow = row;
+            incrementRow = true;
+        }
         for (Cell cell : results) {
             KeyValue kv = KeyValueUtil.ensureKeyValue(cell);
             maxTimeStamp = Math.max(maxTimeStamp, kv.getTimestamp());
@@ -279,7 +291,6 @@ class DefaultStatisticsCollector implements StatisticsCollector {
             long byteCount = gps.getFirst() + kvLength;
             gps.setFirst(byteCount);
             if (byteCount >= guidePostDepth) {
-                ImmutableBytesWritable row = new ImmutableBytesWritable(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
                 if (gps.getSecond().addGuidePosts(row, byteCount, gps.getSecond().getRowCount())) {
                     gps.setFirst(0l);
                     gps.getSecond().resetRowCount();
