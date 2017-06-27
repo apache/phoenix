@@ -234,9 +234,10 @@ public final class QueryServer extends Configured implements Tool, Runnable {
         // Enable SPNEGO and impersonation (through standard Hadoop configuration means)
         builder.withSpnego(ugi.getUserName(), additionalAllowedRealms)
             .withAutomaticLogin(keytab)
-            .withRemoteUserExtractor(new PhoenixRemoteUserExtractor(getConf()))
             .withImpersonation(new PhoenixDoAsCallback(ugi, getConf()));
+
       }
+      setRemoteUserExtractorIfNecessary(builder, getConf());
 
       // Build and start the HttpServer
       server = builder.build();
@@ -281,6 +282,15 @@ public final class QueryServer extends Configured implements Tool, Runnable {
     }
   }
 
+  // add remoteUserExtractor to builder if enabled
+  @VisibleForTesting
+  public void setRemoteUserExtractorIfNecessary(HttpServer.Builder builder, Configuration conf) {
+    if (conf.getBoolean(QueryServices.QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR_ATTRIB,
+            QueryServicesOptions.DEFAULT_QUERY_SERVER_WITH_REMOTEUSEREXTRACTOR)) {
+      builder.withRemoteUserExtractor(new PhoenixRemoteUserExtractor(conf));
+    }
+  }
+
   /**
    * Use the correctly way to extract end user.
    */
@@ -288,34 +298,32 @@ public final class QueryServer extends Configured implements Tool, Runnable {
   static class PhoenixRemoteUserExtractor implements RemoteUserExtractor{
     private final HttpQueryStringParameterRemoteUserExtractor paramRemoteUserExtractor;
     private final HttpRequestRemoteUserExtractor requestRemoteUserExtractor;
-    private final boolean enableDoAs;
-    private final String doAsParam;
+    private final String userExtractParam;
 
     public PhoenixRemoteUserExtractor(Configuration conf) {
       this.requestRemoteUserExtractor = new HttpRequestRemoteUserExtractor();
-      this.doAsParam = conf.get(QueryServices.QUERY_SERVER_DOAS_PARAM,
-              QueryServicesOptions.DEFAULT_QUERY_SERVER_DOAS_PARAM);
-      this.paramRemoteUserExtractor = new HttpQueryStringParameterRemoteUserExtractor(doAsParam);
-      this.enableDoAs = conf.getBoolean(QueryServices.QUERY_SERVER_DOAS_ENABLED_ATTRIB,
-              QueryServicesOptions.DEFAULT_QUERY_SERVER_DOAS_ENABLED);
+      this.userExtractParam = conf.get(QueryServices.QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM,
+              QueryServicesOptions.DEFAULT_QUERY_SERVER_REMOTEUSEREXTRACTOR_PARAM);
+      this.paramRemoteUserExtractor = new HttpQueryStringParameterRemoteUserExtractor(userExtractParam);
     }
 
     @Override
     public String extract(HttpServletRequest request) throws RemoteUserExtractionException {
-      if (request.getParameter(doAsParam) != null && enableDoAs) {
-        String doAsUser = paramRemoteUserExtractor.extract(request);
+      if (request.getParameter(userExtractParam) != null) {
+        String extractedUser = paramRemoteUserExtractor.extract(request);
         UserGroupInformation ugi = UserGroupInformation.createRemoteUser(request.getRemoteUser());
-        UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(doAsUser, ugi);
+        UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(extractedUser, ugi);
 
         // Check if this user is allowed to be impersonated.
         // Will throw AuthorizationException if the impersonation as this user is not allowed
         try {
           ProxyUsers.authorize(proxyUser, request.getRemoteAddr());
-          return doAsUser;
+          return extractedUser;
         } catch (AuthorizationException e) {
-          throw new RemoteUserExtractionException(e.getMessage());
+          throw new RemoteUserExtractionException(e.getMessage(), e);
         }
       } else {
+        LOG.warn("The parameter used to extract user doesn't exist in the request.");
         return requestRemoteUserExtractor.extract(request);
       }
 
