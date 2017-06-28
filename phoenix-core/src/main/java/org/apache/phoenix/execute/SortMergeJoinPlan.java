@@ -239,6 +239,26 @@ public class SortMergeJoinPlan implements QueryPlan {
         return false;
     }
     
+    private static SQLException closeIterators(ResultIterator lhsIterator, ResultIterator rhsIterator) {
+        SQLException e = null;
+        try {
+            lhsIterator.close();
+        } catch (Throwable e1) {
+            e = e1 instanceof SQLException ? (SQLException)e1 : new SQLException(e1);
+        }
+        try {
+            rhsIterator.close();
+        } catch (Throwable e2) {
+            SQLException e22 = e2 instanceof SQLException ? (SQLException)e2 : new SQLException(e2);
+            if (e != null) {
+                e.setNextException(e22);
+            } else {
+                e = e22;
+            }
+        }
+        return e;
+    }
+
     private class BasicJoinIterator implements ResultIterator {
         private final ResultIterator lhsIterator;
         private final ResultIterator rhsIterator;
@@ -283,9 +303,11 @@ public class SortMergeJoinPlan implements QueryPlan {
         
         @Override
         public void close() throws SQLException {
-            lhsIterator.close();
-            rhsIterator.close();
+            SQLException e = closeIterators(lhsIterator, rhsIterator);
             queue.close();
+            if (e != null) {
+                throw e;
+            }
         }
 
         @Override
@@ -453,8 +475,10 @@ public class SortMergeJoinPlan implements QueryPlan {
 
         @Override
         public void close() throws SQLException {
-            lhsIterator.close();
-            rhsIterator.close();
+            SQLException e = closeIterators(lhsIterator, rhsIterator);
+            if (e != null) {
+                throw e;
+            }
         }
 
         @Override
