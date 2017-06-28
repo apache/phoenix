@@ -70,8 +70,8 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
                 this.connections = Sets.newHashSet();
             }
             SQLCloseables.closeAll(connections);
-            // long unfreedBytes = clearCache();
-            // assertEquals("Found unfreed bytes in server-side cache", 0, unfreedBytes);
+             long unfreedBytes = clearCache();
+             assertEquals("Found unfreed bytes in server-side cache", 0, unfreedBytes);
         } finally {
             super.close();
         }

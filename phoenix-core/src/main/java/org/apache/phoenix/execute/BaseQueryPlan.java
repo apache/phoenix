@@ -208,6 +208,21 @@ public abstract class BaseQueryPlan implements QueryPlan {
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         return iterator(Collections.<SQLCloseable>emptyList(), scanGrouper, scan);
     }
+    
+	private ResultIterator getWrappedIterator(final List<? extends SQLCloseable> dependencies,
+			ResultIterator iterator) {
+		ResultIterator wrappedIterator = dependencies.isEmpty() ? iterator : new DelegateResultIterator(iterator) {
+			@Override
+			public void close() throws SQLException {
+				try {
+					super.close();
+				} finally {
+					SQLCloseables.closeAll(dependencies);
+				}
+			}
+		};
+		return wrappedIterator;
+	}
 
     public final ResultIterator iterator(final List<? extends SQLCloseable> dependencies, ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
          if (scan == null) {
@@ -220,11 +235,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
 		 * row to be scanned.
 		 */
         if (context.getScanRanges() == ScanRanges.NOTHING && !getStatement().isAggregate()) {
-            return ResultIterator.EMPTY_ITERATOR;
+            return getWrappedIterator(dependencies, ResultIterator.EMPTY_ITERATOR);
         }
         
         if (tableRef == TableRef.EMPTY_TABLE_REF) {
-            return newIterator(scanGrouper, scan);
+            return getWrappedIterator(dependencies, newIterator(scanGrouper, scan));
         }
         
         // Set miscellaneous scan attributes. This is the last chance to set them before we
@@ -333,19 +348,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         	LOG.debug(LogUtil.addCustomAnnotations("Scan ready for iteration: " + scan, connection));
         }
         
-        ResultIterator iterator = newIterator(scanGrouper, scan);
-        iterator = dependencies.isEmpty() ?
-                iterator : new DelegateResultIterator(iterator) {
-            @Override
-            public void close() throws SQLException {
-                try {
-                    super.close();
-                } finally {
-                    SQLCloseables.closeAll(dependencies);
-                }
-            }
-        };
-        
+        ResultIterator iterator = getWrappedIterator(dependencies, newIterator(scanGrouper, scan));
         if (LOG.isDebugEnabled()) {
         	LOG.debug(LogUtil.addCustomAnnotations("Iterator ready: " + iterator, connection));
         }
