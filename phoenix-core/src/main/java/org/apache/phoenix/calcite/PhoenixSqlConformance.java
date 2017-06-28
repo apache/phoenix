@@ -85,4 +85,9 @@ public class PhoenixSqlConformance implements SqlConformance {
     public boolean isHavingAlias() {
         return true;
     }
+
+    @Override
+    public boolean allowExtend() {
+        return true;
+    }
 }

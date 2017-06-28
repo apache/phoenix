@@ -125,14 +125,13 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
             // TODO TenantId, ViewIndexId, UpdatableViewColumns
             final int[] columnIndexes = new int[targetColumns.size()];
             final int[] pkSlotIndexes = new int[targetColumns.size()];
-            int pkColPosition = -1;
+            int nonPKColumnCount = 0;
             for (int i = 0; i < targetColumns.size(); i++) {
                 PColumn column = targetColumns.get(i);
                 if (SchemaUtil.isPKColumn(column)) {
-                    if (pkColPosition == -1) {
-                        pkColPosition = column.getPosition();
-                    }
-                    pkSlotIndexes[i] = pkColPosition++;
+                    pkSlotIndexes[i] = column.getPosition() - nonPKColumnCount;
+                } else {
+                    nonPKColumnCount++;
                 }
                 columnIndexes[i] = column.getPosition();
             }

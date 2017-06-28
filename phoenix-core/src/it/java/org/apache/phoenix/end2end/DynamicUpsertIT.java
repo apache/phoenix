@@ -200,7 +200,7 @@ public class DynamicUpsertIT extends ParallelStatsDisabledIT {
     /**
      * Test an upsert of two conflicting dynamic columns
      */
-    @Test(expected = ColumnAlreadyExistsException.class)
+    @Test
     public void testAmbiguousDynamicUpsert() throws Exception {
         String upsertquery = "UPSERT INTO " + tableName + " (a.DynCol VARCHAR,a.DynCol INTEGER) VALUES('dynCol',1)";
         String url = getUrl() + ";";
@@ -209,6 +209,8 @@ public class DynamicUpsertIT extends ParallelStatsDisabledIT {
         try {
             PreparedStatement statement = conn.prepareStatement(upsertquery);
             statement.execute();
+        } catch (SQLException e) {
+            assertTrue(e.getCause().getCause().getMessage().contains("Duplicate name"));
         } finally {
             conn.close();
         }

@@ -67,7 +67,7 @@ public class TableMapping {
     private final TableRef tableRef;
     private final TableRef dataTableRef;
     private final List<PColumn> mappedColumns;
-    private final int extendedColumnsOffset;
+    private int extendedColumnsOffset;
     private final TableRef extendedTableRef;
     // For column resolving
     private final List<String> names = Lists.newArrayList();
@@ -80,6 +80,11 @@ public class TableMapping {
         this.extendedColumnsOffset = mappedColumns.size();
         this.extendedTableRef = null;
         init();
+    }
+
+    public TableMapping(PTable table, int extendedColumnsOffset) {
+        this(table);
+        this.extendedColumnsOffset = extendedColumnsOffset;
     }
 
     public TableMapping(TableRef tableRef, TableRef dataTableRef, boolean extend) throws SQLException {
@@ -273,7 +278,7 @@ public class TableMapping {
     
     public Expression newColumnExpression(int index) {
         ColumnRef colRef = new ColumnRef(
-                index < extendedColumnsOffset ? tableRef : extendedTableRef,
+                index < extendedColumnsOffset ? tableRef : (dataTableRef != null? extendedTableRef: tableRef),
                 this.mappedColumns.get(index).getPosition());
         try {
             return colRef.newColumnExpression();
@@ -306,10 +311,18 @@ public class TableMapping {
         int columnCount = 0;
         for (int i = extendedColumnsOffset; i < mappedColumns.size(); i++) {
             if (columnRef.get(i)) {
-                PColumn dataColumn = ((ProjectedColumn) mappedColumns.get(i))
-                        .getSourceColumnRef().getColumn();
-                cf.add(dataColumn.getFamilyName().getString());
-                columnCount++;
+                if(dataTableRef != null) {
+                    PColumn dataColumn = ((ProjectedColumn) mappedColumns.get(i))
+                            .getSourceColumnRef().getColumn();
+                    cf.add(dataColumn.getFamilyName().getString());
+                    columnCount++;
+                } else {
+                    PColumn column = mappedColumns.get(i);
+                    if(column.getFamilyName()!=null) {
+                        cf.add(column.getFamilyName().getString());
+                    }
+                    columnCount++;
+                }
             }
         }
         return new org.apache.hadoop.hbase.util.Pair<Integer, Integer>(cf.size(), columnCount);
@@ -534,5 +547,9 @@ public class TableMapping {
         }
         
         return projectedColumns;
+    }
+    
+    public int getExtendedColumnsOffset() {
+        return extendedColumnsOffset;
     }
 }
