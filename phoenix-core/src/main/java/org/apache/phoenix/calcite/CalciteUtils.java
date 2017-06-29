@@ -228,12 +228,14 @@ public class CalciteUtils {
         final PDataType normalizedBaseType = PDataType.fromTypeId(sqlTypeId);
         final SqlTypeName sqlTypeName = SqlTypeName.valueOf(normalizedBaseType.getSqlTypeName());
         RelDataType type;
-        if (maxLength != null && scale != null) {
-            type = typeFactory.createSqlType(sqlTypeName, maxLength, scale);
-        } else if (maxLength != null) {
+        if (sqlTypeName.allowsNoPrecNoScale()
+                || (sqlTypeName.allowsPrecNoScale() && maxLength == null)
+                || (sqlTypeName.allowsScale() && maxLength == null && scale == null)) {
+            type = typeFactory.createSqlType(sqlTypeName);
+        } else if(sqlTypeName.allowsPrecNoScale()) {
             type = typeFactory.createSqlType(sqlTypeName, maxLength);
         } else {
-            type = typeFactory.createSqlType(sqlTypeName);
+            type = typeFactory.createSqlType(sqlTypeName, maxLength, scale);
         }
         if (isArrayType) {
             type = typeFactory.createArrayType(type, arraySize == null ? -1 : arraySize);
