@@ -540,7 +540,7 @@ public class Indexer extends BaseRegionObserver {
      * hopes they come up before the primary table finishes.
      */
     Collection<Pair<Mutation, byte[]>> indexUpdates = extractIndexUpdate(logEdit);
-    recoveryWriter.write(indexUpdates, true);
+    recoveryWriter.writeAndKillYourselfOnFailure(indexUpdates, true);
   }
 
   /**
