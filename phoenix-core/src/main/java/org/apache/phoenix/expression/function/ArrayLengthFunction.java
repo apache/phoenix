@@ -23,15 +23,15 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.types.PBinaryArray;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PArrayDataType;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinaryArray;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
 
-@BuiltInFunction(name = ArrayLengthFunction.NAME, args = { @Argument(allowedTypes = {
-		PBinaryArray.class, PVarbinaryArray.class }) })
+@BuiltInFunction(name = ArrayLengthFunction.NAME, args = { @Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class }) },classType=FunctionClassType.ARRAY)
 public class ArrayLengthFunction extends ScalarFunction {
 	public static final String NAME = "ARRAY_LENGTH";
 

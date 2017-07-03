@@ -22,12 +22,18 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
 
 @FunctionParseNode.BuiltInFunction(name = ArrayAppendFunction.NAME, args = {
         @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}, defaultValue = "null")})
+        @FunctionParseNode.Argument(allowedTypes = {PBinary.class,PVarbinary.class}, defaultValue = "null")},classType = FunctionClassType.ARRAY)
 public class ArrayAppendFunction extends ArrayModifierFunction {
 
     public static final String NAME = "ARRAY_APPEND";
@@ -47,5 +53,10 @@ public class ArrayAppendFunction extends ArrayModifierFunction {
     @Override
     public String getName() {
         return NAME;
+    }
+    
+    @Override
+    public PDataType getDataType() {
+        return children.get(0).getDataType();
     }
 }

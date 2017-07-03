@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -352,7 +351,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
         String table1 = generateUniqueName();
         String ddl =
-            "CREATE TABLE " + table1 + " (region_name VARCHAR PRIMARY KEY, varchar VARCHAR)";
+            "CREATE TABLE " + table1 + " (region_name VARCHAR PRIMARY KEY, \"varchar\" VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String table2 = generateUniqueName();
@@ -360,16 +359,16 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
 
         String dml =
-            "UPSERT INTO " + table1 + "(region_name, varchar) VALUES('SF Bay Area', 'a,b,c,d')";
+            "UPSERT INTO " + table1 + "(region_name, \"varchar\") VALUES('SF Bay Area', 'a,b,c,d')";
         conn.createStatement().execute(dml);
 
-        dml = "UPSERT INTO " + table1 + "(region_name, varchar) VALUES('SF Bay Area2', '1,2,3,4')";
+        dml = "UPSERT INTO " + table1 + "(region_name, \"varchar\") VALUES('SF Bay Area2', '1,2,3,4')";
         conn.createStatement().execute(dml);
         conn.commit();
 
         dml =
             "UPSERT INTO " + table2
-                + "(region_name, varchars) SELECT region_name, STRING_TO_ARRAY(varchar, ',') FROM "
+                + "(region_name, varchars) SELECT region_name, STRING_TO_ARRAY(\"varchar\", ',') FROM "
                 + table1;
         conn.createStatement().execute(dml);
         conn.commit();
@@ -396,7 +395,7 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         String sourceTable = generateUniqueName();
 
         String ddl =
-            "CREATE TABLE " + sourceTable + " (region_name VARCHAR PRIMARY KEY, varchar VARCHAR)";
+            "CREATE TABLE " + sourceTable + " (region_name VARCHAR PRIMARY KEY, \"varchar\" VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String targetTable = generateUniqueName();
@@ -405,17 +404,17 @@ public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + sourceTable
-            + "(region_name, varchar) VALUES('SF Bay Area', 'a,b,-,c,d')";
+            + "(region_name, \"varchar\") VALUES('SF Bay Area', 'a,b,-,c,d')";
         conn.createStatement().execute(dml);
 
         dml = "UPSERT INTO " + sourceTable
-            + "(region_name, varchar) VALUES('SF Bay Area2', '1,2,-,3,4')";
+            + "(region_name, \"varchar\") VALUES('SF Bay Area2', '1,2,-,3,4')";
         conn.createStatement().execute(dml);
         conn.commit();
 
         dml =
             "UPSERT INTO " + targetTable
-                + "(region_name, varchars) SELECT region_name, STRING_TO_ARRAY(varchar, ',', '-') FROM "
+                + "(region_name, varchars) SELECT region_name, STRING_TO_ARRAY(\"varchar\", ',', '-') FROM "
                 + sourceTable;
         conn.createStatement().execute(dml);
         conn.commit();

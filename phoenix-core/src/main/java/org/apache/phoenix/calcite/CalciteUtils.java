@@ -1,13 +1,14 @@
 package org.apache.phoenix.calcite;
 
+import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.Map;
-import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.calcite.avatica.util.ByteString;
@@ -39,11 +40,11 @@ import org.apache.calcite.sql.SemiJoinType;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlLiteral;
-import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserPos;
@@ -62,6 +63,7 @@ import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.ExpressionManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.ArrayConstructorExpression;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -94,6 +96,7 @@ import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
 import org.apache.phoenix.expression.function.AbsFunction;
 import org.apache.phoenix.expression.function.AggregateFunction;
+import org.apache.phoenix.expression.function.ArrayElemRefExpression;
 import org.apache.phoenix.expression.function.AvgAggregateFunction;
 import org.apache.phoenix.expression.function.CeilDateExpression;
 import org.apache.phoenix.expression.function.CeilDecimalExpression;
@@ -130,20 +133,21 @@ import org.apache.phoenix.expression.function.SumAggregateFunction;
 import org.apache.phoenix.expression.function.TrimFunction;
 import org.apache.phoenix.expression.function.UDFExpression;
 import org.apache.phoenix.expression.function.UpperFunction;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.expression.function.WeekFunction;
 import org.apache.phoenix.expression.function.YearFunction;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
+import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBinaryArray;
 import org.apache.phoenix.schema.types.PChar;
@@ -156,12 +160,12 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
+import org.apache.phoenix.util.ExpressionUtil;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-
-import org.apache.phoenix.util.ExpressionUtil;
 
 /**
  * Utilities for interacting with Calcite.
@@ -246,7 +250,9 @@ public class CalciteUtils {
             type = typeFactory.createSqlType(sqlTypeName);
         }
         if (isArrayType) {
-            type = typeFactory.createArrayType(type, arraySize == null ? -1 : arraySize);
+            type =
+                    typeFactory.createArrayType(
+                        typeFactory.createTypeWithNullability(type, type.isNullable()),-1);
         }
 
         return type;
@@ -782,12 +788,12 @@ public class CalciteUtils {
                 RexDynamicParam param = (RexDynamicParam) node;
                 int index = param.getIndex();
                 PDataType type = relDataTypeToPDataType(node.getType());
-                Integer maxLength =
-                        (type == PChar.INSTANCE
-                            || type == PCharArray.INSTANCE
-                            || type == PBinary.INSTANCE
-                            || type == PBinaryArray.INSTANCE) ?
-                        node.getType().getPrecision() : null;
+                Integer maxLength = (type == PChar.INSTANCE
+
+                        || type == PBinary.INSTANCE) ? node.getType().getPrecision() : null;
+                if (type == PCharArray.INSTANCE || type == PBinaryArray.INSTANCE) {
+                    maxLength = node.getType().getComponentType().getPrecision();
+                }
                 return implementor.newBindParameterExpression(index, type, maxLength);
             }
         });
@@ -891,7 +897,7 @@ public class CalciteUtils {
             @Override
             public Expression newExpression(RexNode node,
                     PhoenixRelImplementor implementor) {
-                RexCall call = (RexCall) node;
+                final RexCall call = (RexCall) node;
                 List<Expression> children = convertChildren(call, implementor);
                 SqlOperator op = call.getOperator();
                 try {
@@ -917,10 +923,15 @@ public class CalciteUtils {
                                 try {
                                     try {
                                         return info.getFunc().getDeclaredConstructor(List.class).newInstance(children);
-                                    } catch (Exception e) {
+                                    } catch (NoSuchMethodException | InstantiationException | IllegalAccessException | IllegalArgumentException | SecurityException e) {
                                         return info.getFunc().getDeclaredConstructor(List.class, StatementContext.class).newInstance(children, implementor.getStatementContext());
                                     }
-                                } catch (Exception e) {throw new RuntimeException ("Failed to create builtin function " + info.getName(), e);}
+                                }catch(InvocationTargetException e){
+                                    if(e.getTargetException() instanceof SQLException){
+                                        throw (SQLException)e.getTargetException();
+                                    }
+                                }
+                                catch (NoSuchMethodException | InstantiationException | IllegalAccessException | IllegalArgumentException |  SecurityException  e) {throw new RuntimeException ("Failed to create builtin function " + info.getName(), e);}
                             }
                             return new UDFExpression(children, scalarFunc.getPFunction());
                         }
@@ -946,7 +957,12 @@ public class CalciteUtils {
                         return new CoalesceFunction(children);
                     } else if (op == SqlStdOperatorTable.MOD) {
                         return new ModulusExpression(children);
-                    };
+                    } else if (op == SqlStdOperatorTable.ITEM){
+                         ArrayElemRefExpression arrayElemRefExpression = new ArrayElemRefExpression(children);
+                         return arrayElemRefExpression;
+                    }
+                         
+                                
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
@@ -1085,6 +1101,66 @@ public class CalciteUtils {
                 return implementor.newSequenceExpression(seq, SequenceValueParseNode.Op.NEXT_VALUE);
             }
         });
+        EXPRESSION_MAP.put(SqlKind.ARRAY_VALUE_CONSTRUCTOR, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
+                List<Expression> children = convertChildren((RexCall) node, implementor);
+                boolean rowKeyOrderOptimizable =
+                        implementor.getTableMapping().getPTable().rowKeyOrderOptimizable();
+                PDataType dataType =
+                        
+                            relDataTypeToPDataType(node.getType().getComponentType());
+                ArrayConstructorExpression arrayExpression =
+                        new ArrayConstructorExpression(children, dataType,
+                                rowKeyOrderOptimizable);
+                ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                if (ExpressionUtil.isConstant(arrayExpression)) {
+                    boolean hasNullValue=false;
+                    for (RexNode l : ((RexCall) node).getOperands()) {
+                        if(l instanceof RexLiteral && ((RexLiteral)l).getValue()==null){
+                            hasNullValue=true;
+                            break;
+                        }
+                    }
+                    PDataType arrayElemDataType = getArrayElemDataType(hasNullValue,dataType);
+                    Object[] elements =
+                            (Object[]) java.lang.reflect.Array
+                                    .newInstance(arrayElemDataType.getJavaClass(), children.size());
+                    try {
+                        for (int i = 0; i < children.size(); i++) {
+
+                            Expression child = children.get(i);
+                            child.evaluate(null, ptr);
+                            Object value = null;
+                            if (child.getDataType() == null) {
+                                value =
+                                        arrayElemDataType.toObject(ptr, arrayElemDataType,
+                                            child.getSortOrder());
+                            } else {
+                                value =
+                                        arrayElemDataType.toObject(ptr, child.getDataType(),
+                                            child.getSortOrder());
+                                
+                            }
+                            elements[i] =
+                                    LiteralExpression.newConstant(value, arrayElemDataType,
+                                        child.getDeterminism()).getValue();
+                        }
+                        Object value = PArrayDataType.instantiatePhoenixArray(arrayElemDataType,
+                                        elements);
+                        return LiteralExpression.newConstant(value,
+                            PDataType.fromTypeId(
+                                arrayElemDataType.getSqlType() + PDataType.ARRAY_TYPE_BASE),
+                            null, null, arrayExpression.getSortOrder(), Determinism.ALWAYS,
+                            rowKeyOrderOptimizable);
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                return arrayExpression;
+            }
+        });
+        
         EXPRESSION_MAP.put(SqlKind.CASE, new ExpressionFactory() {
              @Override
              public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
@@ -1428,11 +1504,19 @@ public class CalciteUtils {
                   column.getDataType().toObject(key,
                       column.getSortOrder(), defaultExpression.getMaxLength(),
                       column.getScale());
+          //TODO: if we can do something better here
+          if(column.getDataType().isArrayType()){
+              try {
+                object=Arrays.asList(((PhoenixArray)object).getArray());
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+          }
           RelDataType pDataTypeToRelDataType =
                   CalciteUtils.pDataTypeToRelDataType(rexBuilder.getTypeFactory(),
                       column.getDataType(), column.getMaxLength(),
                       column.getScale(), column.getArraySize());
-        return rexBuilder.makeLiteral((Comparable)object, pDataTypeToRelDataType,true);
+        return rexBuilder.makeLiteral(object, pDataTypeToRelDataType,true);
     }
 
     private static void throwDistinctNotSupportedException(boolean isDistinct, String func) {
@@ -1440,4 +1524,18 @@ public class CalciteUtils {
             throw new UnsupportedOperationException("DISTINCT " + func + " not supported.");
         }
     }
+    
+    private static PDataType getArrayElemDataType(boolean hasNullValue, PDataType baseType) {
+        // make the return type be the most general number type
+        if (baseType != null) {
+            if (baseType.isCoercibleTo(PVarchar.INSTANCE)) {
+                return PVarchar.INSTANCE;
+            }
+            if(hasNullValue && baseType.isCoercibleTo(PDecimal.INSTANCE)){
+                return PDecimal.INSTANCE;
+            }
+        }
+        return baseType;
+    }
+    
 }

@@ -1154,7 +1154,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
             if (type.isArrayType()) {
                 PhoenixArray arr = (PhoenixArray)value;
                 if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)
-                        && type.getJavaClass().isInstance(value)) { return type; }
+                        ) { return type; }
             } else {
                 if (type.getJavaClass().isInstance(value)) { return type; }
             }

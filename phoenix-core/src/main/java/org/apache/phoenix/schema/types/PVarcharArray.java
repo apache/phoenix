@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.phoenix.schema.SortOrder;
 
 public class PVarcharArray extends PArrayDataType<String> {
@@ -25,7 +26,7 @@ public class PVarcharArray extends PArrayDataType<String> {
 
     private PVarcharArray() {
         super("VARCHAR ARRAY", PDataType.ARRAY_TYPE_BASE + PVarchar.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 26);
+                ArrayImpl.class, null, 26);
     }
 
     @Override

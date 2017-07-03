@@ -1,71 +1,109 @@
 package org.apache.phoenix.calcite;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.ArrayListMultimap;
+import java.lang.reflect.Constructor;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.materialize.MaterializationService;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
-import org.apache.calcite.schema.*;
+import org.apache.calcite.schema.Function;
+import org.apache.calcite.schema.FunctionParameter;
+import org.apache.calcite.schema.Schema;
+import org.apache.calcite.schema.SchemaFactory;
+import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.TableFunctionImpl;
 import org.apache.calcite.schema.impl.ViewTable;
 import org.apache.calcite.sql.ListJarsTable;
+import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.SequenceManager;
-import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.expression.function.UDFExpression;
+import org.apache.phoenix.expression.BaseExpression;
+import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSplitFunction;
 import org.apache.phoenix.expression.function.ByteBasedRegexpSubstrFunction;
-import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpSplitFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpSubstrFunction;
-import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
+import org.apache.phoenix.expression.function.UDFExpression;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ColumnDef;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionArgInfo;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
+import org.apache.phoenix.parse.PFunction.FunctionArgument;
+import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionArgInfo;
-import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
-import org.apache.phoenix.parse.ParseNodeFactory;
-import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PBooleanArray;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PCharArray;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataTypeFactory;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDateArray;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PDoubleArray;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PFloatArray;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PIntegerArray;
+import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PLongArray;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimeArray;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PTimestampArray;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVarcharArray;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
 
 /**
  * Implementation of Calcite's {@link Schema} SPI for Phoenix.
@@ -95,6 +133,8 @@ public class PhoenixSchema implements Schema {
             .create(ListJarsTable.LIST_JARS_TABLE_METHOD);
     private final Multimap<String, Function> builtinFunctions = ArrayListMultimap.create();
     private RelDataTypeFactory typeFactory;
+    Map<Class<? extends PDataType>, List<Class<? extends PDataType>>> overalodDataTypesForArrayFunctions =
+            new HashMap<Class<? extends PDataType>, List<Class<? extends PDataType>>>();
     
     protected PhoenixSchema(String name, String schemaName,
             SchemaPlus parentSchema, PhoenixConnection pc) {
@@ -114,7 +154,25 @@ public class PhoenixSchema implements Schema {
         } catch (SQLException e){
             throw new RuntimeException(e);
         }
+        initializeOveralodMapForArrayFunctions();
         registerBuiltinFunctions();
+    }
+
+    private void initializeOveralodMapForArrayFunctions() {
+        
+        this.overalodDataTypesForArrayFunctions.put(PBinaryArray.class,
+            new ArrayList<Class<? extends PDataType>>(Arrays.asList(PIntegerArray.class,
+                PFloatArray.class,PDoubleArray.class, PBooleanArray.class, PCharArray.class, PLongArray.class,
+                PTimeArray.class, PTimestampArray.class, PDateArray.class)));
+        this.overalodDataTypesForArrayFunctions.put(PVarbinaryArray.class,
+            new ArrayList<Class<? extends PDataType>>(Arrays.asList(PVarcharArray.class)));
+        this.overalodDataTypesForArrayFunctions.put(PBinary.class,
+            new ArrayList<Class<? extends PDataType>>(
+                    Arrays.asList(PInteger.class, PBoolean.class, PChar.class,
+                        PLong.class, PTime.class, PTimestamp.class, PDate.class,PFloat.class,PDouble.class)));
+        this.overalodDataTypesForArrayFunctions.put(PVarbinary.class,
+            new ArrayList<Class<? extends PDataType>>(Arrays.asList(PVarchar.class)));
+        
     }
 
     protected PhoenixSchema(String name, String schemaName,
@@ -206,8 +264,8 @@ public class PhoenixSchema implements Schema {
     }
 
     // Converts phoenix function information to a list of Calcite function signatures
-    private static List<PhoenixScalarFunction> convertBuiltinFunction(BuiltInFunctionInfo functionInfo){
-        List<List<FunctionArgument>> overloadedArgs = PhoenixSchema.overloadArguments(functionInfo.getArgs());
+    private List<PhoenixScalarFunction> convertBuiltinFunction(BuiltInFunctionInfo functionInfo){
+        List<List<FunctionArgument>> overloadedArgs = overloadArguments(functionInfo.getArgs(),functionInfo.getClassType()==FunctionClassType.ARRAY);
         List<PhoenixScalarFunction> functionList = Lists.newArrayListWithExpectedSize(overloadedArgs.size());
         Class<? extends FunctionExpression> clazz = functionInfo.getFunc();
 
@@ -230,10 +288,15 @@ public class PhoenixSchema implements Schema {
                                 @SuppressWarnings("rawtypes")
                                 public RelDataType getType(RelDataTypeFactory typeFactory) {
                                     PDataType dataType =
-                                            arg.isArrayType() ? PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil
-                                                    .normalizeIdentifier(SchemaUtil.normalizeIdentifier(arg
-                                                            .getArgumentType())))) : PDataType.fromSqlTypeName(SchemaUtil
+                                            PDataType.fromSqlTypeName(SchemaUtil
                                                     .normalizeIdentifier(arg.getArgumentType()));
+                                    if (dataType.isArrayType()) {
+                                        return typeFactory
+                                        .createArrayType(
+                                            typeFactory.createSqlType(SqlTypeName
+                                                    .valueOf(PDataType.arrayBaseType(dataType).getSqlTypeName())),
+                                            -1);
+                                    }
                                     return typeFactory.createJavaType(dataType.getJavaClass());
                                 }
 
@@ -254,9 +317,44 @@ public class PhoenixSchema implements Schema {
     private static PDataType evaluateReturnType(Class<? extends FunctionExpression> f, List<FunctionArgument> argumentList) {
         BuiltInFunction d = f.getAnnotation(BuiltInFunction.class);
         try {
-            // Direct evaluation of the return type
-            FunctionExpression func = f.newInstance();
-            return func.getDataType();
+            if (argumentList.size() > 0 && d.classType() == FunctionClassType.ARRAY) {
+                Constructor constructor =
+                        f.getConstructor(new Class[]{List.class});
+                List<BaseExpression> list=new ArrayList<BaseExpression>();
+                for(final FunctionArgument arg:argumentList){
+                   list.add(new BaseExpression(){
+
+                       @Override
+                       public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+                           // TODO Auto-generated method stub
+                           return false;
+                       }
+
+                       @Override
+                       public <T> T accept(ExpressionVisitor<T> visitor) {
+                           // TODO Auto-generated method stub
+                           return null;
+                       }
+
+                       @Override
+                       public List<org.apache.phoenix.expression.Expression> getChildren() {
+                           // TODO Auto-generated method stub
+                           return null;
+                       }
+
+                       @Override
+                       public PDataType getDataType() {
+                          return PDataType.fromSqlTypeName(arg.getArgumentType());
+                       }
+                        
+                    });
+                }
+                FunctionExpression func=(FunctionExpression)constructor.newInstance(list);
+                return func.getDataType();
+            } else {
+                FunctionExpression func = f.newInstance();
+                return func.getDataType();
+            }
         } catch (Exception e) {
             if (d.classType() == FunctionClassType.ALIAS || d.classType() == FunctionClassType.ABSTRACT) {
                 // should never happen
@@ -269,31 +367,50 @@ public class PhoenixSchema implements Schema {
     }
 
     // Using Phoenix argument information, determine all possible function signatures
-    private static List<List<PFunction.FunctionArgument>> overloadArguments(BuiltInFunctionArgInfo[] args){
+    private  List<List<PFunction.FunctionArgument>> overloadArguments(BuiltInFunctionArgInfo[] args, boolean isArrayOverload){
         List<List<PFunction.FunctionArgument>> overloadedArgs = Lists.newArrayList();
         int solutions = 1;
-        for(int i = 0; i < args.length; solutions *= args[i].getAllowedTypes().length, i++);
+
+        
+        List<Pair<BuiltInFunctionArgInfo, List<Class<? extends PDataType>>>> argsAllowedTypePair =
+                new ArrayList<Pair<BuiltInFunctionArgInfo, List<Class<? extends PDataType>>>>();
+        for (int i = 0; i < args.length; i++) {
+            List<Class<? extends PDataType>> argList = new ArrayList<Class<? extends PDataType>>(Arrays.asList(args[i].getAllowedTypes()));
+            if (isArrayOverload) {
+                for (Class<? extends PDataType> cls : this.overalodDataTypesForArrayFunctions.keySet()) {
+                    if (argList.contains(cls)) {
+                        argList.addAll(this.overalodDataTypesForArrayFunctions.get(cls));
+                    }
+                }
+            }
+            argsAllowedTypePair
+                    .add(new Pair<BuiltInFunctionArgInfo, List<Class<? extends PDataType>>>(args[i],
+                            argList));
+        }
+        for(int i = 0; i < argsAllowedTypePair.size(); solutions *= argsAllowedTypePair.get(i).getSecond().size(), i++);
         for(int i = 0; i < solutions; i++) {
             int j = 1;
             short k = 0;
             overloadedArgs.add(new ArrayList<PFunction.FunctionArgument>());
-            for(BuiltInFunctionArgInfo arg : args) {
-                Class<? extends PDataType>[] temp = arg.getAllowedTypes();
-                PDataType dataType = PDataTypeFactory.getInstance().instanceFromClass(temp[(i/j)%temp.length]);
+            for(Pair<BuiltInFunctionArgInfo, List<Class<? extends PDataType>>> arg : argsAllowedTypePair) {
+                List<Class<? extends PDataType>> temp = arg.getSecond();
+                PDataType dataType = PDataTypeFactory.getInstance().instanceFromClass(temp.get((i/j)%temp.size()));
                 overloadedArgs.get(i).add( new PFunction.FunctionArgument(
                         dataType.toString(),
                         dataType.isArrayType(),
-                        arg.isConstant(),
-                        arg.getDefaultValue(),
-                        arg.getMinValue(),
-                        arg.getMaxValue(),
+                        arg.getFirst().isConstant(),
+                        arg.getFirst().getDefaultValue(),
+                        arg.getFirst().getMinValue(),
+                        arg.getFirst().getMaxValue(),
                         k));
                 k++;
-                j *= temp.length;
+                j *= temp.size();
             }
         }
+     
         return overloadedArgs;
     }
+
 
     @Override
     public Table getTable(String name) {

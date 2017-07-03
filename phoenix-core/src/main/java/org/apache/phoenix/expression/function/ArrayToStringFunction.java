@@ -22,14 +22,21 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
 
 @FunctionParseNode.BuiltInFunction(name = ArrayToStringFunction.NAME, args = {
         @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class}),
         @FunctionParseNode.Argument(allowedTypes = {PVarchar.class, PChar.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PVarchar.class, PChar.class}, defaultValue = "null")})
+        @FunctionParseNode.Argument(allowedTypes = {PVarchar.class, PChar.class}, defaultValue = "null")},classType=FunctionClassType.ARRAY)
 public class ArrayToStringFunction extends ScalarFunction {
     public static final String NAME = "ARRAY_TO_STRING";
 

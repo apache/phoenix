@@ -22,7 +22,6 @@ import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -39,7 +38,6 @@ import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -143,7 +141,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 		props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
 		        Long.toString(ts + 2)); // Execute at timestamp 2
 		Connection conn = DriverManager.getConnection(getUrl(), props);
-        analyzeTable(conn, TABLE_WITH_ARRAY);
+		analyzeTable(conn, TABLE_WITH_ARRAY);
 		try {
 		    PreparedStatement statement = conn.prepareStatement(query);
 			statement.setString(1, tenantId);
@@ -158,7 +156,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             doubleArr[3] = 386.63;
 			Array array = conn.createArrayOf("DOUBLE",
 					doubleArr);
-			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
+			Array resultArray = rs.getArray(1);
 			assertEquals(resultArray, array);
             assertEquals("[25.343, 36.763, 37.56, 386.63]", rs.getString(1));
 			assertEquals(rs.getString("B_string"), B_VALUE);
@@ -282,9 +280,9 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			strArr[2] = "XYZWER";
 			strArr[3] = "AB";
 			Array array = conn.createArrayOf("VARCHAR", strArr);
-			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
+			Array resultArray =  rs.getArray(1);
 			assertEquals(resultArray, array);
-            assertEquals("['ABC', 'CEDF', 'XYZWER', 'AB']", rs.getString(1));
+            assertEquals("[ABC, CEDF, XYZWER, AB]", rs.getString(1));
 			assertFalse(rs.next());
 		} finally {
 			conn.close();
@@ -692,7 +690,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             Array resultArr = conn.createArrayOf("VARCHAR", strArr);
             assertEquals(resultArr, array);
             // since array is var length, last string element is messed up
-            String expectedPrefix = "['abc', 'defgh', 'b";
+            String expectedPrefix = "[abc, defgh, b";
             assertTrue("Expected to start with " + expectedPrefix,
                 rs.getString(2).startsWith(expectedPrefix));
             assertFalse(rs.next());
@@ -835,9 +833,9 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT b_string_array FROM t");
         assertTrue(rs.next());
-        PhoenixArray strArr = (PhoenixArray)rs.getArray(1);
+        Array strArr = rs.getArray(1);
         assertEquals(array, strArr);
-        assertEquals("['abc', 'def', 'ghi', 'jkll', null, null, null, 'xxx']", rs.getString(1));
+        assertEquals("[abc, def, ghi, jkll, null, null, null, xxx]", rs.getString(1));
         conn.close();
     }
 
@@ -1005,7 +1003,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         assertArrayGetString(rs, intIndex, intArray, "5555, 6666");
         assertArrayGetString(rs, longIndex, longArray, "7777777, 8888888");
         assertArrayGetString(rs, shortIndex, shortArray, "333, 444");
-        assertArrayGetString(rs, stringIndex, stringArray, "'a', 'b'");
+        assertArrayGetString(rs, stringIndex, stringArray, "a, b");
         conn.close();
     }
 
@@ -1039,11 +1037,11 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         conn.close();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(ts + 40));
         conn = DriverManager.getConnection(getUrl(), props);
-        rs = conn.createStatement().executeQuery("SELECT CAST(a AS DOUBLE []) FROM t");
+        rs = conn.createStatement().executeQuery("SELECT CAST(a AS DOUBLE array) FROM t");
         assertTrue(rs.next());
         Double[] d = new Double[] { 1.0, 2.0 };
         array = conn.createArrayOf("DOUBLE", d);
-        PhoenixArray arr = (PhoenixArray)rs.getArray(1);
+        Array arr = rs.getArray(1);
         assertEquals(array, arr);
         assertEquals("[1.0, 2.0]", rs.getString(1));
         conn.close();
@@ -1065,7 +1063,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         stmt = conn.prepareStatement("UPSERT INTO t VALUES(?,?)");
         stmt.setString(1, "a");
         String[] s = new String[] { "1", "2" };
-        PhoenixArray array = (PhoenixArray)conn.createArrayOf("VARCHAR", s);
+        Array array = conn.createArrayOf("VARCHAR", s);
         stmt.setArray(2, array);
         stmt.execute();
         conn.commit();
@@ -1075,7 +1073,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
         conn = DriverManager.getConnection(getUrl(), props);
         rs = conn.createStatement().executeQuery("SELECT CAST(a AS CHAR ARRAY) FROM t");
         assertTrue(rs.next());
-        PhoenixArray arr = (PhoenixArray)rs.getArray(1);
+        Array arr = rs.getArray(1);
         String[] array2 = (String[])array.getArray();
         String[] array3 = (String[])arr.getArray();
         assertEquals(array2[0], array3[0]);
@@ -1146,7 +1144,7 @@ public class ArrayIT extends BaseClientManagedTimeIT {
             doubleArr[2] = 37.56;
             doubleArr[3] = 386.63;
 			Array array = conn.createArrayOf("DOUBLE", doubleArr);
-			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
+			Array resultArray = rs.getArray(1);
 			assertEquals(resultArray, array);
             assertEquals("[25.343, 36.763, 37.56, 386.63]", rs.getString(1));
 			assertFalse(rs.next());
@@ -1427,8 +1425,8 @@ public class ArrayIT extends BaseClientManagedTimeIT {
 			PreparedStatement statement = conn.prepareStatement(query);
 			ResultSet rs = statement.executeQuery();
 			assertTrue(rs.next());
-			PhoenixArray resultArray = (PhoenixArray) rs.getArray(1);
-			assertNull(resultArray);
+			Double result = rs.getDouble(1);
+			assertTrue(result!=null);
 		} finally {
 			conn.close();
 		}

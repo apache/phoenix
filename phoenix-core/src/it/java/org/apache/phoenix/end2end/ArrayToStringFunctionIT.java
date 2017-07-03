@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -258,17 +257,17 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayToStringFunctionWithUpsert1() throws Exception {
         String table = generateUniqueName();
         String ddl =
-            "CREATE TABLE " + table + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
+            "CREATE TABLE " + table + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + table
-            + "(region_name,varchar) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY['hello','world'],','))";
+            + "(region_name,varchars) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY['hello','world'],','))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT varchar FROM " + table + " WHERE region_name = 'SF Bay Area'");
+            "SELECT varchars FROM " + table + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "hello,world";
@@ -281,17 +280,17 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayToStringFunctionWithUpsert2() throws Exception {
         String tableName = generateUniqueName();
         String ddl =
-            "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
+            "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + tableName
-            + "(region_name,varchar) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY[3, 4, 5],', '))";
+            + "(region_name,varchars) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY[3, 4, 5],', '))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT varchar FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT varchars FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "3, 4, 5";
@@ -304,17 +303,17 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayToStringFunctionWithUpsert3() throws Exception {
         String tableName = generateUniqueName();
         String ddl =
-            "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
+            "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + tableName
-            + "(region_name,varchar) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY[3.1, 4.2, 5.5],', '))";
+            + "(region_name,varchars) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY[3.1, 4.2, 5.5],', '))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT varchar FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT varchars FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "3.1, 4.2, 5.5";
@@ -327,17 +326,17 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
     public void testArrayToStringFunctionWithUpsert4() throws Exception {
         String tableName = generateUniqueName();
         String ddl =
-            "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
+            "CREATE TABLE " + tableName + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + tableName
-            + "(region_name,varchar) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY[true, false, true],', '))";
+            + "(region_name,varchars) VALUES('SF Bay Area',ARRAY_TO_STRING(ARRAY[true, false, true],', '))";
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
         rs = conn.createStatement().executeQuery(
-            "SELECT varchar FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
+            "SELECT varchars FROM " + tableName + " WHERE region_name = 'SF Bay Area'");
         assertTrue(rs.next());
 
         String expected = "true, false, true";
@@ -354,7 +353,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
 
         String target = generateUniqueName();
-        ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
+        ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + source
@@ -368,13 +367,13 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
         dml =
             "UPSERT INTO " + target
-                + "(region_name, varchar) SELECT region_name, ARRAY_TO_STRING(doubles, ', ') FROM "
+                + "(region_name, varchars) SELECT region_name, ARRAY_TO_STRING(doubles, ', ') FROM "
                 + source;
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT varchar FROM " + target);
+        rs = conn.createStatement().executeQuery("SELECT varchars FROM " + target);
         assertTrue(rs.next());
 
         String expected = "5.67, 7.87";
@@ -394,7 +393,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
 
         String target = generateUniqueName();
-        ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
+        ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + source
@@ -408,13 +407,13 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
         dml =
             "UPSERT INTO " + target
-                + "(region_name, varchar) SELECT region_name, ARRAY_TO_STRING(varchars, ':') FROM "
+                + "(region_name, varchars) SELECT region_name, ARRAY_TO_STRING(varchars, ':') FROM "
                 + source;
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT varchar FROM " + target);
+        rs = conn.createStatement().executeQuery("SELECT varchars FROM " + target);
         assertTrue(rs.next());
 
         String expected = "hello:-)";
@@ -434,7 +433,7 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
 
         String target = generateUniqueName();
-        ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchar VARCHAR)";
+        ddl = "CREATE TABLE " + target + " (region_name VARCHAR PRIMARY KEY,varchars VARCHAR)";
         conn.createStatement().execute(ddl);
 
         String dml = "UPSERT INTO " + source
@@ -448,13 +447,13 @@ public class ArrayToStringFunctionIT extends ParallelStatsDisabledIT {
 
         dml =
             "UPSERT INTO " + target
-                + "(region_name, varchar) SELECT region_name, ARRAY_TO_STRING(booleans, ', ') FROM "
+                + "(region_name, varchars) SELECT region_name, ARRAY_TO_STRING(booleans, ', ') FROM "
                 + source;
         conn.createStatement().execute(dml);
         conn.commit();
 
         ResultSet rs;
-        rs = conn.createStatement().executeQuery("SELECT varchar FROM " + target);
+        rs = conn.createStatement().executeQuery("SELECT varchars FROM " + target);
         assertTrue(rs.next());
 
         String expected = "true, true";

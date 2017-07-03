@@ -18,13 +18,16 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.sql.*;
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Test;
 
 public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
@@ -33,7 +36,7 @@ public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE TABLE " + tableName + " ( k VARCHAR PRIMARY KEY, a " + type + "[],b " + type + ")");
         conn.commit();
         PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?,?," + value + ")");
-        PhoenixArray array = (PhoenixArray) conn.createArrayOf(type, objectArray);
+        Array array =  conn.createArrayOf(type, objectArray);
         stmt.setString(1, "a");
         stmt.setArray(2, array);
         stmt.execute();
@@ -120,7 +123,7 @@ public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         initTableWithVarArray(conn, tableName, "VARCHAR", s, null);
         String[] s2 = new String[]{null, null, null, "1", "2"};
-        PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
+        Array array2 =  conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");
@@ -135,7 +138,7 @@ public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         initTableWithVarArray(conn, tableName, "VARCHAR", s, null);
         String[] s2 = new String[]{null, "1", "2"};
-        PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
+        Array array2 =  conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");
@@ -150,7 +153,7 @@ public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         initTableWithVarArray(conn, tableName, "VARCHAR", s, null);
         String[] s2 = new String[]{null, "176", null, "212"};
-        PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
+        Array array2 =  conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");
@@ -165,7 +168,7 @@ public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         initTableWithVarArray(conn, tableName, "VARCHAR", s, "'foo'");
         String[] s2 = new String[]{"foo", "176", null, "212"};
-        PhoenixArray array2 = (PhoenixArray) conn.createArrayOf("VARCHAR", s2);
+        Array array2 =  conn.createArrayOf("VARCHAR", s2);
         conn = DriverManager.getConnection(getUrl());
         ResultSet rs;
         rs = conn.createStatement().executeQuery("SELECT ARRAY_PREPEND(b,a) FROM " + tableName + " WHERE k = 'a'");

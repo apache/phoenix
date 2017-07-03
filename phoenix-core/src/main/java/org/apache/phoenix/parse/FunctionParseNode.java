@@ -304,7 +304,8 @@ public class FunctionParseNode extends CompoundParseNode {
         ABSTRACT,
         DERIVED,
         ALIAS,
-        UDF
+        UDF,
+        ARRAY
     }
 
     /**

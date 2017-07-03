@@ -23,14 +23,20 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PhoenixArray;
 
 @FunctionParseNode.BuiltInFunction(name = ArrayFillFunction.NAME, args = {
-        @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PInteger.class})})
+        @FunctionParseNode.Argument(allowedTypes = {PBinary.class,PVarbinary.class}),
+        @FunctionParseNode.Argument(allowedTypes = {PInteger.class})}, classType=FunctionClassType.ARRAY)
 public class ArrayFillFunction extends ScalarFunction {
 
     public static final String NAME = "ARRAY_FILL";

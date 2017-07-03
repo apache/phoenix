@@ -25,6 +25,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.BaseCompoundExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
@@ -48,6 +49,9 @@ public class ArrayElemRefExpression extends BaseCompoundExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         Expression arrayExpr = children.get(0);
+        if (children.size() > 1) {
+            this.index = (Integer) ((LiteralExpression) children.get(1)).getValue();
+        }
         return PArrayDataTypeDecoder.positionAtArrayElement(tuple, ptr, index, arrayExpr, getDataType(), getMaxLength());
     }
 

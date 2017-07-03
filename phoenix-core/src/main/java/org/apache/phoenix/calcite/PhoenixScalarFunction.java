@@ -20,8 +20,8 @@ package org.apache.phoenix.calcite;
 import java.util.List;
 
 import org.apache.calcite.adapter.enumerable.CallImplementor;
-import org.apache.calcite.adapter.enumerable.RexToLixTranslator;
 import org.apache.calcite.adapter.enumerable.RexImpTable.NullAs;
+import org.apache.calcite.adapter.enumerable.RexToLixTranslator;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.rel.type.RelDataType;
@@ -30,6 +30,7 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.schema.FunctionParameter;
 import org.apache.calcite.schema.ImplementableFunction;
 import org.apache.calcite.schema.ScalarFunction;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
@@ -63,11 +64,14 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
 
                         @SuppressWarnings("rawtypes")
                         public RelDataType getType(RelDataTypeFactory typeFactory) {
-                            PDataType dataType =
-                                    arg.isArrayType() ? PDataType.fromTypeId(PDataType.sqlArrayType(SchemaUtil
-                                            .normalizeIdentifier(SchemaUtil.normalizeIdentifier(arg
-                                                    .getArgumentType())))) : PDataType.fromSqlTypeName(SchemaUtil
-                                            .normalizeIdentifier(arg.getArgumentType()));
+                        PDataType dataType =
+                                PDataType.fromSqlTypeName(
+                                    SchemaUtil.normalizeIdentifier(arg.getArgumentType()));
+                        if (dataType.isArrayType()) {
+                            return typeFactory.createArrayType(
+                                typeFactory.createSqlType(SqlTypeName.valueOf(PDataType.arrayBaseType(dataType
+                                    ).getSqlTypeName())), -1);
+                        }
                             return typeFactory.createJavaType(dataType.getJavaClass());
                         }
 
@@ -88,6 +92,13 @@ public class PhoenixScalarFunction implements ScalarFunction, ImplementableFunct
 
     @Override
     public RelDataType getReturnType(RelDataTypeFactory typeFactory) {
+        if (returnType.isArrayType()) {
+            return typeFactory
+                    .createArrayType(
+                        typeFactory.createSqlType(SqlTypeName
+                                .valueOf(PDataType.arrayBaseType(returnType).getSqlTypeName())),
+                        -1);
+        }
         return typeFactory.createJavaType(returnType.getJavaClass());
     }
 

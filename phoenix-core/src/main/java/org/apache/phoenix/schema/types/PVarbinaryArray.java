@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.phoenix.schema.SortOrder;
 
 public class PVarbinaryArray extends PArrayDataType<byte[][]> {
@@ -25,7 +26,7 @@ public class PVarbinaryArray extends PArrayDataType<byte[][]> {
 
     private PVarbinaryArray() {
         super("VARBINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PVarbinary.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 27);
+            ArrayImpl.class, null, 27);
     }
 
     @Override

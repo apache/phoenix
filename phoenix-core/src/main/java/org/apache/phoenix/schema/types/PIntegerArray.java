@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.phoenix.schema.SortOrder;
 
 public class PIntegerArray extends PArrayDataType<int[]> {
@@ -25,7 +26,7 @@ public class PIntegerArray extends PArrayDataType<int[]> {
 
     private PIntegerArray() {
         super("INTEGER ARRAY", PDataType.ARRAY_TYPE_BASE + PInteger.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 24);
+            ArrayImpl.class, null, 24);
     }
 
     @Override

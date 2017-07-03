@@ -73,7 +73,6 @@ import static org.apache.phoenix.util.TestUtil.SUM_DOUBLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_ARRAY;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -89,7 +88,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -109,6 +107,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
+import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -128,8 +127,8 @@ import org.apache.phoenix.end2end.BaseClientManagedTimeIT;
 import org.apache.phoenix.end2end.BaseHBaseManagedTimeIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixCalciteTestDriver;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
@@ -138,6 +137,7 @@ import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -1777,7 +1777,7 @@ public abstract class BaseTest {
         }
         org.junit.Assert.assertEquals(message, expected, actual);
     }
-
+    
     protected static void assertEquals(String expected, String actual) {
         if ((expected != null && expected.contains("PhoenixToEnumerableConverter"))
                 || (actual != null && actual.contains("PhoenixToEnumerableConverter"))) {
@@ -1835,7 +1835,34 @@ public abstract class BaseTest {
     }
     
     protected static void assertEquals(Object expected, Object actual) {
-        org.junit.Assert.assertEquals(expected, actual);
+        if ((expected instanceof ArrayImpl && actual instanceof ArrayImpl)
+                || (expected instanceof PhoenixArray && actual instanceof PhoenixArray)) {
+            assertEquals(expected.toString(), actual.toString());
+        } else if (expected instanceof ArrayImpl) {
+            try {
+                int i = 0;
+                Object[] obj = (Object[]) ((ArrayImpl) expected).getArray();
+                for (Object aObj : (Object[]) ((PhoenixArray) actual).getArray()) {
+                    assertEquals(obj[i], aObj);
+                    i++;
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        } else if (actual instanceof ArrayImpl) {
+            try {
+                int i = 0;
+                Object[] obj = (Object[]) ((ArrayImpl) actual).getArray();
+                for (Object eObj : (Object[]) ((PhoenixArray) expected).getArray()) {
+                    assertEquals(eObj, obj[i]);
+                    i++;
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            org.junit.Assert.assertEquals(expected, actual);
+        }
     }
     
     @SuppressWarnings("deprecation")

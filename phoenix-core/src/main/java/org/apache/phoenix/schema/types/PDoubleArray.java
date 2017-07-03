@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema.types;
 
+import org.apache.calcite.avatica.util.ArrayImpl;
 import org.apache.phoenix.schema.SortOrder;
 
 public class PDoubleArray extends PArrayDataType<double[]> {
@@ -25,7 +26,7 @@ public class PDoubleArray extends PArrayDataType<double[]> {
 
     private PDoubleArray() {
         super("DOUBLE ARRAY", PDataType.ARRAY_TYPE_BASE + PDouble.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 34);
+                ArrayImpl.class, null, 34);
     }
 
     @Override

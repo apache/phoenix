@@ -23,19 +23,19 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.ParseException;
-import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
-import org.apache.phoenix.schema.types.PBinaryArray;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinaryArray;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
+import org.apache.phoenix.schema.types.PBinaryArray;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarbinaryArray;
 
 @BuiltInFunction(name = ArrayIndexFunction.NAME, args = {
-		@Argument(allowedTypes = { PBinaryArray.class,
-        PVarbinaryArray.class }),
-		@Argument(allowedTypes = { PInteger.class }) })
+		@Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class}),
+		@Argument(allowedTypes = { PInteger.class }) },classType = FunctionClassType.ARRAY)
 public class ArrayIndexFunction extends ScalarFunction {
 
 	public static final String NAME = "ARRAY_ELEM";

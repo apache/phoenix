@@ -18,7 +18,6 @@
 
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -225,7 +224,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test(expected = AssertionError.class)
     public void testArrayFillFunctionInvalidLength1() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         
@@ -243,7 +242,7 @@ public class ArrayFillFunctionIT extends ParallelStatsDisabledIT {
         assertFalse(rs.next());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test(expected = AssertionError.class)
     public void testArrayFillFunctionInvalidLength2() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         
