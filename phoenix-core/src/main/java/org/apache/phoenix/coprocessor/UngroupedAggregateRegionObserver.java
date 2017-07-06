@@ -185,17 +185,19 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     private void commitBatch(Region region, List<Mutation> mutations, byte[] indexUUID, long blockingMemstoreSize,
             byte[] indexMaintainersPtr, byte[] txState, boolean useIndexProto) throws IOException {
-        if (indexMaintainersPtr != null) {
-            mutations.get(0).setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-        }
-
-        if (txState != null) {
-            mutations.get(0).setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-        }
-      if (indexUUID != null) {
-          for (Mutation m : mutations) {
-              m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
-          }
+      if (mutations.isEmpty()) {
+    	  return;
+      }
+      for (Mutation m : mutations) {
+         if (indexMaintainersPtr != null) {
+             m.setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+         }
+         if (indexUUID != null) {
+        	 m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+         }
+         if (txState != null) {
+             m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+         }
       }
       
       Mutation[] mutationArray = new Mutation[mutations.size()];
@@ -217,17 +219,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     
     private void commitBatchWithHTable(HTable table, Region region, List<Mutation> mutations, byte[] indexUUID,
             long blockingMemstoreSize, byte[] indexMaintainersPtr, byte[] txState, boolean useIndexProto) throws IOException {
-
-        if (indexUUID != null) {
-            // Need to add indexMaintainers for each mutation as table.batch can be distributed across servers
-            for (Mutation m : mutations) {
-                if (indexMaintainersPtr != null) {
-                    m.setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
-                }
-                if (txState != null) {
-                    m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
-                }
-                m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
+    	if (mutations.isEmpty()) {
+      	  return;
+    	}
+        for (Mutation m : mutations) {
+            if (indexMaintainersPtr != null) {
+                m.setAttribute(useIndexProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMaintainersPtr);
+            }
+            if (txState != null) {
+                m.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+            }
+            if (indexUUID != null) {
+            	m.setAttribute(PhoenixIndexCodec.INDEX_UUID, indexUUID);
             }
         }
         // When memstore size reaches blockingMemstoreSize we are waiting 3 seconds for the
@@ -703,14 +706,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 }
                             }
                         }
-                        if (ServerUtil.readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
                                     areMutationInSameRegion, targetHTable, useIndexProto);
                             mutations.clear();
                         }
                         // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
-                        if (ServerUtil.readyToCommit(rowCount, indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(indexMutations.size(), indexMutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             commitBatch(region, indexMutations, null, blockingMemStoreSize, null, txState,
                                     useIndexProto);
                             indexMutations.clear();
@@ -792,11 +795,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         } else {
             commitBatch(region, mutations, indexUUID, blockingMemstoreSize, indexMaintainersPtr, txState, useIndexProto);
         }
-    }
-
-    private boolean readyToCommit(int rowCount, long mutationSize, int maxBatchSize, long maxBatchSizeBytes) {
-        return maxBatchSize > 0 && rowCount > maxBatchSize
-                || (maxBatchSizeBytes > 0 && mutationSize > maxBatchSizeBytes);
     }
 
     @Override
@@ -889,7 +887,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 del.addDeleteMarker(cell);
                             }
                         }
-                        if (readyToCommit(rowCount, mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
+                        if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
                             region.batchMutate(mutations.toArray(new Mutation[mutations.size()]), HConstants.NO_NONCE,
                                     HConstants.NO_NONCE);
                             uuidValue = ServerCacheClient.generateId();
