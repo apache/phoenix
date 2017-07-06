@@ -214,8 +214,8 @@ public class ServerUtil {
     }
     
     public static boolean readyToCommit(int rowCount, long mutationSize, int maxBatchSize, long maxBatchSizeBytes) {
-        return maxBatchSize > 0 && rowCount > maxBatchSize
-                || (maxBatchSizeBytes > 0 && mutationSize > maxBatchSizeBytes);
+        return maxBatchSize > 0 && rowCount >= maxBatchSize
+                || (maxBatchSizeBytes > 0 && mutationSize >= maxBatchSizeBytes);
     }
     
 }
