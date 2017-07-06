@@ -364,8 +364,6 @@ public class TephraTransactionContext implements PhoenixTransactionContext {
             tephraVisibilityLevel = VisibilityLevel.SNAPSHOT_EXCLUDE_CURRENT;
             break;
         case SNAPSHOT_ALL:
-            System.out.println("OHAD Move to SNAPSHOT_ALL ");
-            System.out.flush();
             tephraVisibilityLevel = VisibilityLevel.SNAPSHOT_ALL;
             break;
         default:
