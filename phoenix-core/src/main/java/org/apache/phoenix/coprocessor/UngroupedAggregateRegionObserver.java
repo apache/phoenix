@@ -244,6 +244,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         try {
             table.batch(mutations);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new RuntimeException(e);
         }
     }
@@ -1177,6 +1178,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 try {
                     lock.wait(1000);
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
             }
         }
