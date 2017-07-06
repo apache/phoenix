@@ -36,6 +36,7 @@ import org.apache.phoenix.coprocessor.generated.ServerCachingProtos.ServerCachin
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ServerUtil;
 
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -55,31 +56,32 @@ public class ServerCachingEndpointImpl extends ServerCachingService implements C
 
   @Override
   public void addServerCache(RpcController controller, AddServerCacheRequest request,
-      RpcCallback<AddServerCacheResponse> done) {
-    ImmutableBytesPtr tenantId = null;
-    if (request.hasTenantId()) {
-      tenantId = new ImmutableBytesPtr(request.getTenantId().toByteArray());
-    }
-    TenantCache tenantCache = GlobalCache.getTenantCache(this.env, tenantId);
-    ImmutableBytesWritable cachePtr =
-        org.apache.phoenix.protobuf.ProtobufUtil
-            .toImmutableBytesWritable(request.getCachePtr());
-    byte[] txState = request.hasTxState() ? request.getTxState().toByteArray() : ByteUtil.EMPTY_BYTE_ARRAY;
+          RpcCallback<AddServerCacheResponse> done) {
+      ImmutableBytesPtr tenantId = null;
+      if (request.hasTenantId()) {
+          tenantId = new ImmutableBytesPtr(request.getTenantId().toByteArray());
+      }
+      TenantCache tenantCache = GlobalCache.getTenantCache(this.env, tenantId);
+      ImmutableBytesWritable cachePtr =
+              org.apache.phoenix.protobuf.ProtobufUtil
+              .toImmutableBytesWritable(request.getCachePtr());
+      byte[] txState = request.hasTxState() ? request.getTxState().toByteArray() : ByteUtil.EMPTY_BYTE_ARRAY;
 
-    try {
-      @SuppressWarnings("unchecked")
-      Class<ServerCacheFactory> serverCacheFactoryClass =
+      try {
+          @SuppressWarnings("unchecked")
+          Class<ServerCacheFactory> serverCacheFactoryClass =
           (Class<ServerCacheFactory>) Class.forName(request.getCacheFactory().getClassName());
-      ServerCacheFactory cacheFactory = serverCacheFactoryClass.newInstance();
-      tenantCache.addServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()),
-        cachePtr, txState, cacheFactory, request.hasHasProtoBufIndexMaintainer() && request.getHasProtoBufIndexMaintainer());
-    } catch (Throwable e) {
-      ProtobufUtil.setControllerException(controller, new IOException(e));
-    }
-    AddServerCacheResponse.Builder responseBuilder = AddServerCacheResponse.newBuilder();
-    responseBuilder.setReturn(true);
-    AddServerCacheResponse result = responseBuilder.build();
-    done.run(result);
+          ServerCacheFactory cacheFactory = serverCacheFactoryClass.newInstance();
+          tenantCache.addServerCache(new ImmutableBytesPtr(request.getCacheId().toByteArray()),
+              cachePtr, txState, cacheFactory, request.hasHasProtoBufIndexMaintainer() && request.getHasProtoBufIndexMaintainer());
+        } catch (Throwable e) {
+            ProtobufUtil.setControllerException(controller,
+                ServerUtil.createIOException("Error when adding cache: ", e));
+        }
+      AddServerCacheResponse.Builder responseBuilder = AddServerCacheResponse.newBuilder();
+      responseBuilder.setReturn(true);
+      AddServerCacheResponse result = responseBuilder.build();
+      done.run(result);
   }
 
   @Override

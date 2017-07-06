@@ -3100,8 +3100,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
-        } catch (IOException ioe) {
-            ProtobufUtil.setControllerException(controller, ioe);
+        } catch (Throwable e) {
+            logger.error("Add column failed: ", e);
+            ProtobufUtil.setControllerException(controller,
+                ServerUtil.createIOException("Error when adding column: ", e));
         }
     }
 
@@ -3347,8 +3349,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
             if (result != null) {
                 done.run(MetaDataMutationResult.toProto(result));
             }
-        } catch (IOException ioe) {
-            ProtobufUtil.setControllerException(controller, ioe);
+        } catch (Throwable e) {
+            logger.error("Drop column failed: ", e);
+            ProtobufUtil.setControllerException(controller,
+                ServerUtil.createIOException("Error when dropping column: ", e));
         }
     }
     
@@ -3728,7 +3732,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements Coprocesso
                     GlobalCache.getInstance(this.env).getMetaDataCache();
             metaDataCache.invalidate(cacheKey);
         } catch (Throwable t) {
-            logger.error("incrementTableTimeStamp failed", t);
+            logger.error("clearTableFromCache failed", t);
             ProtobufUtil.setControllerException(controller,
                 ServerUtil.createIOException(SchemaUtil.getTableName(schemaName, tableName), t));
         }
