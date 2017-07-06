@@ -54,7 +54,12 @@ import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
+import org.apache.phoenix.parse.ColumnParseNode;
+import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
+import org.apache.phoenix.parse.ParseNodeRewriter;
+import org.apache.phoenix.parse.ParseNodeVisitor;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryServices;
@@ -608,9 +613,11 @@ public class PhoenixSchema implements Schema {
         sb.append("SELECT");
         for (PColumn column : table.getColumns()) {
             String indexColumnName = column.getName().getString();
-            String dataColumnName = IndexUtil.getDataColumnName(indexColumnName);
-            sb.append(",").append(SchemaUtil.getEscapedFullColumnName(dataColumnName));
-            sb.append(" ").append(SchemaUtil.getEscapedFullColumnName(indexColumnName));
+            String dataColumnName = IndexUtil.getIndexColumnExpressionStr(column);
+            sb.append(",").append(dataColumnName);
+            sb.append(" ").append(
+                SchemaUtil.isCaseSensitive(indexColumnName) ? indexColumnName : SchemaUtil
+                        .getQuotedFullColumnName(null, indexColumnName));
         }
         sb.setCharAt(6, ' '); // replace first comma with space.
         sb.append(" FROM ").append(SchemaUtil.getEscapedFullTableName(index.getParentName().getString()));

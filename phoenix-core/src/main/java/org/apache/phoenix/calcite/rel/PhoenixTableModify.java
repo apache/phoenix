@@ -126,6 +126,11 @@ public class PhoenixTableModify extends TableModify implements PhoenixRel {
             final int[] columnIndexes = new int[targetColumns.size()];
             final int[] pkSlotIndexes = new int[targetColumns.size()];
             int nonPKColumnCount = 0;
+            for (int i = 0; i < targetColumns.get(0).getPosition(); i++) {
+                if (!SchemaUtil.isPKColumn(targetTableRef.getTable().getColumns().get(i))) {
+                    nonPKColumnCount++;
+                }
+            }
             for (int i = 0; i < targetColumns.size(); i++) {
                 PColumn column = targetColumns.get(i);
                 if (SchemaUtil.isPKColumn(column)) {

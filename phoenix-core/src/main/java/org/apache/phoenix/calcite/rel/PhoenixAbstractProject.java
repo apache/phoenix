@@ -11,6 +11,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexDynamicParam;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
@@ -65,7 +66,9 @@ abstract public class PhoenixAbstractProject extends Project implements PhoenixQ
         }
         for (int i = 0; i < projects.size(); i++) {
             RexNode project = projects.get(i);
-            if((bindVariablesPresent && RexLiteral.isNullLiteral(project)) || project instanceof ImplicitNullLiteral) {
+            if ((bindVariablesPresent && RexLiteral.isNullLiteral(project))
+                    || project instanceof ImplicitNullLiteral
+                    || (project instanceof RexCall && (((RexCall) project).getOperands().get(0) instanceof ImplicitNullLiteral))) {
                 unspecifiedColumnPositions.add(new Integer(i));
                 continue;
             }

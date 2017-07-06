@@ -238,15 +238,14 @@ public class IndexExpressionIT extends ParallelStatsDisabledIT {
                     + " ((UPPER(varchar_pk) || '_' || UPPER(char_pk) || '_' || UPPER(varchar_col1) || '_' || UPPER(char_col2)),"
                     + " (decimal_pk+int_pk+decimal_col2+int_col1)," + " date_pk+1, date1+1, date2+1 )"
                     + " INCLUDE (long_col1, long_col2)";
-            PreparedStatement stmt = conn.prepareStatement(ddl);
-            stmt.execute();
+            conn.createStatement().execute(ddl);
 
             // update index pk column and covered column
             String upsert = "UPSERT INTO "
                     + fullDataTableName
                     + "(varchar_pk, char_pk, int_pk, long_pk, decimal_pk, date_pk, varchar_col1, long_col1) VALUES(?, ?, ?, ?, ?, ?, ?, ?)";
 
-            stmt = conn.prepareStatement(upsert);
+            PreparedStatement stmt = conn.prepareStatement(upsert);
             stmt.setString(1, "varchar1");
             stmt.setString(2, "char1");
             stmt.setInt(3, 1);

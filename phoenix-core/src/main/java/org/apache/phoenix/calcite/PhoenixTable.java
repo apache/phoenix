@@ -299,6 +299,7 @@ public class PhoenixTable extends AbstractTable
                                 : tableMapping.getTableRef().getTable().getDefaultFamilyName()
                                         .getString();
             }
+            int specialColumnCount = (table.getBucketNum() != null?1:0) + (table.isMultiTenant()?1:0);
             final PColumn column =
                     new PColumnImpl(PNameFactory.newName(columnName),
                             PNameFactory.newName(columnFamily), PDataType.fromSqlTypeName(field
@@ -307,8 +308,7 @@ public class PhoenixTable extends AbstractTable
                                     : colType.getPrecision(),
                             colType.getScale() == RelDataType.SCALE_NOT_SPECIFIED ? null : colType
                                     .getScale(), colType.isNullable(),
-                            (table.getBucketNum() != null ? (field.getIndex() + 1) : field
-                                    .getIndex()),
+                            (field.getIndex() + specialColumnCount),
                             SortOrder.ASC,// TODO: get this from metastore? test if specifying ASC
                                           // or DESC is allowed. use Docker image
                             colType.isStruct() ? field.getType().getFieldCount() : 0, null, false,

@@ -92,6 +92,7 @@ import org.apache.phoenix.expression.OrExpression;
 import org.apache.phoenix.expression.ReinterpretCastExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
 import org.apache.phoenix.expression.StringBasedLikeExpression;
+import org.apache.phoenix.expression.StringConcatExpression;
 import org.apache.phoenix.expression.TimestampAddExpression;
 import org.apache.phoenix.expression.TimestampSubtractExpression;
 import org.apache.phoenix.expression.function.AbsFunction;
@@ -1177,6 +1178,18 @@ public class CalciteUtils {
                  }
              }
          });
+        EXPRESSION_MAP.put(SqlKind.OTHER, new ExpressionFactory() {
+            @Override
+            public Expression newExpression(RexNode node, PhoenixRelImplementor implementor) {
+                SqlOperator operator = ((RexCall)node).getOperator();
+                if(operator.equals(SqlStdOperatorTable.CONCAT)) {
+                    List<Expression> children = convertChildren((RexCall) node, implementor);
+                    return new StringConcatExpression(children);
+                }
+                return null;
+            }
+        });
+
 	}
 	
     private static final Map<String, FunctionFactory> FUNCTION_MAP = Maps
