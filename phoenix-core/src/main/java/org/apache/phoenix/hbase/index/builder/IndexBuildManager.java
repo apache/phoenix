@@ -45,33 +45,12 @@ import com.google.common.util.concurrent.MoreExecutors;
 
 /**
  * Manage the building of index updates from primary table updates.
- * <p>
- * Internally, parallelizes updates through a thread-pool to a delegate index builder. Underlying
- * {@link IndexBuilder} <b>must be thread safe</b> for each index update.
  */
 public class IndexBuildManager implements Stoppable {
 
   private static final Log LOG = LogFactory.getLog(IndexBuildManager.class);
   private final IndexBuilder delegate;
-  private QuickFailingTaskRunner pool;
   private boolean stopped;
-
-  /**
-   * Set the number of threads with which we can concurrently build index updates. Unused threads
-   * will be released, but setting the number of threads too high could cause frequent swapping and
-   * resource contention on the server - <i>tune with care</i>. However, if you are spending a lot
-   * of time building index updates, it could be worthwhile to spend the time to tune this parameter
-   * as it could lead to dramatic increases in speed.
-   */
-  public static final String NUM_CONCURRENT_INDEX_BUILDER_THREADS_CONF_KEY = "index.builder.threads.max";
-  /** Default to a single thread. This is the safest course of action, but the slowest as well */
-  private static final int DEFAULT_CONCURRENT_INDEX_BUILDER_THREADS = 10;
-  /**
-   * Amount of time to keep idle threads in the pool. After this time (seconds) we expire the
-   * threads and will re-create them as needed, up to the configured max
-   */
-  private static final String INDEX_BUILDER_KEEP_ALIVE_TIME_CONF_KEY =
-      "index.builder.threads.keepalivetime";
 
   /**
    * @param env environment in which <tt>this</tt> is running. Used to setup the
@@ -81,7 +60,7 @@ public class IndexBuildManager implements Stoppable {
   public IndexBuildManager(RegionCoprocessorEnvironment env) throws IOException {
     // Prevent deadlock by using single thread for all reads so that we know
     // we can get the ReentrantRWLock. See PHOENIX-2671 for more details.
-    this(getIndexBuilder(env), new QuickFailingTaskRunner(MoreExecutors.sameThreadExecutor()));
+    this.delegate = getIndexBuilder(env);
   }
   
   private static IndexBuilder getIndexBuilder(RegionCoprocessorEnvironment e) throws IOException {
@@ -101,20 +80,6 @@ public class IndexBuildManager implements Stoppable {
     }
   }
 
-  private static ThreadPoolBuilder getPoolBuilder(RegionCoprocessorEnvironment env) {
-    String serverName = env.getRegionServerServices().getServerName().getServerName();
-    return new ThreadPoolBuilder(serverName + "-index-builder", env.getConfiguration()).
-        setCoreTimeout(INDEX_BUILDER_KEEP_ALIVE_TIME_CONF_KEY).
-        setMaxThread(NUM_CONCURRENT_INDEX_BUILDER_THREADS_CONF_KEY,
-          DEFAULT_CONCURRENT_INDEX_BUILDER_THREADS);
-  }
-
-  public IndexBuildManager(IndexBuilder builder, QuickFailingTaskRunner pool) {
-    this.delegate = builder;
-    this.pool = pool;
-  }
-
-
   public Collection<Pair<Mutation, byte[]>> getIndexUpdate(
       MiniBatchOperationInProgress<Mutation> miniBatchOp,
       Collection<? extends Mutation> mutations) throws Throwable {
@@ -122,41 +87,11 @@ public class IndexBuildManager implements Stoppable {
     final IndexMetaData indexMetaData = this.delegate.getIndexMetaData(miniBatchOp);
     this.delegate.batchStarted(miniBatchOp, indexMetaData);
 
-    // parallelize each mutation into its own task
-    // each task is cancelable via two mechanisms: (1) underlying HRegion is closing (which would
-    // fail lookups/scanning) and (2) by stopping this via the #stop method. Interrupts will only be
-    // acknowledged on each thread before doing the actual lookup, but after that depends on the
-    // underlying builder to look for the closed flag.
-    TaskBatch<Collection<Pair<Mutation, byte[]>>> tasks =
-        new TaskBatch<Collection<Pair<Mutation, byte[]>>>(mutations.size());
-    for (final Mutation m : mutations) {
-      tasks.add(new Task<Collection<Pair<Mutation, byte[]>>>() {
-
-        @Override
-        public Collection<Pair<Mutation, byte[]>> call() throws IOException {
-          return delegate.getIndexUpdate(m, indexMetaData);
-        }
-
-      });
+    // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
+    ArrayList<Pair<Mutation, byte[]>> results = new ArrayList<>(mutations.size());
+    for (Mutation m : mutations) {
+      results.addAll(delegate.getIndexUpdate(m, indexMetaData));
     }
-    List<Collection<Pair<Mutation, byte[]>>> allResults = null;
-    try {
-      allResults = pool.submitUninterruptible(tasks);
-    } catch (CancellationException e) {
-      throw e;
-    } catch (ExecutionException e) {
-      LOG.error("Found a failed index update!");
-      throw e.getCause();
-    }
-
-    // we can only get here if we get successes from each of the tasks, so each of these must have a
-    // correct result
-    Collection<Pair<Mutation, byte[]>> results = new ArrayList<Pair<Mutation, byte[]>>();
-    for (Collection<Pair<Mutation, byte[]>> result : allResults) {
-      assert result != null : "Found an unsuccessful result, but didn't propagate a failure earlier";
-      results.addAll(result);
-    }
-
     return results;
   }
 
@@ -194,7 +129,6 @@ public class IndexBuildManager implements Stoppable {
     }
     this.stopped = true;
     this.delegate.stop(why);
-    this.pool.stop(why);
   }
 
   @Override
