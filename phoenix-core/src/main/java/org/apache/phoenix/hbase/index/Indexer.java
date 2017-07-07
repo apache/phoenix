@@ -605,7 +605,9 @@ public class Indexer extends BaseRegionObserver {
    * @return the mutations to apply to the index tables
    */
   private Collection<Pair<Mutation, byte[]>> extractIndexUpdate(WALEdit edit) {
-    Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>();
+    // Avoid multiple internal array resizings. Initial size of 64, unless we have fewer cells in the edit
+    int initialSize = Math.min(edit.size(), 64);
+    Collection<Pair<Mutation, byte[]>> indexUpdates = new ArrayList<Pair<Mutation, byte[]>>(initialSize);
     for (Cell kv : edit.getCells()) {
       if (kv instanceof IndexedKeyValue) {
         IndexedKeyValue ikv = (IndexedKeyValue) kv;
