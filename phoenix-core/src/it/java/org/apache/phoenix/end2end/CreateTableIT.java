@@ -49,10 +49,7 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.*;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -707,5 +704,60 @@ public class CreateTableIT extends BaseClientManagedTimeIT {
           connection.close();
         }
       }
+    }
+
+    @Test
+    public void testCreateTableWithNamespaceMappingEnabled() throws Exception {
+        final String NS = "NS_" + generateUniqueName();
+        final String TBL = "TBL_" + generateUniqueName();
+        final String CF = "CF";
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE SCHEMA " + NS);
+
+            // test for a table that is in non-default schema
+            {
+                String table = NS + "." + TBL;
+                conn.createStatement().execute(
+                    "CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + table))
+                    .contains(NS + ":" + TBL));
+
+                conn.createStatement().execute("DROP TABLE " + table);
+            }
+
+            // test for a table whose name contains a dot (e.g. "AAA.BBB") in default schema
+            {
+                String table = "\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                    "CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + table))
+                    .contains(NS + "." + TBL));
+
+                conn.createStatement().execute("DROP TABLE " + table);
+            }
+
+            // test for a view whose name contains a dot (e.g. "AAA.BBB") in non-default schema
+            {
+                String table = NS + ".\"" + NS + "." + TBL + "\"";
+                conn.createStatement().execute(
+                    "CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
+
+                assertTrue(QueryUtil.getExplainPlan(
+                    conn.createStatement().executeQuery("explain select * from " + table))
+                    .contains(NS + ":" + NS + "." + TBL));
+
+                conn.createStatement().execute("DROP TABLE " + table);
+            }
+
+            conn.createStatement().execute("DROP SCHEMA " + NS);
+        }
     }
 }

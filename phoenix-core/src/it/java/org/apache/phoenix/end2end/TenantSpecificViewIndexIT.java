@@ -36,7 +36,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
@@ -184,7 +183,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertFalse(rs.next());
         rs = conn.createStatement().executeQuery("explain select * from " + viewName);
         assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                + SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, PTableType.TABLE) + " ['"
+                + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped) + " ['"
                 + tenantId + "']", QueryUtil.getExplainPlan(rs));
 
         rs = conn.createStatement().executeQuery("select pk2,col1 from " + viewName + " where col1='f'");
@@ -195,13 +194,13 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         rs = conn.createStatement().executeQuery("explain select pk2,col1 from " + viewName + " where col1='f'");
         if (localIndex) {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + Bytes.toString(SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, PTableType.TABLE).getBytes()) + " [1,'"
+                    + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped) + " [1,'"
                     + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));
         } else {
             assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(SchemaUtil
-                            .getPhysicalHBaseTableName(tableName, isNamespaceMapped, PTableType.TABLE).getBytes()))
+                    + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
+                            SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toBytes()))
                     + " [-32768,'" + tenantId + "','f']\n" + "    SERVER FILTER BY FIRST KEY ONLY",
                     QueryUtil.getExplainPlan(rs));
         }

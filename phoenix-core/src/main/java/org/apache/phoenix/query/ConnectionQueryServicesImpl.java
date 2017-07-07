@@ -750,13 +750,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
-    private HTableDescriptor generateTableDescriptor(byte[] tableName, HTableDescriptor existingDesc,
+    private HTableDescriptor generateTableDescriptor(byte[] physicalTableName, HTableDescriptor existingDesc,
             PTableType tableType, Map<String, Object> tableProps, List<Pair<byte[], Map<String, Object>>> families,
             byte[][] splits, boolean isNamespaceMapped) throws SQLException {
         String defaultFamilyName = (String)tableProps.remove(PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME);
         HTableDescriptor tableDescriptor = (existingDesc != null) ? new HTableDescriptor(existingDesc)
-        : new HTableDescriptor(
-                SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, tableType).getBytes());
+        : new HTableDescriptor(physicalTableName);
         // By default, do not automatically rebuild/catch up an index on a write failure
         for (Entry<String,Object> entry : tableProps.entrySet()) {
             String key = entry.getKey();
@@ -778,7 +777,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 byte[] familyByte = family.getFirst();
                 if (tableDescriptor.getFamily(familyByte) == null) {
                     if (tableType == PTableType.VIEW) {
-                        String fullTableName = Bytes.toString(tableName);
+                        String fullTableName = Bytes.toString(physicalTableName);
                         throw new ReadOnlyTableException(
                                 "The HBase column families for a read-only table must already exist",
                                 SchemaUtil.getSchemaNameFromFullName(fullTableName),
@@ -798,7 +797,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
         }
-        addCoprocessors(tableName, tableDescriptor, tableType, tableProps);
+        addCoprocessors(physicalTableName, tableDescriptor, tableType, tableProps);
 
         // PHOENIX-3072: Set index priority if this is a system table or index table
         if (tableType == PTableType.SYSTEM) {
@@ -1022,24 +1021,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @return true if table was created and false if it already exists
      * @throws SQLException
      */
-    private HTableDescriptor ensureTableCreated(byte[] tableName, PTableType tableType, Map<String, Object> props,
+    private HTableDescriptor ensureTableCreated(byte[] physicalTableName, PTableType tableType, Map<String, Object> props,
             List<Pair<byte[], Map<String, Object>>> families, byte[][] splits, boolean modifyExistingMetaData,
             boolean isNamespaceMapped) throws SQLException {
         SQLException sqlE = null;
         HTableDescriptor existingDesc = null;
-        boolean isMetaTable = SchemaUtil.isMetaTable(tableName);
-        byte[] physicalTable = SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, tableType).getBytes();
+        boolean isMetaTable = SchemaUtil.isMetaTable(physicalTableName);
         boolean tableExist = true;
         try (HBaseAdmin admin = getAdmin()) {
             final String quorum = ZKConfig.getZKQuorumServersString(config);
             final String znode = this.props.get(HConstants.ZOOKEEPER_ZNODE_PARENT);
             logger.debug("Found quorum: " + quorum + ":" + znode);
             try {
-                existingDesc = admin.getTableDescriptor(physicalTable);
+                existingDesc = admin.getTableDescriptor(physicalTableName);
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 tableExist = false;
                 if (tableType == PTableType.VIEW) {
-                    String fullTableName = Bytes.toString(tableName);
+                    String fullTableName = Bytes.toString(physicalTableName);
                     throw new ReadOnlyTableException(
                             "An HBase table for a VIEW must already exist",
                             SchemaUtil.getSchemaNameFromFullName(fullTableName),
@@ -1047,7 +1045,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 }
             }
 
-            HTableDescriptor newDesc = generateTableDescriptor(tableName, existingDesc, tableType, props, families,
+            HTableDescriptor newDesc = generateTableDescriptor(physicalTableName, existingDesc, tableType, props, families,
                     splits, isNamespaceMapped);
 
             if (!tableExist) {
@@ -1078,7 +1076,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                      * brought down.
                      */
                     newDesc.setValue(HTableDescriptor.SPLIT_POLICY, MetaDataSplitPolicy.class.getName());
-                    modifyTable(physicalTable, newDesc, true);
+                    modifyTable(physicalTableName, newDesc, true);
                 }
                 return null;
             } else {
@@ -1110,8 +1108,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     // transactional, don't allow.
                     if (existingDesc.hasCoprocessor(PhoenixTransactionalProcessor.class.getName())) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.TX_MAY_NOT_SWITCH_TO_NON_TX)
-                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(tableName))
-                        .setTableName(SchemaUtil.getTableNameFromFullName(tableName)).build().buildException();
+                        .setSchemaName(SchemaUtil.getSchemaNameFromFullName(physicalTableName))
+                        .setTableName(SchemaUtil.getTableNameFromFullName(physicalTableName)).build().buildException();
                     }
                     newDesc.remove(PhoenixTransactionContext.READ_NON_TX_DATA);
                 }
@@ -1119,7 +1117,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     return null; // Indicate that no metadata was changed
                 }
 
-                modifyTable(physicalTable, newDesc, true);
+                modifyTable(physicalTableName, newDesc, true);
                 return newDesc;
             }
 
@@ -1394,7 +1392,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         byte[] tenantIdBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
         byte[] schemaBytes = rowKeyMetadata[PhoenixDatabaseMetaData.SCHEMA_NAME_INDEX];
         byte[] tableBytes = rowKeyMetadata[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
-        byte[] tableName = physicalTableName != null ? physicalTableName : SchemaUtil.getTableNameAsBytes(schemaBytes, tableBytes);
+        byte[] tableName = physicalTableName != null ? physicalTableName :
+            SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes, isNamespaceMapped).getBytes();
         boolean localIndexTable = false;
         for(Pair<byte[], Map<String, Object>> family: families) {
             if(Bytes.toString(family.getFirst()).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
@@ -1437,9 +1436,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 familiesPlusDefault.add(new Pair<byte[],Map<String,Object>>(defaultCF,Collections.<String,Object>emptyMap()));
             }
             ensureViewIndexTableCreated(
-                    SchemaUtil.getPhysicalHBaseTableName(tableName, isNamespaceMapped, tableType).getBytes(),
-                    tableProps, familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null,
-                            MetaDataUtil.getClientTimeStamp(m), isNamespaceMapped);
+                tableName, tableProps, familiesPlusDefault, MetaDataUtil.isSalted(m, kvBuilder, ptr) ? splits : null,
+                MetaDataUtil.getClientTimeStamp(m), isNamespaceMapped);
         }
 
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
